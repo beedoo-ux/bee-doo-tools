@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0c1222" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>bee-doo Fotos</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+:root {
+  --bg:  #0c1222;
+  --c1:  #151d30;
+  --c2:  #1c2640;
+  --bd:  #263354;
+  --tx:  #e1e7ef;
+  --dm:  #5c6b8a;
+  --y:   #FDE154;
+  --yd:  #c9b230;
+  --g:   #34D399;
+  --r:   #F87171;
+}
+
+body { background:var(--bg); font-family:'DM Sans',sans-serif; color:var(--tx); min-height:100vh; overflow-x:hidden; }
+
+.hdr {
+  position:sticky; top:0; z-index:100;
+  background:rgba(12,18,34,.96); backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--bd);
+  padding:12px 16px; display:flex; align-items:center; gap:10px;
+}
+.hdr-logo { font-size:17px; font-weight:800; color:var(--y); letter-spacing:-.3px; flex-shrink:0; }
+.hdr-info { flex:1; min-width:0; }
+.hdr-name { font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hdr-addr { font-size:11px; color:var(--dm); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hdr-pill {
+  flex-shrink:0; border-radius:8px; padding:4px 10px;
+  font-size:12px; font-weight:700; transition:all .2s;
+  background:var(--c2); border:1px solid var(--bd); color:var(--dm);
+}
+.hdr-pill.warn { background:rgba(253,225,84,.12); border-color:rgba(253,225,84,.3); color:var(--y); }
+.hdr-pill.good { background:rgba(52,211,153,.12); border-color:rgba(52,211,153,.3); color:var(--g); }
+
+.prog { height:3px; background:var(--c2); }
+.prog-fill { height:100%; background:linear-gradient(90deg,var(--y),var(--yd)); transition:width .5s ease; }
+
+.content { padding-bottom:88px; }
+
+.sec { padding:14px 16px 0; }
+.sec-hd {
+  display:flex; align-items:center; gap:8px; margin-bottom:10px;
+  font-size:11px; font-weight:700; color:var(--dm);
+  text-transform:uppercase; letter-spacing:.08em;
+}
+.badge { border-radius:9px; padding:2px 8px; font-size:10px; font-weight:700; }
+.b-need { background:rgba(253,225,84,.15); border:1px solid rgba(253,225,84,.3); color:var(--y); }
+.b-opt  { background:var(--c2); border:1px solid var(--bd); color:var(--dm); }
+.b-done { background:rgba(52,211,153,.12); border:1px solid rgba(52,211,153,.25); color:var(--g); }
+
+/* ── BIG CARDS (needed pflicht + uploading) ── */
+.list-big { display:flex; flex-direction:column; gap:10px; margin-bottom:4px; }
+.card-big {
+  background:var(--c1); border:1.5px solid var(--bd); border-radius:14px;
+  overflow:hidden; cursor:pointer; transition:border-color .15s, transform .1s;
+  display:flex; align-items:stretch;
+}
+.card-big:active { transform:scale(.98); }
+.card-big.state-needed  { border-color:rgba(253,225,84,.25); }
+.card-big.state-needed:active { border-color:var(--y); }
+.card-big.state-uploading { border-color:rgba(253,225,84,.45); cursor:default; }
+.card-big.state-done { border-color:rgba(52,211,153,.3); opacity:.55; }
+
+.card-big .thumb {
+  width:88px; flex-shrink:0; background:var(--c2);
+  display:flex; align-items:center; justify-content:center;
+  font-size:30px; position:relative; overflow:hidden;
+}
+.card-big .thumb img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+
+.card-big .body { flex:1; padding:12px 14px; display:flex; flex-direction:column; justify-content:center; gap:3px; }
+.card-big .lbl  { font-size:15px; font-weight:700; }
+.card-big .note { font-size:11px; color:var(--dm); }
+.card-big .cta  {
+  margin-top:6px; align-self:flex-start;
+  background:linear-gradient(135deg,var(--y),var(--yd)); color:#1a1200;
+  font-size:12px; font-weight:800; border-radius:7px; padding:5px 12px;
+  display:inline-flex; align-items:center; gap:5px;
+}
+.card-big .cta.uploading { background:none; color:var(--y); padding:0; }
+.card-big .cta.done-src  { background:none; color:var(--g); padding:0; }
+
+/* ── SMALL GRID (optional) ── */
+.grid-sm { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:4px; }
+.card-sm {
+  background:var(--c1); border:1.5px solid var(--bd); border-radius:12px;
+  overflow:hidden; cursor:pointer; transition:all .15s;
+}
+.card-sm:active { transform:scale(.97); border-color:var(--y); }
+.card-sm .thumb-sq {
+  width:100%; height:88px; background:var(--c2);
+  display:flex; align-items:center; justify-content:center;
+  font-size:26px; position:relative; overflow:hidden;
+}
+.card-sm .thumb-sq img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.card-sm .body-sm { padding:8px 10px; }
+.card-sm .lbl-sm  { font-size:12px; font-weight:600; line-height:1.3; }
+.card-sm .st-sm   { font-size:10px; font-weight:700; margin-top:3px; color:var(--dm); }
+
+/* ── TINY GRID (done) ── */
+.grid-tiny { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:4px; }
+.card-tiny {
+  background:var(--c1); border:1px solid rgba(52,211,153,.18); border-radius:10px;
+  overflow:hidden; opacity:.55; position:relative; cursor:pointer;
+}
+.card-tiny:active { opacity:.8; }
+.card-tiny .t-sq {
+  width:100%; height:62px; background:var(--c2);
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px; position:relative; overflow:hidden;
+}
+.card-tiny .t-sq img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.card-tiny .t-lbl { font-size:9px; font-weight:600; color:var(--g); padding:4px 5px; line-height:1.2; }
+.card-tiny .chk {
+  position:absolute; top:3px; right:3px;
+  background:var(--g); color:#0c1222; width:15px; height:15px;
+  border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:8px; font-weight:900;
+}
+
+/* ── UPLOAD OVERLAY ── */
+.upload-ov {
+  position:absolute; inset:0; background:rgba(12,18,34,.65);
+  display:flex; align-items:center; justify-content:center; backdrop-filter:blur(2px);
+}
+.spinner { width:22px; height:22px; border:2.5px solid var(--bd); border-top-color:var(--y); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── ALL DONE BANNER ── */
+.done-banner {
+  margin:16px; background:rgba(52,211,153,.07); border:1.5px solid rgba(52,211,153,.22);
+  border-radius:16px; padding:20px; text-align:center;
+}
+.done-banner .di  { font-size:36px; margin-bottom:6px; }
+.done-banner .dt  { font-size:17px; font-weight:800; color:var(--g); }
+.done-banner .ds  { font-size:13px; color:var(--dm); margin-top:4px; line-height:1.5; }
+
+/* ── DIVIDER ── */
+.div-line { display:flex; align-items:center; gap:10px; padding:10px 16px 0; }
+.div-line hr { flex:1; border:none; border-top:1px solid var(--bd); }
+.div-line span { font-size:11px; color:var(--dm); font-weight:600; white-space:nowrap; }
+
+/* ── BOTTOM BAR ── */
+.bot {
+  position:fixed; bottom:0; left:0; right:0;
+  background:rgba(12,18,34,.97); backdrop-filter:blur(12px);
+  border-top:1px solid var(--bd);
+  padding:10px 16px; padding-bottom:max(10px,env(safe-area-inset-bottom));
+  display:flex; align-items:center; gap:12px;
+}
+.bot-stats { display:flex; gap:14px; flex-shrink:0; }
+.bs { text-align:center; }
+.bs-v { font-size:18px; font-weight:800; }
+.bs-l { font-size:10px; color:var(--dm); }
+.bot-btn {
+  flex:1; border:none; border-radius:11px; padding:13px 10px;
+  font-size:14px; font-weight:800; font-family:'DM Sans',sans-serif;
+  cursor:pointer; transition:opacity .15s;
+  display:flex; align-items:center; justify-content:center; gap:6px;
+}
+.bot-btn.act  { background:linear-gradient(135deg,var(--y),var(--yd)); color:#1a1200; animation:pulsering 2s infinite; }
+.bot-btn.done { background:var(--c2); color:var(--dm); cursor:default; }
+@keyframes pulsering { 0%,100%{box-shadow:0 0 0 0 rgba(253,225,84,.25);} 50%{box-shadow:0 0 0 7px rgba(253,225,84,0);} }
+
+/* ── TOAST ── */
+.toast {
+  position:fixed; bottom:82px; left:50%; transform:translateX(-50%);
+  background:var(--c2); border:1px solid var(--bd); border-radius:10px;
+  padding:9px 16px; font-size:13px; font-weight:600;
+  box-shadow:0 4px 20px rgba(0,0,0,.5); z-index:999; white-space:nowrap;
+  animation:fup .22s ease;
+}
+.toast.s { border-color:rgba(52,211,153,.4); color:var(--g); }
+.toast.e { border-color:rgba(248,113,113,.4); color:var(--r); }
+@keyframes fup { from{opacity:0;transform:translateX(-50%) translateY(8px);} to{opacity:1;transform:translateX(-50%) translateY(0);} }
+
+.ctr { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:32px; text-align:center; }
+.logo-big { font-size:28px; font-weight:800; color:var(--y); }
+.big-sp { width:38px; height:38px; border:3px solid var(--bd); border-top-color:var(--y); border-radius:50%; animation:spin .8s linear infinite; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const SUPABASE_URL  = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+const PFLICHT = [
+  {key:"fotoZaehler",        label:"Zähler 1",                 icon:"⚡",  pflicht:true},
+  {key:"fotoZaehler2",       label:"Zähler 2",                 icon:"⚡",  pflicht:true},
+  {key:"fotoZaehler3",       label:"Zähler 3",                 icon:"⚡",  pflicht:true},
+  {key:"fotoHAK",            label:"HAK",                      icon:"🔌",  pflicht:true},
+  {key:"fotoPotential",      label:"Potentialausgleich",        icon:"⏚",  pflicht:true},
+  {key:"fotoNeuerZS",        label:"Neuer Zählerschrank",       icon:"📐",  pflicht:true},
+  {key:"fotoKabelwegInnen",  label:"Kabelweg innen",            icon:"🔗",  pflicht:true},
+  {key:"fotoKabelwegWRZS",   label:"Kabelweg WR → ZS",         icon:"📹",  pflicht:true, note:"Video"},
+  {key:"fotoKabelwegHAKZS",  label:"Kabelweg HAK → ZS",        icon:"📹",  pflicht:true, note:"Video"},
+  {key:"fotoKabelwegAussen", label:"Kabelweg außen",            icon:"🏠",  pflicht:true},
+  {key:"fotoAufstellortWR",  label:"Aufstellort WR/Speicher",   icon:"📐",  pflicht:true},
+  {key:"fotoZSgeschlossen",  label:"Zählerschrank geschlossen", icon:"🔒",  pflicht:true},
+  {key:"fotoZSgeoeffnet",    label:"Zählerschrank geöffnet",    icon:"🔓",  pflicht:true},
+  {key:"fotoDachboden",      label:"Dachboden",                 icon:"🏚️", pflicht:true},
+];
+const OPTIONAL = [
+  {key:"fotoDrohne1",       label:"Drohne 1",              icon:"🚁"},
+  {key:"fotoDrohne2",       label:"Drohne 2",              icon:"🚁"},
+  {key:"fotoDrohne3",       label:"Drohne 3",              icon:"🚁"},
+  {key:"fotoGeruest1",      label:"Gerüst Platz 1",        icon:"🏗️"},
+  {key:"fotoGeruest2",      label:"Gerüst Platz 2",        icon:"🏗️"},
+  {key:"fotoGeruest3",      label:"Gerüst Platz 3",        icon:"🏗️"},
+  {key:"fotoFront",         label:"Frontansicht",          icon:"🏡"},
+  {key:"fotoDach",          label:"Gesamtdach",            icon:"🏠"},
+  {key:"fotoZiegel",        label:"Ziegel",                icon:"🔍"},
+  {key:"fotoHauseinfahrt",  label:"Hauseinfahrt",          icon:"🚛"},
+  {key:"fotoRouter",        label:"Router",                icon:"📡"},
+  {key:"fotoDachstuhl",     label:"Dachstuhl",             icon:"🪵"},
+  {key:"fotoWallbox",       label:"Aufstellort Wallbox",   icon:"🔌"},
+  {key:"fotoKabelwegWB",    label:"Kabelweg Wallbox → ZS", icon:"📹", note:"Video"},
+  {key:"fotoDachpfanne",    label:"Dachpfanne",            icon:"🧱"},
+  {key:"fotoStromrechnung", label:"Stromrechnung",         icon:"📄"},
+];
+const ALL = [...PFLICHT, ...OPTIONAL];
+
+let S = {
+  loading:true, error:null, jobId:null,
+  meta:{}, doneOnIpad:new Set(), phoneDone:{}, toast:null
+};
+
+function ss(u){Object.assign(S,u);render();}
+function toast(msg,type){ss({toast:{msg,type}});setTimeout(()=>ss({toast:null}),2400);}
+
+function isDone(k){ return S.doneOnIpad.has(k)||S.phoneDone[k]?.status==='done'; }
+function isUp(k)  { return S.phoneDone[k]?.status==='uploading'; }
+function url(k)   { return S.phoneDone[k]?.url||null; }
+
+async function init(){
+  const p=new URLSearchParams(location.search);
+  const jobId=p.get('job');
+  if(!jobId){ss({loading:false,error:'Kein Job-Code. QR-Code erneut scannen.'});return;}
+  const done=new Set((p.get('done')||'').split(',').filter(Boolean));
+  ss({loading:false,jobId,doneOnIpad:done,
+    meta:{name:decodeURIComponent(p.get('name')||''),
+          address:decodeURIComponent(p.get('addr')||''),
+          berater:decodeURIComponent(p.get('berater')||'')}});
+  await loadDb(jobId);
+  setInterval(()=>pollDb(jobId),5000);
+}
+
+async function loadDb(jobId){
+  try{
+    const r=await fetch(`${SUPABASE_URL}/rest/v1/field_photos?job_id=eq.${encodeURIComponent(jobId)}&select=photo_key,storage_path`,
+      {headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`}});
+    if(r.ok){const rows=await r.json();const ph={};rows.forEach(r=>ph[r.photo_key]={status:'done',path:r.storage_path});ss({phoneDone:ph});}
+  }catch(e){}
+}
+
+async function pollDb(jobId){
+  try{
+    const r=await fetch(`${SUPABASE_URL}/rest/v1/field_photos?job_id=eq.${encodeURIComponent(jobId)}&select=photo_key`,
+      {headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`}});
+    if(r.ok){const rows=await r.json();const ph={...S.phoneDone};let ch=false;rows.forEach(r=>{if(!ph[r.photo_key]){ph[r.photo_key]={status:'done'};ch=true;}});if(ch)ss({phoneDone:ph});}
+  }catch(e){}
+}
+
+function capture(key,label){
+  if(S.phoneDone[key]?.status==='uploading')return;
+  if(isDone(key)&&!confirm(`"${label}" erneut aufnehmen?`))return;
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*,video/*'; inp.capture='environment';
+  inp.onchange=async(e)=>{
+    const f=e.target.files?.[0]; if(!f)return;
+    const u=URL.createObjectURL(f);
+    ss({phoneDone:{...S.phoneDone,[key]:{url:u,status:'uploading'}}});
+    await upload(f,key,label);
+  };
+  inp.click();
+}
+
+async function upload(file,key,label){
+  const ts=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  const ext=file.type.includes('video')?'mp4':file.type.includes('png')?'png':'jpg';
+  const path=`field/${S.jobId}/${key}_${ts}.${ext}`;
+  try{
+    const up=await fetch(`${SUPABASE_URL}/storage/v1/object/field-photos/${path}`,
+      {method:'POST',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`,'Content-Type':file.type||'image/jpeg','x-upsert':'true'},body:file});
+    if(!up.ok)throw new Error('storage '+up.status);
+    await fetch(`${SUPABASE_URL}/rest/v1/field_photos`,
+      {method:'POST',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},
+       body:JSON.stringify({job_id:S.jobId,photo_key:key,photo_label:label,storage_path:path,file_size:file.size,mime_type:file.type,customer_name:S.meta.name,berater:S.meta.berater,created_at:new Date().toISOString()})});
+    ss({phoneDone:{...S.phoneDone,[key]:{url:S.phoneDone[key]?.url,status:'done',path}}});
+    toast('✓ Gespeichert','s');
+  }catch(err){
+    ss({phoneDone:{...S.phoneDone,[key]:{...S.phoneDone[key],status:'error'}}});
+    toast('Fehler – erneut tippen','e');
+  }
+}
+
+function render(){
+  const root=document.getElementById('root');
+  if(!root)return;
+
+  if(S.loading){root.innerHTML=`<div class="ctr"><div class="logo-big">bee-doo</div><div class="big-sp"></div></div>`;return;}
+  if(S.error){root.innerHTML=`<div class="ctr"><div style="font-size:44px">⚠️</div><div style="font-size:17px;font-weight:700">${S.error}</div></div>`;return;}
+
+  const needed  = PFLICHT.filter(p=>!isDone(p.key)&&!isUp(p.key));
+  const upping  = ALL.filter(p=>isUp(p.key));
+  const needOpt = OPTIONAL.filter(p=>!isDone(p.key)&&!isUp(p.key));
+  const doneAll = ALL.filter(p=>isDone(p.key));
+  const donePfl = PFLICHT.filter(p=>isDone(p.key)).length;
+  const totalPfl= PFLICHT.length;
+  const allDone = donePfl===totalPfl;
+  const phoneTotal=Object.values(S.phoneDone).filter(v=>v.status==='done').length;
+  const prog=Math.round(donePfl/totalPfl*100);
+
+  const nextNeeded = needed[0];
+
+  root.innerHTML=`
+    <div class="hdr">
+      <div class="hdr-logo">bee-doo</div>
+      <div class="hdr-info">
+        <div class="hdr-name">${S.meta.name||'Kunde'}</div>
+        <div class="hdr-addr">${S.meta.address||S.jobId}</div>
+      </div>
+      <div class="hdr-pill ${allDone?'good':needed.length>0?'warn':''}">${donePfl}/${totalPfl}</div>
+    </div>
+    <div class="prog"><div class="prog-fill" style="width:${prog}%"></div></div>
+
+    <div class="content">
+
+      ${allDone?`
+        <div class="done-banner">
+          <div class="di">✅</div>
+          <div class="dt">Alle Pflichtfotos erledigt!</div>
+          <div class="ds">Das iPad synchronisiert automatisch.<br>Optional: weitere Fotos unten aufnehmen.</div>
+        </div>`:''}
+
+      ${upping.length?`
+        <div class="sec">
+          <div class="sec-hd">↑ Wird hochgeladen <span class="badge b-need">${upping.length}</span></div>
+          <div class="list-big">${upping.map(p=>bigCard(p,'uploading')).join('')}</div>
+        </div>`:''}
+
+      ${needed.length?`
+        <div class="sec">
+          <div class="sec-hd">📋 Jetzt aufnehmen <span class="badge b-need">${needed.length} fehlen noch</span></div>
+          <div class="list-big">${needed.map(p=>bigCard(p,'needed')).join('')}</div>
+        </div>`:''}
+
+      ${needOpt.length?`
+        <div class="sec">
+          <div class="sec-hd">📁 Optional <span class="badge b-opt">${needOpt.length}</span></div>
+          <div class="grid-sm">${needOpt.map(p=>smallCard(p)).join('')}</div>
+        </div>`:''}
+
+      ${doneAll.length?`
+        <div class="div-line"><hr/><span>Erledigt (${doneAll.length})</span><hr/></div>
+        <div class="sec" style="padding-top:12px">
+          <div class="grid-tiny">${doneAll.map(p=>tinyCard(p)).join('')}</div>
+        </div>`:''}
+
+    </div>
+
+    <div class="bot">
+      <div class="bot-stats">
+        <div class="bs"><div class="bs-v" style="color:${allDone?'var(--g)':'var(--y)'}">${donePfl}/${totalPfl}</div><div class="bs-l">Pflicht</div></div>
+        <div class="bs"><div class="bs-v" style="color:var(--dm)">${phoneTotal}</div><div class="bs-l">Hochgeladen</div></div>
+      </div>
+      ${nextNeeded
+        ?`<button class="bot-btn act" onclick="capture('${nextNeeded.key}','${nextNeeded.label.replace(/'/g,"\\'")}')">📷 ${nextNeeded.label}</button>`
+        :`<button class="bot-btn done" disabled>✅ Alle Pflichtfotos erledigt</button>`}
+    </div>
+
+    ${S.toast?`<div class="toast ${S.toast.type}">${S.toast.msg}</div>`:''}
+  `;
+}
+
+function bigCard(p,mode){
+  const u=url(p.key), done=mode==='done', up=mode==='uploading';
+  return `
+    <div class="card-big state-${mode}" onclick="${up?'':done?`capture('${p.key}','${p.label.replace(/'/g,"\\'")}')`:`capture('${p.key}','${p.label.replace(/'/g,"\\'")}')` }">
+      <div class="thumb">
+        ${u?`<img src="${u}" alt="${p.label}"/>`:`<span>${p.icon}</span>`}
+        ${up?`<div class="upload-ov"><div class="spinner"></div></div>`:''}
+      </div>
+      <div class="body">
+        <div class="lbl">${p.label}</div>
+        ${p.note?`<div class="note">${p.note}</div>`:''}
+        <div class="cta ${up?'uploading':done?'done-src':''}">
+          ${up?'↑ Hochladen…':done?'✓ Erneut aufnehmen':'📷 Foto aufnehmen'}
+        </div>
+      </div>
+    </div>`;
+}
+
+function smallCard(p){
+  const u=url(p.key);
+  return `
+    <div class="card-sm" onclick="capture('${p.key}','${p.label.replace(/'/g,"\\'")}')">
+      <div class="thumb-sq">${u?`<img src="${u}" alt="${p.label}"/>`:`<span>${p.icon}</span>`}</div>
+      <div class="body-sm">
+        <div class="lbl-sm">${p.label}</div>
+        ${p.note?`<div class="st-sm">${p.note}</div>`:''}
+        <div class="st-sm" style="color:var(--dm)">+ Aufnehmen</div>
+      </div>
+    </div>`;
+}
+
+function tinyCard(p){
+  const u=url(p.key), fromIpad=S.doneOnIpad.has(p.key);
+  return `
+    <div class="card-tiny" onclick="capture('${p.key}','${p.label.replace(/'/g,"\\'")}')">
+      <div class="t-sq">${u?`<img src="${u}" alt="${p.label}"/>`:`<span>${p.icon}</span>`}<div class="chk">✓</div></div>
+      <div class="t-lbl">${p.label}${fromIpad?' 📱':''}</div>
+    </div>`;
+}
+
+document.addEventListener('DOMContentLoaded',()=>{render();init();});
+</script>
+</body>
+</html>
