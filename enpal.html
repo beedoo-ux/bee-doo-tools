@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>bee-doo · Enpal Board</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#0c1222;color:#e1e7ef;min-height:100vh}
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+button,select,input{font-family:inherit;color:inherit}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:#263354;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useRef, useEffect } = React;
+
+const SB_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_SRV = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
+
+const DK='#0c1222',C1='#151d30',C2='#1c2640',BD='#263354',TX='#e1e7ef',DM='#5c6b8a';
+const Y='#FDE154',GN='#22c55e',RD='#ef4444',AM='#f59e0b',BL='#3b82f6',PP='#a855f7';
+
+const fmt  = n => n==null ? '—' : Number(n).toLocaleString('de-DE');
+const fmtE = n => n==null ? '—' : Math.round(n).toLocaleString('de-DE')+' €';
+const fmtP = n => n==null ? '—' : n.toFixed(1)+' %';
+
+function parseCSV(txt) {
+  let r = Papa.parse(txt.trim(), {header:true, skipEmptyLines:true, delimiter:';'});
+  if (!r.data.length || Object.keys(r.data[0]).length < 3)
+    r = Papa.parse(txt.trim(), {header:true, skipEmptyLines:true, delimiter:','});
+  return r.data.map(row => {
+    const n={};
+    for (const [k,v] of Object.entries(row)) n[k.trim()]=(v||'').trim();
+    return n;
+  });
+}
+
+async function saveToSupabase(rows, label) {
+  await fetch(SB_URL+'/rest/v1/enpal_leads?id=gte.0', {
+    method:'DELETE',
+    headers:{'apikey':SB_SRV,'Authorization':'Bearer '+SB_SRV}
+  });
+  for (let i=0; i<rows.length; i+=500) {
+    const chunk = rows.slice(i,i+500).map(r=>({import_label:label, row_data:r}));
+    const res = await fetch(SB_URL+'/rest/v1/enpal_leads', {
+      method:'POST',
+      headers:{'apikey':SB_SRV,'Authorization':'Bearer '+SB_SRV,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify(chunk)
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+}
+
+function getCols(rows) {
+  if (!rows.length) return {};
+  const K = Object.keys(rows[0]);
+  const f = (...t) => K.find(k => t.some(x => k.toLowerCase().includes(x.toLowerCase())));
+  return {
+    status:  f('Status','Terminstatus','Ergebnis'),
+    berater: f('Berater (VB)','Berater','VB'),
+    datum:   f('Datum','Termin Datum'),
+    umsatz:  f('Umsatz','Auftragswert','Wert','Netto','Brutto'),
+    ag:      f('Ausfallgrund','Stornogr','Absagegrund','Grund'),
+  };
+}
+
+function calcM(rows, cols) {
+  const n = rows.length; if (!n) return null;
+  const isA   = s => ['abgeschlossen','abschluss','gewonnen','auftrag','deal'].some(x=>s.includes(x));
+  const isAus  = s => ['ausgefallen','abgesagt','storno','abgelehnt','nicht erschienen'].some(x=>s.includes(x));
+  const isT   = s => isA(s)||['stattgefunden','durchgeführt','positiv','interessiert'].some(x=>s.includes(x));
+  const sv = rows.map(r => (r[cols.status]||'').toLowerCase());
+  const ab=sv.filter(isA).length, aus=sv.filter(isAus).length, ter=sv.filter(isT).length;
+  let um=0;
+  if (cols.umsatz) rows.forEach(r => {
+    if (isA((r[cols.status]||'').toLowerCase())) {
+      const v=parseFloat((r[cols.umsatz]||'0').replace(/\./g,'').replace(',','.'));
+      if (!isNaN(v)) um+=v;
+    }
+  });
+  const gr={};
+  if (cols.ag) rows.filter(r=>isAus((r[cols.status]||'').toLowerCase())).forEach(r=>{
+    const g=r[cols.ag]||'Unbekannt'; gr[g]=(gr[g]||0)+1;
+  });
+  const byB={};
+  if (cols.berater) rows.forEach(r=>{
+    const b=r[cols.berater]||'?';
+    if (!byB[b]) byB[b]={name:b,total:0,ab:0,um:0,aus:0};
+    byB[b].total++;
+    const s=(r[cols.status]||'').toLowerCase();
+    if (isA(s)) { byB[b].ab++; if (cols.umsatz){const v=parseFloat((r[cols.umsatz]||'0').replace(/\./g,'').replace(',','.'));if(!isNaN(v))byB[b].um+=v;}}
+    if (isAus(s)) byB[b].aus++;
+  });
+  const byM={};
+  if (cols.datum) rows.forEach(r=>{
+    const raw=r[cols.datum]; if (!raw) return;
+    const p=raw.split('.');
+    const key=p.length>=2 ? (p[1]+'/'+(p.length>=3?p[2].substring(2):'??')) : raw.substring(0,7);
+    if (!byM[key]) byM[key]={monat:key,total:0,ab:0,aus:0};
+    byM[key].total++;
+    const s=(r[cols.status]||'').toLowerCase();
+    if (isA(s)) byM[key].ab++;
+    if (isAus(s)) byM[key].aus++;
+  });
+  const sm={};
+  rows.forEach(r=>{const s=r[cols.status]||'Unbekannt';sm[s]=(sm[s]||0)+1;});
+  return {
+    n, ab, aus, ter, um,
+    tq: n>0?(ter/n)*100:0, aq: ter>0?(ab/ter)*100:0, auq: n>0?(aus/n)*100:0,
+    avgDeal: ab>0?um/ab:0,
+    byB: Object.values(byB).sort((a,b)=>b.ab-a.ab),
+    byM: Object.values(byM).sort((a,b)=>a.monat.localeCompare(b.monat)),
+    gr: Object.entries(gr).map(([k,v])=>({name:k,count:v})).sort((a,b)=>b.count-a.count),
+    sm: Object.entries(sm).map(([k,v])=>({name:k,value:v})).sort((a,b)=>b.value-a.value),
+  };
+}
+
+function Bar({pct, color}) {
+  return (
+    <div style={{height:6,background:C2,borderRadius:3,marginTop:4}}>
+      <div style={{height:'100%',width:Math.min(100,pct||0)+'%',background:color,borderRadius:3}} />
+    </div>
+  );
+}
+
+function KPI({label, value, sub, color, large}) {
+  const c = color || Y;
+  return (
+    <div style={{background:C1,border:'1px solid '+BD,borderRadius:10,padding:'20px 24px',minWidth:140}}>
+      <div style={{fontSize:large?28:22,fontWeight:800,color:c}}>{value}</div>
+      <div style={{fontSize:13,fontWeight:600,color:TX,marginTop:2}}>{label}</div>
+      {sub && <div style={{fontSize:11,color:DM,marginTop:2}}>{sub}</div>}
+    </div>
+  );
+}
+
+function DropZone({label, file, onFile, color}) {
+  const [drag, setDrag] = useState(false);
+  const ref = useRef();
+  const handle = f => {
+    if (!f || !f.name.endsWith('.csv')) return;
+    const reader = new FileReader();
+    reader.onload = e => { try { onFile({name:f.name, rows:parseCSV(e.target.result)}); } catch(err){ alert(err.message); } };
+    reader.readAsText(f,'utf-8');
+  };
+  const bc = drag ? color : (file ? color : BD);
+  const bg = drag ? C2 : (file ? C2 : C1);
+  return (
+    <div
+      onClick={() => ref.current.click()}
+      onDragOver={e=>{e.preventDefault();setDrag(true);}}
+      onDragLeave={() => setDrag(false)}
+      onDrop={e=>{e.preventDefault();setDrag(false);handle(e.dataTransfer.files[0]);}}
+      style={{borderRadius:10,padding:16,cursor:'pointer',textAlign:'center',border:'2px dashed '+bc,background:bg,transition:'all .2s'}}
+    >
+      <input ref={ref} type="file" accept=".csv" style={{display:'none'}} onChange={e=>handle(e.target.files[0])} />
+      <div style={{fontSize:20,marginBottom:4}}>{file?'✅':'📂'}</div>
+      <div style={{fontSize:12,fontWeight:700,color:file?color:DM}}>{label}</div>
+      <div style={{fontSize:11,color:DM,marginTop:3}}>{file ? file.name+' · '+file.rows.length+' Zeilen' : 'CSV ablegen oder klicken'}</div>
+    </div>
+  );
+}
+
+function Board({enpalRows, allRows}) {
+  const [tab, setTab] = useState('uebersicht');
+  const [bf, setBf] = useState('alle');
+  const [zf, setZf] = useState('alle');
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null);
+
+  const cols = useMemo(() => getCols(enpalRows), [enpalRows]);
+  const beraterList = useMemo(() => {
+    if (!cols.berater) return [];
+    return [...new Set(enpalRows.map(r=>r[cols.berater]).filter(Boolean))].sort();
+  }, [enpalRows, cols]);
+
+  const filtered = useMemo(() => {
+    let r = enpalRows;
+    if (bf !== 'alle' && cols.berater) r = r.filter(x => x[cols.berater]===bf);
+    if (zf !== 'alle' && cols.datum) {
+      const now = new Date();
+      r = r.filter(x => {
+        const raw=x[cols.datum]; if (!raw) return false;
+        const p=raw.split('.');
+        const d=p.length===3?new Date(p[2]+'-'+p[1]+'-'+p[0]):new Date(raw);
+        if (isNaN(d)) return false;
+        const diff=(now-d)/86400000;
+        return zf==='7'?diff<=7:zf==='30'?diff<=30:diff<=90;
+      });
+    }
+    return r;
+  }, [enpalRows, bf, zf, cols]);
+
+  const M = useMemo(() => calcM(filtered, cols), [filtered, cols]);
+
+  const doSave = async () => {
+    setSaving(true); setSaveStatus(null);
+    try {
+      const label = new Date().toLocaleString('de-DE');
+      await saveToSupabase(allRows, label);
+      setSaveStatus('ok');
+    } catch(e) { setSaveStatus('err'); }
+    setSaving(false);
+    setTimeout(() => setSaveStatus(null), 5000);
+  };
+
+  const TABS = [
+    {k:'uebersicht',l:'📊 Übersicht'},
+    {k:'berater',l:'👤 Berater'},
+    {k:'qualitaet',l:'🔍 Qualität'},
+    {k:'trend',l:'📈 Trend'},
+    {k:'tabelle',l:'📋 Tabelle'},
+  ];
+  const saveBorder = saveStatus==='ok' ? GN : saveStatus==='err' ? RD : BD;
+
+  return (
+    <div>
+      <div style={{background:C2,border:'1px solid '+saveBorder,borderRadius:12,padding:'14px 20px',marginBottom:20,display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,flexWrap:'wrap'}}>
+        <div>
+          <div style={{fontSize:14,fontWeight:700}}>☁️ In Supabase speichern</div>
+          <div style={{fontSize:12,color:DM,marginTop:2}}>{enpalRows.length} Enpal-Leads · {allRows.length} Gesamtzeilen · Externes Board aktualisieren</div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          {saveStatus==='ok' && <span style={{color:GN,fontSize:13,fontWeight:600}}>✓ Gespeichert!</span>}
+          {saveStatus==='err' && <span style={{color:RD,fontSize:13}}>✗ Fehler — nochmal</span>}
+          <button onClick={doSave} disabled={saving} style={{background:saving?BD:Y,color:saving?TX:'#0c1222',border:'none',borderRadius:8,padding:'10px 22px',fontWeight:800,fontSize:14,cursor:saving?'not-allowed':'pointer',fontFamily:'inherit'}}>
+            {saving ? '⏳ Speichern...' : '⬆️ Jetzt speichern'}
+          </button>
+        </div>
+      </div>
+
+      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+        <span style={{fontSize:12,color:DM}}>{enpalRows.length} Enpal-Leads</span>
+        {beraterList.length > 0 && (
+          <select value={bf} onChange={e=>setBf(e.target.value)} style={{background:C2,border:'1px solid '+BD,borderRadius:8,color:TX,padding:'6px 10px',fontSize:12}}>
+            <option value="alle">👤 Alle Berater</option>
+            {beraterList.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        )}
+        <select value={zf} onChange={e=>setZf(e.target.value)} style={{background:C2,border:'1px solid '+BD,borderRadius:8,color:TX,padding:'6px 10px',fontSize:12}}>
+          <option value="alle">📅 Gesamt</option>
+          <option value="7">7 Tage</option>
+          <option value="30">30 Tage</option>
+          <option value="90">90 Tage</option>
+        </select>
+      </div>
+
+      <div style={{display:'flex',gap:4,marginBottom:20,flexWrap:'wrap'}}>
+        {TABS.map(t => {
+          const active = tab===t.k;
+          return (
+            <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:'8px 16px',borderRadius:8,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',background:active?Y:C1,color:active?'#0c1222':DM}}>
+              {t.l}
+            </button>
+          );
+        })}
+      </div>
+
+      {!M ? (
+        <div style={{textAlign:'center',padding:60,color:DM}}>Keine Daten nach Filter.</div>
+      ) : (
+        <div>
+          {/* ÜBERSICHT */}
+          {tab==='uebersicht' && (
+            <div>
+              <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:20}}>
+                <KPI label="Enpal Leads" value={fmt(M.n)} large />
+                <KPI label="Terminierungsquote" value={fmtP(M.tq)} sub={M.ter+' terminiert'} color={M.tq>=50?GN:AM} large />
+                <KPI label="Abschlussquote" value={fmtP(M.aq)} sub={M.ab+' Abschlüsse'} color={M.aq>=30?GN:AM} large />
+                {cols.umsatz && <KPI label="Umsatz" value={fmtE(M.um)} sub={'Ø '+fmtE(M.avgDeal)} color={GN} large />}
+                <KPI label="Ausfallquote" value={fmtP(M.auq)} sub={M.aus+' ausgefallen'} color={M.auq<30?GN:RD} large />
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:16}}>
+                <div style={{background:C1,border:'1px solid '+BD,borderRadius:12,padding:20}}>
+                  <div style={{fontSize:14,fontWeight:700,marginBottom:16}}>Status-Verteilung</div>
+                  {M.sm.slice(0,8).map((s,i) => {
+                    const colors=[Y,GN,BL,PP,AM,RD];
+                    return (
+                      <div key={s.name} style={{marginBottom:8}}>
+                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                          <span style={{fontSize:12}}>{s.name}</span>
+                          <span style={{fontSize:12,fontWeight:700,color:Y}}>{s.value}</span>
+                        </div>
+                        <Bar pct={M.n?s.value/M.n*100:0} color={colors[i%6]} />
+                      </div>
+                    );
+                  })}
+                </div>
+                {M.byB.length > 0 && (
+                  <div style={{background:C1,border:'1px solid '+BD,borderRadius:12,padding:20}}>
+                    <div style={{fontSize:14,fontWeight:700,marginBottom:16}}>Top Berater</div>
+                    {M.byB.slice(0,8).map((b,i) => (
+                      <div key={b.name} style={{marginBottom:8}}>
+                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                          <span style={{fontSize:12}}>{i+1}. {b.name}</span>
+                          <span style={{fontSize:12,fontWeight:700,color:GN}}>{b.ab} Abschlüsse</span>
+                        </div>
+                        <Bar pct={M.byB[0].ab?b.ab/M.byB[0].ab*100:0} color={Y} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* BERATER */}
+          {tab==='berater' && (
+            <div>
+              <div style={{fontSize:14,fontWeight:700,marginBottom:16}}>Berater-Ranking</div>
+              {!M.byB.length ? (
+                <div style={{color:DM,padding:40,textAlign:'center'}}>Keine Berater-Spalte erkannt.</div>
+              ) : (
+                <div style={{overflowX:'auto',background:C1,border:'1px solid '+BD,borderRadius:12}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                    <thead>
+                      <tr>
+                        {['#','Berater','Leads','Abschlüsse','%','Ausgefallen','%',...(cols.umsatz?['Umsatz']:[])].map(h => (
+                          <th key={h} style={{padding:'10px 12px',textAlign:['Leads','Abschlüsse','%','Ausgefallen','Umsatz'].includes(h)?'right':'left',color:DM,fontWeight:600,whiteSpace:'nowrap',borderBottom:'2px solid '+BD}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {M.byB.map((b,i) => (
+                        <tr key={b.name} style={{background:i%2===1?C1:DK}}>
+                          <td style={{padding:'9px 12px',color:DM,fontWeight:700}}>{i+1}</td>
+                          <td style={{padding:'9px 12px',fontWeight:600}}>{b.name}</td>
+                          <td style={{padding:'9px 12px',textAlign:'right'}}>{b.total}</td>
+                          <td style={{padding:'9px 12px',textAlign:'right',color:b.ab?GN:DM,fontWeight:700}}>{b.ab}</td>
+                          <td style={{padding:'9px 12px',textAlign:'right',color:b.total&&b.ab/b.total>=.3?GN:AM}}>{b.total?fmtP(b.ab/b.total*100):'—'}</td>
+                          <td style={{padding:'9px 12px',textAlign:'right',color:b.aus?AM:DM}}>{b.aus}</td>
+                          <td style={{padding:'9px 12px',textAlign:'right'}}>{b.total?fmtP(b.aus/b.total*100):'—'}</td>
+                          {cols.umsatz && <td style={{padding:'9px 12px',textAlign:'right',color:Y,fontWeight:600}}>{b.um?fmtE(b.um):'—'}</td>}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* QUALITÄT */}
+          {tab==='qualitaet' && (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:16}}>
+              <div style={{background:C1,border:'1px solid '+BD,borderRadius:12,padding:20}}>
+                <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>Lead-Qualität</div>
+                <div style={{fontSize:12,color:DM,marginBottom:16}}>Enpal vs. Zielwerte</div>
+                {[
+                  {label:'Terminierungsquote',val:M.tq,bench:60,good:'>60%'},
+                  {label:'Abschlussquote',val:M.aq,bench:30,good:'>30%'},
+                  {label:'Ausfallquote',val:M.auq,bench:30,good:'<30%',inv:true},
+                ].map(item => {
+                  const color = item.inv ? (item.val<item.bench?GN:RD) : (item.val>item.bench?GN:AM);
+                  return (
+                    <div key={item.label} style={{marginBottom:14}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                        <span style={{fontSize:13}}>{item.label}</span>
+                        <span style={{fontSize:13,fontWeight:700,color}}>{fmtP(item.val)}</span>
+                      </div>
+                      <Bar pct={item.val} color={color} />
+                      <div style={{fontSize:10,color:DM,marginTop:2}}>Ziel: {item.good}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{background:C1,border:'1px solid '+BD,borderRadius:12,padding:20}}>
+                <div style={{fontSize:14,fontWeight:700,marginBottom:16}}>Ausfallgründe</div>
+                {!M.gr.length ? (
+                  <div style={{color:DM,fontSize:13}}>Keine Ausfallgründe-Spalte erkannt.</div>
+                ) : M.gr.slice(0,8).map(g => (
+                  <div key={g.name} style={{marginBottom:8}}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                      <span style={{fontSize:12,flex:1,marginRight:8,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:RD}}>{g.count}</span>
+                    </div>
+                    <Bar pct={M.gr[0].count?g.count/M.gr[0].count*100:0} color={RD} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TREND */}
+          {tab==='trend' && (
+            <div style={{background:C1,border:'1px solid '+BD,borderRadius:12,padding:20}}>
+              <div style={{fontSize:14,fontWeight:700,marginBottom:16}}>Monatlicher Verlauf</div>
+              {!M.byM.length ? (
+                <div style={{color:DM,fontSize:13}}>Keine Datum-Spalte erkannt.</div>
+              ) : (
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                    <thead>
+                      <tr>
+                        {['Monat','Leads','Abschlüsse','%','Ausgefallen','%'].map(h => (
+                          <th key={h} style={{padding:'10px 12px',textAlign:h==='Monat'?'left':'right',color:DM,fontWeight:600,borderBottom:'2px solid '+BD}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {M.byM.map((m,i) => (
+                        <tr key={m.monat} style={{background:i%2===1?C1:DK}}>
+                          <td style={{padding:'9px 12px',fontWeight:600}}>{m.monat}</td>
+                          <td style={{padding:'9px 12px',textAlign:'right',color:Y,fontWeight:700}}>{m.total}</td>
+                          <td style={{padding:'9px 12px',textAlign:'right',color:GN}}>{m.ab}</td>
+                          <td style={{padding:'9px 12px',textAlign:'right'}}>{m.total?fmtP(m.ab/m.total*100):'—'}</td>
+                          <td style={{padding:'9px 12px',textAlign:'right',color:AM}}>{m.aus}</td>
+                          <td style={{padding:'9px 12px',textAlign:'right'}}>{m.total?fmtP(m.aus/m.total*100):'—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TABELLE */}
+          {tab==='tabelle' && (
+            <div>
+              <div style={{fontSize:13,color:DM,marginBottom:12}}>{filtered.length} Zeilen</div>
+              <div style={{overflowX:'auto',background:C1,border:'1px solid '+BD,borderRadius:12}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                  <thead>
+                    <tr>
+                      {Object.keys(filtered[0]||{}).slice(0,12).map(col => (
+                        <th key={col} style={{padding:'10px 12px',textAlign:'left',color:DM,fontWeight:600,whiteSpace:'nowrap',borderBottom:'2px solid '+BD,background:C1}}>{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.slice(0,200).map((row,i) => (
+                      <tr key={i} style={{background:i%2===1?C1:DK}}>
+                        {Object.keys(filtered[0]).slice(0,12).map(col => (
+                          <td key={col} style={{padding:'9px 12px',whiteSpace:'nowrap',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis'}}>{row[col]}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filtered.length>200 && <div style={{padding:'12px 16px',fontSize:12,color:DM,borderTop:'1px solid '+BD}}>Zeige 200 von {filtered.length} Zeilen</div>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  const [files, setFiles] = useState({f1:null,f2:null,f3:null,f4:null});
+  const setF = k => d => setFiles(f=>({...f,[k]:d}));
+
+  const allRows = useMemo(() => [files.f1,files.f2,files.f3,files.f4].filter(Boolean).flatMap(f=>f.rows), [files]);
+  const lqk = useMemo(() => allRows.length ? Object.keys(allRows[0]).find(k=>k.toLowerCase().includes('leadquelle')||k.toLowerCase()==='quelle') : null, [allRows]);
+  const enpalRows = useMemo(() => lqk ? allRows.filter(r=>(r[lqk]||'').toLowerCase().includes('enpal')) : allRows, [allRows,lqk]);
+  const fc = [files.f1,files.f2,files.f3,files.f4].filter(Boolean).length;
+
+  return (
+    <div style={{minHeight:'100vh',background:DK}}>
+      <div style={{background:C1,borderBottom:'1px solid '+BD,padding:'0 24px'}}>
+        <div style={{maxWidth:1200,margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'space-between',height:56}}>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <a href="./" style={{color:DM,textDecoration:'none',fontSize:12,border:'1px solid '+BD,borderRadius:8,padding:'4px 10px'}}>← Launcher</a>
+            <span style={{fontWeight:800,fontSize:18}}>bee<span style={{color:Y}}>·</span>doo</span>
+            <span style={{background:'rgba(253,225,84,.15)',color:Y,fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>ENPAL BOARD</span>
+            <span style={{fontSize:11,color:DM,background:C2,padding:'2px 8px',borderRadius:6}}>Intern</span>
+          </div>
+          {fc>0 && <span style={{fontSize:12,color:GN}}>✓ {fc} CSV{fc>1?'s':''} · {allRows.length} Zeilen · {enpalRows.length} Enpal</span>}
+        </div>
+      </div>
+
+      <div style={{maxWidth:1200,margin:'0 auto',padding:24}}>
+        <div style={{background:C1,border:'1px solid '+BD,borderRadius:12,padding:24,marginBottom:24}}>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>📂 Täglicher CSV-Upload</div>
+          <div style={{fontSize:12,color:DM,marginBottom:16}}>Morgen-Export aus Leveto laden → Board prüfen → Speichern → Extern-Board aktuell</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}>
+            <DropZone label="Tabelle 1 · Terminauswertung" file={files.f1} onFile={setF('f1')} color={Y} />
+            <DropZone label="Tabelle 2 · Aufträge" file={files.f2} onFile={setF('f2')} color={GN} />
+            <DropZone label="Tabelle 3 · Stornos / Leads" file={files.f3} onFile={setF('f3')} color={BL} />
+            <DropZone label="Tabelle 4 · Weitere CSV" file={files.f4} onFile={setF('f4')} color={PP} />
+          </div>
+          {allRows.length > 0 && (
+            <button onClick={()=>setFiles({f1:null,f2:null,f3:null,f4:null})} style={{marginTop:12,background:'transparent',border:'1px solid '+BD,borderRadius:8,color:DM,padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>
+              🗑 Reset
+            </button>
+          )}
+        </div>
+
+        {!allRows.length ? (
+          <div style={{textAlign:'center',padding:'80px 24px',color:DM}}>
+            <div style={{fontSize:48,marginBottom:16}}>⚡</div>
+            <div style={{fontSize:18,fontWeight:700,color:TX,marginBottom:8}}>Enpal Lead Board — Intern</div>
+            <div style={{fontSize:14}}>CSVs hochladen → Board analysiert → Speichern → Externes Board für Enpal aktuell</div>
+          </div>
+        ) : (
+          <Board enpalRows={enpalRows} allRows={allRows} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
