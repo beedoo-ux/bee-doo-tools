@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo · DC/AC Montage Kanban</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐝</text></svg>">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body,#root{font-family:'DM Sans',sans-serif;background:#0c1222;color:#e1e7ef;height:100vh;overflow:hidden}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#263354;border-radius:3px}
+@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}.fi{animation:fi .18s ease both}
+.cd{transition:box-shadow .15s,transform .15s,border-color .15s;cursor:grab}.cd:hover{box-shadow:0 4px 16px rgba(0,0,0,.4);transform:translateY(-1px);border-color:#FDE15430}.cd:active{cursor:grabbing}
+.ib{display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;cursor:pointer;transition:all .15s;background:transparent;color:#5c6b8a}.ib:hover{background:rgba(255,255,255,.1);color:#e1e7ef}
+.et{background:transparent;border:1px solid transparent;color:#fff;font-size:10px;font-weight:700;letter-spacing:.03em;line-height:1.3;text-align:center;width:100%;cursor:pointer;border-radius:4px;padding:2px 4px;font-family:inherit}.et:hover{border-color:rgba(255,255,255,.25)}.et:focus{outline:none;border-color:#FDE154;background:rgba(0,0,0,.3);cursor:text}
+.hb{position:absolute;left:-1px;top:0;bottom:0;width:18px;background:#34D399;color:#0c1222;font-size:6px;font-weight:700;writing-mode:vertical-rl;text-orientation:mixed;display:flex;align-items:center;justify-content:center;letter-spacing:1px;border-radius:6px 0 0 6px;z-index:2}
+.nd{position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:#60A5FA;border:1.5px solid #151d30;z-index:3}
+input,select,textarea{font-family:inherit}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useCallback,useMemo,useRef,useEffect}=React;
+
+/* ═══ SVG ICON BASE ═══ */
+const Ic=({children,size=16,color="currentColor",sw=2,style={}})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{display:"inline-block",verticalAlign:"middle",flexShrink:0,...style}}>{children}</svg>
+);
+/* Individual icons using SVG paths inline */
+const IcSettings=({size=16,...p})=><Ic size={size} {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></Ic>;
+const IcTrash=({size=16,...p})=><Ic size={size} {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></Ic>;
+const IcGrip=({size=16,...p})=><Ic size={size} {...p}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></Ic>;
+const IcPlus=({size=16,...p})=><Ic size={size} {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Ic>;
+const IcSearch=({size=16,...p})=><Ic size={size} {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Ic>;
+const IcChL=({size=16,...p})=><Ic size={size} {...p}><path d="M15 18l-6-6 6-6"/></Ic>;
+const IcChR=({size=16,...p})=><Ic size={size} {...p}><path d="M9 18l6-6-6-6"/></Ic>;
+const IcX=({size=16,...p})=><Ic size={size} {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Ic>;
+const IcCheck=({size=16,...p})=><Ic size={size} {...p}><path d="M20 6L9 17l-5-5"/></Ic>;
+const IcAlert=({size=16,...p})=><Ic size={size} {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></Ic>;
+const IcClock=({size=16,...p})=><Ic size={size} {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Ic>;
+const IcHour=({size=16,...p})=><Ic size={size} {...p}><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/><path d="M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></Ic>;
+const IcUser=({size=16,...p})=><Ic size={size} {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Ic>;
+const IcDL=({size=16,...p})=><Ic size={size} {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Ic>;
+const IcBar=({size=16,...p})=><Ic size={size} {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></Ic>;
+const IcArrowR=({size=16,...p})=><Ic size={size} {...p}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></Ic>;
+const IcCal=({size=16,...p})=><Ic size={size} {...p}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></Ic>;
+const IcLayers=({size=16,...p})=><Ic size={size} {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></Ic>;
+const IcMin=({size=16,...p})=><Ic size={size} {...p}><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></Ic>;
+
+/* ═══ THEME ═══ */
+const B="#FDE154",DK="#0c1222",C1="#151d30",C2="#1c2640",BD="#263354",TX="#e1e7ef",DM="#5c6b8a";
+const GN="#34D399",RD="#F87171",OR="#FB923C",GY="#64748B",PP="#A78BFA",YL="#FBBF24",BL="#60A5FA",PK="#F472B6",TL="#2DD4BF";
+const EUR_KWP=1500;
+const fmt=v=>v>=1e6?(v/1e6).toFixed(1)+"M":v>=1e3?Math.round(v/1e3)+"k":String(v);
+
+/* ═══ MONTEURE ═══ */
+const DC_MONT=["Team Schäfer","Team Krause","Team Nowak","Team Petersen","Sub Becker","Sub Yilmaz"];
+const AC_MONT=["AC Fischer","AC Braun","AC Vogt","Sub Meier"];
+const DC_LATE=["dc_vollst","dc_reklam"];
+const DC_ACT=["dc_termin","dc_baubegl","dc_gestartet","dc_abnahme","dc_nachterm"];
+const AC_ACT=["ac_termin","ac_gestartet","ac_abnahme","ac_nachterm"];
+
+/* ═══ STAGES with SLA ═══ */
+const DC_ST=[
+  {id:"dc_neue",label:"NEUE MONTAGE",sub:"Erwarte Lieferschein",color:GN,phase:"prep",sla:7},
+  {id:"dc_nacherford",label:"NACHARBEITEN / NÜRNBERG",sub:"Büro Nürnberg",color:GY,phase:"prep",sla:14},
+  {id:"dc_nachhold",label:"NACHARBEITEN (ON HOLD)",sub:"Nicht terminierbar",color:GY,phase:"hold",sla:30},
+  {id:"dc_kontrolle",label:"DC-KONTROLLE",sub:"",color:GY,phase:"prep",sla:5},
+  {id:"dc_hold",label:"ON HOLD",sub:"",color:PP,phase:"hold",sla:30},
+  {id:"dc_barzahler",label:"BARZAHLER – ANZAHLUNG",sub:"",color:GN,phase:"prep",sla:7},
+  {id:"dc_vorort",label:"VOR-ORT-PRÜFUNG DC",sub:"S. Buriáles / A. Richter",color:GN,phase:"prep",sla:10},
+  {id:"dc_lieferschein",label:"LIEFERSCHEIN ERHALTEN",sub:"Warte auf Material",color:GN,phase:"prep",sla:14},
+  {id:"dc_dachziegel",label:"DACHZIEGEL BESTELLEN",sub:"Büro Nürnberg",color:GN,phase:"prep",sla:10},
+  {id:"dc_matbestae",label:"MATERIAL + MONTEUR",sub:"Warte Auslieferung",color:GN,phase:"prep",sla:7},
+  {id:"dc_termin",label:"TERMIN GELEGT",sub:"DC Monteur terminiert",color:GN,phase:"active",sla:14},
+  {id:"dc_baubegl",label:"TERMIN // BAUBEGLEITER",sub:"",color:GN,phase:"active",sla:14},
+  {id:"dc_klaerung",label:"IN KLÄRUNG",sub:"",color:GN,phase:"hold",sla:21},
+  {id:"dc_storniert",label:"STORNIERT",sub:"",color:RD,phase:"end",sla:999},
+  {id:"dc_gestartet",label:"BAUSTELLE GESTARTET",sub:"Montage laufend",color:GN,phase:"active",sla:5},
+  {id:"dc_abnahme",label:"LIVE ABNAHME",sub:"",color:GN,phase:"active",sla:3},
+  {id:"dc_nachterm",label:"NACHARBEITEN TERMINIERT",sub:"",color:RD,phase:"active",sla:14},
+  {id:"dc_abgebrochen",label:"ABGEBROCHEN",sub:"",color:RD,phase:"end",sla:999},
+  {id:"dc_vollst",label:"DC VOLLSTÄNDIG",sub:"→ AC Workflow",color:GN,phase:"done",sla:3},
+  {id:"dc_reklam",label:"REKLAMATION",sub:"",color:RD,phase:"done",sla:21},
+];
+const AC_ST=[
+  {id:"ac_neue",label:"NEUE MONTAGE",sub:"AC Monteur terminieren",color:GN,phase:"prep",sla:7},
+  {id:"ac_storniert",label:"STORNIERT",sub:"",color:RD,phase:"end",sla:999},
+  {id:"ac_barzahler",label:"BARZAHLER – ANZAHLUNG",sub:"",color:GN,phase:"prep",sla:7},
+  {id:"ac_hold",label:"AC NACHARBEIT (HOLD)",sub:"",color:GY,phase:"hold",sla:30},
+  {id:"ac_nachnuern",label:"NACHARBEITEN / NÜRNBERG",sub:"",color:RD,phase:"hold",sla:14},
+  {id:"ac_foxess",label:"FOXESS TICKET",sub:"",color:YL,phase:"hold",sla:21},
+  {id:"ac_vorort",label:"VOR-ORT-PRÜFUNG AC",sub:"",color:GN,phase:"prep",sla:10},
+  {id:"ac_termin",label:"TERMIN GELEGT",sub:"AC Monteur terminiert",color:GN,phase:"active",sla:14},
+  {id:"ac_klaerung",label:"IN KLÄRUNG",sub:"",color:GY,phase:"hold",sla:21},
+  {id:"ac_gestartet",label:"BAUSTELLE GESTARTET",sub:"Montage laufend",color:GN,phase:"active",sla:5},
+  {id:"ac_abnahme",label:"LIVE ABNAHME",sub:"",color:GN,phase:"active",sla:3},
+  {id:"ac_nachterm",label:"NACHARBEITEN TERMINIERT",sub:"",color:RD,phase:"active",sla:14},
+  {id:"ac_abgebrochen",label:"ABGEBROCHEN",sub:"",color:RD,phase:"end",sla:999},
+  {id:"ac_freigabe",label:"FREIGABE AC",sub:"AC fertig",color:GN,phase:"done",sla:5},
+  {id:"ac_vollst",label:"AC VOLLSTÄNDIG",sub:"",color:GN,phase:"done",sla:3},
+  {id:"ac_reklam",label:"REKLAMATION",sub:"",color:RD,phase:"done",sla:21},
+  {id:"ac_ztnicht",label:"ZT NICHT TERMINIERT",sub:"⏳ Netzbetreiber",color:YL,phase:"evu",evu:true,sla:30},
+  {id:"ac_ztterm",label:"ZT TERMINIERT",sub:"⏳ EVU",color:YL,phase:"evu",evu:true,sla:30},
+  {id:"ac_ztabg",label:"ZT ABGESCHLOSSEN",sub:"⏳ EVU",color:YL,phase:"evu",evu:true,sla:14},
+  {id:"ac_evufertig",label:"EVU FERTIGMELDUNG",sub:"⏳ EVU",color:YL,phase:"evu",evu:true,sla:14},
+  {id:"ac_evuinbetr",label:"EVU INBETRIEBNAHME",sub:"Karina / Jenny",color:YL,phase:"evu",evu:true,sla:14},
+];
+
+/* ═══ DATA ═══ */
+const SRC=["MVPP","Omega","Eigenvertrieb","SAOD","Empfehlung"];
+const STAT=[{l:"AB erstellt",c:GN},{l:"Storniert",c:BL},{l:"Proj. created",c:GY}];
+const BER=["N. Brodowski","S. Hensel","G. Ulitko","P.-T. Hannig","L. Kirschner","E. Klitzmano","P. Meier","A. Schwarze","J. Voß","R. Pehlivan","H. Seitz","P. Kalinowski","S. Boyali"];
+const NAM=["H.-J. Mügge","J. Fröhlich","S. Aydin","S. Kunisch","M. Faber","M. Pieper","F. Gerber","Y. Akifov","V. Wilhelm","G. Ronneburg","N. Burger","M. Eberhart","A. Riesterer","D. Geile","C. Schneider","F. Schürmann","K.-P. Pliz","S. Borgers","A. Kommer","I. Dittmann","A. Thevessen","W. Rausch","E. Riedinger"];
+const STR=["Heeper Str.","Lange Str.","Herforder Str.","Am Stadtholz","Detmolder Str.","Mühlenweg","Kirchweg","Hauptstraße","Stettiner Str."];
+const CTY=["Bielefeld","Dortmund","Paderborn","Gütersloh","Herford","Münster","Osnabrück","Minden","Essen","Köln","Lemgo"];
+
+function mkC(id,sid,brd,projId){
+  const n=NAM[id%NAM.length],kw=(id%20)+4;
+  const sla=(brd==="DC"?DC_ST:AC_ST).find(s=>s.id===sid)?.sla||14;
+  const days=Math.floor(Math.random()*Math.max(sla*2,10))+1;
+  const hasMont=brd==="DC"?DC_ACT.includes(sid):AC_ACT.includes(sid);
+  const mont=hasMont?(brd==="DC"?DC_MONT[id%DC_MONT.length]:AC_MONT[id%AC_MONT.length]):null;
+  const tDate=(sid.includes("termin")||sid.includes("gestartet"))?String((id%28)+1).padStart(2,"0")+"."+String((id%3)+2).padStart(2,"0")+".2026":null;
+  return{id:"#"+(40000+id*137+brd.charCodeAt(0)),name:n,src:SRC[id%SRC.length],
+    erst:String((id%28)+1).padStart(2,"0")+".01.2026",
+    ph1:"0"+(170+id%30)+"/"+(1e6+id*7919),
+    em:n.split(" ").pop().toLowerCase().replace(/[^a-z]/g,"")+"@"+["mail.de","web.de","gmail.com","gmx.de"][id%4],
+    str:STR[id%STR.length]+" "+((id%200)+1),city:(id*397%90000+10000)+" "+CTY[id%CTY.length],
+    berater:BER[id%BER.length],stat:STAT[id%10<7?0:id%10<9?2:1],
+    kw,mod:Math.floor(kw*1.8),stage:sid,heute:id%13===0,brd,projId,days,mont,isNew:Math.random()<.25,tDate,sla};
+}
+function genLinked(){
+  const dc=[],ac=[];let pC=1e4,di=0,ai=500;
+  DC_ST.forEach(s=>{const n=Math.min(4,(di%5)+1);for(let i=0;i<n;i++){const p="P"+pC++;dc.push(mkC(di++,s.id,"DC",p));if(DC_LATE.includes(s.id))ac.push(mkC(ai++,AC_ST[Math.floor((di*7)%AC_ST.length)].id,"AC",p));}});
+  AC_ST.forEach((s,si)=>{if(si%2===0){const p="P"+pC++;ac.push(mkC(ai++,s.id,"AC",p));dc.push(mkC(di++,"dc_vollst","DC",p));}});
+  return{dc,ac};
+}
+const{dc:DC0,ac:AC0}=genLinked();
+
+const FILT=[
+  {id:"sla",label:"🔴 SLA",fn:c=>c.days>c.sla},
+  {id:"w7",label:"🟡 >7d",fn:c=>c.days>7},
+  {id:"bz",label:"💰 Bar",fn:c=>c.stage.includes("barzahler")},
+  {id:"na",label:"🔧 Nachr.",fn:c=>c.stage.includes("nach")},
+  {id:"ho",label:"⏸ Hold",fn:c=>c.stage.includes("hold")||c.stage.includes("klaerung")},
+  {id:"mo",label:"👷 Mont.",fn:c=>!!c.mont},
+  {id:"he",label:"📅 Heute",fn:c=>c.heute},
+];
+
+/* ═══ CARD COMPACT ═══ */
+function CCard({c,onClick,xInfo,sel,onSel}){
+  const ov=c.days>c.sla,cl=ov?RD:c.days>c.sla*.7?OR:c.days>3?YL:GN;
+  return(<div className="cd fi" draggable onDragStart={e=>{e.dataTransfer.setData("text/plain",c.id);e.dataTransfer.effectAllowed="move";}}
+    style={{background:C1,borderRadius:6,border:"1px solid "+(ov?RD+"30":BD),padding:"4px 7px",marginBottom:3,position:"relative",display:"flex",alignItems:"center",gap:5,paddingLeft:c.heute?22:7}}>
+    {c.heute&&<div className="hb" style={{width:14,fontSize:5}}>H</div>}
+    {c.isNew&&<div className="nd"/>}
+    <input type="checkbox" checked={sel} onChange={()=>onSel(c.id)} onClick={e=>e.stopPropagation()} style={{accentColor:B,cursor:"pointer",flexShrink:0,width:13,height:13}}/>
+    <div onClick={()=>onClick&&onClick(c)} style={{flex:1,display:"flex",alignItems:"center",gap:5,cursor:"pointer",minWidth:0,overflow:"hidden"}}>
+      <span style={{fontWeight:700,fontSize:10,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:90}}>{c.name}</span>
+      <span style={{fontSize:8,color:PP}}>{c.id}</span>
+      {c.mont&&<span style={{fontSize:7,color:BL,fontWeight:600,background:BL+"10",padding:"0 4px",borderRadius:3,whiteSpace:"nowrap"}}>{c.mont}</span>}
+      {c.tDate&&<span style={{fontSize:7,color:PP,display:"flex",alignItems:"center",gap:1}}><IcCal size={7}/>{c.tDate}</span>}
+      {xInfo&&<span style={{fontSize:7,color:xInfo.color,fontWeight:600}}>{xInfo.board}:{xInfo.label.slice(0,10)}</span>}
+    </div>
+    <span style={{fontSize:8,fontWeight:600,color:GN,whiteSpace:"nowrap"}}>{c.kw}kWp</span>
+    <span style={{padding:"0 4px",borderRadius:3,fontSize:7,fontWeight:700,background:cl+"15",color:cl,whiteSpace:"nowrap"}}>{c.days}d{ov?" ⚠":""}</span>
+  </div>);
+}
+
+/* ═══ CARD FULL ═══ */
+function FCard({c,onClick,xInfo,isEvu,sel,onSel}){
+  const ov=c.days>c.sla,cl=ov?RD:c.days>c.sla*.7?OR:c.days>3?YL:GN;
+  return(<div className="cd fi" draggable onDragStart={e=>{e.dataTransfer.setData("text/plain",c.id);e.dataTransfer.effectAllowed="move";}}
+    style={{background:C1,borderRadius:7,border:"1px solid "+(ov?RD+"30":BD),padding:"8px 10px",marginBottom:5,position:"relative",paddingLeft:c.heute?24:10}}>
+    {c.heute&&<div className="hb">HEUTE</div>}
+    {c.isNew&&<div className="nd"/>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:3}}>
+      <div style={{display:"flex",alignItems:"center",gap:4,flex:1}}>
+        <input type="checkbox" checked={sel} onChange={()=>onSel(c.id)} onClick={e=>e.stopPropagation()} style={{accentColor:B,cursor:"pointer",width:13,height:13}}/>
+        <div onClick={()=>onClick&&onClick(c)} style={{fontWeight:700,fontSize:12,cursor:"pointer"}}>{c.name}</div>
+      </div>
+      <span style={{padding:"1px 5px",borderRadius:3,fontSize:8,fontWeight:700,background:cl+"15",color:cl,flexShrink:0,display:"flex",alignItems:"center",gap:2}}><IcClock size={8}/>{c.days}d/{c.sla}d{ov?" ⚠":""}</span>
+    </div>
+    <div style={{fontSize:9,color:DM,marginBottom:3}}><span style={{color:PP}}>{c.id}</span> · {c.src} · {c.erst}</div>
+    {c.mont&&<div style={{marginBottom:3,display:"inline-flex",alignItems:"center",gap:3,padding:"2px 6px",borderRadius:4,background:BL+"10",border:"1px solid "+BL+"15"}}><IcUser size={9} color={BL}/><span style={{fontSize:9,fontWeight:600,color:BL}}>{c.mont}</span></div>}
+    {c.tDate&&<div style={{marginBottom:3,display:"flex",alignItems:"center",gap:3,fontSize:9,color:PP}}><IcCal size={9}/>{c.tDate}</div>}
+    {isEvu&&<div style={{marginBottom:3}}><span style={{display:"inline-flex",alignItems:"center",gap:2,padding:"1px 5px",borderRadius:3,fontSize:8,fontWeight:600,background:YL+"15",color:YL}}><IcHour size={8}/>EVU/Extern</span></div>}
+    {xInfo&&<div style={{marginBottom:3,padding:"3px 6px",borderRadius:5,background:xInfo.color+"08",border:"1px solid "+xInfo.color+"15",display:"flex",alignItems:"center",gap:4}}>
+      <span style={{fontSize:9}}>{xInfo.board==="AC"?"🔌":"⚡"}</span>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:7,color:DM,fontWeight:600}}>{xInfo.board}</div><div style={{fontSize:8,fontWeight:600,color:xInfo.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{xInfo.label}</div></div>
+    </div>}
+    <div style={{fontSize:9,color:DM,marginBottom:2}}>📞 {c.ph1} · ✉ {c.em}</div>
+    <div style={{fontSize:9,color:DM,marginBottom:3}}>📍 {c.str}, {c.city}</div>
+    {c.stage==="dc_vollst"&&<button onClick={e=>e.stopPropagation()} style={{margin:"2px 0",padding:"2px 7px",borderRadius:4,background:BL+"15",border:"1px solid "+BL+"30",color:BL,fontSize:8,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:2}}><IcArrowR size={9}/>→ AC starten</button>}
+    <div style={{borderTop:"1px solid "+BD,paddingTop:3,marginTop:2,display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:9}}>
+      <span style={{color:DM}}>{c.berater}</span>
+      <div style={{display:"flex",gap:3}}>
+        <span style={{padding:"1px 4px",borderRadius:3,fontSize:8,fontWeight:600,background:GN+"10",color:GN}}>{c.kw}kWp</span>
+        <span style={{padding:"1px 4px",borderRadius:3,fontSize:8,fontWeight:600,background:BL+"10",color:BL}}>{c.mod}M</span>
+      </div>
+    </div>
+  </div>);
+}
+
+/* ═══ MODALS ═══ */
+function ConfirmDel({stage,cnt,onYes,onNo}){return(
+  <div onClick={onNo} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,backdropFilter:"blur(4px)"}}>
+    <div onClick={e=>e.stopPropagation()} className="fi" style={{background:C2,borderRadius:14,border:"1px solid "+RD+"40",padding:"22px 26px",width:"92%",maxWidth:380}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}><div style={{width:38,height:38,borderRadius:9,background:RD+"15",display:"flex",alignItems:"center",justifyContent:"center"}}><IcAlert size={20} color={RD}/></div><div><div style={{fontSize:15,fontWeight:700}}>Schritt löschen?</div></div></div>
+      <div style={{background:RD+"08",border:"1px solid "+RD+"20",borderRadius:8,padding:"10px 12px",marginBottom:14}}><div style={{fontSize:12,fontWeight:700}}>{stage.label}</div>{cnt>0&&<div style={{fontSize:11,color:RD,marginTop:3,fontWeight:700}}>⚠ {cnt} Karte{cnt!==1?"n":""}</div>}</div>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><button onClick={onNo} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:"1px solid "+BD,color:TX,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Nein</button><button onClick={onYes} style={{padding:"8px 16px",borderRadius:8,background:RD,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Löschen</button></div>
+    </div></div>);}
+
+function NewStep({onAdd,onClose}){const[nm,setNm]=useState("");const[cl,setCl]=useState(GN);const r=useRef(null);useEffect(()=>{r.current?.focus();},[]);
+  return(<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,backdropFilter:"blur(4px)"}}><div onClick={e=>e.stopPropagation()} className="fi" style={{background:C2,borderRadius:14,border:"1px solid "+BD,padding:"22px 26px",width:"92%",maxWidth:360}}>
+    <div style={{fontSize:15,fontWeight:700,marginBottom:14}}>Neuer Schritt</div>
+    <input ref={r} value={nm} onChange={e=>setNm(e.target.value)} placeholder="NAME" style={{width:"100%",padding:"8px 12px",background:C1,border:"1px solid "+BD,borderRadius:8,fontSize:13,color:TX,outline:"none",marginBottom:10}} onKeyDown={e=>{if(e.key==="Enter"&&nm.trim())onAdd(nm.trim(),"",cl);}}/>
+    <div style={{display:"flex",gap:4,marginBottom:14}}>{[GN,BL,PP,YL,OR,RD,GY,TL,PK].map(c=>(<div key={c} onClick={()=>setCl(c)} style={{width:22,height:22,borderRadius:5,background:c,cursor:"pointer",border:cl===c?"2px solid "+B:"2px solid transparent"}}/>))}</div>
+    <div style={{display:"flex",gap:8}}><button onClick={onClose} style={{flex:1,padding:"8px",borderRadius:8,background:"transparent",border:"1px solid "+BD,color:TX,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Nein</button><button disabled={!nm.trim()} onClick={()=>nm.trim()&&onAdd(nm.trim(),"",cl)} style={{flex:1,padding:"8px",borderRadius:8,background:B,border:"none",color:DK,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:nm.trim()?1:.4}}>Anlegen</button></div>
+  </div></div>);}
+
+function StepSet({stage,onClose,onSave}){if(!stage)return null;const[nm,setNm]=useState(stage.label);const[sb,setSb]=useState(stage.sub||"");const[bg,setBg]=useState(stage.color);
+  return(<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1500,backdropFilter:"blur(4px)"}}><div onClick={e=>e.stopPropagation()} className="fi" style={{background:C2,borderRadius:14,width:"92%",maxWidth:460,border:"1px solid "+BD,padding:"20px 24px"}}>
+    <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}><div style={{fontSize:14,fontWeight:700}}>Einstellungen</div><button onClick={onClose} className="ib" style={{width:26,height:26}}><IcX size={14}/></button></div>
+    <input style={{width:"100%",padding:"8px 12px",background:C1,border:"1px solid "+BD,borderRadius:8,fontSize:13,color:TX,outline:"none",marginBottom:10}} value={nm} onChange={e=>setNm(e.target.value)}/>
+    <input style={{width:"100%",padding:"8px 12px",background:C1,border:"1px solid "+BD,borderRadius:8,fontSize:13,color:TX,outline:"none",marginBottom:10}} value={sb} onChange={e=>setSb(e.target.value)} placeholder="Beschreibung"/>
+    <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:14}}><input type="color" value={bg} onChange={e=>setBg(e.target.value)} style={{width:100,height:28,border:"1px solid "+BD,borderRadius:6,cursor:"pointer"}}/><div style={{width:28,height:28,borderRadius:6,background:bg}}/></div>
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><button onClick={onClose} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:"1px solid "+BD,color:TX,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Abbrechen</button><button onClick={()=>{onSave({...stage,label:nm,sub:sb,color:bg});onClose();}} style={{padding:"8px 16px",borderRadius:8,background:GN,border:"none",color:DK,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>OK</button></div>
+  </div></div>);}
+
+function Detail({c,onClose,stages,onMove,xInfo}){if(!c)return null;const st=stages.find(s=>s.id===c.stage);
+  return(<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(4px)"}}><div onClick={e=>e.stopPropagation()} className="fi" style={{background:C2,borderRadius:14,width:"90%",maxWidth:480,maxHeight:"85vh",overflow:"auto",border:"1px solid "+BD}}>
+    <div style={{background:st?st.color:GN,padding:"14px 18px",borderRadius:"14px 14px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{color:"#fff",fontSize:16,fontWeight:700}}>{c.name}</div><div style={{color:"rgba(255,255,255,.8)",fontSize:10}}>{c.id} · {c.days}d / SLA {c.sla}d</div></div><button onClick={onClose} className="ib" style={{color:"#fff",width:26,height:26}}><IcX size={14}/></button></div>
+    <div style={{padding:16}}>
+      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+        <div><div style={{fontSize:8,color:DM,textTransform:"uppercase"}}>{c.brd}</div><span style={{display:"inline-block",background:(st?st.color:GY)+"15",color:st?st.color:GY,padding:"2px 8px",borderRadius:5,fontSize:10,fontWeight:600}}>{st?st.label:c.stage}</span></div>
+        {xInfo&&<div><div style={{fontSize:8,color:DM,textTransform:"uppercase"}}>{xInfo.board}</div><span style={{display:"inline-block",background:xInfo.color+"15",color:xInfo.color,padding:"2px 8px",borderRadius:5,fontSize:10,fontWeight:600}}>{xInfo.label}</span></div>}
+      </div>
+      {c.mont&&<div style={{marginBottom:8,display:"flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:5,background:BL+"10"}}><IcUser size={10} color={BL}/><span style={{fontSize:11,fontWeight:600,color:BL}}>{c.mont}</span></div>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10,fontSize:11}}>
+        <div><div style={{fontSize:8,color:DM,textTransform:"uppercase"}}>Adresse</div>{c.str}, {c.city}</div>
+        <div><div style={{fontSize:8,color:DM,textTransform:"uppercase"}}>Kontakt</div>{c.ph1} · {c.em}</div>
+        <div><div style={{fontSize:8,color:DM,textTransform:"uppercase"}}>Anlage</div>{c.kw} kWp · <strong style={{color:B}}>€{(c.kw*EUR_KWP).toLocaleString("de")}</strong></div>
+        <div><div style={{fontSize:8,color:DM,textTransform:"uppercase"}}>Berater</div>{c.berater}</div>
+      </div>
+      <div style={{fontSize:9,color:DM,marginBottom:4}}>Verschieben:</div>
+      <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>{stages.map(s=>(<button key={s.id} onClick={()=>onMove(c.id,s.id)} style={{padding:"2px 5px",borderRadius:4,fontSize:7,fontWeight:c.stage===s.id?700:400,fontFamily:"inherit",background:c.stage===s.id?s.color+"20":C1,color:c.stage===s.id?s.color:DM,border:"1px solid "+(c.stage===s.id?s.color+"30":BD),cursor:"pointer",maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.label}</button>))}</div>
+    </div>
+  </div></div>);}
+
+/* ═══ PIPELINE BAR ═══ */
+function PipeBar({cards,stages}){
+  const ph=[{id:"prep",l:"Vorb.",i:"📋",c:BL},{id:"active",l:"Laufend",i:"🔨",c:GN},{id:"hold",l:"Hold",i:"⏸",c:OR},{id:"evu",l:"EVU",i:"⏳",c:YL},{id:"done",l:"Fertig",i:"✅",c:GN},{id:"end",l:"Storno",i:"❌",c:RD}];
+  const sp={};stages.forEach(s=>{sp[s.id]=s.phase||"prep";});const cnt={},eur={};ph.forEach(p=>{cnt[p.id]=0;eur[p.id]=0;});
+  cards.forEach(c=>{const p=sp[c.stage]||"prep";cnt[p]++;eur[p]+=c.kw*EUR_KWP;});
+  const tot=cards.length||1,avg=cards.length?Math.round(cards.reduce((a,c)=>a+c.days,0)/cards.length):0,sla=cards.filter(c=>c.days>c.sla).length,totE=cards.reduce((a,c)=>a+c.kw*EUR_KWP,0);
+  return(<div style={{padding:"5px 12px",background:C1,borderBottom:"1px solid "+BD,display:"flex",alignItems:"center",gap:6,flexShrink:0,overflow:"auto"}}>
+    <div style={{display:"flex",flex:1,gap:2,height:24,borderRadius:5,overflow:"hidden"}}>
+      {ph.filter(p=>cnt[p.id]>0).map(p=>(<div key={p.id} title={p.l+": "+cnt[p.id]+" · €"+fmt(eur[p.id])} style={{width:Math.max(cnt[p.id]/tot*100,5)+"%",background:p.c+"20",display:"flex",alignItems:"center",justifyContent:"center",gap:2,minWidth:40}}>
+        <span style={{fontSize:9}}>{p.i}</span><span style={{fontSize:9,fontWeight:700,color:p.c}}>{cnt[p.id]}</span><span style={{fontSize:7,color:DM,display:cnt[p.id]/tot>.08?"inline":"none"}}>€{fmt(eur[p.id])}</span>
+      </div>))}
+    </div>
+    <div style={{display:"flex",gap:8,flexShrink:0,fontSize:9}}>
+      <span style={{color:DM}}>Ø<span style={{color:avg>10?OR:TX,fontWeight:600}}>{avg}d</span></span>
+      {sla>0&&<span style={{color:RD,fontWeight:600}}>🔴{sla}</span>}
+      <span style={{fontWeight:700,color:B}}>€{fmt(totE)}</span>
+      <span style={{color:DM}}>Σ{cards.length}</span>
+    </div>
+  </div>);
+}
+
+/* ═══ MONTEUR SIDEBAR ═══ */
+function MontSide({cards,show}){
+  const teams=useMemo(()=>{const m={};cards.forEach(c=>{if(!c.mont)return;if(!m[c.mont])m[c.mont]={n:c.mont,c:0,kw:0};m[c.mont].c++;m[c.mont].kw+=c.kw;});return Object.values(m).sort((a,b)=>b.c-a.c);},[cards]);
+  const mx=Math.max(...teams.map(t=>t.c),1);
+  if(!show)return null;
+  return(<div className="fi" style={{width:190,background:C1,borderLeft:"1px solid "+BD,padding:"10px 12px",overflowY:"auto",flexShrink:0}}>
+    <div style={{fontSize:11,fontWeight:700,marginBottom:8,display:"flex",alignItems:"center",gap:4}}><IcUser size={12}/> Auslastung</div>
+    {teams.length===0&&<div style={{fontSize:10,color:DM}}>Keine</div>}
+    {teams.map(t=>(<div key={t.n} style={{marginBottom:7}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:9,marginBottom:2}}><span style={{fontWeight:600}}>{t.n}</span><span style={{color:DM}}>{t.c} · {t.kw}kWp</span></div>
+      <div style={{height:5,background:BD,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:(t.c/mx*100)+"%",background:t.c>6?RD:t.c>4?OR:GN,borderRadius:3}}/></div>
+    </div>))}
+  </div>);
+}
+
+/* ═══ STATS DRAWER ═══ */
+function StatsDraw({cards,show}){
+  if(!show)return null;
+  const done=cards.filter(c=>c.stage.includes("vollst")||c.stage.includes("freigabe")).length;
+  const sto=cards.filter(c=>c.stage.includes("storniert")||c.stage.includes("abgebrochen")).length;
+  const act=cards.length-sto;
+  const avg=act?Math.round(cards.filter(c=>!c.stage.includes("storniert")).reduce((a,c)=>a+c.days,0)/act):0;
+  const sla=cards.filter(c=>c.days>c.sla).length;
+  const kw=cards.reduce((a,c)=>a+c.kw,0);
+  const montMap={};cards.forEach(c=>{if(c.mont){montMap[c.mont]=(montMap[c.mont]||0)+1;}});
+  const top=Object.entries(montMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const R=({l,v,c})=><div style={{padding:"6px 0",borderBottom:"1px solid "+BD+"40",display:"flex",justifyContent:"space-between",fontSize:10}}><span style={{color:DM}}>{l}</span><span style={{fontWeight:700,color:c||TX}}>{v}</span></div>;
+  return(<div className="fi" style={{width:200,background:C1,borderLeft:"1px solid "+BD,padding:"10px 12px",overflowY:"auto",flexShrink:0}}>
+    <div style={{fontSize:11,fontWeight:700,marginBottom:8,display:"flex",alignItems:"center",gap:4}}><IcBar size={12}/> Stats</div>
+    <R l="Gesamt" v={cards.length}/><R l="Aktiv" v={act} c={GN}/><R l="Fertig" v={done}/><R l="Storno" v={sto+" ("+(cards.length?Math.round(sto/cards.length*100):0)+"%)"} c={RD}/>
+    <R l="Ø Tage" v={avg+"d"} c={avg>10?OR:TX}/><R l="SLA-Brüche" v={sla} c={sla?RD:GN}/><R l="Pipeline" v={"€"+fmt(kw*EUR_KWP)} c={B}/><R l="kWp" v={kw.toLocaleString("de")}/>
+    {top.length>0&&<><div style={{fontSize:9,fontWeight:700,marginTop:8,marginBottom:4}}>Top Monteure</div>{top.map(([n,c])=>(<div key={n} style={{display:"flex",justifyContent:"space-between",fontSize:9,padding:"2px 0"}}><span>{n}</span><span style={{fontWeight:600,color:BL}}>{c}</span></div>))}</>}
+  </div>);
+}
+
+/* ═══ COLUMN ═══ */
+function Col({stage,cards,allCards,onDrop,onCardClick,onDragS,onColDrop,dragId,onML,onMR,first,last,onSet,onDel,onRename,xLookup,compact,sortBy,selC,onSel,collapsed,onCollapse}){
+  const[over,setOver]=useState(false);const[cOver,setCOver]=useState(false);const[editing,setEditing]=useState(false);const[ev,setEv]=useState(stage.label);const ir=useRef(null);
+  let cc=cards.filter(c=>c.stage===stage.id);
+  const tot=allCards.filter(c=>c.stage===stage.id).length;
+  const totKw=cc.reduce((a,c)=>a+c.kw,0);
+  const slaC=cc.filter(c=>c.days>c.sla).length;
+  const heat=slaC>0?RD:cc.length&&Math.max(...cc.map(c=>c.days))>stage.sla*.7?OR:"transparent";
+  if(sortBy==="days")cc=[...cc].sort((a,b)=>b.days-a.days);
+  else if(sortBy==="kwp")cc=[...cc].sort((a,b)=>b.kw-a.kw);
+  else if(sortBy==="mont")cc=[...cc].sort((a,b)=>(a.mont||"zzz").localeCompare(b.mont||"zzz"));
+  else if(sortBy==="name")cc=[...cc].sort((a,b)=>a.name.localeCompare(b.name));
+  useEffect(()=>{if(editing&&ir.current){ir.current.focus();ir.current.select();}},[editing]);
+  const commit=()=>{setEditing(false);if(ev.trim()&&ev!==stage.label)onRename(stage.id,ev.trim());else setEv(stage.label);};
+
+  if(collapsed)return(
+    <div onClick={()=>onCollapse(stage.id)} style={{minWidth:44,width:44,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:C2,borderRadius:12,flexShrink:0,cursor:"pointer",border:"1px solid "+BD+"40",gap:4,padding:"8px 2px"}}
+      onDragOver={e=>{e.preventDefault();setOver(true);}} onDragLeave={()=>setOver(false)} onDrop={e=>{e.preventDefault();setOver(false);const id=e.dataTransfer.getData("text/plain");if(id)onDrop(id,stage.id);}}>
+      {heat!=="transparent"&&<div style={{width:3,height:20,background:heat,borderRadius:2}}/>}
+      <div style={{writingMode:"vertical-rl",textOrientation:"mixed",fontSize:8,fontWeight:700,color:stage.color,letterSpacing:".03em",maxHeight:120,overflow:"hidden"}}>{stage.label}</div>
+      <span style={{fontSize:9,fontWeight:700,color:DM,fontFamily:"'JetBrains Mono',monospace"}}>{tot}</span>
+      <span style={{fontSize:7,color:DM}}>{totKw}kWp</span>
+    </div>
+  );
+
+  return(
+    <div onDragOver={e=>{e.preventDefault();if(e.dataTransfer.types.includes("x-col"))setCOver(true);else setOver(true);}} onDragLeave={()=>{setOver(false);setCOver(false);}} onDrop={e=>{e.preventDefault();setOver(false);setCOver(false);const ci=e.dataTransfer.getData("x-col");if(ci){onColDrop(ci,stage.id);return;}const id=e.dataTransfer.getData("text/plain");if(id)onDrop(id,stage.id);}}
+      style={{minWidth:compact?230:255,maxWidth:290,width:compact?240:270,display:"flex",flexDirection:"column",background:C2,borderRadius:12,flexShrink:0,maxHeight:"100%",opacity:dragId===stage.id?.3:1,outline:cOver&&dragId!==stage.id?"2px dashed "+B:"none",outlineOffset:-2,border:"1px solid "+BD+"40"}}>
+      {heat!=="transparent"&&<div style={{height:3,background:heat,borderRadius:"12px 12px 0 0",opacity:.7}}/>}
+      <div draggable onDragStart={e=>{e.dataTransfer.setData("x-col",stage.id);e.dataTransfer.effectAllowed="move";onDragS(stage.id);}} onDragEnd={()=>onDragS(null)} style={{display:"flex",justifyContent:"center",padding:"3px 6px 0",cursor:"grab"}}>
+        <span style={{display:"flex",alignItems:"center",gap:3,background:BD+"50",borderRadius:3,padding:"1px 6px",fontSize:7,fontWeight:600,color:DM}}><IcGrip size={8}/>POS</span>
+      </div>
+      <div style={{background:stage.color,borderRadius:6,margin:"3px 5px",padding:"5px 4px",display:"flex",alignItems:"center",gap:2}}>
+        <button className="ib" onClick={()=>onCollapse(stage.id)} style={{width:20,height:20,color:"rgba(255,255,255,.7)",flexShrink:0}}><IcMin size={9}/></button>
+        <div style={{flex:1,minWidth:0}}>
+          {editing?<input ref={ir} className="et" value={ev} onChange={e=>setEv(e.target.value)} onBlur={commit} onKeyDown={e=>{if(e.key==="Enter")commit();if(e.key==="Escape"){setEv(stage.label);setEditing(false);}}} style={{background:"rgba(0,0,0,.3)",borderColor:B}}/>:<div className="et" onClick={()=>{setEditing(true);setEv(stage.label);}}>{stage.label}</div>}
+        </div>
+        <button className="ib" onClick={e=>{e.stopPropagation();onSet(stage);}} style={{width:20,height:20,color:"rgba(255,255,255,.7)"}}><IcSettings size={10}/></button>
+        <button className="ib" onClick={e=>{e.stopPropagation();onDel(stage);}} style={{width:20,height:20,color:"rgba(255,255,255,.7)"}}><IcTrash size={10}/></button>
+      </div>
+      {stage.sub&&<div style={{fontSize:7,color:DM,fontStyle:"italic",padding:"1px 8px 0",textAlign:"center"}}>{stage.sub}</div>}
+      {stage.evu&&<div style={{textAlign:"center",margin:"2px 0"}}><span style={{fontSize:7,color:YL,fontWeight:600}}>⏳ EVU/Extern</span></div>}
+      <div style={{padding:"3px 6px 1px",textAlign:"center"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <button onClick={()=>onML(stage.id)} disabled={first} className="ib" style={{width:18,height:18}}><IcChL size={11}/></button>
+          <span style={{fontSize:9,fontWeight:600,color:DM,fontFamily:"'JetBrains Mono',monospace"}}>{cc.length}<span style={{color:BD}}>/{tot}</span></span>
+          <button onClick={()=>onMR(stage.id)} disabled={last} className="ib" style={{width:18,height:18}}><IcChR size={11}/></button>
+        </div>
+        <div style={{fontSize:7,color:DM}}>{totKw}kWp · <span style={{color:B,fontWeight:600}}>€{fmt(totKw*EUR_KWP)}</span>{slaC>0&&<span style={{color:RD,fontWeight:600}}> · {slaC}⚠</span>}</div>
+      </div>
+      <div style={{padding:"0 4px 5px",overflowY:"auto",flex:1,minHeight:30,background:over?B+"06":"transparent",borderRadius:"0 0 12px 12px"}}>
+        {cc.length===0&&<div style={{padding:8,textAlign:"center",color:DM+"40",fontSize:9,border:"2px dashed "+BD,borderRadius:6,margin:2}}>{over?"Ablegen":"Leer"}</div>}
+        {cc.map(c=>compact?
+          <CCard key={c.id} c={c} onClick={onCardClick} xInfo={c.projId?xLookup[c.projId]:null} sel={selC.has(c.id)} onSel={onSel}/>:
+          <FCard key={c.id} c={c} onClick={onCardClick} xInfo={c.projId?xLookup[c.projId]:null} isEvu={stage.evu||false} sel={selC.has(c.id)} onSel={onSel}/>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══ BULK BAR ═══ */
+function BulkBar({count,stages,onMove,onClear}){
+  const[show,setShow]=useState(false);
+  if(!count)return null;
+  return(<div className="fi" style={{position:"fixed",bottom:36,left:"50%",transform:"translateX(-50%)",background:C2,border:"1px solid "+B+"40",borderRadius:10,padding:"7px 14px",display:"flex",alignItems:"center",gap:8,zIndex:900,boxShadow:"0 8px 32px rgba(0,0,0,.5)"}}>
+    <span style={{fontSize:11,fontWeight:700,color:B}}>{count} ✓</span>
+    <div style={{position:"relative"}}><button onClick={()=>setShow(!show)} style={{padding:"4px 10px",borderRadius:6,background:BL+"15",border:"1px solid "+BL+"30",color:BL,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Verschieben ▾</button>
+      {show&&<div style={{position:"absolute",bottom:"100%",left:0,marginBottom:4,background:C2,border:"1px solid "+BD,borderRadius:8,padding:4,maxHeight:180,overflowY:"auto",width:180,zIndex:910}}>
+        {stages.map(s=>(<button key={s.id} onClick={()=>{onMove(s.id);setShow(false);}} style={{display:"block",width:"100%",padding:"3px 6px",borderRadius:4,fontSize:8,fontFamily:"inherit",background:C1,color:TX,border:"1px solid "+BD,cursor:"pointer",marginBottom:1,textAlign:"left"}}>{s.label}</button>))}
+      </div>}
+    </div>
+    <button onClick={onClear} style={{padding:"4px 8px",borderRadius:6,background:"transparent",border:"1px solid "+BD,color:DM,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+  </div>);
+}
+
+/* ═══ MAIN ═══ */
+function App(){
+  const[brd,setBrd]=useState("DC");
+  const[dcC,setDcC]=useState(DC0);const[acC,setAcC]=useState(AC0);
+  const[dcO,setDcO]=useState(DC_ST.map(s=>s.id));const[acO,setAcO]=useState(AC_ST.map(s=>s.id));
+  const[ov,setOv]=useState({});const[q,setQ]=useState("");const[af,setAf]=useState([]);
+  const[sel,setSel]=useState(null);const[dId,setDId]=useState(null);
+  const[setS,setSetS]=useState(null);const[delS,setDelS]=useState(null);const[newS,setNewS]=useState(false);
+  const[compact,setCompact]=useState(false);const[sortBy,setSortBy]=useState("days");
+  const[showM,setShowM]=useState(false);const[showSt,setShowSt]=useState(false);
+  const[selC,setSelC]=useState(new Set());const[collC,setCollC]=useState(new Set());
+
+  const bm=brd==="DC"?DC_ST:AC_ST;
+  const ord=brd==="DC"?dcO:acO;const setOrd=brd==="DC"?setDcO:setAcO;
+  const cards=brd==="DC"?dcC:acC;const setCards=brd==="DC"?setDcC:setAcC;
+  const am=useMemo(()=>{const m={};bm.forEach(s=>{m[s.id]=ov[s.id]?{...s,...ov[s.id]}:s;});Object.entries(ov).forEach(([id,s])=>{if(!m[id])m[id]=s;});return m;},[bm,ov]);
+  const stages=ord.map(id=>am[id]).filter(Boolean);
+
+  const xL=useMemo(()=>{
+    const oc=brd==="DC"?acC:dcC;const ob=brd==="DC"?AC_ST:DC_ST;const on=brd==="DC"?"AC":"DC";
+    const om={};ob.forEach(s=>{om[s.id]=ov[s.id]?{...s,...ov[s.id]}:s;});
+    const lk={};oc.forEach(c=>{if(!c.projId)return;const stg=om[c.stage];lk[c.projId]={board:on,label:stg?stg.label:c.stage,color:stg?stg.color:GY};});
+    if(brd==="DC"){const sl={};dcC.forEach(c=>{if(c.projId&&DC_LATE.includes(c.stage)&&lk[c.projId])sl[c.projId]=lk[c.projId];});return sl;}
+    return lk;
+  },[brd,dcC,acC,ov]);
+
+  const filt=useMemo(()=>{let r=cards;if(q){const lc=q.toLowerCase();r=r.filter(c=>c.name.toLowerCase().includes(lc)||c.id.toLowerCase().includes(lc)||c.em.toLowerCase().includes(lc)||c.city.toLowerCase().includes(lc)||(c.mont&&c.mont.toLowerCase().includes(lc)));}
+    if(af.length)r=r.filter(c=>FILT.filter(f=>af.includes(f.id)).some(f=>f.fn(c)));return r;
+  },[cards,q,af]);
+
+  const tF=fid=>setAf(p=>p.includes(fid)?p.filter(x=>x!==fid):[...p,fid]);
+  const tSel=id=>setSelC(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
+  const drop=useCallback((id,sid)=>setCards(p=>p.map(c=>c.id===id?{...c,stage:sid}:c)),[setCards]);
+  const move=useCallback((id,sid)=>{setCards(p=>p.map(c=>c.id===id?{...c,stage:sid}:c));setSel(p=>p?{...p,stage:sid}:null);},[setCards]);
+  const bulkM=useCallback(sid=>{setCards(p=>p.map(c=>selC.has(c.id)?{...c,stage:sid}:c));setSelC(new Set());},[selC,setCards]);
+  const colDrop=useCallback((a,b)=>{if(a===b)return;setOrd(p=>{const f=p.indexOf(a),t=p.indexOf(b);if(f<0||t<0)return p;const n=[...p];n.splice(f,1);n.splice(t,0,a);return n;});setDId(null);},[setOrd]);
+  const mvL=useCallback(s=>setOrd(p=>{const i=p.indexOf(s);if(i<=0)return p;const n=[...p];[n[i-1],n[i]]=[n[i],n[i-1]];return n;}),[setOrd]);
+  const mvR=useCallback(s=>setOrd(p=>{const i=p.indexOf(s);if(i<0||i>=p.length-1)return p;const n=[...p];[n[i],n[i+1]]=[n[i+1],n[i]];return n;}),[setOrd]);
+  const stUpd=useCallback(u=>setOv(p=>({...p,[u.id]:u})),[]);
+  const rename=useCallback((sid,lbl)=>{const b=bm.find(s=>s.id===sid);setOv(p=>({...p,[sid]:{...(b||{}),...(p[sid]||{}),id:sid,label:lbl}}));},[bm]);
+  const confirmDel=useCallback(()=>{if(!delS)return;setOrd(p=>p.filter(id=>id!==delS.id));setCards(p=>p.filter(c=>c.stage!==delS.id));setDelS(null);},[delS,setOrd,setCards]);
+  const addStep=useCallback((nm,sb,cl)=>{const id="s"+Date.now();setOv(p=>({...p,[id]:{id,label:nm,sub:sb,color:cl,phase:"prep",sla:14}}));setOrd(p=>[id,...p]);setNewS(false);},[setOrd]);
+  const tColl=id=>setCollC(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
+  const expCSV=()=>{const h=["ID","Name","Stage","kWp","EUR","Tage","SLA","Monteur","Stadt","Berater"];const rows=filt.map(c=>[c.id,c.name,stages.find(s=>s.id===c.stage)?.label||c.stage,c.kw,c.kw*EUR_KWP,c.days,c.sla,c.mont||"",c.city,c.berater]);const csv=[h,...rows].map(r=>r.join(";")).join("\n");const b=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`bee-doo-${brd}-export.csv`;a.click();};
+
+  const dcA=dcC.filter(c=>!c.stage.includes("storniert")&&!c.stage.includes("abgebrochen")).length;
+  const acA=acC.filter(c=>!c.stage.includes("storniert")&&!c.stage.includes("abgebrochen")).length;
+
+  return(
+    <React.Fragment>
+      <div style={{height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden",background:DK}}>
+        {/* HEADER */}
+        <div style={{padding:"5px 10px",background:C1,borderBottom:"1px solid "+BD,display:"flex",alignItems:"center",gap:7,flexShrink:0,flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+            <div style={{width:24,height:24,borderRadius:6,background:B,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>🐝</div>
+            <div><div style={{fontWeight:700,fontSize:11,color:B,lineHeight:1}}>bee-doo</div><div style={{fontSize:6,color:DM,letterSpacing:".1em"}}>MONTAGE</div></div>
+          </div>
+          <div style={{width:1,height:18,background:BD}}/>
+          <div style={{display:"flex",background:C2,borderRadius:7,overflow:"hidden",border:"1px solid "+BD}}>
+            {[{k:"DC",cl:RD},{k:"AC",cl:BL}].map(b=>(<button key={b.k} onClick={()=>{setBrd(b.k);setAf([]);setSelC(new Set());}} style={{padding:"4px 12px",fontSize:10,fontWeight:brd===b.k?700:500,color:brd===b.k?"#fff":DM,background:brd===b.k?b.cl:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit"}}>{b.k}<span style={{marginLeft:3,background:brd===b.k?"rgba(255,255,255,.2)":BD,borderRadius:6,padding:"1px 5px",fontSize:8,fontWeight:600}}>{b.k==="DC"?dcA:acA}</span></button>))}
+          </div>
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{padding:"3px 5px",borderRadius:5,background:C2,border:"1px solid "+BD,color:DM,fontSize:8,cursor:"pointer",fontFamily:"inherit"}}>
+            <option value="days">↓ Tage</option><option value="kwp">↓ kWp</option><option value="mont">↓ Monteur</option><option value="name">↓ Name</option>
+          </select>
+          <div style={{flex:1}}/>
+          <div style={{display:"flex",gap:2}}>{FILT.map(f=>{const on=af.includes(f.id);return(<button key={f.id} onClick={()=>tF(f.id)} style={{padding:"3px 5px",borderRadius:4,fontSize:8,fontWeight:on?700:500,background:on?B+"20":"transparent",color:on?B:DM,border:"1px solid "+(on?B+"40":"transparent"),cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>{f.label}</button>);})}</div>
+          <div style={{position:"relative",width:130}}>
+            <IcSearch size={10} style={{position:"absolute",left:6,top:"50%",transform:"translateY(-50%)",color:DM}}/>
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Suchen..." style={{width:"100%",padding:"4px 6px 4px 22px",background:C2,border:"1px solid "+BD,borderRadius:6,color:TX,fontSize:10,outline:"none"}}/>
+          </div>
+          <button onClick={()=>setCompact(!compact)} title="Compact" className="ib" style={{width:24,height:24,background:compact?B+"20":"transparent",color:compact?B:DM}}><IcLayers size={12}/></button>
+          <button onClick={()=>setShowM(!showM)} title="Monteure" className="ib" style={{width:24,height:24,background:showM?BL+"20":"transparent",color:showM?BL:DM}}><IcUser size={12}/></button>
+          <button onClick={()=>setShowSt(!showSt)} title="Stats" className="ib" style={{width:24,height:24,background:showSt?GN+"20":"transparent",color:showSt?GN:DM}}><IcBar size={12}/></button>
+          <button onClick={expCSV} title="CSV" className="ib" style={{width:24,height:24}}><IcDL size={12}/></button>
+          <button onClick={()=>setNewS(true)} style={{padding:"4px 8px",borderRadius:6,background:B+"12",border:"1px solid "+B+"30",color:B,fontSize:9,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}><IcPlus size={10} style={{verticalAlign:-2}}/> Neu</button>
+        </div>
+
+        <PipeBar cards={cards} stages={stages}/>
+
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          <div style={{flex:1,overflow:"auto",padding:5}}>
+            <div style={{display:"flex",gap:5,minHeight:"100%",alignItems:"stretch"}}>
+              {stages.map((s,i)=>(
+                <Col key={s.id} stage={s} cards={filt} allCards={cards} onDrop={drop} onCardClick={c=>setSel(c)}
+                  onDragS={setDId} onColDrop={colDrop} dragId={dId} onML={mvL} onMR={mvR} first={i===0} last={i===stages.length-1}
+                  onSet={s=>setSetS(s)} onDel={s=>setDelS(s)} onRename={rename} xLookup={xL}
+                  compact={compact} sortBy={sortBy} selC={selC} onSel={tSel}
+                  collapsed={collC.has(s.id)} onCollapse={tColl}/>
+              ))}
+            </div>
+          </div>
+          <MontSide cards={cards} show={showM}/>
+          <StatsDraw cards={cards} show={showSt}/>
+        </div>
+
+        <div style={{padding:"2px 10px",borderTop:"1px solid "+BD,background:C1,display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:9,color:DM,flexShrink:0}}>
+          <span>{brd} · {stages.length} Stages · {filt.length}/{cards.length}{af.length?" (gefiltert)":""}{selC.size?" · "+selC.size+" ✓":""}</span>
+          <span style={{color:B+"50"}}>bee-doo GmbH</span>
+        </div>
+      </div>
+
+      <BulkBar count={selC.size} stages={stages} onMove={bulkM} onClear={()=>setSelC(new Set())}/>
+      {sel&&<Detail c={sel} onClose={()=>setSel(null)} stages={stages} onMove={move} xInfo={sel.projId?xL[sel.projId]:null}/>}
+      {setS&&<StepSet stage={setS} onClose={()=>setSetS(null)} onSave={stUpd}/>}
+      {delS&&<ConfirmDel stage={delS} cnt={cards.filter(c=>c.stage===delS.id).length} onYes={confirmDel} onNo={()=>setDelS(null)}/>}
+      {newS&&<NewStep onAdd={addStep} onClose={()=>setNewS(false)}/>}
+    </React.Fragment>
+  );
+}
+
+const root=ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>
