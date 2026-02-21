@@ -1,0 +1,29 @@
+name: DB Migration
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'migrations/*.sql'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      
+      - name: Run migration via psql
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          # Use Supabase direct DB connection
+          PGPASSWORD=$SUPABASE_DB_PASSWORD psql \
+            "postgresql://postgres.hqzpemfaljxcysyqssng:${SUPABASE_DB_PASSWORD}@aws-0-eu-central-1.pooler.supabase.com:6543/postgres" \
+            -f migrations/001_geocache_postgis.sql \
+            && echo "✅ Migration erfolgreich" \
+            || echo "❌ Migration fehlgeschlagen"
