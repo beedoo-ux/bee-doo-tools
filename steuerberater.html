@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>bee-doo · Lohnbuchhaltung</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#root{height:100%}
+body{background:#0A0A0B;color:#F0F0F4;font-family:'DM Sans',sans-serif}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:#111113}
+::-webkit-scrollbar-thumb{background:#2A2A33;border-radius:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@media print{
+  .no-print{display:none!important}
+  body{background:#fff;color:#111}
+  .print-table td,.print-table th{font-size:9px!important;padding:4px 5px!important}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useMemo,useRef,useCallback}=React;
+
+const SB="https://hqzpemfaljxcysyqssng.supabase.co";
+const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const H={apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json"};
+const db={get:async(t,p="")=>{const r=await fetch(SB+"/rest/v1/"+t+p,{headers:H});if(!r.ok)throw new Error(await r.text());return r.json()}};
+
+const SESSION_KEY="beedoo_stb_auth";
+const C={bg:"#0A0A0B",sur:"#111113",card:"#16161A",b:"#1E1E24",bl:"#2A2A33",Y:"#FDE154",YD:"#FDE15415",tx:"#F0F0F4",ts:"#8A8A9A",tm:"#4A4A5A",G:"#34D399",GD:"#34D39915",R:"#F87171",RD:"#F8717115",O:"#FBBF24",OD:"#FBBF2415",B:"#60A5FA"};
+const MO=["","Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+const MOL=["","Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const n2=v=>new Intl.NumberFormat("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2}).format(+v||0);
+const eur=v=>n2(v)+" €";
+const TLBL={angestellt_scouter:"Ang. Scouter",angestellt_vertriebler:"Ang. Vertriebler"};
+
+// 1%-Regel Sachbezug
+const fw1pct=listenpreis=>Math.round((listenpreis||0)*0.01*100)/100;
+
+// ── PIN LOCK ──────────────────────────────────────────────────────
+function PinLock({onUnlock}){
+  const [pin,setPin]=useState("");
+  const [err,setErr]=useState("");
+  const [attempts,setAttempts]=useState(+sessionStorage.getItem("stb_attempts")||0);
+  const [loading,setLd]=useState(false);
+  const [locked,setLocked]=useState(false);
+  const [lockLeft,setLockLeft]=useState(0);
+  const inputRef=useRef();
+
+  useEffect(()=>{
+    const lockUntil=+sessionStorage.getItem("stb_lock_until")||0;
+    if(lockUntil>Date.now()){setLocked(true);startCountdown(lockUntil);}
+    setTimeout(()=>inputRef.current?.focus(),150);
+  },[]);
+
+  const startCountdown=(until)=>{
+    const tick=()=>{
+      const left=Math.ceil((until-Date.now())/1000);
+      if(left<=0){setLocked(false);setLockLeft(0);sessionStorage.removeItem("stb_lock_until");sessionStorage.removeItem("stb_attempts");setAttempts(0);}
+      else{setLockLeft(left);setTimeout(tick,1000);}
+    };tick();
+  };
+
+  const check=async()=>{
+    if(locked||loading||pin.length<4)return;
+    setLd(true);setErr("");
+    try{
+      const arr=await db.get("pay_settings","?key=eq.stb_pin");
+      const correct=arr[0]?.value||"";
+      if(pin===correct){
+        sessionStorage.setItem(SESSION_KEY,"1");
+        sessionStorage.removeItem("stb_attempts");
+        onUnlock();
+      } else {
+        const na=attempts+1;
+        setAttempts(na);sessionStorage.setItem("stb_attempts",na);
+        if(na>=5){const u=Date.now()+5*60*1000;sessionStorage.setItem("stb_lock_until",u);setLocked(true);startCountdown(u);setErr("Zu viele Versuche – 5 Min. gesperrt.");}
+        else{setErr(`Falscher PIN (${5-na} Versuch${5-na!==1?"e":""} übrig)`);setPin("");setTimeout(()=>inputRef.current?.focus(),50);}
+      }
+    }catch(e){setErr("Verbindungsfehler");}
+    finally{setLd(false);}
+  };
+
+  return(
+    <div style={{height:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{width:300,animation:"slideUp .35s ease"}}>
+        <div style={{textAlign:"center",marginBottom:28}}>
+          <div style={{fontSize:32,fontWeight:900,letterSpacing:-1}}>bee<span style={{color:C.Y}}>-doo</span></div>
+          <div style={{fontSize:9,color:C.tm,letterSpacing:2,textTransform:"uppercase",marginTop:3}}>Lohnbuchhaltung · Steuerberater</div>
+        </div>
+        <div style={{background:C.sur,border:`1px solid ${C.b}`,borderRadius:14,padding:"24px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.5)"}}>
+          <div style={{textAlign:"center",marginBottom:20}}>
+            <div style={{fontSize:28,marginBottom:6}}>{locked?"🔒":"🔑"}</div>
+            <div style={{fontSize:14,fontWeight:700}}>{locked?`Gesperrt (${lockLeft}s)`:"PIN eingeben"}</div>
+          </div>
+          <div style={{display:"flex",justifyContent:"center",gap:8,marginBottom:16}}>
+            {Array.from({length:6}).map((_,i)=>(
+              <div key={i} style={{width:12,height:12,borderRadius:"50%",background:i<pin.length?C.Y:"transparent",border:`2px solid ${i<pin.length?C.Y:C.bl}`,transition:"all .12s"}}/>
+            ))}
+          </div>
+          <input ref={inputRef} type="password" inputMode="numeric" maxLength={6} value={pin}
+            onChange={e=>{if(!locked)setPin(e.target.value.replace(/\D/g,""))}}
+            onKeyDown={e=>{if(e.key==="Enter")check();if(!/[0-9]/.test(e.key)&&e.key!=="Backspace")e.preventDefault()}}
+            disabled={locked||loading}
+            style={{width:"100%",background:C.card,border:`1.5px solid ${err?C.R:C.bl}`,borderRadius:8,padding:"11px",fontSize:18,textAlign:"center",color:C.tx,outline:"none",letterSpacing:6,fontFamily:"monospace",marginBottom:err?6:12}}
+            placeholder="••••••"/>
+          {err&&<div style={{color:C.R,fontSize:11,textAlign:"center",marginBottom:10,fontWeight:600}}>⚠ {err}</div>}
+          <button onClick={check} disabled={locked||loading||pin.length<4}
+            style={{width:"100%",background:locked||pin.length<4?C.b:C.Y,border:"none",borderRadius:8,padding:"12px",fontSize:13,fontWeight:800,color:locked||pin.length<4?C.tm:C.bg,cursor:locked||pin.length<4?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"all .2s"}}>
+            {loading?<><div style={{width:14,height:14,border:"2px solid #00000030",borderTop:"2px solid #000",borderRadius:"50%",animation:"spin .6s linear infinite"}}/>Prüfe...</>:locked?`Gesperrt ${lockLeft}s`:"Entsperren →"}
+          </button>
+        </div>
+        <div style={{textAlign:"center",marginTop:16,fontSize:10,color:C.tm}}>bee-doo GmbH · Vertraulich</div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────
+function App(){
+  const [monat,setMonat]=useState(()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()).padStart(2,"0")}`}); // prev month default
+  const [mitarb,setMA]=useState([]);
+  const [einmal,setEinmal]=useState([]);
+  const [abrechnungen,setABR]=useState([]);
+  const [abzuege,setABZ]=useState([]);
+  const [vorschuesse,setVS]=useState([]);
+  const [kranktage,setKT]=useState([]);
+  const [settings,setSettings]=useState({});
+  const [loading,setLd]=useState(true);
+  const [editCell,setEdit]=useState(null); // {maId, field, value}
+  const [saving,setSaving]=useState(false);
+  const [toast,setToast]=useState(null);
+  const [showAddEinmal,setShowAddEinmal]=useState(null); // maId
+  const [einmalForm,setEinmalForm]=useState({bezeichnung:"",betrag:"",kategorie:"praemie",notiz:""});
+
+  const [bJ,bM]=monat.split("-").map(Number);
+
+  useEffect(()=>{
+    setLd(true);
+    const m1=String(bM).padStart(2,"0");
+    const m2=bM===12?"01":String(bM+1).padStart(2,"0");
+    const y2=bM===12?bJ+1:bJ;
+    Promise.all([
+      db.get("pay_mitarbeiter","?aktiv=eq.true&typ=like.angestellt*&order=nachname.asc&select=*").then(arr=>arr.filter(m=>{const n=(m.vorname+" "+m.nachname).toLowerCase();return n!=="patrick grabowski"&&n!=="olaf schader"&&n!=="patrick windolph";})),
+      db.get("pay_einmalzahlungen",`?monat=eq.${bM}&jahr=eq.${bJ}&order=erstellt_am.desc`),
+      db.get("pay_abrechnungen",`?monat=eq.${bM}&jahr=eq.${bJ}`),
+      db.get("pay_abzuege","?aktiv=eq.true"),
+      db.get("pay_vorschuesse",`?monat=eq.${bM}&jahr=eq.${bJ}`),
+      db.get("pay_krankheitstage",`?monat=eq.${bM}&jahr=eq.${bJ}`),
+      db.get("pay_settings",""),
+    ]).then(([ma,em,abr,abz,vs,kt,st])=>{
+      setMA(ma);setEinmal(em);setABR(abr);setABZ(abz);setVS(vs);setKT(kt);
+      setSettings(Object.fromEntries(st.map(s=>[s.key,s.value])));
+    }).catch(e=>setToast({msg:"Ladefehler: "+e.message,type:"error"}))
+    .finally(()=>setLd(false));
+  },[bM,bJ]);
+
+  // Helpers
+  const abzugAktiv=(a,m,j)=>{
+    if(!a.aktiv)return false;
+    const startOk=a.jahr_start<j||(a.jahr_start===j&&a.monat_start<=m);
+    if(!startOk)return false;
+    if(a.typ==="einmalig")return a.monat_start===m&&a.jahr_start===j;
+    if(!a.monat_ende||!a.jahr_ende)return true;
+    return a.jahr_ende>j||(a.jahr_ende===j&&a.monat_ende>=m);
+  };
+
+  // Build rows
+  const rows=useMemo(()=>mitarb.map(ma=>{
+    const abr=abrechnungen.find(a=>a.mitarbeiter_id===ma.id);
+    const vs=vorschuesse.find(v=>v.mitarbeiter_id===ma.id);
+    const kt=kranktage.find(k=>k.mitarbeiter_id===ma.id);
+    const maAbz=abzuege.filter(a=>a.mitarbeiter_id===ma.id&&abzugAktiv(a,bM,bJ));
+    const maEinmal=einmal.filter(e=>e.mitarbeiter_id===ma.id);
+    const grundgehalt=parseFloat(ma.grundgehalt)||0;
+    const provision=parseFloat(abr?.provisions_summe)||0;
+    const kranktageAnz=kt?.tage||0;
+    const arbeitstage=kt?.arbeitstage_monat||21;
+    const krankabzug=kranktageAnz>0?Math.round(grundgehalt/arbeitstage*kranktageAnz*100)/100:0;
+    const fw=parseFloat(ma.fw_listenpreis)||0;
+    const fwSachbezug=fw1pct(fw);
+    const einmalSumme=maEinmal.reduce((s,e)=>s+(+e.betrag),0);
+    const vorschuss=parseFloat(vs?.betrag)||0;
+    const abzSumme=maAbz.reduce((s,a)=>s+(+a.betrag),0);
+    const brutto=grundgehalt+provision+einmalSumme+fwSachbezug-krankabzug;
+    const auszahlung=Math.max(0,brutto-vorschuss-abzSumme);
+    return{ma,abr,grundgehalt,provision,kranktageAnz,arbeitstage,krankabzug,fw,fwSachbezug,einmalSumme,einmal:maEinmal,vorschuss,abzSumme,abzuege:maAbz,brutto,auszahlung};
+  }),[mitarb,abrechnungen,vorschuesse,kranktage,abzuege,einmal,bM,bJ]);
+
+  // Totals
+  const totals=useMemo(()=>({
+    grundgehalt:rows.reduce((s,r)=>s+r.grundgehalt,0),
+    provision:rows.reduce((s,r)=>s+r.provision,0),
+    krank:rows.reduce((s,r)=>s+r.krankabzug,0),
+    fw:rows.reduce((s,r)=>s+r.fwSachbezug,0),
+    einmal:rows.reduce((s,r)=>s+r.einmalSumme,0),
+    vorschuss:rows.reduce((s,r)=>s+r.vorschuss,0),
+    abz:rows.reduce((s,r)=>s+r.abzSumme,0),
+    brutto:rows.reduce((s,r)=>s+r.brutto,0),
+    auszahlung:rows.reduce((s,r)=>s+r.auszahlung,0),
+  }),[rows]);
+
+  // Save inline edit
+  const saveEdit=async(maId,field,val)=>{
+    setSaving(true);
+    try{
+      await fetch(SB+"/rest/v1/pay_mitarbeiter?id=eq."+maId,{method:"PATCH",headers:H,body:JSON.stringify({[field]:+val||0})});
+      setMA(prev=>prev.map(m=>m.id===maId?{...m,[field]:+val||0}:m));
+      setToast({msg:"Gespeichert ✓",type:"ok"});
+    }catch(e){setToast({msg:e.message,type:"error"});}
+    finally{setSaving(false);setEdit(null);}
+  };
+
+  // Save Einmalzahlung
+  const saveEinmal=async()=>{
+    if(!einmalForm.bezeichnung||!einmalForm.betrag||!showAddEinmal)return;
+    setSaving(true);
+    try{
+      const payload={mitarbeiter_id:showAddEinmal,monat:bM,jahr:bJ,bezeichnung:einmalForm.bezeichnung,betrag:+einmalForm.betrag,kategorie:einmalForm.kategorie,notiz:einmalForm.notiz};
+      const r=await fetch(SB+"/rest/v1/pay_einmalzahlungen",{method:"POST",headers:{...H,Prefer:"return=representation"},body:JSON.stringify(payload)});
+      const res=await r.json();
+      setEinmal(prev=>[...prev,res[0]]);
+      setShowAddEinmal(null);setEinmalForm({bezeichnung:"",betrag:"",kategorie:"praemie",notiz:""});
+      setToast({msg:"Einmalzahlung gespeichert ✓",type:"ok"});
+    }catch(e){setToast({msg:e.message,type:"error"});}
+    finally{setSaving(false);}
+  };
+
+  const delEinmal=async(id)=>{
+    try{await fetch(SB+"/rest/v1/pay_einmalzahlungen?id=eq."+id,{method:"DELETE",headers:H});setEinmal(prev=>prev.filter(e=>e.id!==id));setToast({msg:"Gelöscht",type:"ok"});}
+    catch(e){setToast({msg:e.message,type:"error"});}
+  };
+
+  // ── EXCEL EXPORT ──────────────────────────────────────────────
+  const exportXLSX=()=>{
+    const wb=XLSX.utils.book_new();
+
+    // ── Tab 1: Lohnliste (Hauptblatt für StB) ──
+    const heute=new Date().toLocaleDateString("de-DE");
+    const headers=["Personalnr.","Name","Vertragstyp","Grundgehalt","Variable Vergütung","Einmalzahlungen","FW-Sachbezug (1%)","Kranktage","Krankabzug","BRUTTO","Vorschuss-Verrechnung","Sachkosten-Abzüge","AUSZAHLUNG","Status","IBAN","Steuer-ID","SVNR","Steuerklasse","Krankenkasse","Hinweis/Notiz"];
+    const dataRows=rows.map(r=>[
+      r.ma.kuerzel,
+      r.ma.vorname+" "+r.ma.nachname,
+      TLBL[r.ma.typ]||r.ma.typ,
+      r.grundgehalt,
+      r.provision,
+      r.einmalSumme,
+      r.fwSachbezug,
+      r.kranktageAnz,
+      r.krankabzug,
+      r.brutto,
+      r.vorschuss,
+      r.abzSumme,
+      r.auszahlung,
+      r.abr?.status==="ausgezahlt"?"✓ Ausgezahlt":r.abr?.status==="freigegeben"?"Freigegeben":"Offen",
+      r.ma.iban||"",
+      r.ma.steuer_id||"",
+      r.ma.svnr||"",
+      r.ma.steuerklasse||"",
+      r.ma.kv_kasse||"",
+      ""
+    ]);
+    // Summenzeile
+    const sumRow=["","GESAMT","",totals.grundgehalt,totals.provision,totals.einmal,totals.fw,"",totals.krank,totals.brutto,totals.vorschuss,totals.abz,totals.auszahlung,"","","","","","",""];
+
+    const ws1=XLSX.utils.aoa_to_sheet([
+      [`bee-doo GmbH – Lohnbuchhaltung ${MOL[bM]} ${bJ}`,,,,,,,,,,,,,,,,,,,`Stand: ${heute}`],
+      [],
+      headers,
+      ...dataRows,
+      [],
+      sumRow
+    ]);
+
+    // Spaltenbreiten
+    ws1['!cols']=[{wch:10},{wch:22},{wch:16},{wch:12},{wch:16},{wch:14},{wch:14},{wch:9},{wch:12},{wch:12},{wch:14},{wch:14},{wch:12},{wch:12},{wch:24},{wch:14},{wch:18},{wch:12},{wch:22},{wch:20}];
+    XLSX.utils.book_append_sheet(wb,ws1,"Lohnliste "+MO[bM]+" "+bJ);
+
+    // ── Tab 2: Einmalzahlungen Detail ──
+    if(einmal.length>0){
+      const emHeaders=["Mitarbeiter","Kürzel","Bezeichnung","Kategorie","Betrag €","Steuerpflichtig","Notiz"];
+      const emRows=einmal.map(e=>{
+        const ma=mitarb.find(m=>m.id===e.mitarbeiter_id);
+        return[ma?ma.vorname+" "+ma.nachname:"?",ma?.kuerzel||"?",e.bezeichnung,e.kategorie,+e.betrag,e.steuerpflichtig?"ja":"nein",e.notiz||""];
+      });
+      const ws2=XLSX.utils.aoa_to_sheet([
+        [`Einmalzahlungen ${MOL[bM]} ${bJ}`,,,,,,,],
+        [],
+        emHeaders,
+        ...emRows
+      ]);
+      ws2['!cols']=[{wch:22},{wch:8},{wch:24},{wch:14},{wch:10},{wch:14},{wch:24}];
+      XLSX.utils.book_append_sheet(wb,ws2,"Einmalzahlungen");
+    }
+
+    // ── Tab 3: Fahrzeug-Sachbezüge ──
+    const fwMas=rows.filter(r=>r.fw>0);
+    if(fwMas.length>0){
+      const fwHeaders=["Mitarbeiter","Kürzel","Fahrzeug","Kennzeichen","Bruttolistenpreis","1%-Sachbezug","Hinweis"];
+      const fwRows=fwMas.map(r=>[r.ma.vorname+" "+r.ma.nachname,r.ma.kuerzel,r.ma.fw_modell||"",r.ma.fw_kennzeichen||"",r.fw,r.fwSachbezug,"Monatlicher geldwerter Vorteil gem. §8 Abs. 2 EStG"]);
+      const ws3=XLSX.utils.aoa_to_sheet([
+        [`Firmenwagen-Sachbezüge ${MOL[bM]} ${bJ} (1%-Methode)`,,,,,,],
+        [],
+        fwHeaders,
+        ...fwRows
+      ]);
+      ws3['!cols']=[{wch:22},{wch:8},{wch:20},{wch:12},{wch:16},{wch:14},{wch:40}];
+      XLSX.utils.book_append_sheet(wb,ws3,"Firmenwagen");
+    }
+
+    // ── Tab 4: Stammdaten (einmalig / bei Änderung) ──
+    const sdHeaders=["Kürzel","Vorname","Nachname","Typ","Eintrittsdatum","Straße","PLZ","Ort","Geburtsdatum","Steuer-ID","SVNR","Steuerklasse","Konfession","Krankenkasse","IBAN","Grundgehalt"];
+    const sdRows=mitarb.map(m=>[
+      m.kuerzel,m.vorname,m.nachname,TLBL[m.typ]||m.typ,
+      m.eintrittsdatum||"",m.strasse&&m.hausnr?m.strasse+" "+m.hausnr:"",m.plz||"",m.ort||"",
+      m.geburtsdatum||"",m.steuer_id||"",m.svnr||"",m.steuerklasse||"",m.konfession||"",m.kv_kasse||"",m.iban||"",m.grundgehalt||0
+    ]);
+    const ws4=XLSX.utils.aoa_to_sheet([
+      ["Stammdaten Angestellte – bee-doo GmbH",,,,,,,,,,,,,,,,],
+      [`Stand: ${heute}`,,,,,,,,,,,,,,,,],
+      [],
+      sdHeaders,
+      ...sdRows
+    ]);
+    ws4['!cols']=[{wch:8},{wch:12},{wch:16},{wch:16},{wch:12},{wch:20},{wch:7},{wch:14},{wch:12},{wch:14},{wch:18},{wch:12},{wch:12},{wch:22},{wch:26},{wch:12}];
+    XLSX.utils.book_append_sheet(wb,ws4,"Stammdaten");
+
+    XLSX.writeFile(wb,`beedoo-lohn-${bJ}-${String(bM).padStart(2,"0")}.xlsx`);
+    setToast({msg:"Excel exportiert ✓",type:"ok"});
+  };
+
+  // ── INLINE EDIT CELL ──────────────────────────────────────────
+  const EditCell=({row,field,label,color})=>{
+    const val=row.ma[field]||0;
+    const isEditing=editCell?.maId===row.ma.id&&editCell?.field===field;
+    if(isEditing){
+      return <input autoFocus type="number" defaultValue={editCell.value}
+        onBlur={e=>saveEdit(row.ma.id,field,e.target.value)}
+        onKeyDown={e=>{if(e.key==="Enter")saveEdit(row.ma.id,field,e.target.value);if(e.key==="Escape")setEdit(null);}}
+        style={{width:90,background:C.card,border:`1.5px solid ${C.Y}`,borderRadius:5,padding:"3px 7px",fontSize:11,color:C.Y,textAlign:"right",outline:"none"}}/>;
+    }
+    return <span onClick={()=>setEdit({maId:row.ma.id,field,value:val})}
+      style={{color:color||C.tx,fontWeight:600,fontSize:11,cursor:"pointer",borderBottom:`1px dashed ${color||C.bl}`,padding:"0 2px",transition:"all .1s"}}
+      title={`${label} bearbeiten`}>
+      {eur(val)}
+    </span>;
+  };
+
+  const Spi=()=><div style={{width:16,height:16,border:"2px solid #ffffff10",borderTop:"2px solid "+C.Y,borderRadius:"50%",animation:"spin .6s linear infinite"}}/>;
+
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column"}}>
+      {/* Toast */}
+      {toast&&<div style={{position:"fixed",bottom:20,right:20,background:toast.type==="ok"?C.G:C.R,color:"#000",padding:"9px 16px",borderRadius:8,fontWeight:700,fontSize:12,zIndex:9999,boxShadow:"0 4px 20px rgba(0,0,0,.6)",cursor:"pointer",animation:"fadeIn .2s ease"}} onClick={()=>setToast(null)}>
+        {toast.type==="ok"?"✓":"⚠"} {toast.msg}
+      </div>}
+
+      {/* HEADER */}
+      <div style={{background:C.sur,borderBottom:`1px solid ${C.b}`,padding:"10px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}} className="no-print">
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <div>
+            <div style={{fontWeight:900,fontSize:17,letterSpacing:-0.5}}>bee<span style={{color:C.Y}}>-doo</span> <span style={{fontWeight:400,fontSize:12,color:C.ts}}>Lohnbuchhaltung</span></div>
+            <div style={{fontSize:10,color:C.tm,marginTop:1}}>Nur für Steuerberater · Vertraulich</div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          {saving&&<Spi/>}
+          <input type="month" value={monat} onChange={e=>setMonat(e.target.value)}
+            style={{background:C.card,border:`1px solid ${C.bl}`,color:C.tx,borderRadius:6,padding:"5px 10px",fontSize:12,width:130}}/>
+          <button onClick={exportXLSX} style={{background:`${C.G}18`,border:`1px solid ${C.G}28`,color:C.G,borderRadius:7,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+            ⬇ Excel Export
+          </button>
+          <button onClick={()=>window.print()} style={{background:`${C.Y}15`,border:`1px solid ${C.Y}25`,color:C.Y,borderRadius:7,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            🖨 Drucken
+          </button>
+          <button onClick={()=>{sessionStorage.removeItem(SESSION_KEY);location.reload()}} style={{background:C.card,border:`1px solid ${C.bl}`,color:C.ts,borderRadius:7,padding:"7px 10px",fontSize:11,cursor:"pointer"}} title="Abmelden">
+            ⏻
+          </button>
+        </div>
+      </div>
+
+      {/* KPI */}
+      <div style={{background:C.card,borderBottom:`1px solid ${C.b}`,padding:"8px 20px",display:"flex",gap:12,alignItems:"center",flexShrink:0,overflowX:"auto"}} className="no-print">
+        {[
+          {l:"Mitarbeiter",v:rows.length,c:C.tx},
+          {l:"Ges. Grundgehalt",v:eur(totals.grundgehalt),c:C.tx},
+          {l:"Ges. Provision",v:eur(totals.provision),c:C.B},
+          {l:"Einmalzahlungen",v:eur(totals.einmal),c:C.O},
+          {l:"FW-Sachbezüge",v:eur(totals.fw),c:C.O},
+          {l:"Kranktage-Abzüge",v:eur(totals.krank),c:C.R},
+          {l:"BRUTTO Gesamt",v:eur(totals.brutto),c:C.Y,bold:true},
+          {l:"Auszahlung Gesamt",v:eur(totals.auszahlung),c:C.G,bold:true},
+        ].map(({l,v,c,bold})=>(
+          <div key={l} style={{flexShrink:0,padding:"4px 12px",background:`${c}12`,border:`1px solid ${c}20`,borderRadius:7,minWidth:100}}>
+            <div style={{fontSize:8,color:`${c}80`,fontWeight:700,textTransform:"uppercase",letterSpacing:.5}}>{l}</div>
+            <div style={{fontSize:bold?16:13,fontWeight:bold?800:700,color:c,marginTop:1,letterSpacing:-.3}}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* MAIN TABLE */}
+      {loading?(
+        <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:12,color:C.ts}}><Spi/> Lade...</div>
+      ):(
+        <div style={{flex:1,overflow:"auto",padding:"12px 20px"}}>
+          {/* Monatsüberschrift */}
+          <div style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <h2 style={{fontSize:16,fontWeight:800,color:C.tx}}>Lohnliste {MOL[bM]} {bJ}</h2>
+            <div style={{fontSize:11,color:C.ts}}>{rows.length} Angestellte · Werte klickbar zum Bearbeiten</div>
+          </div>
+
+          <div style={{overflowX:"auto",borderRadius:10,border:`1px solid ${C.b}`}}>
+            <table className="print-table" style={{width:"100%",borderCollapse:"collapse",minWidth:1100}}>
+              <thead>
+                <tr style={{background:C.card}}>
+                  {[
+                    "Mitarbeiter","Typ",
+                    "Grundgehalt","Variable","Einmal",
+                    "FW-Sachbezug","Kranktage","Krank-Abzug",
+                    "BRUTTO","Vorschuss","Abzüge","AUSZAHLUNG","Status"
+                  ].map(h=>(
+                    <th key={h} style={{padding:"8px 10px",fontSize:9,fontWeight:700,color:C.tm,textTransform:"uppercase",letterSpacing:.5,borderBottom:`2px solid ${C.b}`,textAlign:["Grundgehalt","Variable","Einmal","FW-Sachbezug","Krank-Abzug","BRUTTO","Vorschuss","Abzüge","AUSZAHLUNG"].includes(h)?"right":"left",whiteSpace:"nowrap"}}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row,i)=>(
+                  <tr key={row.ma.id} style={{borderBottom:`1px solid ${C.b}`,background:i%2===0?"transparent":C.sur+"60"}}>
+                    <td style={{padding:"10px 10px"}}>
+                      <div style={{fontWeight:700,fontSize:12}}>{row.ma.vorname} {row.ma.nachname}</div>
+                      <div style={{fontSize:9,color:C.tm}}>{row.ma.kuerzel} · SK {row.ma.steuerklasse||"?"} · {row.ma.kv_kasse||"KV fehlt"}</div>
+                      {row.ma.svnr&&<div style={{fontSize:9,color:C.tm}}>SVNR: {row.ma.svnr}</div>}
+                    </td>
+                    <td style={{padding:"10px 10px"}}>
+                      <span style={{background:`${C.G}20`,color:C.G,borderRadius:4,padding:"2px 7px",fontSize:9,fontWeight:700}}>
+                        {TLBL[row.ma.typ]||row.ma.typ}
+                      </span>
+                    </td>
+                    {/* Grundgehalt – editierbar */}
+                    <td style={{padding:"10px 10px",textAlign:"right"}}>
+                      <EditCell row={row} field="grundgehalt" label="Grundgehalt"/>
+                    </td>
+                    {/* Variable (aus PAY) */}
+                    <td style={{padding:"10px 10px",textAlign:"right"}}>
+                      <span style={{color:row.provision>0?C.B:C.tm,fontWeight:600,fontSize:11}}>
+                        {row.provision>0?eur(row.provision):"–"}
+                      </span>
+                    </td>
+                    {/* Einmalzahlungen */}
+                    <td style={{padding:"10px 10px",textAlign:"right"}}>
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+                        {row.einmal.map(e=>(
+                          <div key={e.id} style={{display:"flex",gap:4,alignItems:"center"}}>
+                            <span style={{fontSize:9,color:C.ts,maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.bezeichnung}</span>
+                            <span style={{color:C.O,fontWeight:700,fontSize:11}}>{eur(e.betrag)}</span>
+                            <button onClick={()=>delEinmal(e.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.tm,fontSize:10,padding:0}}>✕</button>
+                          </div>
+                        ))}
+                        <button onClick={()=>{setShowAddEinmal(row.ma.id);setEinmalForm({bezeichnung:"",betrag:"",kategorie:"praemie",notiz:""})}}
+                          style={{background:"none",border:`1px dashed ${C.bl}`,color:C.tm,borderRadius:4,padding:"1px 7px",fontSize:9,cursor:"pointer",marginTop:row.einmal.length>0?2:0}}>
+                          {row.einmal.length>0?"+ weitere":"+ Einmalbetrag"}
+                        </button>
+                        {row.einmalSumme>0&&<span style={{color:C.O,fontWeight:800,fontSize:12}}>Σ {eur(row.einmalSumme)}</span>}
+                      </div>
+                    </td>
+                    {/* Firmenwagen Sachbezug */}
+                    <td style={{padding:"10px 10px",textAlign:"right"}}>
+                      {row.fw>0?(
+                        <div>
+                          <div style={{color:C.O,fontWeight:700,fontSize:11}}>{eur(row.fwSachbezug)}</div>
+                          <div style={{fontSize:9,color:C.tm}}>{row.ma.fw_modell||""}</div>
+                          <div style={{fontSize:9,color:C.tm}}>LP: {eur(row.fw)}</div>
+                        </div>
+                      ):(
+                        <span style={{color:C.tm,fontSize:10}}>–</span>
+                      )}
+                    </td>
+                    {/* Kranktage */}
+                    <td style={{padding:"10px 10px",textAlign:"right"}}>
+                      {row.kranktageAnz>0?(
+                        <div>
+                          <span style={{color:C.R,fontWeight:700,fontSize:12}}>{row.kranktageAnz}</span>
+                          <span style={{color:C.tm,fontSize:9}}> d</span>
+                        </div>
+                      ):<span style={{color:C.tm,fontSize:10}}>–</span>}
+                    </td>
+                    {/* Kranktage Abzug */}
+                    <td style={{padding:"10px 10px",textAlign:"right"}}>
+                      {row.krankabzug>0?<span style={{color:C.R,fontWeight:700,fontSize:11}}>-{eur(row.krankabzug)}</span>:<span style={{color:C.tm,fontSize:10}}>–</span>}
+                    </td>
+                    {/* BRUTTO */}
+                    <td style={{padding:"10px 10px",textAlign:"right",fontWeight:800,fontSize:13}}>{eur(row.brutto)}</td>
+                    {/* Vorschuss */}
+                    <td style={{padding:"10px 10px",textAlign:"right"}}>
+                      {row.vorschuss>0?<span style={{color:C.R,fontWeight:700,fontSize:11}}>-{eur(row.vorschuss)}</span>:<span style={{color:C.tm,fontSize:10}}>–</span>}
+                    </td>
+                    {/* Abzüge */}
+                    <td style={{padding:"10px 10px",textAlign:"right"}}>
+                      {row.abzSumme>0?(
+                        <div>
+                          {row.abzuege.map(a=><div key={a.id} style={{fontSize:9,color:C.ts}}>{a.bezeichnung.slice(0,14)}: -{eur(a.betrag)}</div>)}
+                          <div style={{color:"#F472B6",fontWeight:700,fontSize:11}}>Σ -{eur(row.abzSumme)}</div>
+                        </div>
+                      ):<span style={{color:C.tm,fontSize:10}}>–</span>}
+                    </td>
+                    {/* AUSZAHLUNG */}
+                    <td style={{padding:"10px 10px",textAlign:"right",fontWeight:800,fontSize:13,color:C.G}}>{eur(row.auszahlung)}</td>
+                    {/* Status */}
+                    <td style={{padding:"10px 10px"}}>
+                      <span style={{background:row.abr?.status==="ausgezahlt"?C.GD:row.abr?.status==="freigegeben"?`${C.B}15`:C.OD,color:row.abr?.status==="ausgezahlt"?C.G:row.abr?.status==="freigegeben"?C.B:C.O,border:`1px solid ${row.abr?.status==="ausgezahlt"?C.G+"30":row.abr?.status==="freigegeben"?C.B+"30":C.O+"30"}`,borderRadius:4,padding:"2px 8px",fontSize:9,fontWeight:700,whiteSpace:"nowrap"}}>
+                        {row.abr?.status==="ausgezahlt"?"✓ Ausgezahlt":row.abr?.status==="freigegeben"?"Freigegeben":"Offen"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              {/* Summenzeile */}
+              <tfoot>
+                <tr style={{borderTop:`2px solid ${C.bl}`,background:C.card}}>
+                  <td colSpan={2} style={{padding:"8px 10px",fontSize:10,fontWeight:700,color:C.ts}}>GESAMT · {rows.length} MA</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,fontSize:12}}>{eur(totals.grundgehalt)}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,fontSize:12,color:C.B}}>{eur(totals.provision)}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,fontSize:12,color:C.O}}>{totals.einmal>0?eur(totals.einmal):"–"}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,fontSize:12,color:C.O}}>{totals.fw>0?eur(totals.fw):"–"}</td>
+                  <td colSpan={1}/>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,fontSize:12,color:C.R}}>{totals.krank>0?"-"+eur(totals.krank):"–"}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontWeight:800,fontSize:14}}>{eur(totals.brutto)}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,fontSize:12,color:C.R}}>{totals.vorschuss>0?"-"+eur(totals.vorschuss):"–"}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,fontSize:12,color:"#F472B6"}}>{totals.abz>0?"-"+eur(totals.abz):"–"}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontWeight:800,fontSize:14,color:C.G}}>{eur(totals.auszahlung)}</td>
+                  <td/>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Hinweis */}
+          <div style={{marginTop:14,padding:"10px 14px",background:C.sur,borderRadius:8,border:`1px solid ${C.b}`,fontSize:10,color:C.ts,lineHeight:1.6}}>
+            ℹ️ <b style={{color:C.tx}}>Hinweis Lohnsteuer:</b> Variable Vergütung und Einmalzahlungen sind steuerpflichtiger Arbeitslohn. Firmenwagen-Sachbezug gem. §8 Abs. 2 EStG (1%-Methode, Bruttolistenpreis). Kranktage-Abzug: anteiliges Grundgehalt. Verbindliche Lohnabrechnung erfolgt über DATEV. Stand: {new Date().toLocaleDateString("de-DE")} · bee-doo GmbH
+          </div>
+        </div>
+      )}
+
+      {/* EINMALZAHLUNG MODAL */}
+      {showAddEinmal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowAddEinmal(null)}>
+          <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:12,padding:22,width:360}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontWeight:800,fontSize:14,marginBottom:14}}>+ Einmalzahlung / Prämie</div>
+            {[
+              {label:"Bezeichnung *",key:"bezeichnung",type:"text",placeholder:'z.B. "Jahresbonus 2025"'},
+              {label:"Betrag € *",key:"betrag",type:"number",placeholder:"500"},
+            ].map(f=>(
+              <div key={f.key} style={{marginBottom:10}}>
+                <div style={{fontSize:9,fontWeight:700,color:C.ts,marginBottom:3,textTransform:"uppercase"}}>{f.label}</div>
+                <input type={f.type} value={einmalForm[f.key]} placeholder={f.placeholder}
+                  onChange={e=>setEinmalForm(p=>({...p,[f.key]:e.target.value}))}
+                  style={{width:"100%",background:C.sur,border:`1px solid ${C.bl}`,borderRadius:7,padding:"8px 11px",fontSize:12,color:C.tx,outline:"none"}}/>
+              </div>
+            ))}
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:9,fontWeight:700,color:C.ts,marginBottom:3,textTransform:"uppercase"}}>Kategorie</div>
+              <select value={einmalForm.kategorie} onChange={e=>setEinmalForm(p=>({...p,kategorie:e.target.value}))}
+                style={{width:"100%",background:C.sur,border:`1px solid ${C.bl}`,borderRadius:7,padding:"8px 11px",fontSize:12,color:C.tx,outline:"none"}}>
+                {[["praemie","Prämie"],["bonus","Bonus"],["urlaubsgeld","Urlaubsgeld"],["weihnachtsgeld","Weihnachtsgeld"],["sonstiges","Sonstiges"]].map(([k,l])=><option key={k} value={k}>{l}</option>)}
+              </select>
+            </div>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:9,fontWeight:700,color:C.ts,marginBottom:3,textTransform:"uppercase"}}>Notiz</div>
+              <input value={einmalForm.notiz} placeholder="Optional"
+                onChange={e=>setEinmalForm(p=>({...p,notiz:e.target.value}))}
+                style={{width:"100%",background:C.sur,border:`1px solid ${C.bl}`,borderRadius:7,padding:"8px 11px",fontSize:12,color:C.tx,outline:"none"}}/>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setShowAddEinmal(null)} style={{flex:1,background:C.sur,border:`1px solid ${C.bl}`,color:C.ts,borderRadius:7,padding:"9px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Abbrechen</button>
+              <button onClick={saveEinmal} disabled={!einmalForm.bezeichnung||!einmalForm.betrag}
+                style={{flex:2,background:`${C.G}20`,border:`1px solid ${C.G}30`,color:C.G,borderRadius:7,padding:"9px",fontSize:12,fontWeight:700,cursor:"pointer",opacity:!einmalForm.bezeichnung||!einmalForm.betrag?0.5:1}}>
+                Speichern ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Root(){
+  const [auth,setAuth]=useState(()=>sessionStorage.getItem(SESSION_KEY)==="1");
+  if(!auth)return <PinLock onUnlock={()=>setAuth(true)}/>;
+  return <App/>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
+</script>
+</body>
+</html>
