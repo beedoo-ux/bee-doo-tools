@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>bee-doo · Enpal Partner-Reporting</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#06080F;color:#E6EDF3;min-height:100vh}
+button,select,input{font-family:inherit;color:inherit}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:#1B2332;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } = Recharts;
+
+const SB_URL  = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const PW = 'Enpal2026!';
+const SK = 'enpal_ext_v5';
+
+const C = {
+  bg:'#06080F', card:'#0D1117', border:'#1B2332',
+  text:'#E6EDF3', sec:'#8B949E', dim:'#484F58',
+  orange:'#F97316', green:'#3FB950', red:'#F85149',
+  blue:'#58A6FF', amber:'#F0A030', cyan:'#56D4DD',
+};
+
+const fmt  = n => n == null ? '—' : Number(n).toLocaleString('de-DE');
+const fmtP = n => n == null ? '—' : Number(n).toFixed(1) + ' %';
+const eur  = n => n == null ? '—' : Math.round(n).toLocaleString('de-DE') + ' €';
+
+async function loadData() {
+  const res = await fetch(
+    SB_URL + '/rest/v1/enpal_leads?import_label=like.REPORTING*&select=import_label,row_data&order=id.asc&limit=1000',
+    { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + SB_ANON } }
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
+function KPI({ label, value, sub, color }) {
+  const c = color || C.orange;
+  return (
+    <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 10, padding: '18px 22px', minWidth: 140 }}>
+      <div style={{ fontSize: 26, fontWeight: 800, color: c }}>{value}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginTop: 2 }}>{label}</div>
+      {sub && <div style={{ fontSize: 11, color: C.sec, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function TT() {
+  return { contentStyle: { background: C.card, border: '1px solid ' + C.border, borderRadius: 8, fontSize: 12 } };
+}
+
+function Board({ rows, importLabel, onLogout }) {
+  const [tab, setTab] = useState('uebersicht');
+
+  // Parse rows by type
+  const kpi       = rows.find(r => r.type === 'kpi') || {};
+  const dailyImp  = rows.filter(r => r.type === 'daily_import');
+  const dailyEr   = rows.filter(r => r.type === 'daily_erstellt');
+  const dailyTer  = rows.filter(r => r.type === 'daily_termine');
+  const berater   = rows.filter(r => r.type === 'berater');
+  const ccAgents  = rows.filter(r => r.type === 'cc_agent');
+  const abschluss = rows.filter(r => r.type === 'abschluss');
+  const speedBuck = rows.filter(r => r.type === 'speed_bucket');
+  const speedSum  = rows.find(r => r.type === 'speed_summary') || {};
+
+  const termRate = kpi.leads_feb > 0 ? (kpi.terminiert / kpi.leads_feb * 100) : 0;
+  const afRate   = (kpi.stattgefunden + kpi.ausgefallen) > 0 ? (kpi.ausgefallen / (kpi.stattgefunden + kpi.ausgefallen) * 100) : 0;
+  const wasteRate = kpi.leads_feb > 0 ? ((kpi.reklamation + (kpi.ne5||0)) / kpi.leads_feb * 100) : 0;
+
+  const TABS = [
+    { k:'uebersicht', l:'📊 Übersicht' },
+    { k:'termine',    l:'📆 Termine'   },
+    { k:'berater',    l:'👤 Berater'   },
+    { k:'pipeline',   l:'🔄 Pipeline'  },
+  ];
+
+  return (
+    <div style={{ minHeight:'100vh', background: C.bg }}>
+      {/* Header */}
+      <div style={{ background: C.card, borderBottom: '1px solid ' + C.border, padding: '0 24px' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', display:'flex', alignItems:'center', justifyContent:'space-between', height: 56 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <span style={{ fontWeight:800, fontSize:18 }}>bee<span style={{ color: C.orange }}>·</span>doo</span>
+            <span style={{ background:'rgba(249,115,22,.15)', color: C.orange, fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20 }}>ENPAL PARTNER BOARD</span>
+            {importLabel && <span style={{ fontSize:11, color: C.sec }}>Stand: {importLabel.replace('REPORTING::','')}</span>}
+          </div>
+          <button onClick={onLogout} style={{ background:'transparent', border:'1px solid '+C.border, borderRadius:8, color:C.sec, padding:'5px 12px', fontSize:12, cursor:'pointer' }}>Abmelden</button>
+        </div>
+      </div>
+
+      <div style={{ maxWidth:1200, margin:'0 auto', padding:24 }}>
+        {/* Tabs */}
+        <div style={{ display:'flex', gap:4, marginBottom:20, flexWrap:'wrap' }}>
+          {TABS.map(t => {
+            const active = tab === t.k;
+            return (
+              <button key={t.k} onClick={() => setTab(t.k)} style={{ padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, background: active ? C.orange : C.card, color: active ? '#fff' : C.sec }}>
+                {t.l}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ÜBERSICHT */}
+        {tab === 'uebersicht' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+            <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
+              <KPI label="Enpal Leads Feb" value={fmt(kpi.leads_feb)} sub={'WP: '+fmt(kpi.wp_leads)+' · Klassisch: '+fmt(kpi.klassisch_leads)} />
+              <KPI label="Terminierungsquote" value={fmtP(termRate)} sub={fmt(kpi.terminiert)+' terminiert'} color={termRate>=15?C.green:C.amber} />
+              <KPI label="Termine erstellt" value={fmt(kpi.termine_erstellt)} sub={'Stattgef.: '+fmt(kpi.stattgefunden)+' · Ausgef.: '+fmt(kpi.ausgefallen)} color={C.cyan} />
+              <KPI label="Abschlüsse" value={fmt(kpi.sales)} sub={kpi.sales_netto ? eur(kpi.sales_netto) : '—'} color={kpi.sales > 0 ? C.green : C.red} />
+              <KPI label="Waste-Quote" value={fmtP(wasteRate)} sub={fmt(kpi.reklamation)+' Rekl. + '+fmt(kpi.ne5||0)+' NE5'} color={wasteRate < 40 ? C.amber : C.red} />
+            </div>
+
+            {/* Daily Lead Import */}
+            {dailyImp.length > 0 && (
+              <div style={{ background: C.card, border: '1px solid '+C.border, borderRadius:12, padding:20 }}>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:16 }}>📥 Täglicher Enpal Lead-Import</div>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={dailyImp}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis dataKey="datum" tick={{ fill: C.sec, fontSize:11 }} />
+                    <YAxis tick={{ fill: C.sec, fontSize:11 }} />
+                    <Tooltip {...TT()} />
+                    <Legend wrapperStyle={{ fontSize:10 }} />
+                    <Bar dataKey="wp"  stackId="a" fill={C.orange} name="WP" />
+                    <Bar dataKey="kl"  stackId="a" fill={C.amber}  name="Klassisch" radius={[4,4,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TERMINE */}
+        {tab === 'termine' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+            {dailyEr.length > 0 && (
+              <div style={{ background: C.card, border: '1px solid '+C.border, borderRadius:12, padding:20 }}>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:16 }}>📆 Termine erstellt pro Tag</div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={dailyEr}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis dataKey="datum" tick={{ fill:C.sec, fontSize:11 }} />
+                    <YAxis tick={{ fill:C.sec, fontSize:11 }} />
+                    <Tooltip {...TT()} />
+                    <Legend wrapperStyle={{ fontSize:10 }} />
+                    <Bar dataKey="wp" stackId="a" fill={C.orange} name="WP" />
+                    <Bar dataKey="kl" stackId="a" fill={C.amber} name="Klassisch" radius={[4,4,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            {dailyTer.length > 0 && (
+              <div style={{ background: C.card, border: '1px solid '+C.border, borderRadius:12, padding:20 }}>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:16 }}>📊 Termine Stattgef. / Ausgef. / Offen</div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={dailyTer}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis dataKey="datum" tick={{ fill:C.sec, fontSize:10 }} angle={-45} textAnchor="end" height={50} />
+                    <YAxis tick={{ fill:C.sec, fontSize:11 }} />
+                    <Tooltip {...TT()} />
+                    <Legend wrapperStyle={{ fontSize:10 }} />
+                    <Bar dataKey="stattgef" stackId="a" fill={C.green} name="Stattgefunden" />
+                    <Bar dataKey="ausgef"   stackId="a" fill={C.red}   name="Ausgefallen" />
+                    <Bar dataKey="offen"    stackId="a" fill={C.blue}  name="Offen" radius={[4,4,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div style={{ fontSize:11, color:C.sec, marginTop:8 }}>
+                  Ausgefallen-Quote: <strong style={{ color: afRate > 40 ? C.red : C.amber }}>{fmtP(afRate)}</strong> · {fmt(kpi.offen)} offene Termine ausstehend
+                </div>
+              </div>
+            )}
+            {abschluss.length > 0 && (
+              <div style={{ background: C.card, border: '1px solid '+C.border, borderRadius:12, padding:20 }}>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:16 }}>🏁 Abschluss-Ergebnisse (stattgef. Termine)</div>
+                {abschluss.map((a, i) => (
+                  <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid '+C.border }}>
+                    <span style={{ fontSize:13 }}>{a.name}</span>
+                    <span style={{ fontSize:13, fontWeight:700, color: a.name==='Sale' ? C.green : C.sec }}>{a.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* BERATER */}
+        {tab === 'berater' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+            {berater.length > 0 && (
+              <div style={{ background: C.card, border: '1px solid '+C.border, borderRadius:12, padding:20 }}>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:16 }}>👤 Berater — Termine erstellt</div>
+                <ResponsiveContainer width="100%" height={Math.max(200, berater.length * 34)}>
+                  <BarChart data={berater} layout="vertical" margin={{ left:10 }}>
+                    <XAxis type="number" tick={{ fill:C.sec, fontSize:11 }} />
+                    <YAxis type="category" dataKey="name" tick={{ fill:C.text, fontSize:12 }} width={150} />
+                    <Tooltip {...TT()} />
+                    <Bar dataKey="termine" fill={C.orange} name="Termine" radius={[0,4,4,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            {ccAgents.length > 0 && (
+              <div style={{ background: C.card, border: '1px solid '+C.border, borderRadius:12, padding:20 }}>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:16 }}>📞 CC Agenten — Enpal Conversion</div>
+                <div style={{ overflowX:'auto' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                    <thead>
+                      <tr>
+                        {['Agentin','Leads','Terminiert','Rate','Reklamation'].map(h => (
+                          <th key={h} style={{ padding:'10px 12px', textAlign: h==='Agentin' ? 'left' : 'right', color:C.sec, fontWeight:600, borderBottom:'2px solid '+C.border }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ccAgents.sort((a,b) => b.rate - a.rate).map((a, i) => (
+                        <tr key={i} style={{ background: i%2===1 ? C.card : 'transparent', borderBottom:'1px solid '+C.border }}>
+                          <td style={{ padding:'9px 12px', fontWeight:600 }}>{a.name}</td>
+                          <td style={{ padding:'9px 12px', textAlign:'right' }}>{fmt(a.leads)}</td>
+                          <td style={{ padding:'9px 12px', textAlign:'right', color:C.green, fontWeight:700 }}>{fmt(a.terminiert)}</td>
+                          <td style={{ padding:'9px 12px', textAlign:'right', color: a.rate >= 15 ? C.green : C.amber, fontWeight:700 }}>{fmtP(a.rate)}</td>
+                          <td style={{ padding:'9px 12px', textAlign:'right', color:C.red }}>{fmt(a.rekl)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PIPELINE */}
+        {tab === 'pipeline' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+            <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
+              <KPI label="Nicht erreicht (NE)" value={fmt(kpi.ne)} sub={(kpi.ne5||0)+' × NE5'} color={C.amber} />
+              <KPI label="Wiedervorlage" value={fmt(kpi.wvl)} color={C.blue} />
+              <KPI label="Reklamation" value={fmt(kpi.reklamation)} color={C.red} />
+            </div>
+            {speedBuck.length > 0 && (
+              <div style={{ background: C.card, border: '1px solid '+C.border, borderRadius:12, padding:20 }}>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:4 }}>⚡ Lead → Termin Reaktionszeit</div>
+                {speedSum.median && (
+                  <div style={{ fontSize:12, color:C.sec, marginBottom:16 }}>
+                    Median: <strong style={{ color:C.orange }}>{speedSum.median}h</strong> · Ø {speedSum.avg}h · {speedSum.unter24h_pct}% unter 24h
+                  </div>
+                )}
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={speedBuck}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis dataKey="name" tick={{ fill:C.sec, fontSize:11 }} />
+                    <YAxis tick={{ fill:C.sec, fontSize:11 }} />
+                    <Tooltip {...TT()} />
+                    <Bar dataKey="count" fill={C.cyan} name="Termine" radius={[4,4,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            <div style={{ background: C.card, border: '1px solid '+C.border, borderRadius:12, padding:20 }}>
+              <div style={{ fontSize:14, fontWeight:700, marginBottom:8 }}>📋 Handlungsempfehlungen</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {termRate < 15 && (
+                  <div style={{ background:'rgba(240,160,48,.08)', border:'1px solid rgba(240,160,48,.25)', borderRadius:8, padding:'10px 14px', fontSize:13 }}>
+                    🟡 <strong>Terminierungsquote {fmtP(termRate)}</strong> — Ziel: &gt;15% · {fmt(kpi.leads_feb - kpi.terminiert)} Leads bisher nicht terminiert
+                  </div>
+                )}
+                {afRate > 40 && (
+                  <div style={{ background:'rgba(248,81,73,.08)', border:'1px solid rgba(248,81,73,.25)', borderRadius:8, padding:'10px 14px', fontSize:13 }}>
+                    🔴 <strong>Ausfallquote {fmtP(afRate)}</strong> — Höher als Benchmark · Bestätigungsanrufe optimieren
+                  </div>
+                )}
+                {kpi.offen > 0 && (
+                  <div style={{ background:'rgba(88,166,255,.08)', border:'1px solid rgba(88,166,255,.25)', borderRadius:8, padding:'10px 14px', fontSize:13 }}>
+                    🔵 <strong>{fmt(kpi.offen)} offene Termine</strong> stehen noch aus — Ergebnisse folgen
+                  </div>
+                )}
+                {(kpi.wvl||0) > 0 && (
+                  <div style={{ background:'rgba(63,185,80,.08)', border:'1px solid rgba(63,185,80,.25)', borderRadius:8, padding:'10px 14px', fontSize:13 }}>
+                    🟢 <strong>{fmt(kpi.wvl)} Wiedervorlagen</strong> nachfassen — potenzielle Abschlüsse
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Login({ onLogin }) {
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState(false);
+  const submit = () => {
+    if (pw === PW) { sessionStorage.setItem(SK, '1'); onLogin(); }
+    else { setErr(true); setTimeout(() => setErr(false), 3000); }
+  };
+  return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background: C.bg }}>
+      <div style={{ background: C.card, border: '1px solid '+C.border, borderRadius:16, padding:'48px 40px', width:'100%', maxWidth:380, textAlign:'center' }}>
+        <div style={{ fontSize:36, fontWeight:800, marginBottom:4 }}>bee<span style={{ color: C.orange }}>·</span>doo</div>
+        <div style={{ background:'rgba(249,115,22,.15)', color: C.orange, display:'inline-block', padding:'3px 14px', borderRadius:20, fontSize:11, fontWeight:700, marginBottom:32 }}>ENPAL PARTNER BOARD</div>
+        <div style={{ fontSize:15, color: C.sec, marginBottom:20 }}>Bitte Passwort eingeben</div>
+        <input
+          type="password" value={pw} onChange={e => setPw(e.target.value)}
+          onKeyDown={e => e.key==='Enter' && submit()}
+          placeholder="Passwort" autoFocus
+          style={{ width:'100%', padding:'12px 16px', borderRadius:10, fontSize:15, border:'2px solid '+(err ? C.red : C.border), background:'#0D1117', color: C.text, outline:'none', marginBottom:8, display:'block' }}
+        />
+        {err && <div style={{ color: C.red, fontSize:12, marginBottom:8 }}>Falsches Passwort</div>}
+        <button onClick={submit} style={{ width:'100%', padding:12, borderRadius:10, border:'none', cursor:'pointer', background: C.orange, color:'#fff', fontWeight:800, fontSize:15, marginTop:8 }}>
+          Anmelden →
+        </button>
+        <div style={{ marginTop:24, fontSize:12, color: C.sec }}>bee-doo GmbH · Enpal Partner Analytics</div>
+      </div>
+    </div>
+  );
+}
+
+function Main() {
+  const [auth, setAuth]     = useState(() => sessionStorage.getItem(SK) === '1');
+  const [loading, setLoading] = useState(false);
+  const [rows, setRows]     = useState([]);
+  const [importLabel, setImportLabel] = useState(null);
+  const [error, setError]   = useState(null);
+
+  useEffect(() => {
+    if (!auth) return;
+    setLoading(true);
+    loadData().then(data => {
+      if (data.length) {
+        setImportLabel(data[0].import_label);
+        setRows(data.map(d => d.row_data));
+      }
+      setLoading(false);
+    }).catch(e => { setError(e.message); setLoading(false); });
+  }, [auth]);
+
+  if (!auth) return <Login onLogin={() => setAuth(true)} />;
+
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', flexDirection:'column', gap:16, color: C.sec }}>
+      <div style={{ fontSize:32 }}>⏳</div>
+      <div style={{ fontSize:16 }}>Lade Daten...</div>
+    </div>
+  );
+  if (error) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
+      <div style={{ background:'rgba(248,81,73,.1)', border:'1px solid rgba(248,81,73,.4)', borderRadius:12, padding:32, textAlign:'center', color: C.red, maxWidth:400 }}>
+        <div style={{ fontSize:20, marginBottom:8 }}>⚠️ Fehler</div>
+        <div style={{ fontSize:13 }}>{error}</div>
+      </div>
+    </div>
+  );
+  if (!rows.length) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', flexDirection:'column', gap:12, color: C.sec }}>
+      <div style={{ fontSize:48 }}>📭</div>
+      <div style={{ fontSize:18, fontWeight:700, color: C.text }}>Noch keine Daten</div>
+      <div style={{ fontSize:14 }}>bee-doo aktualisiert das Board täglich.</div>
+    </div>
+  );
+
+  return <Board rows={rows} importLabel={importLabel} onLogout={() => { sessionStorage.removeItem(SK); setAuth(false); }} />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Main />);
+</script>
+</body>
+</html>
