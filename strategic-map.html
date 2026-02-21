@@ -201,7 +201,7 @@ input[type=range] { width:100%; accent-color:#FDE154; }
   <label class="ly-row"><input type="checkbox" id="l-vb" checked onchange="toggleLayer('vb')"><div class="ly-dot" style="background:#FDE154"></div>Vertriebler<span class="ly-n" id="ln-vb"></span></label>
   <label class="ly-row"><input type="checkbox" id="l-sc" checked onchange="toggleLayer('sc')"><div class="ly-dot" style="background:#22c55e"></div>Scouter<span class="ly-n" id="ln-sc"></span></label>
   <label class="ly-row"><input type="checkbox" id="l-qu" checked onchange="toggleLayer('qu')"><div class="ly-dot" style="background:#60a5fa"></div>Qualifizierungen<span class="ly-n" id="ln-qu"></span></label>
-  <label class="ly-row"><input type="checkbox" id="l-inf" onchange="toggleLayer('inf')"><div class="ly-dot" style="background:#f97316"></div>infas360 Potenzial<span class="ly-n" id="ln-inf">761</span></label>
+  <label class="ly-row"><input type="checkbox" id="l-inf" onchange="toggleLayer('inf')"><div class="ly-dot" style="background:#f97316"></div>infas360 Potenzial<span class="ly-n" id="ln-inf">15.3k</span></label>
   <label class="ly-row"><input type="checkbox" id="l-gap" checked onchange="toggleLayer('gap')"><div class="ly-dot" style="background:#ef4444"></div>Lücken<span class="ly-n" id="ln-gap"></span></label>
 </div>
 
@@ -401,13 +401,35 @@ QUALIF.forEach(q => {
 });
 
 // ─── RENDER INFAS360 ─────────────────────────────────────────────────────────
-INFAS.forEach(a => {
-  const icon = L.divIcon({
-    html:`<div style="width:4px;height:4px;background:#f97316;border-radius:50%;opacity:.4"></div>`,
-    iconSize:[4,4], iconAnchor:[2,2], className:''
+// infas360: lazy load 15k points when layer is activated
+// (data in infas_nrw.js, loaded on demand)
+let infasLoaded = false;
+async function loadInfasLayer() {
+  if (infasLoaded) return;
+  // Show loading indicator
+  document.getElementById('ln-inf').textContent = '⏳';
+  
+  await new Promise((resolve, reject) => {
+    if (window.INFAS_NRW) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = '/infas_nrw.js';
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
   });
-  L.marker([a[0], a[1]], {icon, zIndexOffset:-200}).addTo(layers.inf);
-});
+  
+  const pts = window.INFAS_NRW || [];
+  pts.forEach(a => {
+    const icon = L.divIcon({
+      html:`<div style="width:4px;height:4px;background:#f97316;border-radius:50%;opacity:.5;border-radius:50%"></div>`,
+      iconSize:[4,4], iconAnchor:[2,2], className:''
+    });
+    L.marker([a[0], a[1]], {icon, zIndexOffset:-200}).addTo(layers.inf);
+  });
+  
+  infasLoaded = true;
+  document.getElementById('ln-inf').textContent = pts.length.toLocaleString('de') + ' Pkt.';
+}
 
 // ─── RENDER GAPS ─────────────────────────────────────────────────────────────
 gaps.forEach(vb => {
@@ -508,6 +530,10 @@ function showGapDetail(vb) {
 // ─── TOGGLE LAYERS ───────────────────────────────────────────────────────────
 function toggleLayer(type) {
   const show = document.getElementById('l-'+type).checked;
+  if (type === 'inf' && show) {
+    loadInfasLayer().then(() => layers[type].addTo(map));
+    return;
+  }
   if(show) layers[type].addTo(map); else map.removeLayer(layers[type]);
 }
 
@@ -521,7 +547,7 @@ function switchTab(tab) {
     document.getElementById('l-gap').checked=true; toggleLayer('gap');
   }
   if(tab==='heatmap') {
-    document.getElementById('l-inf').checked=true; toggleLayer('inf');
+    document.getElementById('l-inf').checked=true; loadInfasLayer().then(() => layers.inf.addTo(map));
     document.getElementById('l-qu').checked=true; toggleLayer('qu');
   }
   if(tab==='overview') {
