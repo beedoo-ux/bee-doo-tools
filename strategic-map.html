@@ -6,6 +6,8 @@
 <title>bee-doo · Strategische Karte NRW</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family: 'DM Sans', system-ui, sans-serif; background:#0c1222; color:#e1e7ef; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
@@ -72,6 +74,42 @@ input[type=range] { width:100%; accent-color:#FDE154; }
 .alert { background:#1a0f10ee; border:1px solid #ef444460; border-radius:7px; padding:5px 12px; font-size:11px; cursor:pointer; pointer-events:all; white-space:nowrap; }
 .alert:hover { background:#2a1418; }
 
+/* Draw toolbar */
+.leaflet-draw-toolbar a { background-color: #0f1320 !important; border-color: #263354 !important; }
+.leaflet-draw-toolbar a:hover { background-color: #1c2640 !important; }
+.leaflet-draw-actions a { background:#151d30 !important; color:#e1e7ef !important; border-color:#263354 !important; }
+
+/* Save modal */
+#save-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:9999; align-items:center; justify-content:center; }
+#save-modal.open { display:flex; }
+.modal-box { background:#0f1320; border:1px solid #263354; border-radius:14px; padding:24px; width:360px; box-shadow:0 20px 60px rgba(0,0,0,.8); }
+.modal-box h3 { font-size:15px; font-weight:700; color:#FDE154; margin-bottom:16px; }
+.modal-field { margin-bottom:12px; }
+.modal-field label { display:block; font-size:11px; color:#5c6b8a; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+.modal-field input, .modal-field select, .modal-field textarea { width:100%; background:#151d30; border:1px solid #263354; color:#e1e7ef; border-radius:8px; padding:8px 10px; font-size:13px; outline:none; }
+.modal-field input:focus, .modal-field select:focus { border-color:#FDE154; }
+.modal-field textarea { resize:vertical; height:60px; }
+.modal-btns { display:flex; gap:8px; margin-top:16px; }
+.btn-save { flex:1; background:#FDE154; color:#0c1222; border:none; border-radius:8px; padding:10px; font-size:13px; font-weight:700; cursor:pointer; }
+.btn-save:hover { background:#f5d633; }
+.btn-cancel { background:#1c2640; color:#5c6b8a; border:1px solid #263354; border-radius:8px; padding:10px 16px; font-size:13px; cursor:pointer; }
+.btn-cancel:hover { color:#e1e7ef; }
+
+/* Gebiet tooltip */
+.gebiet-tip { background:#151d30 !important; border:1px solid #263354 !important; color:#e1e7ef !important; font-size:12px !important; padding:6px 10px !important; }
+.gebiet-tip::before { display:none; }
+
+/* Gebiete list panel */
+#gebiete-list { position:absolute; top:58px; right:10px; z-index:1000; width:240px; background:#0f1320ee; border:1px solid #1c2640; border-radius:10px; display:none; overflow:hidden; backdrop-filter:blur(4px); }
+#gebiete-list .gl-head { padding:10px 12px; font-size:11px; color:#5c6b8a; font-weight:600; text-transform:uppercase; letter-spacing:.5px; border-bottom:1px solid #1c2640; display:flex; justify-content:space-between; align-items:center; }
+#gebiete-list .gl-head button { background:#1c2640; border:none; border-radius:5px; padding:2px 8px; font-size:10px; color:#FDE154; cursor:pointer; }
+.gl-item { padding:8px 12px; border-bottom:1px solid #1c264040; cursor:pointer; transition:.1s; }
+.gl-item:hover { background:#151d30; }
+.gl-item .gi-name { font-size:12px; font-weight:600; color:#e1e7ef; }
+.gl-item .gi-scout { font-size:11px; color:#5c6b8a; margin-top:1px; }
+.gl-item .gi-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+.gl-empty { padding:16px 12px; text-align:center; font-size:12px; color:#5c6b8a; }
+
 /* Legend */
 #legend { position:absolute; bottom:50px; left:10px; z-index:1000; background:#0f1320ee; border:1px solid #1c2640; border-radius:8px; padding:10px 12px; font-size:11px; }
 .leg-row { display:flex; align-items:center; gap:7px; padding:2px 0; color:#5c6b8a; }
@@ -90,12 +128,14 @@ input[type=range] { width:100%; accent-color:#FDE154; }
     <button class="tab" onclick="switchTab('roi')">ROI Rechner</button>
     <button class="tab" onclick="switchTab('heatmap')">Heatmap</button>
   </div>
+  <button onclick="toggleDrawMode()" id="btn-draw" style="margin-left:8px;background:#1c2640;border:1px solid #263354;color:#e1e7ef;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px">✏️ Gebiet zeichnen</button>
+  <button onclick="toggleGebiete()" style="background:#1c2640;border:1px solid #263354;color:#5c6b8a;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">📋 Gebiete</button>
   <div class="stats">
     <div class="stat">VB: <b id="n-vb">—</b></div>
     <div class="stat">Scouter: <b id="n-sc">—</b></div>
     <div class="stat">Qualif.: <b id="n-qu">—</b></div>
     <div class="stat">Lücken: <b id="n-gap" style="color:#ef4444">—</b></div>
-  </div>
+    </div>
 </nav>
 
 <div id="map"></div>
@@ -143,6 +183,50 @@ input[type=range] { width:100%; accent-color:#FDE154; }
   <div class="leg-row"><div class="leg-dot" style="background:#60a5fa"></div>Qualifizierungen</div>
   <div class="leg-row"><div class="leg-dot" style="background:#f97316"></div>infas360 Potenzial</div>
   <div class="leg-row"><div class="leg-dot" style="background:#ef4444; opacity:.6"></div>Abdeckungslücke</div>
+</div>
+
+<!-- Save modal -->
+<div id="save-modal">
+  <div class="modal-box">
+    <h3>📍 Gebiet speichern</h3>
+    <div class="modal-field">
+      <label>Name</label>
+      <input type="text" id="g-name" placeholder="z.B. Bielefeld Nord"/>
+    </div>
+    <div class="modal-field">
+      <label>Scouter zuordnen</label>
+      <select id="g-scouter">
+        <option value="">— Noch kein Scouter —</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Farbe</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="color-picker">
+        <div class="cp-dot" data-color="#22c55e" style="background:#22c55e;width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid #22c55e" onclick="selectColor('#22c55e')"></div>
+        <div class="cp-dot" data-color="#60a5fa" style="background:#60a5fa;width:22px;height:22px;border-radius:50%;cursor:pointer" onclick="selectColor('#60a5fa')"></div>
+        <div class="cp-dot" data-color="#FDE154" style="background:#FDE154;width:22px;height:22px;border-radius:50%;cursor:pointer" onclick="selectColor('#FDE154')"></div>
+        <div class="cp-dot" data-color="#f97316" style="background:#f97316;width:22px;height:22px;border-radius:50%;cursor:pointer" onclick="selectColor('#f97316')"></div>
+        <div class="cp-dot" data-color="#a78bfa" style="background:#a78bfa;width:22px;height:22px;border-radius:50%;cursor:pointer" onclick="selectColor('#a78bfa')"></div>
+        <div class="cp-dot" data-color="#f43f5e" style="background:#f43f5e;width:22px;height:22px;border-radius:50%;cursor:pointer" onclick="selectColor('#f43f5e')"></div>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Notizen (optional)</label>
+      <textarea id="g-notizen" placeholder="z.B. Fokus auf Neubaugebiete..."></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="cancelDraw()">Abbrechen</button>
+      <button class="btn-save" onclick="saveGebiet()">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Gebiete list -->
+<div id="gebiete-list">
+  <div class="gl-head">
+    Gebiete <button onclick="toggleGebiete()">✕</button>
+  </div>
+  <div id="gl-body"><div class="gl-empty">Noch keine Gebiete</div></div>
 </div>
 
 <script>
@@ -385,6 +469,253 @@ calcROI();
 const style = document.createElement('style');
 style.textContent='.dark-tip{background:#151d30!important;border:1px solid #263354!important;color:#e1e7ef!important;font-size:11px!important;}.dark-tip.leaflet-tooltip-top::before{border-top-color:#263354!important}';
 document.head.appendChild(style);
+
+// ─── DRAW & GEBIETE ──────────────────────────────────────────────────────────
+const SB_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.LSlMAp';
+
+let pendingLayer = null;
+let selectedColor = '#22c55e';
+let drawnGebiete = [];
+const gebieteGroup = L.layerGroup().addTo(map);
+
+// Init Leaflet Draw
+const drawControl = new L.Control.Draw({
+  position: 'topright',
+  draw: {
+    polygon: {
+      allowIntersection: false,
+      showArea: true,
+      shapeOptions: { color: '#FDE154', fillOpacity: 0.15, weight: 2 }
+    },
+    rectangle: {
+      shapeOptions: { color: '#FDE154', fillOpacity: 0.15, weight: 2 }
+    },
+    circle: false, marker: false, circlemarker: false, polyline: false
+  },
+  edit: false
+});
+
+let drawEnabled = false;
+function toggleDrawMode() {
+  drawEnabled = !drawEnabled;
+  const btn = document.getElementById('btn-draw');
+  if(drawEnabled) {
+    map.addControl(drawControl);
+    btn.style.background = '#FDE154';
+    btn.style.color = '#0c1222';
+    btn.textContent = '✕ Zeichnen beenden';
+  } else {
+    map.removeControl(drawControl);
+    btn.style.background = '#1c2640';
+    btn.style.color = '#e1e7ef';
+    btn.innerHTML = '✏️ Gebiet zeichnen';
+  }
+}
+
+map.on(L.Draw.Event.CREATED, function(e) {
+  pendingLayer = e.layer;
+  // Pre-fill name suggestion
+  document.getElementById('g-name').value = '';
+  document.getElementById('g-notizen').value = '';
+  selectColor('#22c55e');
+  document.getElementById('save-modal').classList.add('open');
+  document.getElementById('g-name').focus();
+});
+
+function selectColor(c) {
+  selectedColor = c;
+  document.querySelectorAll('.cp-dot').forEach(d => {
+    d.style.border = d.dataset.color === c ? '2px solid white' : 'none';
+  });
+}
+
+function cancelDraw() {
+  pendingLayer = null;
+  document.getElementById('save-modal').classList.remove('open');
+}
+
+async function saveGebiet() {
+  if(!pendingLayer) return;
+  
+  const name = document.getElementById('g-name').value.trim() || 'Neues Gebiet';
+  const scouterId = document.getElementById('g-scouter').value || null;
+  const notizen = document.getElementById('g-notizen').value.trim() || null;
+  
+  // Get polygon coordinates
+  const latlngs = pendingLayer.getLatLngs()[0] || pendingLayer.getLatLngs();
+  const coords = (Array.isArray(latlngs[0]) ? latlngs[0] : latlngs).map(p => [p.lat, p.lng]);
+  
+  // Find scouter name
+  const scout = SCOUTER.find(s => s.id === scouterId);
+  
+  // Save to Supabase
+  const btn = document.querySelector('.btn-save');
+  btn.textContent = '⏳ Speichern...';
+  btn.disabled = true;
+  
+  try {
+    const resp = await fetch(`${SB_URL}/rest/v1/gebiete`, {
+      method: 'POST',
+      headers: {
+        'apikey': ANON, 'Authorization': 'Bearer '+ANON,
+        'Content-Type': 'application/json', 'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({
+        name, scouter_id: scouterId, farbe: selectedColor,
+        notizen, polygon: JSON.stringify(coords), active: true,
+        created_by: 'strategic-map'
+      })
+    });
+    
+    if(resp.ok) {
+      const saved = await resp.json();
+      const gebiet = Array.isArray(saved) ? saved[0] : saved;
+      
+      // Add to map
+      addGebietToMap({...gebiet, scouter_name: scout?.name});
+      drawnGebiete.push({...gebiet, scouter_name: scout?.name, latlngs: coords});
+      renderGebieteList();
+      
+      document.getElementById('save-modal').classList.remove('open');
+      pendingLayer = null;
+      showToast('✅ Gebiet "'+name+'" gespeichert!');
+    } else {
+      const err = await resp.json();
+      showToast('❌ Fehler: ' + (err.message || resp.status));
+    }
+  } catch(e) {
+    showToast('❌ Netzwerkfehler: ' + e.message);
+  }
+  
+  btn.textContent = '💾 Speichern';
+  btn.disabled = false;
+}
+
+function addGebietToMap(g) {
+  if(!g.polygon) return;
+  const coords = typeof g.polygon === 'string' ? JSON.parse(g.polygon) : g.polygon;
+  const poly = L.polygon(coords, {
+    color: g.farbe || '#22c55e',
+    fillColor: g.farbe || '#22c55e',
+    fillOpacity: 0.12, weight: 2, opacity: 0.7
+  });
+  
+  const scoutName = g.scouter_name || (g.scouter_id ? 'Scouter zugeordnet' : 'Kein Scouter');
+  poly.bindTooltip(`<b>${g.name}</b><br>🔍 ${scoutName}${g.notizen?'<br>'+g.notizen:''}`, {
+    className: 'gebiet-tip', sticky: true
+  });
+  
+  poly.on('click', () => showGebietDetail(g));
+  poly.addTo(gebieteGroup);
+}
+
+function showGebietDetail(g) {
+  const scout = SCOUTER.find(s => s.id === g.scouter_id);
+  document.getElementById('detail-body').innerHTML = `
+    <h3><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${g.farbe||'#22c55e'};margin-right:6px"></span>${g.name}</h3>
+    <div class="d-row"><span class="d-key">Scouter</span><span>${scout?.name || '— nicht zugeordnet'}</span></div>
+    <div class="d-row"><span class="d-key">Standort</span><span>${scout?.ort || '—'}</span></div>
+    ${g.notizen ? `<div class="d-row"><span class="d-key">Notizen</span><span>${g.notizen}</span></div>` : ''}
+    <div class="d-row"><span class="d-key">Erstellt</span><span>${g.created_at ? new Date(g.created_at).toLocaleDateString('de') : '—'}</span></div>
+    <div style="margin-top:10px;display:flex;gap:6px">
+      <button onclick="deleteGebiet('${g.id}')" style="background:#ef444420;border:1px solid #ef444440;color:#ef4444;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer">🗑 Löschen</button>
+    </div>
+  `;
+  document.getElementById('detail').style.display = 'block';
+}
+
+async function deleteGebiet(id) {
+  if(!confirm('Gebiet wirklich löschen?')) return;
+  const resp = await fetch(`${SB_URL}/rest/v1/gebiete?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: {'apikey': ANON, 'Authorization': 'Bearer '+ANON}
+  });
+  if(resp.ok) {
+    drawnGebiete = drawnGebiete.filter(g => g.id !== id);
+    gebieteGroup.clearLayers();
+    drawnGebiete.forEach(g => addGebietToMap(g));
+    renderGebieteList();
+    document.getElementById('detail').style.display = 'none';
+    showToast('🗑 Gebiet gelöscht');
+    await loadGebiete();
+  }
+}
+
+async function loadGebiete() {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/gebiete?active=eq.true&order=created_at.desc`, {
+      headers: {'apikey': ANON, 'Authorization': 'Bearer '+ANON}
+    });
+    if(r.ok) {
+      const data = await r.json();
+      gebieteGroup.clearLayers();
+      drawnGebiete = [];
+      data.forEach(g => {
+        const scout = SCOUTER.find(s => s.id === g.scouter_id);
+        const entry = {...g, scouter_name: scout?.name};
+        drawnGebiete.push(entry);
+        addGebietToMap(entry);
+      });
+      renderGebieteList();
+    }
+  } catch(e) { console.log('Gebiete load error:', e.message); }
+}
+
+function renderGebieteList() {
+  const body = document.getElementById('gl-body');
+  if(drawnGebiete.length === 0) {
+    body.innerHTML = '<div class="gl-empty">Noch keine Gebiete</div>';
+    return;
+  }
+  body.innerHTML = drawnGebiete.map(g => `
+    <div class="gl-item" onclick="focusGebiet('${g.id}')">
+      <div class="gi-name"><span class="gi-dot" style="background:${g.farbe||'#22c55e'}"></span>${g.name}</div>
+      <div class="gi-scout">🔍 ${g.scouter_name || 'Kein Scouter'}</div>
+    </div>
+  `).join('');
+}
+
+function focusGebiet(id) {
+  const g = drawnGebiete.find(x => x.id === id);
+  if(g && g.polygon) {
+    const coords = typeof g.polygon === 'string' ? JSON.parse(g.polygon) : g.polygon;
+    const latlngs = coords.map(c => [c[0], c[1]]);
+    const bounds = L.latLngBounds(latlngs);
+    map.fitBounds(bounds, {padding:[40,40]});
+    showGebietDetail(g);
+  }
+}
+
+function toggleGebiete() {
+  const el = document.getElementById('gebiete-list');
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  // Hide detail if showing gebiete list
+  if(el.style.display === 'block') document.getElementById('detail').style.display = 'none';
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#151d30;border:1px solid #263354;color:#e1e7ef;padding:8px 18px;border-radius:8px;font-size:13px;z-index:9999;pointer-events:none';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// Populate scouter dropdown
+function populateScouterDropdown() {
+  const sel = document.getElementById('g-scouter');
+  sel.innerHTML = '<option value="">— Noch kein Scouter —</option>';
+  SCOUTER.forEach(s => {
+    sel.innerHTML += `<option value="${s.id}">${s.name} (${s.ort})</option>`;
+  });
+}
+
+// Init on load
+populateScouterDropdown();
+selectColor('#22c55e');
+loadGebiete();
+
 </script>
 </body>
 </html>
