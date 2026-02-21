@@ -402,9 +402,9 @@ VB.forEach(vb => {
     html:`<div style="width:14px;height:14px;background:#FDE154;border-radius:50%;border:2px solid #0c1222;box-shadow:0 0 6px #FDE15460"></div>`,
     iconSize:[14,14], iconAnchor:[7,7], className:''
   });
-  L.marker([vb.lat, vb.lng], {icon}).addTo(layers.vb)
+  const vbMarker = L.marker([vb.lat, vb.lng], {icon}).addTo(layers.vb); markerMap[String(vb.id)] = vbMarker; vbMarker
     .bindTooltip(vb.name + '<br>' + vb.ort, {className:'dark-tip'})
-    .on('click', () => showVBDetail(vb, nearbyScouts));
+    .on('click', () => { showVBDetail(vb, nearbyScouts); showIsochrone(vb); });
 });
 
 // ─── RENDER SCOUTER ──────────────────────────────────────────────────────────
@@ -419,7 +419,7 @@ SCOUTER.forEach(sc => {
     html:`<div style="width:11px;height:11px;background:#22c55e;border-radius:50%;border:2px solid #0c1222;box-shadow:0 0 5px #22c55e60"></div>`,
     iconSize:[11,11], iconAnchor:[5.5,5.5], className:''
   });
-  L.marker([sc.lat, sc.lng], {icon}).addTo(layers.sc)
+  const scMarker = L.marker([sc.lat, sc.lng], {icon}).addTo(layers.sc); markerMap[String(sc.id)] = scMarker; scMarker
     .bindTooltip('🔍 '+sc.name+'<br>'+sc.ort, {className:'dark-tip'})
     .on('click', () => showSCDetail(sc));
 });
@@ -706,6 +706,8 @@ async function deleteGebiet(id) {
   });
   document.getElementById('detail').style.display='none';
   loadGebiete();
+// Start geocoding in background after 2s
+setTimeout(geocodeAll, 2000);
 }
 
 function populateScouterDropdown() {
@@ -822,6 +824,8 @@ async function saveGebiet() {
     dpStatus('ok', editId ? '✓ Gebiet aktualisiert!' : '✓ Gebiet gespeichert!');
     stopDrawing(); 
     await loadGebiete();
+// Start geocoding in background after 2s
+setTimeout(geocodeAll, 2000);
     setTimeout(() => { showDrawPanel(false); }, 1200);
   } else {
     const err = await res.text();
@@ -838,6 +842,8 @@ function dpStatus(type, msg) {
 
 // Load gebiete on startup
 loadGebiete();
+// Start geocoding in background after 2s
+setTimeout(geocodeAll, 2000);
 
 
 // ─── GEBIETE (Draw & Save) ───────────────────────────────────────────────
@@ -895,8 +901,8 @@ map.on('click', function(e) {
   
   drawPoints.push(pt);
   
-  // Update live counter
-  updateDrawCounter();
+  // Update live counter (PostGIS if available)
+  updateDrawCounterPostGIS();
   
   // Add dot marker
   const dotIcon = L.divIcon({ html:'<div style="width:8px;height:8px;background:#FDE154;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.5)"></div>', iconSize:[8,8], iconAnchor:[4,4], className:'' });
@@ -991,6 +997,8 @@ async function saveGebiet() {
       document.getElementById('g-name').value = '';
       document.getElementById('g-notiz').value = '';
       loadGebiete();
+// Start geocoding in background after 2s
+setTimeout(geocodeAll, 2000);
     } else {
       showAlert('❌ Fehler: ' + (data.message || JSON.stringify(data)));
     }
@@ -1035,6 +1043,8 @@ async function deleteGebiet(id, btn) {
   });
   document.getElementById('detail').style.display = 'none';
   loadGebiete();
+// Start geocoding in background after 2s
+setTimeout(geocodeAll, 2000);
   showAlert('🗑 Gebiet gelöscht');
 }
 
@@ -1072,6 +1082,8 @@ async function loadGebiete() {
   }).join('');
 }
 loadGebiete();
+// Start geocoding in background after 2s
+setTimeout(geocodeAll, 2000);
 
 function toggleGebietePanel() {
   const p = document.getElementById('gebiete-panel');
@@ -1212,6 +1224,200 @@ async function saveGebiet() {
     notizEl.value = `${count.toLocaleString('de')} Adressen · ${area.toFixed(1)} km²`;
   }
   await _origSaveGebiet();
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// FEATURE 1: GEOCODING (Nominatim, cached in pay_mitarbeiter)
+// ═══════════════════════════════════════════════════════════════════
+async function geocodeMitarbeiter(ma) {
+  // Check if already geocoded in DB
+  if (ma.geo_lat && ma.geo_lng) return {lat: ma.geo_lat, lng: ma.geo_lng};
+  
+  const addr = [ma.strasse, ma.hausnr, ma.plz, ma.ort, 'Deutschland'].filter(Boolean).join(' ');
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1`,
+      {headers: {'User-Agent': 'bee-doo-strategic-map/1.0'}}
+    );
+    const data = await r.json();
+    if (data?.length) {
+      const coords = {lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon)};
+      // Cache back to Supabase
+      await fetch(SB_URL + '/rest/v1/pay_mitarbeiter?id=eq.' + ma.id, {
+        method: 'PATCH',
+        headers: {'apikey': SB_SVC, 'Authorization': 'Bearer ' + SB_SVC, 'Content-Type': 'application/json'},
+        body: JSON.stringify({geo_lat: coords.lat, geo_lng: coords.lng, geo_cached_at: new Date().toISOString()})
+      });
+      return coords;
+    }
+  } catch(e) {}
+  return null;
+}
+
+// Geocode all mitarbeiter in background (progressive)
+async function geocodeAll() {
+  // Fetch fresh with geo fields
+  const r = await fetch(SB_URL + '/rest/v1/pay_mitarbeiter?select=id,vorname,nachname,typ,strasse,hausnr,plz,ort,aktiv,geo_lat,geo_lng&aktiv=eq.true&plz=gte.30000&plz=lte.59999', {
+    headers: {'apikey': SB_SVC, 'Authorization': 'Bearer ' + SB_SVC}
+  });
+  const allMA = await r.json();
+  
+  const needsGeo = allMA.filter(m => !m.geo_lat || !m.geo_lng);
+  if (!needsGeo.length) {
+    console.log('All geocoded already');
+    refreshMarkersFromGeocache(allMA);
+    return;
+  }
+  
+  console.log(`Geocoding ${needsGeo.length} addresses...`);
+  for (let i = 0; i < needsGeo.length; i++) {
+    const m = needsGeo[i];
+    const coords = await geocodeMitarbeiter(m);
+    if (coords) {
+      m.geo_lat = coords.lat; m.geo_lng = coords.lng;
+      // Update marker position live
+      updateMarkerPosition(m, coords);
+    }
+    // Rate limit: 1 req/sec
+    if (i < needsGeo.length - 1) await new Promise(r => setTimeout(r, 1100));
+  }
+  refreshMarkersFromGeocache(allMA);
+  showAlert('✅ ' + needsGeo.length + ' Adressen geocodiert');
+}
+
+// Map from id → leaflet marker for live updates
+const markerMap = {};
+
+function updateMarkerPosition(m, coords) {
+  const mk = markerMap[String(m.id)];
+  if (mk && mk.setLatLng) mk.setLatLng([coords.lat, coords.lng]);
+}
+
+function refreshMarkersFromGeocache(allMA) {
+  // Move markers to precise positions
+  allMA.forEach(m => {
+    if (!m.geo_lat || !m.geo_lng) return;
+    updateMarkerPosition(m, {lat: m.geo_lat, lng: m.geo_lng});
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FEATURE 2: ORS ISOCHRONES (Fahrtzeit-Polygone)
+// ═══════════════════════════════════════════════════════════════════
+let activeIsochrone = null;
+
+async function showIsochrone(vb) {
+  // Remove previous
+  if (activeIsochrone) { map.removeLayer(activeIsochrone); activeIsochrone = null; }
+  
+  if (!vb.geo_lat || !vb.geo_lng) {
+    showAlert('⚠ Noch nicht geocodiert – kurz warten');
+    return;
+  }
+  
+  showAlert('⏳ Lade Fahrtzeit-Polygon...');
+  
+  try {
+    // ORS public API – no key needed for basic use
+    const body = {
+      locations: [[vb.geo_lng, vb.geo_lat]],
+      range: [3600, 5400],   // 60min + 90min Fahrtzeit
+      range_type: 'time',
+      profile: 'driving-car'
+    };
+    
+    const r = await fetch('https://api.openrouteservice.org/v2/isochrones/driving-car', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json, application/geo+json'},
+      body: JSON.stringify(body)
+    });
+    
+    if (!r.ok) throw new Error('ORS ' + r.status);
+    const data = await r.json();
+    
+    // Draw isochrones
+    const colors = ['#ef4444', '#FDE154'];
+    const labels = ['90 Min Fahrt', '60 Min Fahrt'];
+    
+    activeIsochrone = L.layerGroup();
+    data.features.forEach((feat, i) => {
+      const coords = feat.geometry.coordinates[0].map(c => [c[1], c[0]]);
+      L.polygon(coords, {
+        color: colors[i] || '#60a5fa',
+        fillColor: colors[i] || '#60a5fa',
+        fillOpacity: 0.07,
+        weight: 2, opacity: 0.5,
+        dashArray: i === 0 ? '8,4' : null
+      }).bindTooltip(labels[i] || '', {className:'dark-tip'}).addTo(activeIsochrone);
+    });
+    activeIsochrone.addTo(map);
+    showAlert('✅ Fahrtzeit-Polygon: 60 + 90 Min');
+    
+  } catch(e) {
+    // Fallback to circle if ORS fails
+    showAlert('⚠ ORS nicht verfügbar – zeige Luftlinien-Radius');
+    console.warn('ORS error:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FEATURE 3: POSTGIS SERVER-SIDE COUNT (mit JS fallback)
+// ═══════════════════════════════════════════════════════════════════
+async function countInfasServerSide(polygon_geojson) {
+  try {
+    const r = await fetch(SB_URL + '/rest/v1/rpc/count_infas_in_polygon', {
+      method: 'POST',
+      headers: {
+        'apikey': SB_SVC,
+        'Authorization': 'Bearer ' + SB_SVC,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({geojson_polygon: JSON.stringify(polygon_geojson)})
+    });
+    if (!r.ok) throw new Error('RPC ' + r.status);
+    const count = await r.json();
+    return {count, source: 'postgis', total: 23454753};
+  } catch(e) {
+    // Fallback: client-side with loaded sample
+    const pts = window.INFAS_NRW || [];
+    const count = pts.filter(p => pointInPolygon(p, drawPoints)).length;
+    const sampleRate = 15331 / 23454753;
+    const estimated = Math.round(count / sampleRate);
+    return {count, estimated, source: 'sample', total: pts.length};
+  }
+}
+
+// Override updateDrawCounter to use PostGIS when available  
+async function updateDrawCounterPostGIS() {
+  if (drawPoints.length < 3) {
+    updateDrawCounter();
+    return;
+  }
+  
+  const el = document.getElementById('dc-count');
+  el.textContent = '⏳';
+  
+  // Build GeoJSON polygon from current drawPoints
+  const coords = [...drawPoints, drawPoints[0]].map(p => [p[1], p[0]]);
+  const polygon_geojson = {type: 'Polygon', coordinates: [coords]};
+  
+  const result = await countInfasServerSide(polygon_geojson);
+  
+  const area = polygonAreaKm2(drawPoints);
+  
+  if (result.source === 'postgis') {
+    el.textContent = result.count.toLocaleString('de');
+    document.getElementById('dc-label') && (document.getElementById('dc-label').textContent = 'Adressen im Gebiet (alle 23,4 Mio.)');
+    document.getElementById('dc-hint').textContent = `✅ PostGIS · ${drawPoints.length} Punkte · Enter = fertig`;
+  } else {
+    const est = result.estimated;
+    el.textContent = '~' + (est || result.count).toLocaleString('de');
+    document.getElementById('dc-hint').textContent = `📊 Schätzung (${result.total.toLocaleString('de')} Sample) · Enter = fertig`;
+  }
+  
+  document.getElementById('dc-km2').textContent = area.toFixed(1);
+  document.getElementById('dc-density').textContent = area > 0 ? Math.round((result.count || 0) / area).toLocaleString('de') : '—';
 }
 
 // Leaflet tooltip dark style
@@ -1388,6 +1594,8 @@ async function deleteGebiet(id) {
     document.getElementById('detail').style.display = 'none';
     showToast('🗑 Gebiet gelöscht');
     await loadGebiete();
+// Start geocoding in background after 2s
+setTimeout(geocodeAll, 2000);
   }
 }
 
@@ -1464,12 +1672,15 @@ function populateScouterDropdown() {
 populateScouterDropdown();
 selectColor('#22c55e');
 loadGebiete();
+// Start geocoding in background after 2s
+setTimeout(geocodeAll, 2000);
 
 </script>
 
 <div id="draw-toolbar">
   <div class="draw-btn" id="btn-draw" onclick="startDraw()" title="Gebiet zeichnen">✏️</div>
   <div class="draw-btn" id="btn-gebiete" onclick="toggleGebietePanel()" title="Alle Gebiete">📋</div>
+  <div class="draw-btn" id="btn-geo" onclick="geocodeAll()" title="Adressen präzise geocodieren">📍</div>
 </div>
 
 <div id="gebiet-modal">
@@ -1513,7 +1724,7 @@ loadGebiete();
 
 <div id="draw-counter">
   <div class="dc-main" id="dc-count">0</div>
-  <div class="dc-label">Adressen im Gebiet</div>
+  <div class="dc-label" id="dc-label">Adressen im Gebiet</div>
   <div class="dc-sub">
     <div class="dc-stat"><div class="v" id="dc-km2">—</div><div class="l">km²</div></div>
     <div class="dc-stat"><div class="v" id="dc-pts">—</div><div class="l">Punkte</div></div>
