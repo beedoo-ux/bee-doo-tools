@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>bee-doo · mitarbeiter-portal</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; } body { background: #0f1117; color: #e1e7ef; } button, select, input, textarea { color: inherit; font-family: inherit; } .back-btn { position: fixed; top: 10px; left: 10px; z-index: 9999; background: #1a1d27; border: 1px solid #2a2d3a; color: #94a3b8; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-family: 'DM Sans', sans-serif; cursor: pointer; text-decoration: none; transition: all .15s; } .back-btn:hover { border-color: #FDE154; color: #FDE154; }</style>
+</head>
+<body>
+<a href="index.html" class="back-btn">← Launcher</a>
+<div id="root"></div>
+<script>
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+const Y = "#FDE154", BG = "#0c1222", C1 = "#151d30", C2 = "#1c2640", BD = "#263354", TX = "#e1e7ef", T2 = "#8b95ab", TM = "#5c6b8a";
+const OK = "#34d399", ERR = "#f87171", WARN = "#fbbf24", INF = "#60a5fa", PUR = "#a78bfa", TEAL = "#2dd4bf", ORANGE = "#fb923c";
+const TODAY = "2026-02-18";
+const V = {
+  email: (v) => {
+    if (!v) return null;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : "Ung\xFCltige E-Mail";
+  },
+  phone: (v) => {
+    if (!v) return null;
+    const c = v.replace(/[\s\-\/\(\)]/g, "");
+    return /^\+?[0-9]{6,15}$/.test(c) ? null : "Min. 6 Ziffern";
+  },
+  plz: (v) => {
+    if (!v) return null;
+    return /^\d{5}$/.test(v) ? null : "5 Ziffern";
+  },
+  iban: (v) => {
+    if (!v) return null;
+    const c = v.replace(/\s/g, "").toUpperCase();
+    if (!/^[A-Z]{2}/.test(c)) return "L\xE4ndercode fehlt";
+    if (c.startsWith("DE") && c.length !== 22) return `DE-IBAN = 22 Zeichen (${c.length})`;
+    return null;
+  },
+  steuernr: (v) => {
+    if (!v) return null;
+    return /^\d{10,13}$/.test(v.replace(/[\s\/\-]/g, "")) ? null : "10-13 Ziffern";
+  },
+  ustId: (v) => {
+    if (!v) return null;
+    return /^DE\d{9}$/i.test(v.replace(/\s/g, "")) ? null : "DE + 9 Ziffern";
+  },
+  steuerid: (v) => {
+    if (!v) return null;
+    return /^\d{11}$/.test(v.replace(/\s/g, "")) ? null : "11 Ziffern";
+  }
+};
+const fmtIBAN = (v) => v.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().replace(/(.{4})/g, "$1 ").trim();
+const DOCS_H = [
+  { id: "personalausweis", label: "Personalausweis / Reisepass", desc: "Vorder- und R\xFCckseite", accept: ".pdf,.jpg,.jpeg,.png", tip: "Mit dem Handy abfotografieren, beide Seiten lesbar." },
+  { id: "gewerbeanmeldung", label: "Gewerbeanmeldung", desc: "Aktuelle Gewerbeanmeldung", accept: ".pdf", tip: "Beim Gewerbeamt deiner Stadt, oft online m\xF6glich (20-65 EUR)." },
+  { id: "steuernummer", label: "Steuerliche Erfassung", desc: "Bescheinigung vom Finanzamt", accept: ".pdf", tip: "Kommt nach Gewerbeanmeldung automatisch (1-4 Wochen)." },
+  { id: "ust_id", label: "USt-IdNr. / Kleinunternehmer", desc: "USt-ID oder \xA719 UStG Erkl\xE4rung", accept: ".pdf", tip: "USt-ID bei formulare.bzst.de oder \xA719 Erkl\xE4rung." },
+  { id: "steuernachweis", label: "Steuernachweis", desc: "Steuerbescheid oder Unbedenklichkeit", accept: ".pdf", tip: "Letzten Steuerbescheid als PDF oder Unbedenklichkeitsbescheinigung." },
+  { id: "bankverbindung", label: "IBAN-Nachweis", desc: "Kontoauszug-Header oder Bankbest\xE4tigung", accept: ".pdf,.jpg,.jpeg,.png", tip: "Banking-App \u2192 Kontodetails als PDF exportieren." },
+  { id: "fuehrerschein", label: "F\xFChrerschein (Kopie)", desc: "Vorderseite, gut lesbar", accept: ".pdf,.jpg,.jpeg,.png", tip: "Vorderseite abfotografieren." }
+];
+const DOCS_A = [
+  { id: "personalausweis", label: "Personalausweis / Reisepass", desc: "Vorder- und R\xFCckseite", accept: ".pdf,.jpg,.jpeg,.png", tip: "Beide Seiten lesbar abfotografieren." },
+  { id: "steuerid_doc", label: "Steueridentifikationsnummer", desc: "11-stellige Steuer-ID", accept: ".pdf,.jpg,.jpeg,.png", tip: "Steht auf jedem Steuerbescheid oben rechts." },
+  { id: "sozialversicherung", label: "Sozialversicherungsausweis", desc: "SV-Nummer Nachweis", accept: ".pdf,.jpg,.jpeg,.png", tip: "Von der Rentenversicherung oder Krankenkasse anfordern." },
+  { id: "krankenkasse", label: "Mitgliedsbescheinigung KV", desc: "Gesetzliche oder private KV", accept: ".pdf", tip: "Online-Portal deiner Krankenkasse oder anrufen." },
+  { id: "bankverbindung", label: "IBAN-Nachweis", desc: "Offizielles Dokument mit IBAN", accept: ".pdf,.jpg,.jpeg,.png", tip: "Banking-App \u2192 Kontodetails als PDF." },
+  { id: "steuerklasse_doc", label: "ELStAM / Lohnsteuerbescheinigung", desc: "Steuerklasse-Nachweis", accept: ".pdf", tip: "Letzte Gehaltsabrechnung oder mein-elster.de." },
+  { id: "fuehrerschein", label: "F\xFChrerschein (Kopie)", desc: "Vorderseite, gut lesbar", accept: ".pdf,.jpg,.jpeg,.png", tip: "Vorderseite abfotografieren." }
+];
+const EXTRA_DOCS = [
+  { id: "profilbild", label: "Profilbild", desc: "F\xFCr Team\xFCbersicht & bee-doo Apps", accept: ".jpg,.jpeg,.png", tip: "Freundliches Portraitfoto vor neutralem Hintergrund." },
+  { id: "fuehrungszeugnis", label: "F\xFChrungszeugnis", desc: "Empfohlen f\xFCr Hausbesuche", accept: ".pdf", tip: "Online unter fuehrungszeugnis.bund.de (13 EUR, 1-3 Wochen)." }
+];
+const DEMO_HGB = {
+  vpNr: "20001-000",
+  empType: "hgb84",
+  role: "scout",
+  stage: "active",
+  name: "Thomas Herrmann",
+  email: "t.herrmann@example.de",
+  phone: "+49 151 1234567",
+  firma: "",
+  street: "Musterstr. 12",
+  zip: "33602",
+  city: "Bielefeld",
+  geburtsdatum: "1992-05-15",
+  steuernr: "336/5432/1234",
+  ustId: "",
+  steuerid: "",
+  svnr: "",
+  steuerklasse: "",
+  iban: "DE89 3704 0044 0532 0130 00",
+  notfall_name: "Maria Herrmann",
+  notfall_phone: "+49 170 9876543",
+  notfall_beziehung: "Ehepartnerin",
+  startdatum: "2025-08-15",
+  umfang: "Vollzeit (40h+)",
+  wochentage: ["Mo", "Di", "Mi", "Do", "Fr"],
+  einsatzgebiet: ["33xxx Bielefeld/GT", "32xxx Ostwestfalen"],
+  radius: "50",
+  fahrzeug: "Ja, eigenes Fahrzeug",
+  kennzeichen: "BI-TH 987",
+  fuehrerschein: "Klasse B (PKW)",
+  geraete: ["iPhone", "Eigener Laptop"],
+  sprachen: ["Deutsch (Muttersprachler)", "Englisch"],
+  groesse_hemd: "L",
+  groesse_jacke: "L",
+  joinDate: "2025-08-15",
+  provision: "Standard-Provision",
+  fzCheck: null,
+  docs: {
+    personalausweis: { status: "approved", uploadedAt: "2025-08-10", fileName: "ausweis_vr.pdf" },
+    gewerbeanmeldung: { status: "approved", uploadedAt: "2025-08-10", fileName: "gewerbe_bi.pdf" },
+    steuernummer: { status: "approved", uploadedAt: "2025-08-12", fileName: "steuererfassung.pdf" },
+    ust_id: { status: "approved", uploadedAt: "2025-08-12", fileName: "kleinunternehmer_19.pdf" },
+    steuernachweis: { status: "approved", uploadedAt: "2025-08-14", fileName: "steuerbescheid_2024.pdf" },
+    bankverbindung: { status: "approved", uploadedAt: "2025-08-14", fileName: "iban_sparkasse.pdf" }
+  },
+  optDocs: {
+    fuehrerschein: { status: "approved", uploadedAt: "2025-08-15", fileName: "fuehrerschein.jpg" },
+    profilbild: { status: "approved", uploadedAt: "2025-08-15", fileName: "profil_thomas.jpg" }
+  },
+  payouts: [
+    { date: "2026-01-31", amount: 3920, status: "paid", type: "Monatsabrechnung Jan", details: "14 Termine \xD7 280 EUR" },
+    { date: "2025-12-31", amount: 3540, status: "paid", type: "Monatsabrechnung Dez", details: "12 Termine \xD7 295 EUR" },
+    { date: "2025-11-30", amount: 2800, status: "paid", type: "Monatsabrechnung Nov", details: "10 Termine \xD7 280 EUR" }
+  ],
+  stats: { leads: 46, termine: 10, anlagen: 0, tage_aktiv: 187 }
+};
+const DEMO_ANG = {
+  vpNr: "10002-000",
+  empType: "angestellt",
+  role: "scout",
+  stage: "active",
+  name: "Kevin Braun",
+  email: "k.braun@example.de",
+  phone: "+49 163 4445566",
+  firma: "",
+  street: "Detmolder Str. 44",
+  zip: "33604",
+  city: "Bielefeld",
+  geburtsdatum: "1995-03-22",
+  steuernr: "",
+  ustId: "",
+  steuerid: "57 841 237 805",
+  svnr: "12 220395 B 017",
+  steuerklasse: "1",
+  iban: "DE33 4401 0046 0123 4567 89",
+  notfall_name: "Sabine Braun",
+  notfall_phone: "+49 171 5554433",
+  notfall_beziehung: "Mutter",
+  startdatum: "2025-11-01",
+  umfang: "Vollzeit (40h+)",
+  wochentage: ["Mo", "Di", "Mi", "Do", "Fr"],
+  einsatzgebiet: ["33xxx Bielefeld/GT"],
+  radius: "40",
+  fahrzeug: "Ja, Firmenwagen gew\xFCnscht",
+  kennzeichen: "BI-BD 102",
+  fuehrerschein: "Klasse B (PKW)",
+  geraete: ["iPhone"],
+  sprachen: ["Deutsch (Muttersprachler)", "T\xFCrkisch"],
+  groesse_hemd: "M",
+  groesse_jacke: "M",
+  joinDate: "2025-11-01",
+  provision: "",
+  fzCheck: { kennzeichen: "BI-BD 102", nextDue: "2026-02-14", interval: 28, checks: [{ date: "2026-01-17", km: 8420, kmPhoto: true, video: true }, { date: "2025-12-20", km: 6890, kmPhoto: true, video: true }] },
+  docs: {
+    personalausweis: { status: "approved", uploadedAt: "2025-10-28", fileName: "ausweis_kevin.pdf" },
+    steuerid_doc: { status: "approved", uploadedAt: "2025-10-28", fileName: "steuerid.pdf" },
+    sozialversicherung: { status: "approved", uploadedAt: "2025-10-29", fileName: "sv_ausweis.pdf" },
+    krankenkasse: { status: "approved", uploadedAt: "2025-10-29", fileName: "tk_bescheinigung.pdf" },
+    bankverbindung: { status: "approved", uploadedAt: "2025-10-30", fileName: "iban_commerzbank.pdf" },
+    steuerklasse_doc: { status: "pending", uploadedAt: "2026-02-10", fileName: "elstam_2026.pdf" }
+  },
+  optDocs: {
+    fuehrerschein: { status: "approved", uploadedAt: "2025-10-30", fileName: "fuehrerschein_kb.jpg" }
+  },
+  payouts: [
+    { date: "2026-01-31", amount: 2800, status: "paid", type: "Gehalt + Variable Jan", details: "Grundgehalt 2.400 + 400 Variable" },
+    { date: "2025-12-31", amount: 2600, status: "paid", type: "Gehalt + Variable Dez", details: "Grundgehalt 2.400 + 200 Variable" }
+  ],
+  stats: { leads: 38, termine: 8, anlagen: 0, tage_aktiv: 110 }
+};
+const DEMO_USERS = [
+  { key: "hgb", label: "\u{1F3E2} HGB \xA784 \u2013 Thomas", user: DEMO_HGB },
+  { key: "ang", label: "\u{1F464} Angestellt \u2013 Kevin", user: DEMO_ANG }
+];
+const S = {
+  app: { fontFamily: "'DM Sans',sans-serif", background: BG, color: TX, minHeight: "100vh", display: "flex", flexDirection: "column" },
+  inp: { background: C2, border: `1.5px solid ${BD}`, borderRadius: 10, padding: "10px 14px", color: TX, fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box", transition: "border-color .2s" },
+  sel: { background: C2, border: `1.5px solid ${BD}`, borderRadius: 10, padding: "10px 14px", color: TX, fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box", appearance: "none", cursor: "pointer" },
+  ta: { background: C2, border: `1.5px solid ${BD}`, borderRadius: 10, padding: "10px 14px", color: TX, fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box", resize: "vertical", minHeight: 60, fontFamily: "inherit" },
+  btn: { padding: "10px 20px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, transition: "all .15s" },
+  bP: { background: Y, color: BG },
+  bG: { background: "transparent", color: T2, border: `1.5px solid ${BD}` },
+  bSm: { padding: "7px 14px", fontSize: 12 },
+  bOK: { background: `${OK}15`, color: OK, border: `1px solid ${OK}30` },
+  bERR: { background: `${ERR}15`, color: ERR, border: `1px solid ${ERR}30` },
+  card: { background: C1, borderRadius: 14, border: `1.5px solid ${BD}`, padding: "16px 20px" },
+  badge: { display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 600 },
+  label: { fontSize: 11, color: TM, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 5, display: "block" },
+  sec: { fontSize: 14, fontWeight: 700, marginBottom: 12, marginTop: 20, display: "flex", alignItems: "center", gap: 8, paddingTop: 14, borderTop: `1px solid ${BD}` },
+  tab: { padding: "10px 16px", border: "none", background: "transparent", color: TM, cursor: "pointer", fontSize: 13, fontWeight: 600, borderBottom: "2px solid transparent", transition: "all .15s", whiteSpace: "nowrap" },
+  tabActive: { color: Y, borderBottomColor: Y }
+};
+function Prog({ pct }) {
+  const c = pct === 100 ? OK : pct >= 50 ? Y : ERR;
+  return /* @__PURE__ */ React.createElement("div", { style: { height: 6, borderRadius: 3, background: `${TX}08`, overflow: "hidden", width: "100%" } }, /* @__PURE__ */ React.createElement("div", { style: { height: "100%", borderRadius: 3, width: `${pct}%`, background: c, transition: "width .5s ease" } }));
+}
+function Field({ label, value, onChange, validator, type, placeholder, note, format, disabled, inputMode }) {
+  const [t, setT] = useState(false);
+  const err = t && validator ? validator(value) : null;
+  const ok = t && value && !err;
+  return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: S.label }, label), /* @__PURE__ */ React.createElement(
+    "input",
+    {
+      style: { ...S.inp, borderColor: err ? ERR : ok ? `${OK}50` : BD, ...disabled ? { opacity: 0.5 } : {} },
+      type: type || "text",
+      inputMode,
+      value: value || "",
+      disabled,
+      onChange: (e) => {
+        let v = e.target.value;
+        if (format) v = format(v);
+        onChange(v);
+      },
+      onBlur: () => setT(true),
+      placeholder
+    }
+  ), err && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: ERR, marginTop: 3 } }, "\u26A0 ", err), note && !err && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: TM, marginTop: 3, fontStyle: "italic" } }, note));
+}
+function DocRow({ doc, fileData, onUpload, onRemove, opt }) {
+  const ref = useRef();
+  const has = !!fileData;
+  const st = fileData?.status;
+  const stColor = st === "approved" ? OK : st === "rejected" ? ERR : st === "pending" ? WARN : TM;
+  const stLabel = st === "approved" ? "\u2713 Genehmigt" : st === "rejected" ? "\u2717 Abgelehnt" : st === "pending" ? "\u23F3 In Pr\xFCfung" : "";
+  const [showTip, setShowTip] = useState(false);
+  return /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 6, padding: "10px 14px", borderColor: has ? `${stColor}25` : BD, background: has ? `${stColor}04` : C1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 600 } }, doc.label), opt && /* @__PURE__ */ React.createElement("span", { style: { ...S.badge, background: `${TM}12`, color: TM, fontSize: 9 } }, "Optional"), !opt && !has && /* @__PURE__ */ React.createElement("span", { style: { ...S.badge, background: `${ERR}12`, color: ERR, fontSize: 9 } }, "Pflicht"), has && /* @__PURE__ */ React.createElement("span", { style: { ...S.badge, background: `${stColor}12`, color: stColor, fontSize: 9 } }, stLabel)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T2, marginTop: 2 } }, doc.desc), has && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T2, marginTop: 2 } }, "\u{1F4CE} ", fileData.fileName, " \xB7 ", fileData.uploadedAt), doc.tip && !has && /* @__PURE__ */ React.createElement("button", { onClick: () => setShowTip(!showTip), style: { background: "none", border: "none", cursor: "pointer", fontSize: 10, color: INF, fontWeight: 600, marginTop: 3, padding: 0 } }, "\u{1F4A1} ", showTip ? "Ausblenden" : "Wo bekomme ich das?")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, has && st !== "approved" && /* @__PURE__ */ React.createElement("button", { onClick: onRemove, style: { ...S.btn, ...S.bSm, ...S.bERR, width: "auto", padding: "4px 10px" } }, "\u2715"), /* @__PURE__ */ React.createElement("button", { onClick: () => ref.current?.click(), style: { ...S.btn, ...S.bSm, ...has ? S.bG : opt ? S.bG : S.bP, width: "auto", padding: "5px 12px" } }, has ? "\u21BB" : "\u2191")), /* @__PURE__ */ React.createElement("input", { ref, type: "file", accept: doc.accept, style: { display: "none" }, onChange: (e) => {
+    if (e.target.files[0]) onUpload(e.target.files[0]);
+    e.target.value = "";
+  } })), showTip && doc.tip && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 6, padding: "8px 12px", borderRadius: 8, background: `${INF}08`, border: `1px solid ${INF}12`, fontSize: 11, color: `${INF}dd`, lineHeight: 1.5 } }, "\u{1F4A1} ", doc.tip));
+}
+function HGBVertrag({ f }) {
+  const td = (/* @__PURE__ */ new Date()).toLocaleDateString("de-DE");
+  return /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "serif", color: "#111", background: "#fff", padding: "32px 40px", lineHeight: 1.7, fontSize: 13, maxWidth: 680, margin: "0 auto", borderRadius: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 28 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 700, letterSpacing: 1 } }, "HANDELSVERTRETERVERTRAG"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#555", marginTop: 4 } }, "gem\xE4\xDF \xA7\xA7 84 ff. HGB")), /* @__PURE__ */ React.createElement("p", null, "zwischen ", /* @__PURE__ */ React.createElement("strong", null, "bee-doo GmbH"), ', Bielefeld (GF: Patrick, Olaf Schader) \u2014 \u201EUnternehmer" \u2014'), /* @__PURE__ */ React.createElement("p", null, "und ", /* @__PURE__ */ React.createElement("strong", null, f.name || "[Name]", f.firma ? ` / ${f.firma}` : ""), ", ", f.street || "[Str.]", ", ", f.zip || "[PLZ]", " ", f.city || "[Ort]", /* @__PURE__ */ React.createElement("br", null), "StNr: ", f.steuernr || "\u2014", " \xB7 USt: ", f.ustId || "\xA719 UStG", " \xB7 IBAN: ", f.iban || "\u2014", ' \u2014 \u201EHandelsvertreter" \u2014'), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "\xA71"), " T\xE4tigkeit als ", f.role === "scout" ? "Scout (Lead-Generierung)" : "Vertrieb (PV-Beratung & Verkauf)", ". Weisungsfrei gem. \xA784 HGB.", f.einsatzgebiet?.length > 0 && ` Einsatzgebiet: ${f.einsatzgebiet.join(", ")}.`), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "\xA72"), " Provision gem\xE4\xDF Provisionsordnung", f.provision ? ` (${f.provision})` : "", ", f\xE4llig nach Zahlungseingang.", f.ustId ? "" : " Rechnungen unter Verweis auf \xA719 UStG."), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "\xA73"), " Kein Arbeitsverh\xE4ltnis. Selbst verantwortlich f\xFCr Steuern, SV, KV."), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "\xA74"), " DSGVO-konform. Verschwiegenheitspflicht."), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "\xA75"), " Beginn: ", f.startdatum ? new Date(f.startdatum).toLocaleDateString("de-DE") : td, ". Unbefristet. K\xFCndigung: 1 Monat."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, marginTop: 40 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { borderBottom: "1px solid #999", paddingBottom: 36 } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11 } }, "bee-doo GmbH")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { borderBottom: "1px solid #999", paddingBottom: 36 } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11 } }, f.name || "[Name]"))));
+}
+function AVertrag({ f }) {
+  const td = (/* @__PURE__ */ new Date()).toLocaleDateString("de-DE");
+  return /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "serif", color: "#111", background: "#fff", padding: "32px 40px", lineHeight: 1.7, fontSize: 13, maxWidth: 680, margin: "0 auto", borderRadius: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 28 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 700, letterSpacing: 1 } }, "ARBEITSVERTRAG")), /* @__PURE__ */ React.createElement("p", null, "zwischen ", /* @__PURE__ */ React.createElement("strong", null, "bee-doo GmbH"), ', Bielefeld \u2014 \u201EArbeitgeber" \u2014'), /* @__PURE__ */ React.createElement("p", null, "und ", /* @__PURE__ */ React.createElement("strong", null, f.name || "[Name]"), ", geb. ", f.geburtsdatum ? new Date(f.geburtsdatum).toLocaleDateString("de-DE") : "\u2014", ", ", f.street, ", ", f.zip, " ", f.city, /* @__PURE__ */ React.createElement("br", null), "Steuer-ID: ", f.steuerid || "\u2014", " \xB7 SV: ", f.svnr || "\u2014", " \xB7 StKl: ", f.steuerklasse || "\u2014", " \xB7 IBAN: ", f.iban || "\u2014"), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "\xA71"), " Einstellung als ", f.role === "scout" ? "Scout" : "Vertriebsmitarbeiter", ".", f.einsatzgebiet?.length > 0 && ` Einsatzgebiet: ${f.einsatzgebiet.join(", ")}.`), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "\xA72"), " Beginn: ", f.startdatum ? new Date(f.startdatum).toLocaleDateString("de-DE") : td, ". 6 Monate Probezeit."), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "\xA73"), " 40h/Woche. 28 Tage Urlaub."), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "\xA74"), " K\xFCndigung: 4 Wochen zum 15. oder Monatsende (\xA7622 BGB)."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, marginTop: 40 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { borderBottom: "1px solid #999", paddingBottom: 36 } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11 } }, "bee-doo GmbH")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { borderBottom: "1px solid #999", paddingBottom: 36 } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11 } }, f.name || "[Name]"))));
+}
+
+// ── SUPABASE ──────────────────────────────────────────────────
+const SB_URL = "https://hqzpemfaljxcysyqssng.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const sbH = { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY, "Content-Type": "application/json" };
+async function sbGet(table, params) {
+  const r = await fetch(SB_URL + "/rest/v1/" + table + (params||""), { headers: sbH });
+  return r.json();
+}
+async function sbPatch(table, where, body) {
+  await fetch(SB_URL + "/rest/v1/" + table + "?" + where, { method: "PATCH", headers: sbH, body: JSON.stringify(body) });
+}
+function App() {
+  const [view, setView] = useState("login");
+  const [tab, setTab] = useState("dashboard");
+  const [demoKey, setDemoKey] = useState("hgb");
+  const [user, setUser] = useState(DEMO_HGB);
+  const [files, setFiles] = useState(DEMO_HGB.docs);
+  const [optFiles, setOptFiles] = useState(DEMO_HGB.optDocs);
+  const [editing, setEditing] = useState(null);
+  const [draft, setDraft] = useState({});
+  const [saved, setSaved] = useState(false);
+  const [showContract, setShowContract] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("t.herrmann@example.de");
+  const [sbDocs, setSbDocs] = useState(null);  // null=loading, []=loaded
+  const [sbDocsLoading, setSbDocsLoading] = useState(false);
+  const [openDoc, setOpenDoc] = useState(null); // currently viewed doc
+  const [portalKuerzel, setPortalKuerzel] = useState("");
+  const [portalPin, setPortalPin] = useState("");
+  const [portalError, setPortalError] = useState("");
+  const [portalMaId, setPortalMaId] = useState(null);
+  const [calc, setCalc] = useState({ leads: 30, termine: 15, wahrgenommen: 12, anlagen: 0 });
+  const [fzUploaded, setFzUploaded] = useState({ km: false, video: false });
+  const fzRefKm = useRef(null);
+  const fzRefVideo = useRef(null);
+  const switchDemo = (key) => {
+    const d = DEMO_USERS.find((u) => u.key === key);
+    if (!d) return;
+    setDemoKey(key);
+    setUser(d.user);
+    setFiles(d.user.docs);
+    setOptFiles(d.user.optDocs);
+    setTab("dashboard");
+    setEditing(null);
+    setSaved(false);
+    const isSc = d.user.role === "scout";
+    setCalc(isSc ? { leads: 30, termine: 15, wahrgenommen: 12, anlagen: 0 } : { anlagen: 8, eigenleads: 2, empfehlungen: 1, speicher: 3, zero: 2 });
+    setFzUploaded({ km: false, video: false });
+  };
+  const isH = user.empType === "hgb84";
+  const reqDocs = isH ? DOCS_H : DOCS_A;
+  const uC = reqDocs.filter((d) => files[d.id]).length;
+  const uT = reqDocs.length;
+  const uP = Math.round(uC / uT * 100);
+  const startEdit = (section) => {
+    setEditing(section);
+    setDraft({ ...user });
+    setSaved(false);
+  };
+  const cancelEdit = () => {
+    setEditing(null);
+    setDraft({});
+    setSaved(false);
+  };
+  const saveEdit = () => {
+    setUser({ ...user, ...draft });
+    setEditing(null);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3e3);
+  };
+  const d_ = (k, v) => setDraft((p) => ({ ...p, [k]: v }));
+  const uploadDoc = (docId, file, isOpt = false) => {
+    const entry = { status: "pending", uploadedAt: TODAY, fileName: file.name };
+    if (isOpt) setOptFiles((p) => ({ ...p, [docId]: entry }));
+    else setFiles((p) => ({ ...p, [docId]: entry }));
+  };
+  const removeDoc = (docId, isOpt = false) => {
+    if (isOpt) setOptFiles((p) => {
+      const n = { ...p };
+      delete n[docId];
+      return n;
+    });
+    else setFiles((p) => {
+      const n = { ...p };
+      delete n[docId];
+      return n;
+    });
+  };
+
+  // ── Lade echte Abrechnungen aus Supabase wenn MA bekannt ──
+  useEffect(() => {
+    if (!portalMaId) return;
+    setSbDocsLoading(true);
+    sbGet("pay_dokumente", "?mitarbeiter_id=eq." + portalMaId + "&order=jahr.desc,monat.desc")
+      .then(docs => setSbDocs(docs))
+      .catch(() => setSbDocs([]))
+      .finally(() => setSbDocsLoading(false));
+  }, [portalMaId]);
+
+  const openPDF = async (doc) => {
+    // Mark as read
+    if (doc.status === "erstellt") {
+      await sbPatch("pay_dokumente", "id=eq." + doc.id, { status: "gelesen", gelesen_am: new Date().toISOString() });
+      setSbDocs(prev => prev.map(d => d.id === doc.id ? {...d, status:"gelesen"} : d));
+    }
+    // Open in new window
+    const w = window.open("", "_blank");
+    w.document.write(doc.html_content);
+    w.document.close();
+  };
+
+  const doPortalLogin = async () => {
+    setPortalError("");
+    const k = portalKuerzel.trim().toUpperCase();
+    const p = portalPin.trim().toUpperCase();
+    if (!k || !p) { setPortalError("Kürzel und PIN eingeben"); return; }
+    const rows = await sbGet("pay_mitarbeiter", "?kuerzel=eq." + k + "&aktiv=eq.true");
+    if (!rows || rows.length === 0) { setPortalError("Kürzel nicht gefunden"); return; }
+    const ma = rows[0];
+    const expectedPin = (ma.portal_pin || "").toUpperCase();
+    if (p !== expectedPin) { setPortalError("Falscher PIN"); return; }
+    setPortalMaId(ma.id);
+    // Update demo user name to match real MA
+    setUser(u => ({...u, name: ma.vorname + " " + ma.nachname, vpNr: ma.kuerzel}));
+    setView("portal");
+    setTab("pay");
+  };
+
+  const MON = ["","Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+  const unread = sbDocs ? sbDocs.filter(d => d.status === "erstellt").length : 0;
+
+  const TABS = [
+    { id: "dashboard", label: "\u{1F4CA} Dashboard" },
+    { id: "stamm", label: "\u{1F464} Meine Daten" },
+    { id: "docs", label: `\u{1F4C4} Dokumente (${uC}/${uT})` },
+    { id: "vertrag", label: "\u{1F4CB} Vertrag" },
+    ...user.fzCheck ? [{ id: "fahrzeug", label: "\u{1F697} Fahrzeug" }] : [],
+    { id: "pay", label: "\u{1F4B0} Abrechnungen" },
+    { id: "rechner", label: "\u{1F9EE} Rechner" },
+    { id: "profil", label: "\u2699\uFE0F Profil" }
+  ];
+  const fzStatus = user.fzCheck ? (() => {
+    const due = new Date(user.fzCheck.nextDue);
+    const diff = Math.ceil((due - new Date(TODAY)) / 864e5);
+    if (diff < 0) return { status: "overdue", color: ERR, label: `${Math.abs(diff)} Tage \xFCberf\xE4llig` };
+    if (diff <= 7) return { status: "soon", color: WARN, label: `In ${diff} Tagen f\xE4llig` };
+    return { status: "ok", color: OK, label: `${new Date(user.fzCheck.nextDue).toLocaleDateString("de-DE")}` };
+  })() : null;
+  if (view === "login") return /* @__PURE__ */ React.createElement("div", { style: S.app }, /* @__PURE__ */ React.createElement("link", { href: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap", rel: "stylesheet" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", maxWidth: 440, margin: "0 auto", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 52, height: 52, borderRadius: 14, background: Y, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 18, color: BG, marginBottom: 24 } }, "bd"), /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 26, fontWeight: 800, margin: "0 0 8px" } }, "bee-doo ", /* @__PURE__ */ React.createElement("span", { style: { color: Y } }, "Portal")), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 14, color: T2, margin: "0 0 28px" } }, "Dein pers\xF6nliches Mitarbeiter-Portal"), /* @__PURE__ */ React.createElement("div", { style: { width: "100%" } }, /* @__PURE__ */ React.createElement(Field, { label: "E-Mail", value: loginEmail, onChange: setLoginEmail, placeholder: "deine@email.de", type: "email" }), /* @__PURE__ */ React.createElement("button", { onClick: () => setView("portal"), style: { ...S.btn, ...S.bP, width: "100%", fontSize: 15, padding: "14px" } }, "\u{1F4E7} Login-Link senden"), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20, padding: "14px 16px", borderRadius: 12, background: `${WARN}08`, border: `1px solid ${WARN}18` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: WARN, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 10 } }, "\u{1F9EA} Demo-Zugang"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, DEMO_USERS.map((d) => /* @__PURE__ */ React.createElement("button", { key: d.key, onClick: () => {
+    switchDemo(d.key);
+    setView("portal");
+  }, style: { ...S.btn, width: "100%", padding: "10px 14px", fontSize: 13, background: demoKey === d.key ? `${Y}15` : C2, color: demoKey === d.key ? Y : T2, border: `1.5px solid ${demoKey === d.key ? Y : BD}`, justifyContent: "flex-start" } }, d.label)))))));
+  if (showContract) return /* @__PURE__ */ React.createElement("div", { style: S.app }, /* @__PURE__ */ React.createElement("link", { href: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap", rel: "stylesheet" }), /* @__PURE__ */ React.createElement("header", { style: { background: C1, borderBottom: `1px solid ${BD}`, padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 28, height: 28, borderRadius: 7, background: Y, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, color: BG } }, "bd"), /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 14 } }, "Mein Vertrag")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => window.print(), style: { ...S.btn, ...S.bP, ...S.bSm } }, "\u2B07 PDF"), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowContract(false), style: { ...S.btn, ...S.bG, ...S.bSm } }, "\u2190 Zur\xFCck"))), /* @__PURE__ */ React.createElement("div", { style: { padding: 20 } }, isH ? /* @__PURE__ */ React.createElement(HGBVertrag, { f: user }) : /* @__PURE__ */ React.createElement(AVertrag, { f: user })));
+  return /* @__PURE__ */ React.createElement("div", { style: S.app }, /* @__PURE__ */ React.createElement("link", { href: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap", rel: "stylesheet" }), /* @__PURE__ */ React.createElement("div", { style: { background: `${WARN}10`, borderBottom: `1px solid ${WARN}25`, padding: "6px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: WARN, fontWeight: 700 } }, "\u{1F9EA} DEMO"), DEMO_USERS.map((d) => /* @__PURE__ */ React.createElement("button", { key: d.key, onClick: () => switchDemo(d.key), style: { padding: "4px 12px", borderRadius: 7, border: `1.5px solid ${demoKey === d.key ? Y : BD}`, background: demoKey === d.key ? `${Y}15` : "transparent", color: demoKey === d.key ? Y : TM, fontSize: 11, fontWeight: demoKey === d.key ? 700 : 500, cursor: "pointer" } }, d.label))), /* @__PURE__ */ React.createElement("header", { style: { background: C1, borderBottom: `1px solid ${BD}`, padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 28, height: 28, borderRadius: 7, background: Y, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, color: BG } }, "bd"), /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 14 } }, "bee-doo ", /* @__PURE__ */ React.createElement("span", { style: { color: Y } }, "Portal"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { ...S.badge, background: `${isH ? Y : INF}12`, color: isH ? Y : INF, fontFamily: "monospace", fontWeight: 700 } }, user.vpNr), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: T2 } }, user.name), /* @__PURE__ */ React.createElement("button", { onClick: () => setView("login"), style: { ...S.btn, ...S.bG, ...S.bSm } }, "Abmelden"))), saved && /* @__PURE__ */ React.createElement("div", { style: { padding: "10px 20px", background: `${OK}15`, borderBottom: `1px solid ${OK}30`, fontSize: 13, fontWeight: 600, color: OK, textAlign: "center" } }, "\u2713 \xC4nderungen gespeichert"), /* @__PURE__ */ React.createElement("div", { style: { background: C1, borderBottom: `1px solid ${BD}`, overflowX: "auto", display: "flex" } }, TABS.map((t) => {
+    const isFzAlert = t.id === "fahrzeug" && fzStatus && fzStatus.status === "overdue";
+    return /* @__PURE__ */ React.createElement("button", { key: t.id, onClick: () => setTab(t.id), style: { ...S.tab, ...tab === t.id ? S.tabActive : {}, ...isFzAlert ? { color: ERR } : {}, flexShrink: 0 } }, t.label, isFzAlert && /* @__PURE__ */ React.createElement("span", { style: { display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: ERR, marginLeft: 4 } }));
+  })), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, maxWidth: 700, margin: "0 auto", padding: "20px 20px 40px", width: "100%" } }, tab === "dashboard" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("h2", { style: { fontSize: 20, fontWeight: 800, margin: "0 0 4px" } }, "Hallo, ", user.name.split(" ")[0], " \u{1F44B}"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: T2, margin: "0 0 20px" } }, "Dein \xDCberblick als ", /* @__PURE__ */ React.createElement("strong", { style: { color: isH ? Y : INF } }, isH ? "Handelsvertreter (HGB \xA784)" : "Angestellte/r")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 18 } }, [
+    { label: "VP-Nr.", value: user.vpNr, color: isH ? Y : INF },
+    { label: "Status", value: user.stage === "active" ? "\u2705 Aktiv" : "\u23F3 " + user.stage, color: user.stage === "active" ? OK : WARN },
+    { label: "Leads", value: user.stats.leads, color: PUR },
+    { label: "Termine", value: user.stats.termine, color: INF },
+    { label: "Tage aktiv", value: user.stats.tage_aktiv, color: TEAL },
+    { label: "Dokumente", value: `${uC}/${uT}`, color: uC === uT ? OK : WARN }
+  ].map(({ label, value, color }) => /* @__PURE__ */ React.createElement("div", { key: label, style: S.card }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: TM, fontWeight: 600, textTransform: "uppercase" } }, label), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color, marginTop: 2 } }, value)))), uC < uT && /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 10, borderColor: `${WARN}30`, background: `${WARN}06`, display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 22 } }, "\u{1F4C4}"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: WARN } }, "Dokumente unvollst\xE4ndig"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T2, marginTop: 2 } }, uT - uC, " Pflichtdokument", uT - uC > 1 ? "e" : "", " fehlen. Ohne vollst\xE4ndige Dokumente ist keine Auszahlung m\xF6glich.")), /* @__PURE__ */ React.createElement("button", { onClick: () => setTab("docs"), style: { ...S.btn, ...S.bSm, background: `${WARN}15`, color: WARN } }, "Hochladen \u2192")), fzStatus && fzStatus.status === "overdue" && /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 10, borderColor: `${ERR}30`, background: `${ERR}06`, display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 22 } }, "\u{1F697}"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: ERR } }, "Fahrzeug-Check \xFCberf\xE4llig!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T2, marginTop: 2 } }, "Bitte Kilometerstand-Foto und Rundgang-Video hochladen.")), /* @__PURE__ */ React.createElement("button", { onClick: () => setTab("fahrzeug"), style: { ...S.btn, ...S.bSm, background: `${ERR}15`, color: ERR } }, "Jetzt erledigen \u2192")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginTop: 18, marginBottom: 10 } }, "Schnellzugriff"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, [
+    { label: "Daten \xE4ndern", icon: "\u270F\uFE0F", tab: "stamm" },
+    { label: "Dokumente", icon: "\u{1F4C4}", tab: "docs" },
+    { label: "Mein Vertrag", icon: "\u{1F4CB}", tab: "vertrag" },
+    { label: "Abrechnungen", icon: "\u{1F4B0}", tab: "pay" }
+  ].map((a) => /* @__PURE__ */ React.createElement("button", { key: a.tab, onClick: () => setTab(a.tab), style: { ...S.card, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", textAlign: "left", color: TX, fontFamily: "'DM Sans',sans-serif", border: `1px solid ${BD}` } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20 } }, a.icon), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 600 } }, a.label)))), user.payouts.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, "Letzte Abrechnung"), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 15, color: OK } }, user.payouts[0].amount.toLocaleString("de-DE"), " \u20AC"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T2, marginTop: 2 } }, user.payouts[0].type, " \xB7 ", user.payouts[0].details)), /* @__PURE__ */ React.createElement("span", { style: { ...S.badge, background: `${OK}12`, color: OK } }, "\u2713 Bezahlt")))), tab === "stamm" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("h2", { style: { fontSize: 20, fontWeight: 800, margin: 0 } }, "Meine Daten"), editing !== "stamm" ? /* @__PURE__ */ React.createElement("button", { onClick: () => startEdit("stamm"), style: { ...S.btn, ...S.bP, ...S.bSm } }, "\u270F\uFE0F Bearbeiten") : /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement("button", { onClick: saveEdit, style: { ...S.btn, ...S.bSm, ...S.bOK } }, "\u2713 Speichern"), /* @__PURE__ */ React.createElement("button", { onClick: cancelEdit, style: { ...S.btn, ...S.bSm, ...S.bG } }, "Abbrechen"))), editing !== "stamm" ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: TM, marginBottom: 10 } }, "PERS\xD6NLICHE DATEN"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, [
+    { l: "Name", v: user.name },
+    { l: "E-Mail", v: user.email },
+    { l: "Telefon", v: user.phone },
+    { l: "Adresse", v: `${user.street}, ${user.zip} ${user.city}` },
+    ...isH ? [{ l: "Firma", v: user.firma || "\u2014" }] : [{ l: "Geburtsdatum", v: user.geburtsdatum ? new Date(user.geburtsdatum).toLocaleDateString("de-DE") : "\u2014" }]
+  ].map((x) => /* @__PURE__ */ React.createElement("div", { key: x.l, style: { padding: "6px 10px", background: C2, borderRadius: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: TM, fontWeight: 600, textTransform: "uppercase" } }, x.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, x.v || "\u2014"))))), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: TM, marginBottom: 10 } }, isH ? "STEUER- & BANKDATEN" : "LOHNSTEUER & BANK"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, (isH ? [
+    { l: "Steuernummer", v: user.steuernr },
+    { l: "USt-IdNr.", v: user.ustId || "\xA719 UStG" }
+  ] : [
+    { l: "Steuer-ID", v: user.steuerid },
+    { l: "SV-Nr.", v: user.svnr },
+    { l: "Steuerklasse", v: user.steuerklasse }
+  ]).map((x) => /* @__PURE__ */ React.createElement("div", { key: x.l, style: { padding: "6px 10px", background: C2, borderRadius: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: TM, fontWeight: 600, textTransform: "uppercase" } }, x.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, x.v || "\u2014"))), [{ l: "IBAN", v: user.iban }].map((x) => /* @__PURE__ */ React.createElement("div", { key: x.l, style: { padding: "6px 10px", background: C2, borderRadius: 8, gridColumn: "1/-1" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: TM, fontWeight: 600, textTransform: "uppercase" } }, x.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontFamily: "monospace" } }, x.v || "\u2014"))))), /* @__PURE__ */ React.createElement("div", { style: { ...S.card } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: TM, marginBottom: 10 } }, "NOTFALLKONTAKT"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } }, [{ l: "Name", v: user.notfall_name }, { l: "Telefon", v: user.notfall_phone }, { l: "Beziehung", v: user.notfall_beziehung }].map((x) => /* @__PURE__ */ React.createElement("div", { key: x.l, style: { padding: "6px 10px", background: C2, borderRadius: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: TM, fontWeight: 600, textTransform: "uppercase" } }, x.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, x.v || "\u2014"))))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, padding: "10px 14px", borderRadius: 8, background: `${INF}06`, border: `1px solid ${INF}12`, fontSize: 11, color: T2 } }, "\u2139\uFE0F \xC4nderungen an Steuer- oder Bankdaten m\xFCssen von bee-doo gepr\xFCft werden. Du wirst per E-Mail benachrichtigt.")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Field, { label: "Name", value: draft.name, onChange: (v) => d_("name", v), validator: V.name }), /* @__PURE__ */ React.createElement(Field, { label: "E-Mail", value: draft.email, onChange: (v) => d_("email", v), validator: V.email, type: "email" }), /* @__PURE__ */ React.createElement(Field, { label: "Telefon", value: draft.phone, onChange: (v) => d_("phone", v), validator: V.phone, type: "tel" }), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(Field, { label: "Stra\xDFe & Nr.", value: draft.street, onChange: (v) => d_("street", v) }), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "80px 1fr", gap: 6 } }, /* @__PURE__ */ React.createElement(Field, { label: "PLZ", value: draft.zip, onChange: (v) => d_("zip", v), validator: V.plz, inputMode: "numeric" }), /* @__PURE__ */ React.createElement(Field, { label: "Ort", value: draft.city, onChange: (v) => d_("city", v) }))), /* @__PURE__ */ React.createElement("div", { style: S.sec }, "\u{1F9FE} ", isH ? "Steuer- & Bankdaten" : "Lohnsteuer & Bank"), isH ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Field, { label: "Steuernummer", value: draft.steuernr, onChange: (v) => d_("steuernr", v), validator: V.steuernr, note: "\u{1F4A1} Steht auf deinem Steuerbescheid. Format: xxx/xxxx/xxxx" }), /* @__PURE__ */ React.createElement(Field, { label: "USt-IdNr.", value: draft.ustId, onChange: (v) => d_("ustId", v), validator: V.ustId, note: "\u{1F4A1} Leer = Kleinunternehmer \xA719. Beantragen: formulare.bzst.de" })) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Field, { label: "Steuer-ID", value: draft.steuerid, onChange: (v) => d_("steuerid", v), validator: V.steuerid, note: "\u{1F4A1} 11-stellig, auf jedem Steuerbescheid oben rechts" }), /* @__PURE__ */ React.createElement(Field, { label: "SV-Nr.", value: draft.svnr, onChange: (v) => d_("svnr", v) }), /* @__PURE__ */ React.createElement(Field, { label: "Steuerklasse", value: draft.steuerklasse, onChange: (v) => d_("steuerklasse", v), note: "\u{1F4A1} 1=ledig, 3=Hauptverdiener, 4=beide gleich, 5=Partner von 3" })), /* @__PURE__ */ React.createElement(Field, { label: "IBAN", value: draft.iban, onChange: (v) => d_("iban", fmtIBAN(v)), validator: V.iban, note: "\u{1F4A1} Banking-App \u2192 Kontodetails als PDF" }), /* @__PURE__ */ React.createElement("div", { style: S.sec }, "\u{1F4DE} Notfallkontakt"), /* @__PURE__ */ React.createElement(Field, { label: "Name", value: draft.notfall_name, onChange: (v) => d_("notfall_name", v) }), /* @__PURE__ */ React.createElement(Field, { label: "Telefon", value: draft.notfall_phone, onChange: (v) => d_("notfall_phone", v), type: "tel" }), /* @__PURE__ */ React.createElement(Field, { label: "Beziehung", value: draft.notfall_beziehung, onChange: (v) => d_("notfall_beziehung", v) }))), tab === "docs" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("h2", { style: { fontSize: 20, fontWeight: 800, margin: "0 0 4px" } }, "Meine Dokumente"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: T2, margin: "0 0 14px" } }, "Lade Dokumente hoch oder ersetze bestehende. \xC4nderungen werden von bee-doo gepr\xFCft."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, "Pflichtdokumente"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: uC === uT ? OK : T2 } }, uC, "/", uT)), /* @__PURE__ */ React.createElement(Prog, { pct: uP }), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12 } }, reqDocs.map((d) => /* @__PURE__ */ React.createElement(DocRow, { key: d.id, doc: d, fileData: files[d.id], onUpload: (f) => uploadDoc(d.id, f), onRemove: () => removeDoc(d.id) }))), /* @__PURE__ */ React.createElement("div", { style: S.sec }, "Optionale Dokumente"), EXTRA_DOCS.map((d) => /* @__PURE__ */ React.createElement(DocRow, { key: d.id, doc: d, fileData: optFiles[d.id], onUpload: (f) => uploadDoc(d.id, f, true), onRemove: () => removeDoc(d.id, true), opt: true })), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14, padding: "10px 14px", borderRadius: 8, background: `${OK}06`, border: `1px solid ${OK}12`, fontSize: 11, color: T2 } }, "\u2705 Genehmigte Dokumente k\xF6nnen nur durch Neuhochladen ersetzt werden. Die alte Version wird archiviert.")), tab === "vertrag" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("h2", { style: { fontSize: 20, fontWeight: 800, margin: "0 0 14px" } }, "Mein Vertrag"), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, borderColor: `${Y}25`, background: `${Y}04`, display: "flex", alignItems: "center", gap: 14, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 28 } }, "\u{1F4CB}"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: Y } }, isH ? "Handelsvertretervertrag (HGB \xA784)" : "Arbeitsvertrag"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T2, marginTop: 2 } }, "Generiert aus deinen Stammdaten \xB7 Letzte Aktualisierung: ", TODAY)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setShowContract(true), style: { ...S.btn, ...S.bP, ...S.bSm } }, "Ansehen"), /* @__PURE__ */ React.createElement("button", { onClick: () => window.print(), style: { ...S.btn, ...S.bG, ...S.bSm } }, "\u2B07 PDF"))), /* @__PURE__ */ React.createElement("div", { style: { ...S.card } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, "Vertragsdaten"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, [
+    { l: "Vertragstyp", v: isH ? "HGB \xA784 Handelsvertreter" : "Arbeitsvertrag" },
+    { l: "VP-Nr.", v: user.vpNr },
+    { l: "Beginn", v: user.startdatum ? new Date(user.startdatum).toLocaleDateString("de-DE") : "\u2014" },
+    { l: "Rolle", v: user.role === "scout" ? "\u{1F50D} Scout" : "\u26A1 Vertrieb" },
+    ...isH ? [{ l: "Provision", v: user.provision || "Standard" }] : [],
+    { l: "Einsatzgebiet", v: (user.einsatzgebiet || []).join(", ") || "\u2014" }
+  ].map((x) => /* @__PURE__ */ React.createElement("div", { key: x.l, style: { padding: "6px 10px", background: C2, borderRadius: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: TM, fontWeight: 600, textTransform: "uppercase" } }, x.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12 } }, x.v))))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, fontSize: 11, color: TM, fontStyle: "italic" } }, "\u2139\uFE0F Der Vertrag wird live aus deinen Stammdaten generiert. \xC4nderst du deine Daten, aktualisiert sich der Vertrag automatisch.")), tab === "fahrzeug" && user.fzCheck && (() => {
+    const fz = user.fzCheck;
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("h2", { style: { fontSize: 20, fontWeight: 800, margin: "0 0 14px" } }, "Fahrzeug-Check"), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, borderColor: `${fzStatus.color}30`, background: `${fzStatus.color}06`, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: fzStatus.color } }, fzStatus.status === "overdue" ? "\u{1F534} \xDCBERF\xC4LLIG" : fzStatus.status === "soon" ? "\u{1F7E1} Bald f\xE4llig" : "\u{1F7E2} Alles OK"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T2, marginTop: 3 } }, "N\xE4chster Check: ", /* @__PURE__ */ React.createElement("strong", { style: { color: fzStatus.color } }, fzStatus.label)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T2, marginTop: 1 } }, "Intervall: alle ", fz.interval, " Tage \xB7 Kennzeichen: ", /* @__PURE__ */ React.createElement("strong", null, fz.kennzeichen))))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, "Jetzt hochladen"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 } }, [
+      { id: "km", icon: "\u{1F4F8}", title: "Kilometerstand-Foto", desc: "Tacho gut lesbar abfotografieren. Datum + km-Stand m\xFCssen erkennbar sein.", accept: ".jpg,.jpeg,.png", ref: fzRefKm },
+      { id: "video", icon: "\u{1F3A5}", title: "Rundgang-Video", desc: "Einmal langsam ums Fahrzeug herumgehen. Alle Seiten zeigen. Max. 60 Sek.", accept: ".mp4,.mov,.avi", ref: fzRefVideo }
+    ].map((item) => {
+      const uploaded = fzUploaded[item.id];
+      return /* @__PURE__ */ React.createElement("div", { key: item.id, style: { ...S.card, borderColor: uploaded ? `${OK}30` : BD, background: uploaded ? `${OK}04` : C1, textAlign: "center", padding: "20px 16px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 8 } }, item.icon), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 4 } }, item.title), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T2, marginBottom: 12, lineHeight: 1.4 } }, item.desc), uploaded ? /* @__PURE__ */ React.createElement("div", { style: { ...S.badge, background: `${OK}12`, color: OK, fontSize: 12, padding: "6px 14px" } }, "\u2713 Hochgeladen") : /* @__PURE__ */ React.createElement("button", { onClick: () => item.ref.current?.click(), style: { ...S.btn, ...S.bP, width: "100%" } }, "\u2191 Hochladen"), /* @__PURE__ */ React.createElement("input", { ref: item.ref, type: "file", accept: item.accept, style: { display: "none" }, onChange: () => setFzUploaded((d) => ({ ...d, [item.id]: true })) }));
+    })), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 8 } }, "Aktueller Kilometerstand"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } }, /* @__PURE__ */ React.createElement("input", { style: { ...S.inp, flex: 1 }, type: "number", placeholder: "z.B. 14500", inputMode: "numeric" }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: TM } }, "km")), fz.checks.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: TM, marginTop: 4 } }, "Letzter Stand: ", fz.checks[0].km.toLocaleString("de-DE"), " km (", new Date(fz.checks[0].date).toLocaleDateString("de-DE"), ")")), /* @__PURE__ */ React.createElement("button", { style: { ...S.btn, ...S.bP, width: "100%", fontSize: 15, padding: "14px" }, onClick: () => {
+      const next = new Date(fz.nextDue);
+      next.setDate(next.getDate() + fz.interval);
+      setUser((u) => ({ ...u, fzCheck: { ...fz, nextDue: next.toISOString().slice(0, 10), checks: [{ date: TODAY, km: (fz.checks[0]?.km || 0) + 800, kmPhoto: true, video: true }, ...fz.checks] } }));
+      setFzUploaded({ km: false, video: false });
+    } }, "\u2713 Fahrzeug-Check absenden"), fz.checks.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, "Meine Check-Historie"), fz.checks.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { ...S.card, marginBottom: 6, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13 } }, new Date(c.date).toLocaleDateString("de-DE")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T2 } }, c.km.toLocaleString("de-DE"), " km")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { ...S.badge, background: c.kmPhoto ? `${OK}12` : `${ERR}12`, color: c.kmPhoto ? OK : ERR } }, "\u{1F4F8} ", c.kmPhoto ? "\u2713" : "\u2717"), /* @__PURE__ */ React.createElement("span", { style: { ...S.badge, background: c.video ? `${OK}12` : `${ERR}12`, color: c.video ? OK : ERR } }, "\u{1F3A5} ", c.video ? "\u2713" : "\u2717"))))));
+  })(), tab === "pay" && React.createElement(React.Fragment, null,
+    React.createElement("h2", { style: { fontSize: 20, fontWeight: 800, margin: "0 0 4px" } }, "💰 Meine Abrechnungen"),
+    React.createElement("p", { style: { fontSize: 13, color: T2, margin: "0 0 20px" } }, "Offizielle Gutschriften von bee-doo PAY"),
+
+    // Login-Karte wenn noch nicht authentifiziert
+    !portalMaId && React.createElement("div", { style: { ...S.card, marginBottom: 16 } },
+      React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 12 } }, "🔐 Mit Kürzel + PIN anmelden"),
+      React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 } },
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 10, color: TM, fontWeight: 600, textTransform: "uppercase", marginBottom: 4 } }, "Kürzel"),
+          React.createElement("input", {
+            value: portalKuerzel,
+            onChange: e => setPortalKuerzel(e.target.value),
+            placeholder: "z.B. JPf",
+            style: { ...S.inp, width: "100%" }
+          })
+        ),
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 10, color: TM, fontWeight: 600, textTransform: "uppercase", marginBottom: 4 } }, "PIN"),
+          React.createElement("input", {
+            value: portalPin,
+            onChange: e => setPortalPin(e.target.value),
+            placeholder: "z.B. JPF2026",
+            type: "password",
+            onKeyDown: e => e.key === "Enter" && doPortalLogin(),
+            style: { ...S.inp, width: "100%" }
+          })
+        )
+      ),
+      portalError && React.createElement("div", { style: { color: ERR, fontSize: 11, marginBottom: 8 } }, "⚠️ ", portalError),
+      React.createElement("button", {
+        onClick: doPortalLogin,
+        style: { ...S.btn, ...S.bP, width: "100%", padding: "10px" }
+      }, "🔓 Abrechnungen laden"),
+      React.createElement("div", { style: { marginTop: 10, fontSize: 10, color: TM, textAlign: "center" } }, "PIN = Dein Kürzel (Großbuchstaben) + 2026 · Beispiel: JPF2026")
+    ),
+
+    // Lade-Spinner
+    sbDocsLoading && React.createElement("div", { style: { textAlign: "center", padding: 30, color: T2 } }, "⏳ Lade Abrechnungen..."),
+
+    // Docs geladen
+    portalMaId && !sbDocsLoading && React.createElement(React.Fragment, null,
+      // Stats-Karte
+      React.createElement("div", { style: { ...S.card, marginBottom: 16, display: "flex", gap: 20, flexWrap: "wrap" } },
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 10, color: TM, fontWeight: 600, textTransform: "uppercase" } }, "Abrechnungen"),
+          React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: T2 } }, sbDocs ? sbDocs.length : 0)
+        ),
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 10, color: TM, fontWeight: 600, textTransform: "uppercase" } }, "Gesamt Netto"),
+          React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: OK } },
+            sbDocs ? sbDocs.reduce((s,d)=>s+(+d.netto_betrag||0),0).toLocaleString("de-DE") + " €" : "–"
+          )
+        ),
+        unread > 0 && React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 10, color: TM, fontWeight: 600, textTransform: "uppercase" } }, "Neu"),
+          React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: WARN } }, unread)
+        )
+      ),
+
+      // Dokument-Liste
+      sbDocs && sbDocs.length === 0 && React.createElement("div", { style: { textAlign: "center", padding: 40, color: TM } },
+        "Noch keine Abrechnungen verfügbar. Wende dich ans Büro."
+      ),
+
+      sbDocs && sbDocs.map((doc) => {
+        const isNew = doc.status === "erstellt";
+        const moName = MON[doc.monat] || doc.monat;
+        return React.createElement("div", {
+          key: doc.id,
+          style: { ...S.card, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center",
+            borderLeft: isNew ? "3px solid " + WARN : "3px solid transparent",
+            background: isNew ? C2 : C1
+          }
+        },
+          React.createElement("div", null,
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
+              React.createElement("span", { style: { fontWeight: 700, fontSize: 15 } }, moName + " " + doc.jahr),
+              isNew && React.createElement("span", { style: {
+                background: WARN + "20", color: WARN, border: "1px solid " + WARN + "30",
+                borderRadius: 4, padding: "1px 7px", fontSize: 9, fontWeight: 700
+              } }, "NEU"),
+              doc.status === "gelesen" && React.createElement("span", { style: {
+                background: INF + "15", color: INF, borderRadius: 4, padding: "1px 7px", fontSize: 9
+              } }, "gelesen"),
+              doc.status === "heruntergeladen" && React.createElement("span", { style: {
+                background: OK + "15", color: OK, borderRadius: 4, padding: "1px 7px", fontSize: 9
+              } }, "✓ heruntergeladen")
+            ),
+            React.createElement("div", { style: { fontSize: 11, color: T2 } },
+              "Gutschrift ", doc.beleg_nr,
+              " · Brutto: ", (+doc.gesamt_betrag||0).toLocaleString("de-DE"), " €"
+            ),
+            React.createElement("div", { style: { fontSize: 10, color: TM, marginTop: 2 } },
+              "Erstellt: ", new Date(doc.erstellt_am).toLocaleDateString("de-DE")
+            )
+          ),
+          React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 } },
+            React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: OK } },
+              (+doc.netto_betrag||0).toLocaleString("de-DE"), " €"
+            ),
+            React.createElement("button", {
+              onClick: () => openPDF(doc),
+              style: { ...S.btn, background: Y + "18", border: "1px solid " + Y + "30", color: Y, padding: "6px 14px", fontSize: 11, fontWeight: 700 }
+            }, "📄 Gutschrift öffnen")
+          )
+        );
+      })
+    )
+  ), tab === "rechner" && (() => {
+    const isScout = user.role === "scout";
+    const scoutProv = isH ? { lead: 50, termin: 100, wahrgenommen: 100, anlage: 200 } : { fixGehalt: 2200, lead: 30, termin: 50, wahrgenommen: 50, anlage: 100 };
+    const vertriebProv = isH ? { basis: 1500, staffel: 1700, staffelAb: 10, eigenlead: 800, empfehlung: 500, speicher: 200, zeroBonus: 100 } : { fixGehalt: 2800, basis: 800, staffel: 1e3, staffelAb: 8 };
+    const prov = isScout ? scoutProv : vertriebProv;
+    const c_ = (k, v) => setCalc((d) => ({ ...d, [k]: v === "" ? "" : Number(v.toString().replace(/[^0-9]/g, "")) }));
+    let total = 0;
+    let breakdown = [];
+    if (isScout) {
+      const lP = (calc.leads || 0) * prov.lead;
+      const tP = (calc.termine || 0) * prov.termin;
+      const wP = (calc.wahrgenommen || 0) * prov.wahrgenommen;
+      const aP = (calc.anlagen || 0) * prov.anlage;
+      breakdown = [
+        { label: `${calc.leads || 0} Leads \xD7 ${prov.lead} \u20AC`, value: lP },
+        { label: `${calc.termine || 0} Termine \xD7 ${prov.termin} \u20AC`, value: tP },
+        { label: `${calc.wahrgenommen || 0} Wahrgenommen \xD7 ${prov.wahrgenommen} \u20AC`, value: wP },
+        { label: `${calc.anlagen || 0} Anlagen \xD7 ${prov.anlage} \u20AC`, value: aP }
+      ];
+      if (!isH) breakdown.unshift({ label: "Fixgehalt", value: prov.fixGehalt });
+      total = breakdown.reduce((s, b) => s + b.value, 0);
+    } else {
+      const n = calc.anlagen || 0;
+      const rate = n >= (prov.staffelAb || 10) ? prov.staffel : prov.basis;
+      const aP = n * rate;
+      breakdown = [
+        { label: `${n} Anlagen \xD7 ${rate} \u20AC ${n >= (prov.staffelAb || 10) ? "(Staffel!)" : "(Basis)"}`, value: aP }
+      ];
+      if (isH) {
+        const eP = (calc.eigenleads || 0) * (prov.eigenlead || 0);
+        const emP = (calc.empfehlungen || 0) * (prov.empfehlung || 0);
+        const sP = (calc.speicher || 0) * (prov.speicher || 0);
+        const zP = (calc.zero || 0) * (prov.zeroBonus || 0);
+        breakdown.push({ label: `${calc.eigenleads || 0} Eigenleads \xD7 ${prov.eigenlead} \u20AC`, value: eP });
+        breakdown.push({ label: `${calc.empfehlungen || 0} Empfehlungen \xD7 ${prov.empfehlung} \u20AC`, value: emP });
+        breakdown.push({ label: `${calc.speicher || 0} Speicher \xD7 ${prov.speicher} \u20AC`, value: sP });
+        breakdown.push({ label: `${calc.zero || 0} Zero% \xD7 ${prov.zeroBonus} \u20AC`, value: zP });
+      }
+      if (!isH) breakdown.unshift({ label: "Fixgehalt", value: prov.fixGehalt });
+      total = breakdown.reduce((s, b) => s + b.value, 0);
+    }
+    const fmtE = (v) => v.toLocaleString("de-DE") + " \u20AC";
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("h2", { style: { fontSize: 20, fontWeight: 800, margin: "0 0 6px" } }, "Provisionsrechner"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: T2, margin: "0 0 20px" } }, "Berechne dein m\xF6gliches Einkommen \u2013 trage deine Ziele ein."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 } }, isScout ? /* @__PURE__ */ React.createElement(React.Fragment, null, [{ l: "Leads / Monat", k: "leads", icon: "\u{1F3AF}" }, { l: "Termine / Monat", k: "termine", icon: "\u{1F4C5}" }, { l: "Wahrgenommen", k: "wahrgenommen", icon: "\u2705" }, { l: "Anlagen", k: "anlagen", icon: "\u2600\uFE0F" }].map((f) => /* @__PURE__ */ React.createElement("div", { key: f.k, style: { ...S.card, padding: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T2, fontWeight: 600, marginBottom: 6 } }, f.icon, " ", f.l), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "text",
+        inputMode: "numeric",
+        value: calc[f.k] ?? "",
+        onChange: (e) => c_(f.k, e.target.value),
+        style: { background: C2, border: `1.5px solid ${BD}`, borderRadius: 10, padding: "10px 14px", color: TX, fontSize: 20, fontWeight: 800, textAlign: "center", width: "100%", boxSizing: "border-box", outline: "none" }
+      }
+    )))) : /* @__PURE__ */ React.createElement(React.Fragment, null, [
+      { l: "Anlagen / Monat", k: "anlagen", icon: "\u2600\uFE0F" },
+      ...isH ? [
+        { l: "Eigenleads", k: "eigenleads", icon: "\u{1F3AF}" },
+        { l: "Empfehlungen", k: "empfehlungen", icon: "\u{1F91D}" },
+        { l: "Speichererweiterung", k: "speicher", icon: "\u{1F50B}" },
+        { l: "Zero% Finanzierung", k: "zero", icon: "\u{1F4B3}" }
+      ] : []
+    ].map((f) => /* @__PURE__ */ React.createElement("div", { key: f.k, style: { ...S.card, padding: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T2, fontWeight: 600, marginBottom: 6 } }, f.icon, " ", f.l), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "text",
+        inputMode: "numeric",
+        value: calc[f.k] ?? "",
+        onChange: (e) => c_(f.k, e.target.value),
+        style: { background: C2, border: `1.5px solid ${BD}`, borderRadius: 10, padding: "10px 14px", color: TX, fontSize: 20, fontWeight: 800, textAlign: "center", width: "100%", boxSizing: "border-box", outline: "none" }
+      }
+    ))))), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, padding: 20, borderColor: `${Y}40`, background: `${Y}06` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: Y, marginBottom: 12 } }, "\u{1F4CA} Hochrechnung Monat"), breakdown.filter((b) => b.value > 0).map((b, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${BD}08` } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: T2 } }, b.label), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, fmtE(b.value)))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", padding: "12px 0 0", marginTop: 8, borderTop: `2px solid ${Y}30` } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16, fontWeight: 800 } }, "Gesamt"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 22, fontWeight: 800, color: Y } }, fmtE(total)))), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, padding: 16, marginTop: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: T2 } }, "\u{1F4C5} Jahreshochrechnung (\xD7 12)"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18, fontWeight: 800, color: OK } }, fmtE(total * 12)))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16, padding: 12, background: `${INF}08`, borderRadius: 10, border: `1px solid ${INF}15`, fontSize: 11, color: T2, lineHeight: 1.5 } }, "\u{1F4A1} Dies ist eine Sch\xE4tzung basierend auf deinem aktuellen Provisionsmodell. Tats\xE4chliche Auszahlungen k\xF6nnen abweichen. ", !isH && "Abz\xFCge (Steuern, SV) sind nicht ber\xFCcksichtigt.", " ", isH && "Als Selbstst\xE4ndiger bist du selbst f\xFCr Steuern und SV verantwortlich."));
+  })(), tab === "profil" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("h2", { style: { fontSize: 20, fontWeight: 800, margin: 0 } }, "Profil & Einsatz"), editing !== "profil" ? /* @__PURE__ */ React.createElement("button", { onClick: () => startEdit("profil"), style: { ...S.btn, ...S.bP, ...S.bSm } }, "\u270F\uFE0F Bearbeiten") : /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement("button", { onClick: saveEdit, style: { ...S.btn, ...S.bSm, ...S.bOK } }, "\u2713 Speichern"), /* @__PURE__ */ React.createElement("button", { onClick: cancelEdit, style: { ...S.btn, ...S.bSm, ...S.bG } }, "Abbrechen"))), editing !== "profil" ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: TM, marginBottom: 10 } }, "VERF\xDCGBARKEIT & EINSATZ"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, [
+    { l: "Startdatum", v: user.startdatum ? new Date(user.startdatum).toLocaleDateString("de-DE") : "\u2014" },
+    { l: "Umfang", v: user.umfang || "\u2014" },
+    { l: "Wochentage", v: (user.wochentage || []).join(", ") },
+    { l: "Radius", v: user.radius ? `${user.radius} km` : "\u2014" },
+    { l: "Fahrzeug", v: user.fahrzeug || "\u2014" },
+    { l: "F\xFChrerschein", v: user.fuehrerschein || "\u2014" }
+  ].map((x) => /* @__PURE__ */ React.createElement("div", { key: x.l, style: { padding: "6px 10px", background: C2, borderRadius: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: TM, fontWeight: 600, textTransform: "uppercase" } }, x.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12 } }, x.v)))), (user.einsatzgebiet || []).length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: TM, fontWeight: 600, textTransform: "uppercase", marginBottom: 4 } }, "Einsatzgebiet"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } }, user.einsatzgebiet.map((e) => /* @__PURE__ */ React.createElement("span", { key: e, style: { ...S.badge, background: `${PUR}12`, color: PUR, fontSize: 10 } }, e))))), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: TM, marginBottom: 10 } }, "SPRACHEN & GER\xC4TE"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 } }, (user.sprachen || []).map((s) => /* @__PURE__ */ React.createElement("span", { key: s, style: { ...S.badge, background: `${TEAL}12`, color: TEAL, fontSize: 10 } }, s))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } }, (user.geraete || []).map((g) => /* @__PURE__ */ React.createElement("span", { key: g, style: { ...S.badge, background: `${ORANGE}12`, color: ORANGE, fontSize: 10 } }, g)))), /* @__PURE__ */ React.createElement("div", { style: { ...S.card } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: TM, marginBottom: 10 } }, "KLEIDERGR\xD6SSEN"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, [
+    { l: "Hemd", v: user.groesse_hemd },
+    { l: "Jacke", v: user.groesse_jacke }
+  ].map((x) => /* @__PURE__ */ React.createElement("div", { key: x.l, style: { padding: "8px 10px", background: C2, borderRadius: 8, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: TM, fontWeight: 600, textTransform: "uppercase" } }, x.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: Y, marginTop: 2 } }, x.v || "\u2014")))))) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Umfang"), /* @__PURE__ */ React.createElement("select", { style: S.sel, value: draft.umfang || "", onChange: (e) => d_("umfang", e.target.value) }, ["Vollzeit (40h+)", "Teilzeit (20-30h)", "Minijob / Nebent\xE4tigkeit", "Flexibel / nach Bedarf"].map((o) => /* @__PURE__ */ React.createElement("option", { key: o }, o)))), /* @__PURE__ */ React.createElement(Field, { label: "Radius (km)", value: draft.radius, onChange: (v) => d_("radius", v), inputMode: "numeric" })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Fahrzeug"), /* @__PURE__ */ React.createElement("select", { style: S.sel, value: draft.fahrzeug || "", onChange: (e) => d_("fahrzeug", e.target.value) }, ["Ja, eigenes Fahrzeug", "Ja, Firmenwagen gew\xFCnscht", "Nein, \xD6PNV", "Nein, Fahrrad/E-Bike"].map((o) => /* @__PURE__ */ React.createElement("option", { key: o }, o)))), /* @__PURE__ */ React.createElement(Field, { label: "Kennzeichen", value: draft.kennzeichen, onChange: (v) => d_("kennzeichen", v), placeholder: "BI-AB 1234" })), /* @__PURE__ */ React.createElement("div", { style: S.sec }, "\u{1F454} Kleidergr\xF6\xDFen"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, [
+    { l: "Hemd / Polo", k: "groesse_hemd" },
+    { l: "Jacke / Softshell", k: "groesse_jacke" }
+  ].map((f) => /* @__PURE__ */ React.createElement("div", { key: f.k }, /* @__PURE__ */ React.createElement("label", { style: S.label }, f.l), /* @__PURE__ */ React.createElement("select", { style: S.sel, value: draft[f.k] || "", onChange: (e) => d_(f.k, e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014"), ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL"].map((o) => /* @__PURE__ */ React.createElement("option", { key: o }, o))))))))));
+}
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(/* @__PURE__ */ React.createElement(App, null));
+</script>
+</body>
+</html>
