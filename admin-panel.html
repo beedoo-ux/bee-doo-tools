@@ -1,0 +1,1840 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>bee-doo · Scout Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Syne',sans-serif;background:#08090d;color:#e8e9ef;overflow-x:hidden}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#08090d}::-webkit-scrollbar-thumb{background:#252530;border-radius:2px}
+button{font-family:'Syne',sans-serif;cursor:pointer;border:none;outline:none}
+input,select,textarea{font-family:'Syne',sans-serif;outline:none}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes countUp{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+.nav-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 16px;border-radius:8px;background:transparent;color:#555;font-size:13px;font-weight:600;letter-spacing:.3px;transition:all .15s;border:none;cursor:pointer;text-align:left}
+.nav-btn:hover{background:rgba(255,107,53,.08);color:#bbb}
+.nav-btn.active{background:rgba(255,107,53,.14);color:#FF6B35;border-left:3px solid #FF6B35;padding-left:13px}
+.card{background:#111218;border:1px solid #1c1d26;border-radius:12px;transition:border-color .15s}
+.card:hover{border-color:#252530}
+.btn-primary{background:#FF6B35;color:#fff;padding:9px 18px;border-radius:8px;font-weight:700;font-size:13px;transition:all .15s;border:none;cursor:pointer;font-family:'Syne',sans-serif}
+.btn-primary:hover{background:#ff8255;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-secondary{background:#1c1d26;color:#777;padding:9px 18px;border-radius:8px;font-weight:600;font-size:13px;border:1px solid #252530;transition:all .15s;cursor:pointer;font-family:'Syne',sans-serif}
+.btn-secondary:hover{border-color:#FF6B35;color:#FF6B35}
+.btn-danger{background:rgba(239,68,68,.12);color:#ef4444;padding:6px 12px;border-radius:7px;font-weight:600;font-size:11px;border:1px solid rgba(239,68,68,.2);transition:all .15s;cursor:pointer;font-family:'Syne',sans-serif}
+.btn-danger:hover{background:rgba(239,68,68,.22)}
+.btn-warn{background:rgba(245,158,11,.12);color:#f59e0b;padding:6px 12px;border-radius:7px;font-weight:600;font-size:11px;border:1px solid rgba(245,158,11,.2);transition:all .15s;cursor:pointer;font-family:'Syne',sans-serif}
+.btn-warn:hover{background:rgba(245,158,11,.22)}
+.input-field{background:#0d0e14;border:1px solid #1c1d26;color:#e8e9ef;border-radius:8px;padding:9px 13px;font-size:13px;width:100%;transition:border-color .15s}
+.input-field:focus{border-color:#FF6B35}
+select.input-field option{background:#0d0e14}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.3px}
+.badge-green{background:rgba(52,211,153,.12);color:#34d399}
+.badge-orange{background:rgba(251,146,60,.12);color:#fb923c}
+.badge-red{background:rgba(239,68,68,.12);color:#ef4444}
+.badge-blue{background:rgba(96,165,250,.12);color:#60a5fa}
+.badge-purple{background:rgba(167,139,250,.12);color:#a78bfa}
+.progress{background:#1c1d26;border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;border-radius:4px;transition:width .6s ease}
+.table-row{border-bottom:1px solid #13141a;transition:background .1s}
+.table-row:hover{background:#0d0e14}
+.mono{font-family:'JetBrains Mono',monospace}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+.modal{background:#111218;border:1px solid #252530;border-radius:14px;padding:28px;width:480px;max-width:95vw;animation:fadeIn .2s ease;max-height:90vh;overflow-y:auto}
+.notif{position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:700;animation:fadeIn .25s ease;pointer-events:none;max-width:320px}
+.funnel-bar{position:relative;border-radius:6px;transition:width .6s ease;display:flex;align-items:center;padding:0 12px}
+.tooltip{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1c1d26;border:1px solid #252530;border-radius:6px;padding:6px 10px;font-size:11px;white-space:nowrap;pointer-events:none;z-index:100}
+.drag-area{border:2px dashed #252530;border-radius:10px;transition:all .2s;min-height:60px;padding:10px}
+.drag-area.drag-over{border-color:#FF6B35;background:rgba(255,107,53,.06)}
+#map{width:100%;height:100%}
+.map-toolbar{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;z-index:10;pointer-events:none}
+.map-toolbar > *{pointer-events:all}
+.map-tool-btn{background:rgba(8,9,13,.92);border:1px solid #252530;color:#ccc;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;backdrop-filter:blur(8px);transition:all .15s;cursor:pointer;font-family:'Syne',sans-serif}
+.map-tool-btn:hover{border-color:#FF6B35;color:#FF6B35}
+.map-tool-btn.active{background:rgba(255,107,53,.2);border-color:#FF6B35;color:#FF6B35}
+.tab-btn{padding:7px 16px;border-radius:7px;font-size:12px;font-weight:700;border:1px solid #1c1d26;cursor:pointer;transition:all .15s;font-family:'Syne',sans-serif;background:transparent;color:#555}
+.tab-btn.active{background:rgba(255,107,53,.15);border-color:rgba(255,107,53,.4);color:#FF6B35}
+.tab-btn:hover:not(.active){border-color:#252530;color:#aaa}
+.gps-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;animation:pulse 2s infinite}
+</style>
+</head>
+<body>
+<a href="index.html" style="position:fixed;top:12px;left:12px;z-index:9999;background:#111218;border:1px solid #252530;color:#555;padding:6px 13px;border-radius:7px;font-size:12px;font-weight:600;text-decoration:none;transition:all .15s" onmouseover="this.style.color='#FF6B35';this.style.borderColor='#FF6B35'" onmouseout="this.style.color='#555';this.style.borderColor='#252530'">← Launcher</a>
+<div id="root"></div>
+<script>
+const SUPABASE_URL = "https://hqzpemfaljxcysyqssng.supabase.co";
+const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.VGFg4LhH_y5EBE3vQ8-EJxqJq_qFzJ0H0hR6tS-WsJ8";
+const GOOGLE_KEY = "AIzaSyB6GngBnHzfITUnkOHsFKgO9SwmKbRvGA8";
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ── SUPABASE ─────────────────────────────────────────────────────
+const SB_HDR = () => ({ "apikey": SUPABASE_SERVICE_KEY, "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" });
+const sbGet = async (table, params="") => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}${params?"?"+params:""}`,{headers:SB_HDR()}); const t=await r.text(); return t?JSON.parse(t):[]; };
+const sbPost = async (table, body) => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{method:"POST",headers:SB_HDR(),body:JSON.stringify(body)}); const t=await r.text(); return t?JSON.parse(t):[]; };
+const sbPatch = async (table, id, body) => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`,{method:"PATCH",headers:SB_HDR(),body:JSON.stringify(body)}); const t=await r.text(); return t?JSON.parse(t):[]; };
+const sbDel = async (table, id) => fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`,{method:"DELETE",headers:SB_HDR()});
+const sbDelWhere = async (table, col, val) => fetch(`${SUPABASE_URL}/rest/v1/${table}?${col}=eq.${val}`,{method:"DELETE",headers:SB_HDR()});
+
+// ── HELPERS ──────────────────────────────────────────────────────
+const SCOUT_COLORS = ["#FF6B35","#4ECDC4","#45B7D1","#A78BFA","#34D399","#F59E0B","#F472B6","#60A5FA","#FB923C","#2DD4BF","#818CF8","#E879F9"];
+function hexRgba(hex,a){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `rgba(${r},${g},${b},${a})`;}
+const initials = s => (s||"?").split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
+const fmtDate = d => d ? new Date(d).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"}) : "—";
+const fmtTime = d => d ? new Date(d).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "—";
+
+// ── NOTIF ────────────────────────────────────────────────────────
+function Notif({msg,type}){
+  const s={ok:{bg:"#0d2318",bd:"#34d399",c:"#34d399"},err:{bg:"#1a0d0d",bd:"#ef4444",c:"#ef4444"},warn:{bg:"#1a1000",bd:"#f59e0b",c:"#f59e0b"}}[type||"ok"];
+  return React.createElement("div",{className:"notif",style:{background:s.bg,border:`1px solid ${s.bd}`,color:s.c}},
+    (type==="ok"?"✓ ":type==="err"?"✕ ":"⚠ ")+msg);
+}
+
+// ── APP ───────────────────────────────────────────────────────────
+function App(){
+  const [view,setView]=useState("dashboard");
+  const [scouts,setScouts]=useState([]);
+  const [gebiete,setGebiete]=useState([]);
+  const [zuweisungen,setZuweisungen]=useState([]);
+  const [qualifizierungen,setQualifizierungen]=useState([]);
+  const [sessions,setSessions]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [notif,setNotif]=useState(null);
+  const [selectedScout,setSelectedScout]=useState(null);
+
+  const showNotif=(msg,type="ok")=>{setNotif({msg,type});setTimeout(()=>setNotif(null),3500);};
+
+  const [vertriebler,setVertriebler]=useState([]);
+  const [montagepartner,setMontagepartner]=useState([]);
+
+  const loadData=async()=>{
+    setLoading(true);
+    try{
+      const [scouterData,gebieteData,zuwData,qualData,sessData,vertData,montData]=await Promise.all([
+        sbGet("scouter","select=*&order=created_at.asc"),
+        sbGet("gebiete","select=*&order=created_at.desc"),
+        sbGet("zuweisungen","select=*&active=eq.true"),
+        sbGet("qualifizierungen","select=id,scouter_id,status,created_at,lat,lng,termin_datum"),
+        sbGet("sessions","select=*&order=started_at.desc&limit=200").catch(()=>[]),
+        sbGet("vertriebler_standorte","select=*&aktiv=eq.true").catch(()=>[]),
+        sbGet("montagepartner","select=*&aktiv=eq.true").catch(()=>[]),
+      ]);
+      // Auth users for pending
+      const authResp=await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=100`,{headers:{"apikey":SUPABASE_SERVICE_KEY,"Authorization":`Bearer ${SUPABASE_SERVICE_KEY}`}});
+      const authData=await authResp.json();
+      const authUsers=authData.users||[];
+      const scouterIds=new Set((scouterData||[]).map(s=>s.id));
+      const pending=authUsers.filter(u=>!scouterIds.has(u.id)).map(u=>({id:u.id,name:u.user_metadata?.name||u.email,email:u.email,phone:u.user_metadata?.phone||"",active:false,pending:true,created_at:u.created_at}));
+      // Merge email into scouter
+      const scoutersWithEmail=(scouterData||[]).map(s=>{const au=authUsers.find(u=>u.id===s.id);return{...s,email:au?.email||""};});
+      setScouts([...scoutersWithEmail,...pending]);
+      setGebiete(gebieteData||[]);
+      setZuweisungen(zuwData||[]);
+      setQualifizierungen(qualData||[]);
+      setSessions(sessData||[]);
+      setVertriebler(vertData||[]);
+      setMontagepartner(montData||[]);
+    }catch(e){console.error(e);showNotif("Verbindungsfehler zu Supabase","err");}
+    setLoading(false);
+  };
+  useEffect(()=>{loadData();},[]);
+
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+  const pendingCount=scouts.filter(s=>s.pending).length;
+
+  const navItems=[
+    {id:"dashboard",icon:"◈",label:"Dashboard"},
+    {id:"scouts",icon:"◉",label:"Scouts",badge:pendingCount||null},
+    {id:"map",icon:"◎",label:"Karte & Gebiete"},
+    {id:"strategie",icon:"🗺",label:"Strategie-Karte"},
+    {id:"heatmap",icon:"⬡",label:"Aktivitäts-Karte"},
+    {id:"gps",icon:"◍",label:"GPS Tracking"},
+    {id:"funnel",icon:"◭",label:"Conversion Funnel"},
+    {id:"transfer",icon:"⇄",label:"Gebietswechsel"},
+    {id:"gebiete",icon:"▣",label:"Gebiete"},
+    {id:"performance",icon:"◇",label:"Performance"},
+  ];
+
+  return React.createElement("div",{style:{display:"flex",height:"100vh",overflow:"hidden"}},
+    // Sidebar
+    React.createElement("aside",{style:{width:210,background:"#0a0b10",borderRight:"1px solid #1c1d26",display:"flex",flexDirection:"column",flexShrink:0}},
+      React.createElement("div",{style:{padding:"22px 18px 18px",borderBottom:"1px solid #1c1d26"}},
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10}},
+          React.createElement("div",{style:{width:34,height:34,background:"linear-gradient(135deg,#FF6B35,#FF9F1C)",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}},"🐝"),
+          React.createElement("div",null,
+            React.createElement("div",{style:{fontSize:15,fontWeight:800,letterSpacing:"-.5px"}},"bee-doo"),
+            React.createElement("div",{style:{fontSize:10,color:"#333",letterSpacing:"2px",textTransform:"uppercase",marginTop:1}},"Scout Admin v2")
+          )
+        )
+      ),
+      React.createElement("nav",{style:{padding:"10px 8px",flex:1,overflowY:"auto"}},
+        ...navItems.map(item=>
+          React.createElement("button",{key:item.id,className:`nav-btn ${view===item.id?"active":""}`,onClick:()=>setView(item.id)},
+            React.createElement("span",{style:{fontSize:14}}),
+            React.createElement("span",{style:{fontSize:14,minWidth:18}}),
+            item.icon+" ",
+            React.createElement("span",{style:{flex:1,marginLeft:4}}),
+            React.createElement("span",{style:{flex:1}}),
+            item.label,
+            item.badge&&React.createElement("span",{style:{background:"#FF6B35",color:"#fff",borderRadius:"50%",width:17,height:17,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,flexShrink:0}},item.badge)
+          )
+        )
+      ),
+      React.createElement("div",{style:{padding:"14px 18px",borderTop:"1px solid #1c1d26"}},
+        React.createElement("div",{style:{fontSize:10,color:"#333",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:8,fontWeight:700}},"Live Status"),
+        React.createElement("div",{style:{fontSize:12,color:"#555",lineHeight:2}},
+          React.createElement("div",null,"Scouts aktiv: ",React.createElement("span",{style:{color:"#34d399"}},activeScouts.length)),
+          React.createElement("div",null,"Pending: ",React.createElement("span",{style:{color:pendingCount?"#f59e0b":"#333"}},pendingCount)),
+          React.createElement("div",null,"Gebiete: ",React.createElement("span",{style:{color:"#60a5fa"}},gebiete.length)),
+        ),
+        React.createElement("button",{onClick:loadData,style:{marginTop:10,width:"100%",background:"#1c1d26",border:"1px solid #252530",color:"#555",padding:"6px",borderRadius:7,fontSize:11,cursor:"pointer",fontFamily:"'Syne',sans-serif",fontWeight:700}},loading?"…":"↺ Refresh")
+      )
+    ),
+    // Main
+    React.createElement("main",{style:{flex:1,overflow:"auto",padding:"28px"}},
+      loading&&view==="dashboard"
+        ? React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",height:"60vh",flexDirection:"column",gap:16}},
+            React.createElement("div",{style:{width:32,height:32,border:"3px solid #1c1d26",borderTopColor:"#FF6B35",borderRadius:"50%",animation:"spin 1s linear infinite"}}),
+            React.createElement("div",{style:{color:"#444",fontSize:13}},"Verbinde mit Supabase…")
+          )
+        : [
+          view==="dashboard"&&React.createElement(Dashboard,{key:"d",scouts,gebiete,zuweisungen,qualifizierungen,setView,setSelectedScout}),
+          view==="scouts"&&React.createElement(ScoutsView,{key:"s",scouts,gebiete,zuweisungen,setScouts,selectedScout,setSelectedScout,setView,showNotif,reload:loadData}),
+          view==="map"&&React.createElement(MapView,{key:"m",scouts,gebiete,zuweisungen,setGebiete,setZuweisungen,showNotif,reload:loadData}),
+          view==="strategie"&&React.createElement(StrategieKarte,{key:"sk",scouts,gebiete,zuweisungen,qualifizierungen,vertriebler,montagepartner,reload:loadData,showNotif}),
+          view==="heatmap"&&React.createElement(HeatmapView,{key:"h",scouts,gebiete,zuweisungen,qualifizierungen}),
+          view==="gps"&&React.createElement(GpsView,{key:"g",scouts,sessions,qualifizierungen,reload:loadData}),
+          view==="funnel"&&React.createElement(FunnelView,{key:"f",scouts,gebiete,zuweisungen,qualifizierungen}),
+          view==="transfer"&&React.createElement(TransferView,{key:"t",scouts,gebiete,zuweisungen,showNotif,reload:loadData}),
+          view==="gebiete"&&React.createElement(GebieteView,{key:"gv",scouts,gebiete,zuweisungen,showNotif,reload:loadData}),
+          view==="performance"&&React.createElement(PerformanceView,{key:"p",scouts,gebiete,zuweisungen,qualifizierungen}),
+        ]
+    ),
+    notif&&React.createElement(Notif,notif)
+  );
+}
+
+// ── DASHBOARD ────────────────────────────────────────────────────
+function Dashboard({scouts,gebiete,zuweisungen,qualifizierungen,setView,setSelectedScout}){
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+  const pendingScouts=scouts.filter(s=>s.pending);
+  const qualified=qualifizierungen.filter(q=>q.status==="qualified").length;
+  const total=qualifizierungen.length;
+  const conv=total>0?((qualified/total)*100).toFixed(1):0;
+
+  const kpis=[
+    {label:"Aktive Scouts",value:activeScouts.length,sub:`${pendingScouts.length} ausstehend`,color:"#FF6B35",icon:"👥"},
+    {label:"Gebiete",value:gebiete.length,sub:`${zuweisungen.length} zugewiesen`,color:"#60A5FA",icon:"🗺️"},
+    {label:"Qualifizierungen",value:total,sub:"Gesamt erfasst",color:"#A78BFA",icon:"🏠"},
+    {label:"Termine/Leads",value:qualified,sub:`${conv}% Conv.Rate`,color:"#34D399",icon:"📅"},
+  ];
+
+  const getScoutStats=id=>{
+    const myZ=zuweisungen.filter(z=>z.scouter_id===id);
+    const myQ=qualifizierungen.filter(q=>q.scouter_id===id);
+    return{gebiete:myZ.length,qual:myQ.length,termine:myQ.filter(q=>q.status==="qualified").length};
+  };
+
+  return React.createElement("div",null,
+    React.createElement("div",{style:{marginBottom:28}},
+      React.createElement("h1",{style:{fontSize:26,fontWeight:800,letterSpacing:"-1px"}},"Dashboard"),
+      React.createElement("p",{style:{color:"#555",fontSize:13,marginTop:4}},"Echtzeit-Übersicht · Supabase Live")
+    ),
+    React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:28}},
+      ...kpis.map((k,i)=>React.createElement("div",{key:i,className:"card",style:{padding:"18px 20px",animation:`countUp .4s ease ${i*.1}s both`}},
+        React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"start",marginBottom:10}},
+          React.createElement("span",{style:{fontSize:22}}),k.icon,
+          React.createElement("div",{style:{width:7,height:7,borderRadius:"50%",background:k.color,boxShadow:`0 0 10px ${k.color}`}})
+        ),
+        React.createElement("div",{style:{fontSize:30,fontWeight:800,letterSpacing:"-1px",color:k.color,fontFamily:"'JetBrains Mono',monospace"}},k.value),
+        React.createElement("div",{style:{fontSize:13,fontWeight:600,marginTop:3}}),k.label,
+        React.createElement("div",{style:{fontSize:11,color:"#444",marginTop:2}}),k.sub
+      ))
+    ),
+    pendingScouts.length>0&&React.createElement("div",{style:{background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.25)",borderRadius:10,padding:"16px 20px",display:"flex",alignItems:"center",gap:14,marginBottom:24,cursor:"pointer"},onClick:()=>setView("scouts")},
+      React.createElement("div",{style:{fontSize:22}},"⚠️"),
+      React.createElement("div",{style:{flex:1}},
+        React.createElement("div",{style:{fontWeight:700,color:"#f59e0b",fontSize:14}},`${pendingScouts.length} neue Scout-Registrierung${pendingScouts.length>1?"en":""}`),
+        React.createElement("div",{style:{fontSize:12,color:"#666",marginTop:2}},"Warten auf Freischaltung und Gebietszuweisung")
+      ),
+      React.createElement("button",{className:"btn-primary"},"Verwalten →")
+    ),
+    React.createElement("div",{className:"card",style:{padding:"22px 24px"}},
+      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}},
+        React.createElement("h2",{style:{fontSize:16,fontWeight:700}},"Scout Übersicht"),
+        React.createElement("button",{className:"btn-secondary",onClick:()=>setView("scouts")},"Alle →")
+      ),
+      React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:13}},
+        React.createElement("thead",null,
+          React.createElement("tr",null,
+            ...["Scout","Status","Gebiete","Qualif.","Termine","Conv.%"].map(h=>
+              React.createElement("th",{key:h,style:{textAlign:"left",padding:"7px 12px",color:"#444",fontWeight:700,fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase",borderBottom:"1px solid #1c1d26"}},h)
+            )
+          )
+        ),
+        React.createElement("tbody",null,
+          ...activeScouts.map((s,i)=>{
+            const st=getScoutStats(s.id);
+            const color=SCOUT_COLORS[i%SCOUT_COLORS.length];
+            const conv=st.qual>0?((st.termine/st.qual)*100).toFixed(0):0;
+            return React.createElement("tr",{key:s.id,className:"table-row",style:{cursor:"pointer"},onClick:()=>{setSelectedScout(s.id);setView("scouts");}},
+              React.createElement("td",{style:{padding:"11px 12px"}},
+                React.createElement("div",{style:{display:"flex",alignItems:"center",gap:9}},
+                  React.createElement("div",{style:{width:30,height:30,borderRadius:"50%",background:color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff",flexShrink:0}},initials(s.name)),
+                  React.createElement("div",null,
+                    React.createElement("div",{style:{fontWeight:600}}),s.name||"—",
+                    React.createElement("div",{style:{color:"#444",fontSize:11}}),s.email
+                  )
+                )
+              ),
+              React.createElement("td",{style:{padding:"11px 12px"}},React.createElement("span",{className:"badge badge-green"},"● Aktiv")),
+              React.createElement("td",{style:{padding:"11px 12px",fontFamily:"'JetBrains Mono',monospace",color:"#60a5fa"}},st.gebiete),
+              React.createElement("td",{style:{padding:"11px 12px",fontFamily:"'JetBrains Mono',monospace",color:"#a78bfa"}},st.qual),
+              React.createElement("td",{style:{padding:"11px 12px",fontFamily:"'JetBrains Mono',monospace",color:"#34d399"}},st.termine),
+              React.createElement("td",{style:{padding:"11px 12px"}},
+                React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},
+                  React.createElement("div",{className:"progress",style:{width:50,height:5}}),
+                    React.createElement("div",{className:"progress-fill",style:{width:`${Math.min(100,conv)}%`,background:color}}),
+                  React.createElement("span",{style:{fontSize:11,color,fontFamily:"'JetBrains Mono',monospace"}}),conv+"%"
+                )
+              )
+            );
+          })
+        )
+      )
+    )
+  );
+}
+
+// ── SCOUTS VIEW ───────────────────────────────────────────────────
+function ScoutsView({scouts,gebiete,zuweisungen,setScouts,selectedScout,setSelectedScout,setView,showNotif,reload}){
+  const [showAdd,setShowAdd]=useState(false);
+  const [form,setForm]=useState({name:"",email:"",phone:""});
+  const [saving,setSaving]=useState(false);
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+  const pendingScouts=scouts.filter(s=>s.pending);
+
+  const approveScout=async s=>{
+    setSaving(true);
+    try{
+      await sbPost("scouter",{id:s.id,name:s.name||s.email,phone:s.phone||"",active:true});
+      showNotif(`${s.name||s.email} freigeschaltet!`);
+    }catch(e){
+      await sbPatch("scouter",s.id,{active:true});
+      showNotif("Scout freigeschaltet!");
+    }
+    await reload(); setSaving(false);
+  };
+
+  const addScout=async()=>{
+    if(!form.name||!form.email)return showNotif("Name + E-Mail erforderlich","err");
+    setSaving(true);
+    try{
+      const resp=await fetch(`${SUPABASE_URL}/auth/v1/admin/users`,{method:"POST",headers:{"apikey":SUPABASE_SERVICE_KEY,"Authorization":`Bearer ${SUPABASE_SERVICE_KEY}`,"Content-Type":"application/json"},body:JSON.stringify({email:form.email,password:"Scouting2025!",email_confirm:true,user_metadata:{name:form.name,phone:form.phone}})});
+      const user=await resp.json();
+      if(user.id){
+        await sbPost("scouter",{id:user.id,name:form.name,phone:form.phone,active:true});
+        showNotif(`Scout ${form.name} angelegt!`);
+        setForm({name:"",email:"",phone:""});setShowAdd(false);
+        await reload();
+      }else showNotif(user.message||"Fehler beim Anlegen","err");
+    }catch(e){showNotif("Fehler: "+e.message,"err");}
+    setSaving(false);
+  };
+
+  const getScoutZuw=id=>zuweisungen.filter(z=>z.scouter_id===id).map(z=>gebiete.find(g=>g.id===z.gebiet_id)).filter(Boolean);
+
+  return React.createElement("div",null,
+    React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}},
+      React.createElement("div",null,
+        React.createElement("h1",{style:{fontSize:26,fontWeight:800,letterSpacing:"-1px"}},"Scouts"),
+        React.createElement("p",{style:{color:"#555",fontSize:13,marginTop:4}},`${activeScouts.length} aktiv · ${pendingScouts.length} ausstehend`)
+      ),
+      React.createElement("button",{className:"btn-primary",onClick:()=>setShowAdd(!showAdd)},"+ Scout hinzufügen")
+    ),
+    showAdd&&React.createElement("div",{className:"card",style:{padding:22,marginBottom:22,borderColor:"#FF6B35"}},
+      React.createElement("div",{style:{fontSize:12,fontWeight:700,color:"#FF6B35",marginBottom:14}},"Neuen Scout anlegen"),
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:12,alignItems:"end"}},
+        ...[["name","Name *","Max Mustermann"],["email","E-Mail *","scout@bee-doo.de"],["phone","Telefon","0521-000000"]].map(([k,l,p])=>
+          React.createElement("div",{key:k},
+            React.createElement("label",{style:{fontSize:10,color:"#555",display:"block",marginBottom:5,letterSpacing:"1px",textTransform:"uppercase",fontWeight:700}},l),
+            React.createElement("input",{className:"input-field",value:form[k],onChange:e=>setForm(p=>({...p,[k]:e.target.value})),placeholder:p})
+          )
+        ),
+        React.createElement("button",{className:"btn-primary",disabled:saving,onClick:addScout},saving?"…":"Anlegen")
+      )
+    ),
+    pendingScouts.length>0&&React.createElement("div",{style:{marginBottom:24}},
+      React.createElement("div",{style:{fontSize:10,color:"#f59e0b",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:10}},"◌ Neue Registrierungen"),
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:10}},
+        ...pendingScouts.map(s=>React.createElement("div",{key:s.id,className:"card",style:{padding:"16px 20px",borderColor:"rgba(245,158,11,.3)",display:"flex",alignItems:"center",gap:14}},
+          React.createElement("div",{style:{width:42,height:42,borderRadius:"50%",background:"#f59e0b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#000"}},initials(s.name||s.email)),
+          React.createElement("div",{style:{flex:1}},
+            React.createElement("div",{style:{fontWeight:700,fontSize:15}}),s.name||s.email,
+            React.createElement("div",{style:{color:"#555",fontSize:12}}),s.email," · ",fmtDate(s.created_at)
+          ),
+          React.createElement("div",{style:{display:"flex",gap:8}},
+            React.createElement("button",{className:"btn-primary",disabled:saving,onClick:()=>approveScout(s)},"✓ Freischalten"),
+            React.createElement("button",{className:"btn-secondary",onClick:()=>setView("map")},"Gebiet →")
+          )
+        ))
+      )
+    ),
+    React.createElement("div",{style:{fontSize:10,color:"#555",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:12}},`● Aktive Scouts (${activeScouts.length})`),
+    React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}},
+      ...activeScouts.map((s,i)=>{
+        const color=SCOUT_COLORS[i%SCOUT_COLORS.length];
+        const myG=getScoutZuw(s.id);
+        const isSel=selectedScout===s.id;
+        return React.createElement("div",{key:s.id,className:"card",style:{padding:20,cursor:"pointer",borderColor:isSel?color:undefined},onClick:()=>setSelectedScout(isSel?null:s.id)},
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:14}},
+            React.createElement("div",{style:{width:44,height:44,borderRadius:"50%",background:`linear-gradient(135deg,${color},${color}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff",boxShadow:isSel?`0 0 18px ${color}44`:"none"}},initials(s.name)),
+            React.createElement("div",{style:{flex:1}},
+              React.createElement("div",{style:{fontWeight:700,fontSize:15}}),s.name||"—",
+              React.createElement("div",{style:{color:"#444",fontSize:12}}),s.email
+            ),
+            React.createElement("span",{className:"badge badge-green"},"● Aktiv")
+          ),
+          React.createElement("div",{style:{display:"flex",gap:8,marginBottom:14}},
+            ...[["Gebiete",myG.length,color],["Telefon",s.phone||"—","#888"]].map(([l,v,c])=>
+              React.createElement("div",{key:l,style:{flex:1,background:"#0d0e14",borderRadius:8,padding:"10px 12px",textAlign:"center"}},
+                React.createElement("div",{style:{fontSize:16,fontWeight:800,color:c,fontFamily:"'JetBrains Mono',monospace"}}),v,
+                React.createElement("div",{style:{fontSize:10,color:"#444",marginTop:2,letterSpacing:"1px",textTransform:"uppercase"}}),l
+              )
+            )
+          ),
+          myG.length>0&&React.createElement("div",{style:{paddingTop:12,borderTop:"1px solid #1c1d26"}},
+            React.createElement("div",{style:{fontSize:10,color:"#444",letterSpacing:"1px",textTransform:"uppercase",marginBottom:7}},"Gebiete"),
+            React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:5}},
+              ...myG.map(g=>React.createElement("span",{key:g.id,style:{background:hexRgba(color,.14),color,padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600}},g.name))
+            )
+          )
+        );
+      })
+    )
+  );
+}
+
+// ── MAP VIEW ──────────────────────────────────────────────────────
+function MapView({scouts,gebiete,zuweisungen,showNotif,reload}){
+  const mapRef=useRef(null);
+  const mapInst=useRef(null);
+  const dm=useRef(null);
+  const polys=useRef({});
+  const [drawMode,setDrawMode]=useState(false);
+  const [assignId,setAssignId]=useState("");
+  const [gebietName,setGebietName]=useState("");
+  const [unitMode,setUnitMode]=useState("500");
+  const [customUnits,setCustomUnits]=useState(500);
+  const [pendingPoly,setPendingPoly]=useState(null);
+  const [showModal,setShowModal]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+
+  useEffect(()=>{if(assignId===""&&activeScouts.length>0)setAssignId(activeScouts[0].id);},[activeScouts]);
+
+  const initMap=()=>{
+    if(!mapRef.current||mapInst.current)return;
+    const map=new google.maps.Map(mapRef.current,{center:{lat:52.0302,lng:8.5325},zoom:12,mapTypeId:"hybrid",mapTypeControl:false,streetViewControl:false,fullscreenControl:false});
+    mapInst.current=map;
+    const drawing=new google.maps.drawing.DrawingManager({drawingMode:null,drawingControl:false,polygonOptions:{strokeColor:"#FF6B35",strokeWeight:2,fillColor:"#FF6B35",fillOpacity:.2,editable:true}});
+    drawing.setMap(map);dm.current=drawing;
+    google.maps.event.addListener(drawing,"polygoncomplete",poly=>{drawing.setDrawingMode(null);setDrawMode(false);setPendingPoly(poly);setShowModal(true);});
+    drawAreas(map);
+  };
+
+  const drawAreas=map=>{
+    Object.values(polys.current).forEach(p=>p.setMap(null));polys.current={};
+    gebiete.forEach(g=>{
+      if(!g.polygon_coords)return;
+      let coords;try{coords=typeof g.polygon_coords==="string"?JSON.parse(g.polygon_coords):g.polygon_coords;}catch{return;}
+      const zuw=zuweisungen.find(z=>z.gebiet_id===g.id);
+      const scout=zuw?scouts.find(s=>s.id===zuw.scouter_id):null;
+      const idx=scout?scouts.filter(s=>s.active&&!s.pending).indexOf(scout):0;
+      const color=idx>=0?SCOUT_COLORS[idx%SCOUT_COLORS.length]:"#888";
+      const poly=new google.maps.Polygon({paths:coords.map(([lat,lng])=>({lat,lng})),strokeColor:color,strokeWeight:2,fillColor:color,fillOpacity:.2,map});
+      const iw=new google.maps.InfoWindow({content:`<div style="font-family:'Syne',sans-serif;padding:8px;min-width:180px"><b style="font-size:14px">${g.name}</b><br/><span style="font-size:12px;color:#666">${scout?"Scout: "+(scout.name||scout.email):"Nicht zugewiesen"}</span><br/><span style="font-size:12px;color:#666">${g.einheiten||500} Wohneinheiten</span></div>`});
+      poly.addListener("click",e=>{iw.setPosition(e.latLng);iw.open(map);});
+      polys.current[g.id]=poly;
+    });
+  };
+
+  useEffect(()=>{
+    if(window.google&&!mapInst.current){initMap();return;}
+    if(!window.google){
+      const s=document.createElement("script");
+      s.src=`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_KEY}&libraries=drawing,geometry,visualization`;
+      s.onload=()=>initMap();
+      document.head.appendChild(s);
+    }
+  },[]);
+  useEffect(()=>{if(mapInst.current)drawAreas(mapInst.current);},[gebiete,zuweisungen]);
+
+  const toggleDraw=()=>{
+    if(!dm.current)return;
+    const next=!drawMode;setDrawMode(next);
+    dm.current.setDrawingMode(next?google.maps.drawing.OverlayType.POLYGON:null);
+  };
+
+  const cancel=()=>{
+    if(pendingPoly){pendingPoly.setMap(null);setPendingPoly(null);}
+    setShowModal(false);setDrawMode(false);
+    if(dm.current)dm.current.setDrawingMode(null);
+  };
+
+  const save=async()=>{
+    if(!pendingPoly||!gebietName)return showNotif("Gebietsname erforderlich","err");
+    setSaving(true);
+    try{
+      const coords=pendingPoly.getPath().getArray().map(p=>[p.lat(),p.lng()]);
+      const einheiten=unitMode==="500"?500:parseInt(customUnits)||500;
+      const res=await sbPost("gebiete",{name:gebietName,einheiten,polygon_coords:JSON.stringify(coords),active:true});
+      const gid=Array.isArray(res)?res[0]?.id:res?.id;
+      if(!gid)throw new Error("Kein gebiet_id");
+      if(assignId)await sbPost("zuweisungen",{gebiet_id:gid,scouter_id:assignId,active:true});
+      pendingPoly.setMap(null);setPendingPoly(null);setShowModal(false);setGebietName("");
+      showNotif(`"${gebietName}" gespeichert!`);await reload();
+    }catch(e){showNotif("Fehler: "+e.message,"err");console.error(e);}
+    setSaving(false);
+  };
+
+  return React.createElement("div",null,
+    React.createElement("div",{style:{marginBottom:20}},
+      React.createElement("h1",{style:{fontSize:26,fontWeight:800,letterSpacing:"-1px"}},"Karte & Gebiete"),
+      React.createElement("p",{style:{color:"#555",fontSize:13,marginTop:4}},"Gebiete zeichnen → Scout-App zeigt sie sofort")
+    ),
+    React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 300px",gap:18,height:"calc(100vh - 160px)"}},
+      React.createElement("div",{style:{position:"relative",borderRadius:12,overflow:"hidden",border:"1px solid #1c1d26"}},
+        React.createElement("div",{ref:mapRef,id:"map"}),
+        React.createElement("div",{className:"map-toolbar"},
+          React.createElement("button",{className:`map-tool-btn ${drawMode?"active":""}`,onClick:toggleDraw},drawMode?"✕ Abbrechen":"✎ Gebiet zeichnen"),
+          drawMode&&React.createElement("div",{style:{background:"rgba(255,107,53,.15)",border:"1px solid rgba(255,107,53,.3)",color:"#FF6B35",padding:"7px 14px",borderRadius:8,fontSize:11,fontWeight:700,animation:"pulse 1.5s infinite",backdropFilter:"blur(8px)"}},"Klicken · Doppelklick zum Beenden")
+        )
+      ),
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:14,overflowY:"auto"}},
+        React.createElement("div",{className:"card",style:{padding:18}},
+          React.createElement("div",{style:{fontSize:10,color:"#FF6B35",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:14}},"Neues Gebiet"),
+          React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:10}},
+            React.createElement("div",null,
+              React.createElement("label",{style:{fontSize:10,color:"#555",display:"block",marginBottom:5,letterSpacing:"1px",textTransform:"uppercase",fontWeight:700}},"Zuweisen an"),
+              React.createElement("select",{className:"input-field",value:assignId,onChange:e=>setAssignId(e.target.value)},
+                React.createElement("option",{value:""},"— Kein Scout —"),
+                ...activeScouts.map(s=>React.createElement("option",{key:s.id,value:s.id},s.name||s.email))
+              )
+            ),
+            React.createElement("div",null,
+              React.createElement("label",{style:{fontSize:10,color:"#555",display:"block",marginBottom:5,letterSpacing:"1px",textTransform:"uppercase",fontWeight:700}},"Wohneinheiten"),
+              React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}},
+                ...[["500","500 fix"],["custom","Frei"]].map(([v,l])=>
+                  React.createElement("button",{key:v,onClick:()=>setUnitMode(v),style:{background:unitMode===v?"rgba(255,107,53,.2)":"#0d0e14",color:unitMode===v?"#FF6B35":"#555",border:`1px solid ${unitMode===v?"rgba(255,107,53,.4)":"#1c1d26"}`,padding:"7px",borderRadius:7,fontSize:12,fontWeight:700,cursor:"pointer"}},l)
+                )
+              ),
+              unitMode==="custom"&&React.createElement("input",{className:"input-field",type:"number",value:customUnits,onChange:e=>setCustomUnits(e.target.value),placeholder:"Anzahl Einheiten",min:1})
+            ),
+            React.createElement("button",{className:"btn-primary",style:{width:"100%"},onClick:toggleDraw},drawMode?"✎ Aktiv…":"Auf Karte zeichnen →")
+          )
+        ),
+        React.createElement("div",{className:"card",style:{padding:18,flex:1}},
+          React.createElement("div",{style:{fontSize:10,color:"#555",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:12}},`Gebiete (${gebiete.length})`),
+          React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:7,overflowY:"auto",maxHeight:400}},
+            ...gebiete.map(g=>{
+              const zuw=zuweisungen.find(z=>z.gebiet_id===g.id);
+              const scout=zuw?scouts.find(s=>s.id===zuw.scouter_id):null;
+              const idx=scout?scouts.filter(s=>s.active&&!s.pending).indexOf(scout):-1;
+              const color=idx>=0?SCOUT_COLORS[idx%SCOUT_COLORS.length]:"#555";
+              return React.createElement("div",{key:g.id,style:{background:"#0d0e14",border:"1px solid #1c1d26",borderRadius:8,padding:"10px 12px"}},
+                React.createElement("div",{style:{fontWeight:700,fontSize:12,color}}),g.name,
+                React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}}),scout?"→ "+(scout.name||scout.email):"—",
+                React.createElement("span",{style:{color:"#444",marginLeft:8}}),(g.einheiten||500)+" Einh."
+              );
+            })
+          )
+        )
+      )
+    ),
+    showModal&&React.createElement("div",{className:"modal-overlay",onClick:e=>e.target===e.currentTarget&&cancel()},
+      React.createElement("div",{className:"modal"},
+        React.createElement("h3",{style:{fontSize:17,fontWeight:800,marginBottom:4}},"Gebiet speichern"),
+        React.createElement("p",{style:{color:"#555",fontSize:13,marginBottom:20}},"Polygon gezeichnet — Details eingeben"),
+        React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:12,marginBottom:20}},
+          React.createElement("div",null,
+            React.createElement("label",{style:{fontSize:10,color:"#666",display:"block",marginBottom:5,letterSpacing:"1px",textTransform:"uppercase",fontWeight:700}},"Gebietsname *"),
+            React.createElement("input",{className:"input-field",value:gebietName,onChange:e=>setGebietName(e.target.value),placeholder:"z.B. Bielefeld-Mitte Nord",autoFocus:true})
+          ),
+          React.createElement("div",null,
+            React.createElement("label",{style:{fontSize:10,color:"#666",display:"block",marginBottom:5,letterSpacing:"1px",textTransform:"uppercase",fontWeight:700}},"Scout zuweisen"),
+            React.createElement("select",{className:"input-field",value:assignId,onChange:e=>setAssignId(e.target.value)},
+              React.createElement("option",{value:""},"— Kein Scout —"),
+              ...activeScouts.map(s=>React.createElement("option",{key:s.id,value:s.id},s.name||s.email))
+            )
+          ),
+          React.createElement("div",null,
+            React.createElement("label",{style:{fontSize:10,color:"#666",display:"block",marginBottom:5,letterSpacing:"1px",textTransform:"uppercase",fontWeight:700}},"Wohneinheiten"),
+            React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}},
+              ...[["500","500 fix"],["custom","Frei wählen"]].map(([v,l])=>
+                React.createElement("button",{key:v,onClick:()=>setUnitMode(v),style:{background:unitMode===v?"rgba(255,107,53,.2)":"#0d0e14",color:unitMode===v?"#FF6B35":"#555",border:`1px solid ${unitMode===v?"rgba(255,107,53,.4)":"#1c1d26"}`,padding:"7px",borderRadius:7,fontSize:12,fontWeight:700,cursor:"pointer"}},l)
+              )
+            ),
+            unitMode==="custom"&&React.createElement("input",{className:"input-field",type:"number",value:customUnits,onChange:e=>setCustomUnits(e.target.value),placeholder:"Anzahl",min:1})
+          )
+        ),
+        React.createElement("div",{style:{display:"flex",gap:10}},
+          React.createElement("button",{className:"btn-primary",style:{flex:1},disabled:saving,onClick:save},saving?"Speichert…":"✓ Speichern"),
+          React.createElement("button",{className:"btn-secondary",onClick:cancel},"Abbrechen")
+        )
+      )
+    )
+  );
+}
+
+// ── HEATMAP / DEUTSCHLAND KARTE ───────────────────────────────────
+// ── STRATEGIE-KARTE ──────────────────────────────────────────────────────────
+function StrategieKarte({scouts,gebiete,zuweisungen,qualifizierungen,vertriebler,montagepartner,reload,showNotif}){
+  const mapRef=useRef(null);
+  const mapInstanceRef=useRef(null);
+  const overlaysRef=useRef([]);
+  const [layers,setLayers]=useState({scouter:true,vertriebler:true,montagepartner:true,heatmap:false,luecken:false});
+  const [infoPanel,setInfoPanel]=useState(null);
+  const [mapLoaded,setMapLoaded]=useState(false);
+  const [showAddVertriebler,setShowAddVertriebler]=useState(false);
+  const [showAddMontage,setShowAddMontage]=useState(false);
+
+  // Stats
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+  const scouterMitGebiet=new Set(zuweisungen.map(z=>z.scouter_id));
+  const qualThisWeek=qualifizierungen.filter(q=>{const d=new Date(q.created_at);return Date.now()-d<7*86400000;});
+  const qualifiedCount=qualifizierungen.filter(q=>q.status==="qualified").length;
+
+  const toggleLayer=l=>setLayers(prev=>({...prev,[l]:!prev[l]}));
+
+  // Color helpers
+  const VERTR_COLORS={teamleiter:"#1d4ed8",vertriebler:"#3b82f6"};
+
+  useEffect(()=>{
+    const init=()=>{
+      if(!window.google||!mapRef.current)return;
+      const map=new google.maps.Map(mapRef.current,{
+        center:{lat:51.165,lng:10.451},zoom:6,
+        mapTypeId:"roadmap",
+        styles:[
+          {elementType:"geometry",stylers:[{color:"#0a0b10"}]},
+          {elementType:"labels.text.stroke",stylers:[{color:"#0a0b10"}]},
+          {elementType:"labels.text.fill",stylers:[{color:"#555"}]},
+          {featureType:"road",elementType:"geometry",stylers:[{color:"#1c1d26"}]},
+          {featureType:"road",elementType:"geometry.stroke",stylers:[{color:"#0a0b10"}]},
+          {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#252530"}]},
+          {featureType:"water",elementType:"geometry",stylers:[{color:"#060710"}]},
+          {featureType:"administrative.country",elementType:"geometry.stroke",stylers:[{color:"#333"}]},
+          {featureType:"administrative.province",elementType:"geometry.stroke",stylers:[{color:"#252530"}]},
+          {featureType:"poi",stylers:[{visibility:"off"}]},
+          {featureType:"transit",stylers:[{visibility:"off"}]},
+        ],
+        disableDefaultUI:false,
+        zoomControl:true,
+        streetViewControl:false,
+        mapTypeControl:false,
+        fullscreenControl:false,
+      });
+      mapInstanceRef.current=map;
+      setMapLoaded(true);
+    };
+    if(window.google)init();
+    else{const t=setInterval(()=>{if(window.google){clearInterval(t);init();}},200);}
+  },[]);
+
+  const clearOverlays=()=>{overlaysRef.current.forEach(o=>{if(o.setMap)o.setMap(null);});overlaysRef.current=[];};
+
+  useEffect(()=>{
+    if(!mapLoaded||!mapInstanceRef.current)return;
+    const map=mapInstanceRef.current;
+    clearOverlays();
+    const bounds=new google.maps.LatLngBounds();
+    let hasPoints=false;
+
+    // ── SCOUTER LAYER ──────────────────────────────────────────────
+    if(layers.scouter){
+      activeScouts.forEach((scout,i)=>{
+        const color=SCOUT_COLORS[i%SCOUT_COLORS.length];
+        const scoutQuals=qualifizierungen.filter(q=>q.scouter_id===scout.id&&q.lat&&q.lng);
+        if(scoutQuals.length===0)return;
+        // Cluster center = average position
+        const avgLat=scoutQuals.reduce((s,q)=>s+q.lat,0)/scoutQuals.length;
+        const avgLng=scoutQuals.reduce((s,q)=>s+q.lng,0)/scoutQuals.length;
+        const qualified=scoutQuals.filter(q=>q.status==="qualified").length;
+        // Scout area circle (light)
+        const circle=new google.maps.Circle({
+          map,center:{lat:avgLat,lng:avgLng},radius:8000,
+          fillColor:color,fillOpacity:.08,
+          strokeColor:color,strokeOpacity:.3,strokeWeight:1,
+        });
+        overlaysRef.current.push(circle);
+        // Scout marker (custom)
+        const marker=new google.maps.Marker({
+          map,position:{lat:avgLat,lng:avgLng},
+          icon:{path:google.maps.SymbolPath.CIRCLE,scale:10,fillColor:color,fillOpacity:1,strokeColor:"#0a0b10",strokeWeight:2},
+          title:`${scout.vorname} ${scout.nachname}`,zIndex:10
+        });
+        marker.addListener("click",()=>setInfoPanel({type:"scouter",data:{...scout,color,totalQuals:scoutQuals.length,qualified,avgLat,avgLng}}));
+        overlaysRef.current.push(marker);
+        // Label
+        const label=new google.maps.Marker({
+          map,position:{lat:avgLat+0.04,lng:avgLng},
+          icon:{url:"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",scaledSize:new google.maps.Size(1,1)},
+          label:{text:`${scout.vorname} ${scout.nachname[0]}.`,color:color,fontSize:"10px",fontWeight:"700",fontFamily:"Syne,sans-serif"},
+          zIndex:9
+        });
+        overlaysRef.current.push(label);
+        bounds.extend({lat:avgLat,lng:avgLng});
+        hasPoints=true;
+      });
+    }
+
+    // ── VERTRIEBLER LAYER ──────────────────────────────────────────
+    if(layers.vertriebler){
+      (vertriebler||[]).forEach((v,i)=>{
+        if(!v.lat||!v.lng)return;
+        const isTeamleiter=v.rolle==="teamleiter";
+        const color=isTeamleiter?"#1d4ed8":"#3b82f6";
+        // Fahrtradius
+        const circle=new google.maps.Circle({
+          map,center:{lat:v.lat,lng:v.lng},radius:(v.fahrtradius_km||50)*1000,
+          fillColor:color,fillOpacity:.06,
+          strokeColor:color,strokeOpacity:.35,strokeWeight:isTeamleiter?2:1,
+          strokePattern:isTeamleiter?null:[{icon:{path:"M 0,-1 0,1",strokeOpacity:1,scale:3},offset:"0",repeat:"10px"}]
+        });
+        overlaysRef.current.push(circle);
+        // Marker
+        const svgIcon=`<svg xmlns='http://www.w3.org/2000/svg' width='28' height='36' viewBox='0 0 28 36'>
+          <path d='M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22s14-12.67 14-22C28 6.27 21.73 0 14 0z' fill='${color}' stroke='%230a0b10' stroke-width='2'/>
+          ${isTeamleiter?"<text x='14' y='19' text-anchor='middle' fill='white' font-size='13' font-family='sans-serif'>★</text>":"<text x='14' y='19' text-anchor='middle' fill='white' font-size='12' font-family='sans-serif'>V</text>"}
+        </svg>`;
+        const marker=new google.maps.Marker({
+          map,position:{lat:v.lat,lng:v.lng},
+          icon:{url:"data:image/svg+xml;charset=UTF-8,"+svgIcon.replace(/\n/g,""),anchor:new google.maps.Point(14,36)},
+          title:v.name,zIndex:20
+        });
+        marker.addListener("click",()=>setInfoPanel({type:"vertriebler",data:v}));
+        overlaysRef.current.push(marker);
+        bounds.extend({lat:v.lat,lng:v.lng});
+        hasPoints=true;
+      });
+    }
+
+    // ── MONTAGEPARTNER LAYER ───────────────────────────────────────
+    if(layers.montagepartner){
+      (montagepartner||[]).forEach((m,i)=>{
+        if(!m.lat||!m.lng)return;
+        const color=m.farbe||"#8b5cf6";
+        // Arbeitsradius
+        const circle=new google.maps.Circle({
+          map,center:{lat:m.lat,lng:m.lng},radius:(m.arbeitsradius_km||80)*1000,
+          fillColor:color,fillOpacity:.05,
+          strokeColor:color,strokeOpacity:.45,strokeWeight:1.5,
+          strokePattern:[{icon:{path:"M 0,0 0,1",strokeOpacity:1,scale:4},offset:"0",repeat:"12px"}]
+        });
+        overlaysRef.current.push(circle);
+        // Marker
+        const svgIcon2=`<svg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'>
+          <circle cx='15' cy='15' r='13' fill='${color}' stroke='%230a0b10' stroke-width='2'/>
+          <text x='15' y='20' text-anchor='middle' fill='white' font-size='13' font-family='sans-serif'>🔧</text>
+        </svg>`;
+        const marker=new google.maps.Marker({
+          map,position:{lat:m.lat,lng:m.lng},
+          icon:{url:"data:image/svg+xml;charset=UTF-8,"+svgIcon2.replace(/\n/g,""),anchor:new google.maps.Point(15,15)},
+          title:m.name,zIndex:15
+        });
+        marker.addListener("click",()=>setInfoPanel({type:"montage",data:m}));
+        overlaysRef.current.push(marker);
+        bounds.extend({lat:m.lat,lng:m.lng});
+        hasPoints=true;
+      });
+    }
+
+    // ── HEATMAP LAYER ──────────────────────────────────────────────
+    if(layers.heatmap&&window.google.maps.visualization){
+      const pts=qualifizierungen.filter(q=>q.lat&&q.lng).map(q=>({
+        location:new google.maps.LatLng(q.lat,q.lng),
+        weight:q.status==="qualified"?3:1
+      }));
+      if(pts.length){
+        const heat=new google.maps.visualization.HeatmapLayer({
+          data:pts,map,radius:25,opacity:.7,
+          gradient:["rgba(0,0,0,0)","rgba(255,107,53,.3)","rgba(255,107,53,.6)","rgba(255,107,53,1)"]
+        });
+        overlaysRef.current.push(heat);
+      }
+    }
+
+    // ── LÜCKEN-ANALYSE ─────────────────────────────────────────────
+    if(layers.luecken&&vertriebler){
+      // Großstädte ohne Vertriebler-Abdeckung
+      const cities=[
+        {name:"Dresden",lat:51.050,lng:13.740},{name:"Nürnberg",lat:49.452,lng:11.077},
+        {name:"Bremen",lat:53.079,lng:8.801},{name:"Düsseldorf",lat:51.227,lng:6.773},
+        {name:"Kiel",lat:54.323,lng:10.138},{name:"Mannheim",lat:49.487,lng:8.466},
+        {name:"Freiburg",lat:47.997,lng:7.842},{name:"Erfurt",lat:50.984,lng:11.029},
+        {name:"Rostock",lat:54.092,lng:12.099},{name:"Augsburg",lat:48.370,lng:10.898},
+      ];
+      cities.forEach(city=>{
+        const covered=(vertriebler||[]).some(v=>{
+          if(!v.lat||!v.lng)return false;
+          const dlat=city.lat-v.lat,dlng=city.lng-v.lng;
+          const dist=Math.sqrt(dlat*dlat+dlng*dlng)*111;
+          return dist<=(v.fahrtradius_km||50);
+        });
+        if(!covered){
+          const marker=new google.maps.Marker({
+            map,position:{lat:city.lat,lng:city.lng},
+            icon:{path:google.maps.SymbolPath.CIRCLE,scale:12,fillColor:"#ef4444",fillOpacity:.8,strokeColor:"#fff",strokeWeight:2},
+            title:`⚠ Keine Abdeckung: ${city.name}`,zIndex:25
+          });
+          marker.addListener("click",()=>setInfoPanel({type:"luecke",data:city}));
+          overlaysRef.current.push(marker);
+          // Label
+          const lbl=new google.maps.Marker({
+            map,position:{lat:city.lat+0.05,lng:city.lng},
+            icon:{url:"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",scaledSize:new google.maps.Size(1,1)},
+            label:{text:city.name,color:"#ef4444",fontSize:"10px",fontWeight:"700",fontFamily:"Syne,sans-serif"},
+          });
+          overlaysRef.current.push(lbl);
+        }
+      });
+    }
+
+    if(hasPoints)map.fitBounds(bounds,{padding:60});
+  },[mapLoaded,layers,scouts,vertriebler,montagepartner,qualifizierungen]);
+
+  // ── INFO PANEL ─────────────────────────────────────────────────────────────
+  const InfoPanelContent=()=>{
+    if(!infoPanel)return null;
+    const {type,data}=infoPanel;
+    if(type==="scouter")return React.createElement("div",null,
+      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:14}},
+        React.createElement("div",{style:{width:36,height:36,borderRadius:"50%",background:data.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff"}},
+          initials(`${data.vorname} ${data.nachname}`)),
+        React.createElement("div",null,
+          React.createElement("div",{style:{fontSize:14,fontWeight:700}},`${data.vorname} ${data.nachname}`),
+          React.createElement("div",{style:{fontSize:11,color:"#555"}},data.email||"")
+        )
+      ),
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        React.createElement("div",{style:{background:"#0d0e14",borderRadius:8,padding:"10px 12px"}},
+          React.createElement("div",{style:{fontSize:20,fontWeight:800,color:data.color}},data.totalQuals),
+          React.createElement("div",{style:{fontSize:10,color:"#555",marginTop:2}},"Gesamt Besuche")
+        ),
+        React.createElement("div",{style:{background:"#0d0e14",borderRadius:8,padding:"10px 12px"}},
+          React.createElement("div",{style:{fontSize:20,fontWeight:800,color:"#34d399"}},data.qualified),
+          React.createElement("div",{style:{fontSize:10,color:"#555",marginTop:2}},"Qualifiziert")
+        ),
+        React.createElement("div",{style:{background:"#0d0e14",borderRadius:8,padding:"10px 12px",gridColumn:"span 2"}},
+          React.createElement("div",{style:{fontSize:14,fontWeight:700,color:"#FF6B35"}},
+            data.totalQuals?`${Math.round(data.qualified/data.totalQuals*100)}%`:"—"),
+          React.createElement("div",{style:{fontSize:10,color:"#555",marginTop:2}},"Konversionsrate")
+        )
+      )
+    );
+    if(type==="vertriebler")return React.createElement("div",null,
+      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:14}},
+        React.createElement("div",{style:{width:36,height:36,borderRadius:8,background:data.rolle==="teamleiter"?"#1d4ed8":"#2563eb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}},
+          data.rolle==="teamleiter"?"★":"V"),
+        React.createElement("div",null,
+          React.createElement("div",{style:{fontSize:14,fontWeight:700}},data.name),
+          React.createElement("span",{className:`badge badge-blue`,style:{marginTop:4}},data.rolle==="teamleiter"?"Teamleiter":"Vertriebler")
+        )
+      ),
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        React.createElement("div",{style:{background:"#0d0e14",borderRadius:8,padding:"10px 12px"}},
+          React.createElement("div",{style:{fontSize:18,fontWeight:800,color:"#3b82f6"}},data.fahrtradius_km||50," km"),
+          React.createElement("div",{style:{fontSize:10,color:"#555",marginTop:2}},"Fahrtradius")
+        ),
+        React.createElement("div",{style:{background:"#0d0e14",borderRadius:8,padding:"10px 12px"}},
+          React.createElement("div",{style:{fontSize:18,fontWeight:800,color:"#60a5fa"}},data.stadt||"—"),
+          React.createElement("div",{style:{fontSize:10,color:"#555",marginTop:2}},"Standort")
+        )
+      ),
+      // Count nearby scouts
+      React.createElement("div",{style:{marginTop:10,padding:"8px 12px",background:"#0d0e14",borderRadius:8}},
+        React.createElement("div",{style:{fontSize:11,color:"#555",marginBottom:4}},"Scouter im Umkreis"),
+        React.createElement("div",{style:{fontSize:20,fontWeight:800,color:"#34d399"}},
+          activeScouts.filter(s=>{
+            const sq=qualifizierungen.filter(q=>q.scouter_id===s.id&&q.lat&&q.lng);
+            if(!sq.length)return false;
+            const alat=sq.reduce((a,q)=>a+q.lat,0)/sq.length;
+            const alng=sq.reduce((a,q)=>a+q.lng,0)/sq.length;
+            const dist=Math.sqrt(Math.pow((alat-data.lat)*111,2)+Math.pow((alng-data.lng)*71,2));
+            return dist<=(data.fahrtradius_km||50);
+          }).length
+        )
+      )
+    );
+    if(type==="montage")return React.createElement("div",null,
+      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:14}},
+        React.createElement("div",{style:{width:36,height:36,borderRadius:"50%",background:data.farbe||"#8b5cf6",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}},
+          "🔧"),
+        React.createElement("div",null,
+          React.createElement("div",{style:{fontSize:14,fontWeight:700}},data.name),
+          React.createElement("div",{style:{fontSize:11,color:"#555"}},data.stadt||"")
+        )
+      ),
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        React.createElement("div",{style:{background:"#0d0e14",borderRadius:8,padding:"10px 12px"}},
+          React.createElement("div",{style:{fontSize:18,fontWeight:800,color:data.farbe||"#8b5cf6"}},data.arbeitsradius_km||80," km"),
+          React.createElement("div",{style:{fontSize:10,color:"#555",marginTop:2}},"Arbeitsradius")
+        ),
+        React.createElement("div",{style:{background:"#0d0e14",borderRadius:8,padding:"10px 12px"}},
+          React.createElement("div",{style:{fontSize:18,fontWeight:800,color:"#a78bfa"}},data.kapazitaet_pro_woche||"?"),
+          React.createElement("div",{style:{fontSize:10,color:"#555",marginTop:2}},"Anlagen/Woche")
+        )
+      ),
+      data.phone&&React.createElement("div",{style:{marginTop:8,fontSize:12,color:"#60a5fa"}},data.phone),
+      data.email&&React.createElement("div",{style:{marginTop:4,fontSize:12,color:"#60a5fa"}},data.email)
+    );
+    if(type==="luecke")return React.createElement("div",null,
+      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:12}},
+        React.createElement("div",{style:{fontSize:28}},"⚠️"),
+        React.createElement("div",null,
+          React.createElement("div",{style:{fontSize:16,fontWeight:700,color:"#ef4444"}},data.name),
+          React.createElement("div",{style:{fontSize:11,color:"#555"}},"Keine Vertriebler-Abdeckung")
+        )
+      ),
+      React.createElement("div",{style:{padding:"10px 12px",background:"rgba(239,68,68,.08)",borderRadius:8,border:"1px solid rgba(239,68,68,.2)"}},
+        React.createElement("div",{style:{fontSize:12,color:"#ef4444",fontWeight:600}},"Wachstumspotenzial"),
+        React.createElement("div",{style:{fontSize:11,color:"#666",marginTop:4}},"Kein Vertriebler deckt diese Region ab. Scouter-Aktivität ohne Nachverfolgung.")
+      )
+    );
+    return null;
+  };
+
+  const layerConfig=[
+    {key:"scouter",label:"Scouter",color:"#FF6B35",desc:"Aktionsradien"},
+    {key:"vertriebler",label:"Vertriebler",color:"#3b82f6",desc:"Fahrtradien"},
+    {key:"montagepartner",label:"Montage",color:"#8b5cf6",desc:"Arbeitsgebiete"},
+    {key:"heatmap",label:"Heatmap",color:"#f59e0b",desc:"Aktivität"},
+    {key:"luecken",label:"Lücken",color:"#ef4444",desc:"Unabgedeckt"},
+  ];
+
+  return React.createElement("div",{style:{height:"calc(100vh - 56px)",display:"flex",flexDirection:"column",margin:"-28px",overflow:"hidden"}},
+    // Header bar
+    React.createElement("div",{style:{padding:"14px 20px",borderBottom:"1px solid #1c1d26",background:"#0a0b10",display:"flex",alignItems:"center",gap:16,flexShrink:0}},
+      React.createElement("div",null,
+        React.createElement("h1",{style:{fontSize:20,fontWeight:800,letterSpacing:"-0.5px"}},"🗺 Strategie-Karte"),
+        React.createElement("div",{style:{fontSize:11,color:"#444",marginTop:2}},"Vertriebler · Scouter · Montagepartner · Lückenanalyse")
+      ),
+      React.createElement("div",{style:{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}},
+        // Layer toggles
+        ...layerConfig.map(l=>
+          React.createElement("button",{key:l.key,className:`map-tool-btn ${layers[l.key]?"active":""}`,onClick:()=>toggleLayer(l.key),
+            style:{borderColor:layers[l.key]?l.color:"",color:layers[l.key]?l.color:"",background:layers[l.key]?`${l.color}18`:""}},
+            React.createElement("span",{style:{display:"inline-block",width:7,height:7,borderRadius:"50%",background:l.color,marginRight:5}}),
+            l.label
+          )
+        ),
+        // Stats
+        React.createElement("div",{style:{padding:"6px 12px",background:"#111218",border:"1px solid #1c1d26",borderRadius:8,fontSize:11,color:"#555",display:"flex",gap:12}},
+          React.createElement("span",null,React.createElement("span",{style:{color:"#FF6B35",fontWeight:700}},activeScouts.length)," Scouter"),
+          React.createElement("span",null,React.createElement("span",{style:{color:"#3b82f6",fontWeight:700}},(vertriebler||[]).length)," Vertriebler"),
+          React.createElement("span",null,React.createElement("span",{style:{color:"#8b5cf6",fontWeight:700}},(montagepartner||[]).length)," Partner"),
+          React.createElement("span",null,React.createElement("span",{style:{color:"#34d399",fontWeight:700}},qualifiedCount)," Leads")
+        )
+      )
+    ),
+    // Map + Side panel
+    React.createElement("div",{style:{flex:1,display:"flex",overflow:"hidden"}},
+      // Map
+      React.createElement("div",{style:{flex:1,position:"relative"}},
+        React.createElement("div",{id:"strategie-map",ref:mapRef,style:{width:"100%",height:"100%"}}),
+        !mapLoaded&&React.createElement("div",{style:{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#08090d"}},
+          React.createElement("div",{style:{textAlign:"center"}},
+            React.createElement("div",{style:{width:32,height:32,border:"3px solid #1c1d26",borderTopColor:"#FF6B35",borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto 12px"}}),
+            React.createElement("div",{style:{color:"#444",fontSize:13}},"Karte lädt…")
+          )
+        ),
+        // Legend overlay
+        React.createElement("div",{style:{position:"absolute",bottom:12,left:12,background:"rgba(8,9,13,.92)",border:"1px solid #1c1d26",borderRadius:10,padding:"10px 14px",backdropFilter:"blur(8px)"}},
+          React.createElement("div",{style:{fontSize:9,color:"#444",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:8}},"Legende"),
+          ...layerConfig.filter(l=>layers[l.key]).map(l=>
+            React.createElement("div",{key:l.key,style:{display:"flex",alignItems:"center",gap:7,marginBottom:5,fontSize:11,color:"#888"}},
+              React.createElement("div",{style:{width:20,height:2,background:l.color,borderRadius:1}}),
+              React.createElement("span",{style:{fontWeight:700,color:l.color}},l.label),
+              React.createElement("span",{style:{color:"#444"}},l.desc)
+            )
+          ),
+          React.createElement("div",{style:{marginTop:8,paddingTop:8,borderTop:"1px solid #1c1d26"}},
+            React.createElement("div",{style:{display:"flex",gap:10,fontSize:10,color:"#444"}},
+              React.createElement("span",null,"Pin = Vertriebler"),
+              React.createElement("span",null,"🔧 = Montage"),
+              React.createElement("span",null,"● = Scout")
+            )
+          )
+        )
+      ),
+      // Info panel
+      React.createElement("div",{style:{width:260,background:"#0a0b10",borderLeft:"1px solid #1c1d26",display:"flex",flexDirection:"column",overflow:"hidden"}},
+        // Stats grid
+        React.createElement("div",{style:{padding:14,borderBottom:"1px solid #1c1d26"}},
+          React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+            [
+              {v:activeScouts.length,l:"Aktive Scouter",c:"#FF6B35"},
+              {v:(vertriebler||[]).filter(v=>v.rolle==="teamleiter").length,l:"Teamleiter",c:"#1d4ed8"},
+              {v:(vertriebler||[]).filter(v=>v.rolle==="vertriebler").length,l:"Vertriebler",c:"#3b82f6"},
+              {v:(montagepartner||[]).length,l:"Montagepartner",c:"#8b5cf6"},
+              {v:qualThisWeek.length,l:"Besuche Woche",c:"#f59e0b"},
+              {v:qualifiedCount,l:"Leads Total",c:"#34d399"},
+            ].map(({v,l,c})=>
+              React.createElement("div",{key:l,style:{background:"#111218",border:"1px solid #1c1d26",borderRadius:8,padding:"8px 10px"}},
+                React.createElement("div",{style:{fontSize:18,fontWeight:800,color:c}},v),
+                React.createElement("div",{style:{fontSize:9,color:"#444",marginTop:2,letterSpacing:".3px"}},l)
+              )
+            )
+          )
+        ),
+        // Info panel content
+        React.createElement("div",{style:{flex:1,overflowY:"auto",padding:14}},
+          infoPanel
+            ?React.createElement("div",null,
+                React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+                  React.createElement("div",{style:{fontSize:10,color:"#444",letterSpacing:"1.5px",textTransform:"uppercase"}},
+                    {scouter:"Scout",vertriebler:"Vertriebler",montage:"Montagepartner",luecke:"Lücke"}[infoPanel.type]
+                  ),
+                  React.createElement("button",{onClick:()=>setInfoPanel(null),style:{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:16}},"×")
+                ),
+                React.createElement(InfoPanelContent,null)
+              )
+            :React.createElement("div",{style:{textAlign:"center",paddingTop:40}},
+                React.createElement("div",{style:{fontSize:32,marginBottom:12}},"🗺"),
+                React.createElement("div",{style:{fontSize:12,color:"#333",lineHeight:1.7}},"Pin oder Marker\nanklicken für\nDetails"),
+                !vertriebler?.length&&React.createElement("div",{style:{marginTop:20,padding:"12px",background:"rgba(239,68,68,.06)",border:"1px solid rgba(239,68,68,.2)",borderRadius:8}},
+                  React.createElement("div",{style:{fontSize:11,color:"#ef4444",fontWeight:700,marginBottom:4}},"⚠ SQL fehlt noch"),
+                  React.createElement("div",{style:{fontSize:10,color:"#666"}},
+                    "Vertriebler & Montage-\ntabellen noch nicht angelegt.\nSQL im Supabase Editor ausführen."
+                  )
+                )
+              )
+        )
+      )
+    )
+  );
+}
+
+function HeatmapView({scouts,gebiete,zuweisungen,qualifizierungen}){
+  const mapRef=useRef(null);
+  const mapInst=useRef(null);
+  const [mapMode,setMapMode]=useState("scouts"); // scouts | heatmap-qual | heatmap-white
+  const [mapsReady,setMapsReady]=useState(!!window.google);
+  const [heatmapLayer,setHeatmapLayer]=useState(null);
+  const [polyLayers,setPolyLayers]=useState([]);
+
+  const initMap=()=>{
+    if(!mapRef.current||mapInst.current)return;
+    const map=new google.maps.Map(mapRef.current,{
+      center:{lat:51.1657,lng:10.4515},zoom:6,
+      mapTypeId:"roadmap",
+      styles:[
+        {featureType:"all",elementType:"geometry",stylers:[{color:"#1a1d27"}]},
+        {featureType:"water",elementType:"geometry",stylers:[{color:"#0d0e14"}]},
+        {featureType:"road",elementType:"geometry",stylers:[{color:"#252530"}]},
+        {featureType:"road",elementType:"labels.text.fill",stylers:[{color:"#666"}]},
+        {featureType:"poi",elementType:"all",stylers:[{visibility:"off"}]},
+        {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#333"}]},
+        {featureType:"administrative.country",elementType:"labels.text.fill",stylers:[{color:"#888"}]},
+      ],
+      mapTypeControl:false,streetViewControl:false,fullscreenControl:false
+    });
+    mapInst.current=map;
+    setMapsReady(true);
+    renderMode(map,"scouts");
+  };
+
+  useEffect(()=>{
+    if(window.google){initMap();return;}
+    const script=document.createElement("script");
+    script.src=`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_KEY}&libraries=visualization,drawing,geometry`;
+    script.onload=()=>initMap();
+    document.head.appendChild(script);
+  },[]);
+
+  useEffect(()=>{
+    if(mapInst.current)renderMode(mapInst.current,mapMode);
+  },[mapMode,gebiete,zuweisungen,scouts,qualifizierungen]);
+
+  const clearLayers=()=>{
+    if(heatmapLayer){heatmapLayer.setMap(null);setHeatmapLayer(null);}
+    polyLayers.forEach(l=>l.setMap(null));setPolyLayers([]);
+  };
+
+  const renderMode=(map,mode)=>{
+    clearLayers();
+    const newPolys=[];
+
+    if(mode==="scouts"){
+      // Draw all gebiete colored by scout
+      gebiete.forEach(g=>{
+        if(!g.polygon_coords)return;
+        let coords;try{coords=JSON.parse(g.polygon_coords);}catch{return;}
+        const zuw=zuweisungen.find(z=>z.gebiet_id===g.id);
+        const scout=zuw?scouts.find(s=>s.id===zuw.scouter_id):null;
+        const idx=scout?scouts.filter(s=>s.active&&!s.pending).indexOf(scout):-1;
+        const color=idx>=0?SCOUT_COLORS[idx%SCOUT_COLORS.length]:"#555";
+        const poly=new google.maps.Polygon({paths:coords.map(([lat,lng])=>({lat,lng})),strokeColor:color,strokeWeight:2,fillColor:color,fillOpacity:.35,map});
+        const iw=new google.maps.InfoWindow({content:`<div style="font-family:'Syne',sans-serif;padding:10px"><b>${g.name}</b><br/><span style="color:#666;font-size:12px">${scout?scout.name||scout.email:"Kein Scout"}</span><br/><span style="color:#666;font-size:12px">${g.einheiten||500} Einheiten</span></div>`});
+        poly.addListener("click",e=>{iw.setPosition(e.latLng);iw.open(map);});
+        newPolys.push(poly);
+      });
+      // Scout markers
+      scouts.filter(s=>s.active&&!s.pending).forEach((s,i)=>{
+        const myG=zuweisungen.filter(z=>z.scouter_id===s.id).map(z=>gebiete.find(g=>g.id===z.gebiet_id)).filter(Boolean).filter(g=>g.polygon_coords);
+        if(myG.length===0)return;
+        const color=SCOUT_COLORS[i%SCOUT_COLORS.length];
+        // Find centroid of first area
+        try{
+          const coords=JSON.parse(myG[0].polygon_coords);
+          const lat=coords.reduce((a,c)=>a+c[0],0)/coords.length;
+          const lng=coords.reduce((a,c)=>a+c[1],0)/coords.length;
+          const marker=new google.maps.Marker({position:{lat,lng},map,label:{text:initials(s.name),color:"#fff",fontWeight:"800",fontSize:"12px"},icon:{path:google.maps.SymbolPath.CIRCLE,scale:20,fillColor:color,fillOpacity:1,strokeColor:"#000",strokeWeight:2}});
+          marker.addListener("click",()=>{new google.maps.InfoWindow({content:`<div style="font-family:'Syne',sans-serif;padding:10px"><b>${s.name}</b><br/><span style="color:#666;font-size:12px">${myG.length} Gebiete</span></div>`}).open(map,marker);});
+          newPolys.push(marker);
+        }catch{}
+      });
+    }
+
+    if(mode==="heatmap-qual"){
+      // Qualifizierungen heatmap
+      const points=qualifizierungen.filter(q=>q.lat&&q.lng).map(q=>({location:new google.maps.LatLng(q.lat,q.lng),weight:q.status==="qualified"?3:1}));
+      if(points.length>0){
+        const hl=new google.maps.visualization.HeatmapLayer({data:points,map,radius:30,gradient:["rgba(0,0,0,0)","rgba(52,211,153,0.3)","rgba(52,211,153,0.7)","rgba(245,158,11,0.8)","rgba(255,107,53,1)"]});
+        setHeatmapLayer(hl);
+      }else{
+        // Demo heatmap wenn keine GPS-Daten
+        const demoPts=[
+          {lat:52.52,lng:13.40,w:8},{lat:53.55,lng:9.99,w:6},{lat:48.13,lng:11.57,w:9},
+          {lat:51.23,lng:6.78,w:7},{lat:50.93,lng:6.96,w:5},{lat:51.07,lng:13.74,w:4},
+          {lat:51.34,lng:12.38,w:6},{lat:52.37,lng:9.73,w:3},{lat:48.78,lng:9.18,w:7},
+          {lat:51.50,lng:7.46,w:5},{lat:53.07,lng:8.80,w:4},{lat:51.96,lng:7.63,w:6},
+          {lat:51.515,lng:8.335,w:8},{lat:51.52,lng:8.35,w:6},{lat:51.51,lng:8.32,w:4},
+        ].map(p=>({location:new google.maps.LatLng(p.lat,p.lng),weight:p.w}));
+        const hl=new google.maps.visualization.HeatmapLayer({data:demoPts,map,radius:40,gradient:["rgba(0,0,0,0)","rgba(52,211,153,0.2)","rgba(52,211,153,0.6)","rgba(245,158,11,0.8)","rgba(255,107,53,1)"]});
+        setHeatmapLayer(hl);
+      }
+    }
+
+    if(mode==="heatmap-white"){
+      // White spots - draw Germany with covered areas removed (simplified)
+      gebiete.forEach(g=>{
+        if(!g.polygon_coords)return;
+        let coords;try{coords=JSON.parse(g.polygon_coords);}catch{return;}
+        const poly=new google.maps.Polygon({paths:coords.map(([lat,lng])=>({lat,lng})),strokeColor:"#34d399",strokeWeight:2,fillColor:"#34d399",fillOpacity:.3,map});
+        newPolys.push(poly);
+      });
+    }
+
+    setPolyLayers(newPolys);
+  };
+
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+  const withGebiet=activeScouts.filter(s=>zuweisungen.some(z=>z.scouter_id===s.id));
+  const withoutGebiet=activeScouts.filter(s=>!zuweisungen.some(z=>z.scouter_id===s.id));
+
+  return React.createElement("div",null,
+    React.createElement("div",{style:{marginBottom:20}},
+      React.createElement("h1",{style:{fontSize:26,fontWeight:800,letterSpacing:"-1px"}},"Deutschland Karte"),
+      React.createElement("p",{style:{color:"#555",fontSize:13,marginTop:4}},"Übersicht aller Scouts und Aktivitäten")
+    ),
+    React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 280px",gap:18,height:"calc(100vh - 160px)"}},
+      React.createElement("div",{style:{position:"relative",borderRadius:12,overflow:"hidden",border:"1px solid #1c1d26"}},
+        React.createElement("div",{ref:mapRef,style:{width:"100%",height:"100%",background:"#1a1d27"}}),
+        React.createElement("div",{className:"map-toolbar"},
+          ...[["scouts","👥 Scouts & Gebiete"],["heatmap-qual","🔥 Aktivitäts-Heatmap"],["heatmap-white","🗺 Weiße Flecken"]].map(([m,l])=>
+            React.createElement("button",{key:m,className:`map-tool-btn ${mapMode===m?"active":""}`,onClick:()=>setMapMode(m)},l)
+          )
+        )
+      ),
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:14,overflowY:"auto"}},
+        // Stats
+        React.createElement("div",{className:"card",style:{padding:18}},
+          React.createElement("div",{style:{fontSize:10,color:"#FF6B35",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:14}},"Übersicht"),
+          ...[
+            ["Scouts gesamt",activeScouts.length,"#e8e9ef"],
+            ["Mit Gebiet",withGebiet.length,"#34d399"],
+            ["Ohne Gebiet",withoutGebiet.length,withoutGebiet.length>0?"#f59e0b":"#555"],
+            ["Gebiete total",gebiete.length,"#60a5fa"],
+            ["Qualifizierungen",qualifizierungen.length,"#a78bfa"],
+          ].map(([l,v,c])=>React.createElement("div",{key:l,style:{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #1c1d26"}},
+            React.createElement("span",{style:{fontSize:13,color:"#666"}}),l,
+            React.createElement("span",{style:{fontSize:13,fontWeight:700,color:c,fontFamily:"'JetBrains Mono',monospace"}}),v
+          ))
+        ),
+        // Scout legend
+        React.createElement("div",{className:"card",style:{padding:18}},
+          React.createElement("div",{style:{fontSize:10,color:"#555",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:12}},"Scout Legende"),
+          React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8,maxHeight:300,overflowY:"auto"}},
+            ...activeScouts.map((s,i)=>{
+              const color=SCOUT_COLORS[i%SCOUT_COLORS.length];
+              const myG=zuweisungen.filter(z=>z.scouter_id===s.id).length;
+              return React.createElement("div",{key:s.id,style:{display:"flex",alignItems:"center",gap:10}},
+                React.createElement("div",{style:{width:10,height:10,borderRadius:"50%",background:color,flexShrink:0}}),
+                React.createElement("div",{style:{flex:1}},
+                  React.createElement("div",{style:{fontSize:12,fontWeight:600}}),s.name||"—",
+                  React.createElement("div",{style:{fontSize:10,color:"#555"}}),myG+" Gebiete"
+                )
+              );
+            })
+          )
+        ),
+        // Mode description
+        React.createElement("div",{className:"card",style:{padding:18}},
+          React.createElement("div",{style:{fontSize:11,color:"#555",lineHeight:1.7}}),
+          mapMode==="scouts"&&"Zeigt alle Scouts auf der Karte mit ihren Gebieten farblich markiert.",
+          mapMode==="heatmap-qual"&&"Heatmap aller Qualifizierungen und Termine. Rot = hohe Aktivität, Grün = niedrig.",
+          mapMode==="heatmap-white"&&"Grüne Flächen = abgedeckte Gebiete. Unmarkierte Bereiche = Weiße Flecken ohne Scout."
+        )
+      )
+    )
+  );
+}
+
+// ── GPS TRACKING ──────────────────────────────────────────────────
+function GpsView({scouts,sessions,qualifizierungen,reload}){
+  const mapRef=useRef(null);
+  const mapInst=useRef(null);
+  const [selectedScoutId,setSelectedScoutId]=useState("");
+  const [selectedDate,setSelectedDate]=useState(new Date().toISOString().slice(0,10));
+  const [trackLayer,setTrackLayer]=useState([]);
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+
+  useEffect(()=>{if(activeScouts.length>0&&!selectedScoutId)setSelectedScoutId(activeScouts[0].id);},[activeScouts]);
+
+  const initMap=()=>{
+    if(!mapRef.current||mapInst.current)return;
+    const map=new google.maps.Map(mapRef.current,{
+      center:{lat:52.03,lng:8.53},zoom:12,
+      mapTypeId:"roadmap",
+      styles:[
+        {featureType:"all",elementType:"geometry",stylers:[{color:"#1a1d27"}]},
+        {featureType:"water",stylers:[{color:"#0d0e14"}]},
+        {featureType:"road",elementType:"geometry",stylers:[{color:"#252530"}]},
+        {featureType:"road",elementType:"labels.text.fill",stylers:[{color:"#666"}]},
+        {featureType:"poi",stylers:[{visibility:"off"}]},
+        {featureType:"transit",stylers:[{visibility:"off"}]},
+      ],
+      mapTypeControl:false,streetViewControl:false,fullscreenControl:false
+    });
+    mapInst.current=map;
+  };
+
+  useEffect(()=>{
+    if(window.google&&!mapInst.current){initMap();return;}
+    if(!window.google){
+      if(document.querySelector('script[src*="maps.googleapis"]'))return;
+      const s=document.createElement("script");
+      s.src=`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_KEY}&libraries=visualization,drawing,geometry`;
+      s.onload=()=>initMap();document.head.appendChild(s);
+    }
+  },[]);
+
+  useEffect(()=>{
+    if(!mapInst.current||!selectedScoutId)return;
+    drawTrack();
+  },[selectedScoutId,selectedDate,qualifizierungen,mapInst.current]);
+
+  const drawTrack=()=>{
+    if(!mapInst.current)return;
+    // Clear
+    trackLayer.forEach(l=>{try{l.setMap(null);}catch{}});
+    const newLayer=[];
+
+    // Filter qualifizierungen for this scout+date
+    const dayQual=qualifizierungen.filter(q=>{
+      if(q.scouter_id!==selectedScoutId)return false;
+      if(!q.lat||!q.lng)return false;
+      const d=q.created_at?.slice(0,10);
+      return d===selectedDate;
+    }).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+
+    if(dayQual.length===0){
+      // Show demo track if no real data
+      const demoPoints=[
+        {lat:52.030,lng:8.530,status:"open"},{lat:52.032,lng:8.533,status:"qualified"},
+        {lat:52.035,lng:8.535,status:"rejected"},{lat:52.037,lng:8.532,status:"open"},
+        {lat:52.034,lng:8.528,status:"qualified"},{lat:52.031,lng:8.525,status:"open"},
+      ];
+      renderTrackPoints(demoPoints,newLayer,true);
+    }else{
+      renderTrackPoints(dayQual.map(q=>({lat:q.lat,lng:q.lng,status:q.status,time:q.created_at})),newLayer,false);
+    }
+    setTrackLayer(newLayer);
+  };
+
+  const renderTrackPoints=(points,layer,isDemo)=>{
+    const map=mapInst.current;
+    const statusColor={qualified:"#34d399",rejected:"#ef4444",open:"#f59e0b",revisit:"#60a5fa"};
+    // Draw path
+    if(points.length>1){
+      const path=new google.maps.Polyline({path:points.map(p=>({lat:p.lat,lng:p.lng})),geodesic:true,strokeColor:"#FF6B35",strokeOpacity:.7,strokeWeight:3,map});
+      layer.push(path);
+    }
+    // Draw markers
+    points.forEach((p,i)=>{
+      const color=statusColor[p.status]||"#888";
+      const marker=new google.maps.Marker({
+        position:{lat:p.lat,lng:p.lng},map,
+        label:{text:String(i+1),color:"#000",fontWeight:"800",fontSize:"11px"},
+        icon:{path:google.maps.SymbolPath.CIRCLE,scale:14,fillColor:color,fillOpacity:1,strokeColor:"#000",strokeWeight:2},
+        title:`${p.status}${p.time?" · "+fmtTime(p.time):""}${isDemo?" (Demo)":""}`
+      });
+      layer.push(marker);
+      if(points.length===1||i===0||i===points.length-1){
+        mapInst.current.setCenter({lat:p.lat,lng:p.lng});
+        mapInst.current.setZoom(14);
+      }
+    });
+    if(points.length>1){
+      const bounds=new google.maps.LatLngBounds();
+      points.forEach(p=>bounds.extend({lat:p.lat,lng:p.lng}));
+      map.fitBounds(bounds,{top:40,right:40,bottom:40,left:40});
+    }
+  };
+
+  const todayQual=qualifizierungen.filter(q=>q.scouter_id===selectedScoutId&&q.created_at?.slice(0,10)===selectedDate);
+  const scout=scouts.find(s=>s.id===selectedScoutId);
+  const scoutIdx=activeScouts.indexOf(scout);
+  const color=scoutIdx>=0?SCOUT_COLORS[scoutIdx%SCOUT_COLORS.length]:"#FF6B35";
+
+  return React.createElement("div",null,
+    React.createElement("div",{style:{marginBottom:20}},
+      React.createElement("h1",{style:{fontSize:26,fontWeight:800,letterSpacing:"-1px"}},"GPS Tracking"),
+      React.createElement("p",{style:{color:"#555",fontSize:13,marginTop:4}},"Tagesrouten und Besuchspunkte aller Scouts")
+    ),
+    React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 280px",gap:18,height:"calc(100vh - 160px)"}},
+      React.createElement("div",{style:{position:"relative",borderRadius:12,overflow:"hidden",border:"1px solid #1c1d26"}},
+        React.createElement("div",{ref:mapRef,style:{width:"100%",height:"100%",background:"#1a1d27"}}),
+        React.createElement("div",{className:"map-toolbar"},
+          React.createElement("div",{style:{background:"rgba(8,9,13,.92)",border:"1px solid #252530",borderRadius:8,padding:"7px 12px",display:"flex",alignItems:"center",gap:10,backdropFilter:"blur(8px)"}},
+            React.createElement("select",{value:selectedScoutId,onChange:e=>{setSelectedScoutId(e.target.value);},style:{background:"transparent",border:"none",color:"#e8e9ef",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif",outline:"none"}},
+              ...activeScouts.map(s=>React.createElement("option",{key:s.id,value:s.id,style:{background:"#1a1d27"}},s.name||s.email))
+            ),
+            React.createElement("span",{style:{color:"#333"}}),"|",
+            React.createElement("input",{type:"date",value:selectedDate,onChange:e=>setSelectedDate(e.target.value),style:{background:"transparent",border:"none",color:"#e8e9ef",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Syne',sans-serif",outline:"none"}})
+          ),
+          React.createElement("div",{style:{display:"flex",gap:8}},
+            ...[["qualified","#34d399","Termin"],["open","#f59e0b","Offen"],["rejected","#ef4444","Abgelehnt"]].map(([s,c,l])=>
+              React.createElement("div",{key:s,style:{background:"rgba(8,9,13,.9)",border:`1px solid ${c}44`,borderRadius:8,padding:"5px 10px",backdropFilter:"blur(8px)",display:"flex",alignItems:"center",gap:5}},
+                React.createElement("div",{style:{width:8,height:8,borderRadius:"50%",background:c}}),
+                React.createElement("span",{style:{fontSize:11,color:c,fontWeight:700}}),l
+              )
+            )
+          )
+        )
+      ),
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:14,overflowY:"auto"}},
+        // Scout selector
+        React.createElement("div",{className:"card",style:{padding:18}},
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}},
+            React.createElement("div",{style:{width:42,height:42,borderRadius:"50%",background:`linear-gradient(135deg,${color},${color}77)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff"}},initials(scout?.name||"?")),
+            React.createElement("div",null,
+              React.createElement("div",{style:{fontWeight:700,fontSize:15}}),scout?.name||"—",
+              React.createElement("div",{style:{fontSize:12,color:"#555"}}),fmtDate(selectedDate)
+            )
+          ),
+          React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+            ...[
+              ["Besuche",todayQual.length,color],
+              ["Termine",todayQual.filter(q=>q.status==="qualified").length,"#34d399"],
+              ["Abgelehnt",todayQual.filter(q=>q.status==="rejected").length,"#ef4444"],
+              ["Offen",todayQual.filter(q=>q.status==="open").length,"#f59e0b"],
+            ].map(([l,v,c])=>React.createElement("div",{key:l,style:{background:"#0d0e14",borderRadius:8,padding:"10px",textAlign:"center"}},
+              React.createElement("div",{style:{fontSize:20,fontWeight:800,color:c,fontFamily:"'JetBrains Mono',monospace"}}),v,
+              React.createElement("div",{style:{fontSize:10,color:"#444",marginTop:2,textTransform:"uppercase",letterSpacing:"1px"}}),l
+            ))
+          ),
+          todayQual.length===0&&React.createElement("div",{style:{marginTop:12,padding:"10px",background:"rgba(245,158,11,.08)",borderRadius:8,fontSize:12,color:"#f59e0b",textAlign:"center"}},"Demo-Daten werden angezeigt (keine GPS-Logs für diesen Tag)")
+        ),
+        // Timeline
+        todayQual.length>0&&React.createElement("div",{className:"card",style:{padding:18}},
+          React.createElement("div",{style:{fontSize:10,color:"#555",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:12}},"Tagesablauf"),
+          React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6,maxHeight:300,overflowY:"auto"}},
+            ...todayQual.map((q,i)=>{
+              const sc={qualified:"#34d399",rejected:"#ef4444",open:"#f59e0b"}[q.status]||"#888";
+              return React.createElement("div",{key:q.id,style:{display:"flex",alignItems:"center",gap:10,padding:"7px 8px",borderRadius:7,background:"#0d0e14"}},
+                React.createElement("div",{style:{width:22,height:22,borderRadius:"50%",background:sc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#000",flexShrink:0}}),i+1,
+                React.createElement("div",{style:{flex:1}},
+                  React.createElement("div",{style:{fontSize:11,fontWeight:600,color:sc}}),q.status,
+                  React.createElement("div",{style:{fontSize:10,color:"#555"}}),fmtTime(q.created_at)
+                )
+              );
+            })
+          )
+        ),
+        // All scouts today
+        React.createElement("div",{className:"card",style:{padding:18}},
+          React.createElement("div",{style:{fontSize:10,color:"#555",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:12}}),"Alle Scouts · "+fmtDate(selectedDate),
+          React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+            ...activeScouts.map((s,i)=>{
+              const c=SCOUT_COLORS[i%SCOUT_COLORS.length];
+              const dayQ=qualifizierungen.filter(q=>q.scouter_id===s.id&&q.created_at?.slice(0,10)===selectedDate);
+              const hasGps=dayQ.some(q=>q.lat&&q.lng);
+              return React.createElement("div",{key:s.id,style:{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:7,background:selectedScoutId===s.id?"rgba(255,107,53,.08)":"transparent",cursor:"pointer"},onClick:()=>setSelectedScoutId(s.id)},
+                React.createElement("span",{className:"gps-dot",style:{background:hasGps?"#34d399":"#333",animationPlayState:hasGps?"running":"paused"}}),
+                React.createElement("div",{style:{flex:1,fontSize:12,fontWeight:600,color:selectedScoutId===s.id?c:"#888"}}),s.name||"—",
+                React.createElement("div",{style:{fontSize:11,color:"#555",fontFamily:"'JetBrains Mono',monospace"}}),dayQ.length+" bes."
+              );
+            })
+          )
+        )
+      )
+    )
+  );
+}
+
+// ── CONVERSION FUNNEL ─────────────────────────────────────────────
+function FunnelView({scouts,gebiete,zuweisungen,qualifizierungen}){
+  const [scoutFilter,setScoutFilter]=useState("all");
+  const [dateRange,setDateRange]=useState("30"); // days
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+
+  const filtered=useMemo(()=>{
+    let q=qualifizierungen;
+    if(scoutFilter!=="all")q=q.filter(x=>x.scouter_id===scoutFilter);
+    if(dateRange!=="all"){
+      const from=new Date();from.setDate(from.getDate()-parseInt(dateRange));
+      q=q.filter(x=>new Date(x.created_at)>=from);
+    }
+    return q;
+  },[qualifizierungen,scoutFilter,dateRange]);
+
+  const total=filtered.length;
+  const qualified=filtered.filter(q=>q.status==="qualified").length;
+  const withTermin=filtered.filter(q=>q.termin_datum).length;
+  const rejected=filtered.filter(q=>q.status==="rejected").length;
+  const revisit=filtered.filter(q=>q.status==="revisit").length;
+  const open=filtered.filter(q=>q.status==="open").length;
+
+  // Funnel steps
+  const funnelSteps=[
+    {label:"Haustüren besucht",value:total,color:"#60a5fa",pct:100,icon:"🏠"},
+    {label:"Kontakt hergestellt",value:Math.round(total*.7),color:"#a78bfa",pct:70,icon:"🤝"},
+    {label:"Qualifiziert / Termin",value:qualified,color:"#34d399",pct:total>0?(qualified/total*100):0,icon:"📅"},
+    {label:"Termin bestätigt",value:withTermin,color:"#FF6B35",pct:total>0?(withTermin/total*100):0,icon:"✅"},
+  ];
+
+  // Per scout breakdown
+  const scoutBreakdown=activeScouts.map((s,i)=>{
+    const sq=filtered.filter(q=>q.scouter_id===s.id);
+    const squal=sq.filter(q=>q.status==="qualified").length;
+    const conv=sq.length>0?((squal/sq.length)*100).toFixed(1):0;
+    return{...s,color:SCOUT_COLORS[i%SCOUT_COLORS.length],total:sq.length,qualified:squal,rejected:sq.filter(q=>q.status==="rejected").length,revisit:sq.filter(q=>q.status==="revisit").length,open:sq.filter(q=>q.status==="open").length,conv};
+  }).sort((a,b)=>b.qualified-a.qualified);
+
+  // Time series (last 7 days)
+  const dayLabels=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return d.toISOString().slice(0,10);});
+  const daySeries=dayLabels.map(day=>({
+    day:day.slice(5),
+    total:qualifizierungen.filter(q=>(scoutFilter==="all"||q.scouter_id===scoutFilter)&&q.created_at?.slice(0,10)===day).length,
+    qual:qualifizierungen.filter(q=>(scoutFilter==="all"||q.scouter_id===scoutFilter)&&q.created_at?.slice(0,10)===day&&q.status==="qualified").length,
+  }));
+  const maxDay=Math.max(1,...daySeries.map(d=>d.total));
+
+  return React.createElement("div",null,
+    React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}},
+      React.createElement("div",null,
+        React.createElement("h1",{style:{fontSize:26,fontWeight:800,letterSpacing:"-1px"}},"Conversion Funnel"),
+        React.createElement("p",{style:{color:"#555",fontSize:13,marginTop:4}},"Von Haustür zu Termin")
+      ),
+      React.createElement("div",{style:{display:"flex",gap:10}},
+        React.createElement("select",{className:"input-field",style:{width:180},value:scoutFilter,onChange:e=>setScoutFilter(e.target.value)},
+          React.createElement("option",{value:"all"},"Alle Scouts"),
+          ...activeScouts.map(s=>React.createElement("option",{key:s.id,value:s.id},s.name||s.email))
+        ),
+        React.createElement("select",{className:"input-field",style:{width:140},value:dateRange,onChange:e=>setDateRange(e.target.value)},
+          React.createElement("option",{value:"7"},"Letzte 7 Tage"),
+          React.createElement("option",{value:"30"},"Letzte 30 Tage"),
+          React.createElement("option",{value:"90"},"Letzte 90 Tage"),
+          React.createElement("option",{value:"all"},"Gesamt")
+        )
+      )
+    ),
+    // Funnel
+    React.createElement("div",{className:"card",style:{padding:28,marginBottom:20}},
+      React.createElement("h2",{style:{fontSize:15,fontWeight:700,marginBottom:20}},"Conversion Funnel"),
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:10}},
+        ...funnelSteps.map((step,i)=>{
+          const w=Math.max(15,step.pct);
+          return React.createElement("div",{key:i},
+            React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}},
+              React.createElement("span",{style:{fontSize:12,fontWeight:700,color:"#888"}}),step.icon+" "+step.label,
+              React.createElement("span",{style:{fontSize:12,fontWeight:800,color:step.color,fontFamily:"'JetBrains Mono',monospace"}}),step.value," ",
+              React.createElement("span",{style:{fontSize:11,color:"#555"}}),(step.pct.toFixed(1))+"%"
+            ),
+            React.createElement("div",{style:{position:"relative",height:36,background:"#1c1d26",borderRadius:6,overflow:"hidden"}},
+              React.createElement("div",{style:{position:"absolute",left:0,top:0,bottom:0,width:`${w}%`,background:`linear-gradient(90deg,${step.color}cc,${step.color})`,borderRadius:6,transition:"width .8s ease",display:"flex",alignItems:"center",padding:"0 12px"}},
+                React.createElement("span",{style:{fontSize:12,fontWeight:800,color:"#fff",textShadow:"0 1px 3px rgba(0,0,0,.5)"}}),step.value+" Fälle"
+              )
+            )
+          );
+        })
+      ),
+      // Drop rates
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginTop:20}},
+        ...[
+          {label:"Kontaktrate",val:total>0?"70%":"—",color:"#a78bfa",sub:"Geschätzt"},
+          {label:"Qualifizierungsrate",val:total>0?(qualified/total*100).toFixed(1)+"%":"—",color:"#34d399",sub:"Echte Daten"},
+          {label:"Drop-off",val:total>0?(100-qualified/total*100).toFixed(1)+"%":"—",color:"#ef4444",sub:"Nicht qualifiziert"},
+        ].map((s,i)=>React.createElement("div",{key:i,style:{background:"#0d0e14",borderRadius:10,padding:"14px 16px",textAlign:"center"}},
+          React.createElement("div",{style:{fontSize:22,fontWeight:800,color:s.color,fontFamily:"'JetBrains Mono',monospace"}}),s.val,
+          React.createElement("div",{style:{fontSize:12,fontWeight:600,marginTop:4}}),s.label,
+          React.createElement("div",{style:{fontSize:10,color:"#444",marginTop:2}}),s.sub
+        ))
+      )
+    ),
+    // Charts row
+    React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18,marginBottom:20}},
+      // Status breakdown pie-like
+      React.createElement("div",{className:"card",style:{padding:22}},
+        React.createElement("h3",{style:{fontSize:14,fontWeight:700,marginBottom:16}},"Status Breakdown"),
+        React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+          ...[
+            {label:"Qualifiziert",val:qualified,color:"#34d399"},
+            {label:"Abgelehnt",val:rejected,color:"#ef4444"},
+            {label:"Wiedervorlage",val:revisit,color:"#60a5fa"},
+            {label:"Offen",val:open,color:"#f59e0b"},
+          ].map(s=>{
+            const pct=total>0?(s.val/total*100).toFixed(0):0;
+            return React.createElement("div",{key:s.label},
+              React.createElement("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:12}},
+                React.createElement("span",{style:{color:"#888"}}),s.label,
+                React.createElement("span",{style:{color:s.color,fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}),s.val," (",pct,"%)"
+              ),
+              React.createElement("div",{className:"progress",style:{height:8}},
+                React.createElement("div",{className:"progress-fill",style:{width:`${pct}%`,background:s.color}})
+              )
+            );
+          })
+        )
+      ),
+      // Daily chart
+      React.createElement("div",{className:"card",style:{padding:22}},
+        React.createElement("h3",{style:{fontSize:14,fontWeight:700,marginBottom:16}},"Letzte 7 Tage"),
+        React.createElement("div",{style:{display:"flex",alignItems:"flex-end",gap:6,height:120,paddingBottom:20,position:"relative"}},
+          ...daySeries.map((d,i)=>{
+            const h=Math.round((d.total/maxDay)*100);
+            const hq=Math.round((d.qual/maxDay)*100);
+            return React.createElement("div",{key:i,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,height:"100%",justifyContent:"flex-end"}},
+              React.createElement("div",{style:{fontSize:9,color:"#555",marginBottom:2}}),d.total||"",
+              React.createElement("div",{style:{width:"100%",position:"relative",height:`${Math.max(4,h)}%`,background:"#1c1d26",borderRadius:"3px 3px 0 0"}},
+                React.createElement("div",{style:{position:"absolute",bottom:0,width:"100%",height:`${hq>0?Math.round(hq/h*100):0}%`,background:"#34d399",borderRadius:"3px 3px 0 0",minHeight:hq>0?3:0}})
+              ),
+              React.createElement("div",{style:{fontSize:9,color:"#444",marginTop:4,transform:"rotate(-30deg)",transformOrigin:"top center"}}),d.day
+            );
+          })
+        ),
+        React.createElement("div",{style:{display:"flex",gap:16,justifyContent:"center"}},
+          ...[["#1c1d26","Besuche"],["#34d399","Termine"]].map(([c,l])=>React.createElement("div",{key:l,style:{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#555"}},
+            React.createElement("div",{style:{width:10,height:10,borderRadius:2,background:c}}),l
+          ))
+        )
+      )
+    ),
+    // Scout breakdown table
+    React.createElement("div",{className:"card",style:{padding:22}},
+      React.createElement("h3",{style:{fontSize:14,fontWeight:700,marginBottom:16}},"Breakdown pro Scout"),
+      React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:13}},
+        React.createElement("thead",null,
+          React.createElement("tr",null,
+            ...["Scout","Besuche","Qual.","Abgel.","WV","Conv.%","Trend"].map(h=>
+              React.createElement("th",{key:h,style:{textAlign:"left",padding:"7px 12px",color:"#444",fontWeight:700,fontSize:10,letterSpacing:"1px",textTransform:"uppercase",borderBottom:"1px solid #1c1d26"}},h)
+            )
+          )
+        ),
+        React.createElement("tbody",null,
+          ...scoutBreakdown.map(s=>React.createElement("tr",{key:s.id,className:"table-row"},
+            React.createElement("td",{style:{padding:"10px 12px"}},
+              React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},
+                React.createElement("div",{style:{width:8,height:8,borderRadius:"50%",background:s.color}}),
+                React.createElement("span",{style:{fontWeight:600}}),s.name||"—"
+              )
+            ),
+            React.createElement("td",{style:{padding:"10px 12px",fontFamily:"'JetBrains Mono',monospace",color:"#888"}}),s.total,
+            React.createElement("td",{style:{padding:"10px 12px",fontFamily:"'JetBrains Mono',monospace",color:"#34d399"}}),s.qualified,
+            React.createElement("td",{style:{padding:"10px 12px",fontFamily:"'JetBrains Mono',monospace",color:"#ef4444"}}),s.rejected,
+            React.createElement("td",{style:{padding:"10px 12px",fontFamily:"'JetBrains Mono',monospace",color:"#60a5fa"}}),s.revisit,
+            React.createElement("td",{style:{padding:"10px 12px"}},
+              React.createElement("div",{style:{display:"flex",alignItems:"center",gap:6}},
+                React.createElement("div",{className:"progress",style:{width:50,height:6}}),
+                  React.createElement("div",{className:"progress-fill",style:{width:`${Math.min(100,s.conv)}%`,background:s.color}}),
+                React.createElement("span",{style:{fontSize:11,color:s.color,fontFamily:"'JetBrains Mono',monospace"}}),s.conv+"%"
+              )
+            ),
+            React.createElement("td",{style:{padding:"10px 12px"}}),
+              parseFloat(s.conv)>30?React.createElement("span",{style:{color:"#34d399",fontSize:13}},"↑ Stark"):
+              parseFloat(s.conv)>15?React.createElement("span",{style:{color:"#f59e0b",fontSize:13}},"→ OK"):
+              React.createElement("span",{style:{color:"#ef4444",fontSize:13}},"↓ Niedrig")
+          ))
+        )
+      )
+    )
+  );
+}
+
+// ── GEBIETSWECHSEL / TRANSFER ─────────────────────────────────────
+function TransferView({scouts,gebiete,zuweisungen,showNotif,reload}){
+  const [fromScout,setFromScout]=useState("");
+  const [toScout,setToScout]=useState("");
+  const [selectedGebiet,setSelectedGebiet]=useState(null);
+  const [dragOver,setDragOver]=useState(null);
+  const [transfering,setTransfering]=useState(false);
+  const [history,setHistory]=useState([]);
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+
+  const getScoutGebiete=id=>zuweisungen.filter(z=>z.scouter_id===id).map(z=>gebiete.find(g=>g.id===z.gebiet_id)).filter(Boolean);
+
+  const doTransfer=async(gebietId,newScoutId,reason="Manueller Transfer")=>{
+    if(!gebietId||!newScoutId)return;
+    setTransfering(true);
+    try{
+      const oldZuw=zuweisungen.find(z=>z.gebiet_id===gebietId);
+      const oldScout=oldZuw?scouts.find(s=>s.id===oldZuw.scouter_id):null;
+      const newScout=scouts.find(s=>s.id===newScoutId);
+      const gebiet=gebiete.find(g=>g.id===gebietId);
+      await sbDelWhere("zuweisungen","gebiet_id",gebietId);
+      await sbPost("zuweisungen",{gebiet_id:gebietId,scouter_id:newScoutId,active:true});
+      const entry={id:Date.now(),gebiet:gebiet?.name||"—",from:oldScout?.name||"—",to:newScout?.name||"—",time:new Date().toLocaleTimeString("de-DE"),reason};
+      setHistory(p=>[entry,...p.slice(0,9)]);
+      showNotif(`"${gebiet?.name}" → ${newScout?.name}`);
+      await reload();
+    }catch(e){showNotif("Fehler: "+e.message,"err");}
+    setTransfering(false);setSelectedGebiet(null);
+  };
+
+  const fromGebiete=fromScout?getScoutGebiete(fromScout):[];
+  const toGebiete=toScout?getScoutGebiete(toScout):[];
+  const unassigned=gebiete.filter(g=>!zuweisungen.some(z=>z.gebiet_id===g.id));
+
+  const fromColor=fromScout?SCOUT_COLORS[activeScouts.findIndex(s=>s.id===fromScout)%SCOUT_COLORS.length]:"#555";
+  const toColor=toScout?SCOUT_COLORS[activeScouts.findIndex(s=>s.id===toScout)%SCOUT_COLORS.length]:"#555";
+
+  const GebietCard=({g,sourceScoutId,isDraggable})=>{
+    const zuw=zuweisungen.find(z=>z.gebiet_id===g.id);
+    const scout=zuw?scouts.find(s=>s.id===zuw.scouter_id):null;
+    const idx=scout?activeScouts.indexOf(scout):-1;
+    const color=idx>=0?SCOUT_COLORS[idx%SCOUT_COLORS.length]:"#555";
+    const isSel=selectedGebiet===g.id;
+    return React.createElement("div",{
+      style:{background:isSel?"rgba(255,107,53,.1)":"#0d0e14",border:`1px solid ${isSel?"#FF6B35":"#1c1d26"}`,borderRadius:9,padding:"10px 13px",cursor:"pointer",transition:"all .15s",userSelect:"none"},
+      onClick:()=>setSelectedGebiet(isSel?null:g.id),
+      draggable:isDraggable,
+      onDragStart:e=>{e.dataTransfer.setData("gebietId",g.id);e.dataTransfer.setData("fromScoutId",sourceScoutId||"");},
+    },
+      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        React.createElement("div",null,
+          React.createElement("div",{style:{fontWeight:700,fontSize:13,color:isSel?"#FF6B35":color}}),g.name,
+          React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}}),(g.einheiten||500)+" Einheiten"
+        ),
+        isSel&&toScout&&toScout!==sourceScoutId&&React.createElement("button",{className:"btn-primary",style:{fontSize:11,padding:"5px 10px"},disabled:transfering,onClick:e=>{e.stopPropagation();doTransfer(g.id,toScout);}},transfering?"…":"→ Übertragen")
+      )
+    );
+  };
+
+  return React.createElement("div",null,
+    React.createElement("div",{style:{marginBottom:28}},
+      React.createElement("h1",{style:{fontSize:26,fontWeight:800,letterSpacing:"-1px"}},"Gebietswechsel"),
+      React.createElement("p",{style:{color:"#555",fontSize:13,marginTop:4}},"Gebiete zwischen Scouts übertragen · Drag & Drop oder klicken")
+    ),
+    React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:16,marginBottom:20,alignItems:"start"}},
+      // From
+      React.createElement("div",null,
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:12}},
+          React.createElement("div",{style:{width:10,height:10,borderRadius:"50%",background:fromColor}}),
+          React.createElement("select",{className:"input-field",value:fromScout,onChange:e=>setFromScout(e.target.value),style:{flex:1}},
+            React.createElement("option",{value:""},"— Von Scout wählen —"),
+            ...activeScouts.map(s=>React.createElement("option",{key:s.id,value:s.id},s.name||s.email))
+          )
+        ),
+        React.createElement("div",{
+          className:`drag-area ${dragOver==="from"?"drag-over":""}`,
+          onDragOver:e=>{e.preventDefault();setDragOver("from");},
+          onDragLeave:()=>setDragOver(null),
+          onDrop:async e=>{e.preventDefault();setDragOver(null);const gid=e.dataTransfer.getData("gebietId");if(fromScout)doTransfer(gid,fromScout,"Drag & Drop Transfer");},
+        },
+          fromScout
+            ? fromGebiete.length>0
+              ? React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:7}},
+                  React.createElement("div",{style:{fontSize:10,color:"#555",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,marginBottom:4}}),fromGebiete.length+" Gebiete",
+                  ...fromGebiete.map(g=>React.createElement(GebietCard,{key:g.id,g,sourceScoutId:fromScout,isDraggable:true}))
+                )
+              : React.createElement("div",{style:{textAlign:"center",color:"#444",padding:"20px 0",fontSize:13}},"Keine Gebiete zugewiesen")
+            : React.createElement("div",{style:{textAlign:"center",color:"#333",padding:"20px 0",fontSize:13}},"Scout auswählen")
+        )
+      ),
+      // Arrow
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",paddingTop:50,gap:8}},
+        React.createElement("div",{style:{fontSize:28,color:"#333"}},"⇄"),
+        selectedGebiet&&fromScout&&toScout&&toScout!==fromScout&&React.createElement("button",{className:"btn-primary",style:{fontSize:11,padding:"6px 12px",whiteSpace:"nowrap"},disabled:transfering,onClick:()=>doTransfer(selectedGebiet,toScout)},transfering?"…":"Übertragen →")
+      ),
+      // To
+      React.createElement("div",null,
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:12}},
+          React.createElement("div",{style:{width:10,height:10,borderRadius:"50%",background:toColor}}),
+          React.createElement("select",{className:"input-field",value:toScout,onChange:e=>setToScout(e.target.value),style:{flex:1}},
+            React.createElement("option",{value:""},"— An Scout wählen —"),
+            ...activeScouts.filter(s=>s.id!==fromScout).map(s=>React.createElement("option",{key:s.id,value:s.id},s.name||s.email))
+          )
+        ),
+        React.createElement("div",{
+          className:`drag-area ${dragOver==="to"?"drag-over":""}`,
+          onDragOver:e=>{e.preventDefault();setDragOver("to");},
+          onDragLeave:()=>setDragOver(null),
+          onDrop:async e=>{e.preventDefault();setDragOver(null);const gid=e.dataTransfer.getData("gebietId");if(toScout)doTransfer(gid,toScout,"Drag & Drop Transfer");},
+        },
+          toScout
+            ? toGebiete.length>0
+              ? React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:7}},
+                  React.createElement("div",{style:{fontSize:10,color:"#555",letterSpacing:"1px",textTransform:"uppercase",fontWeight:700,marginBottom:4}}),toGebiete.length+" Gebiete",
+                  ...toGebiete.map(g=>React.createElement(GebietCard,{key:g.id,g,sourceScoutId:toScout,isDraggable:false}))
+                )
+              : React.createElement("div",{style:{textAlign:"center",color:"#444",padding:"20px 0",fontSize:13}},"Noch keine Gebiete · hierher ziehen")
+            : React.createElement("div",{style:{textAlign:"center",color:"#333",padding:"20px 0",fontSize:13}},"Ziel-Scout auswählen")
+        )
+      )
+    ),
+    // Unassigned
+    unassigned.length>0&&React.createElement("div",{className:"card",style:{padding:18,marginBottom:20}},
+      React.createElement("div",{style:{fontSize:10,color:"#f59e0b",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:12}}),`◌ Nicht zugewiesene Gebiete (${unassigned.length})`,
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}},
+        ...unassigned.map(g=>React.createElement("div",{key:g.id,style:{background:"#0d0e14",border:"1px solid rgba(245,158,11,.2)",borderRadius:9,padding:"10px 13px"}},
+          React.createElement("div",{style:{fontWeight:700,fontSize:13,color:"#f59e0b"}}),g.name,
+          React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2,marginBottom:8}}),(g.einheiten||500)+" Einheiten",
+          toScout&&React.createElement("button",{className:"btn-warn",style:{width:"100%"},onClick:()=>doTransfer(g.id,toScout,"Zuweisung aus Pool")},"→ "+scouts.find(s=>s.id===toScout)?.name?.split(" ")[0]+" zuweisen")
+        ))
+      )
+    ),
+    // Transfer history
+    history.length>0&&React.createElement("div",{className:"card",style:{padding:18}},
+      React.createElement("div",{style:{fontSize:10,color:"#555",letterSpacing:"2px",textTransform:"uppercase",fontWeight:700,marginBottom:12}},"Transfer-Protokoll (Session)"),
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+        ...history.map(h=>React.createElement("div",{key:h.id,style:{display:"flex",alignItems:"center",gap:12,padding:"8px 12px",background:"#0d0e14",borderRadius:8,fontSize:12}},
+          React.createElement("span",{style:{color:"#444",fontFamily:"'JetBrains Mono',monospace",minWidth:50}}),h.time,
+          React.createElement("span",{style:{fontWeight:700,color:"#e8e9ef",flex:1}}),h.gebiet,
+          React.createElement("span",{style:{color:"#666"}}),h.from,
+          React.createElement("span",{style:{color:"#FF6B35",fontSize:16}}),"→",
+          React.createElement("span",{style:{color:"#34d399",fontWeight:700}}),h.to
+        ))
+      )
+    )
+  );
+}
+
+// ── GEBIETE VIEW ──────────────────────────────────────────────────
+function GebieteView({scouts,gebiete,zuweisungen,showNotif,reload}){
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+  const reassign=async(gId,newSId)=>{
+    try{
+      await sbDelWhere("zuweisungen","gebiet_id",gId);
+      if(newSId)await sbPost("zuweisungen",{gebiet_id:gId,scouter_id:newSId,active:true});
+      showNotif("Zuweisung aktualisiert!");await reload();
+    }catch(e){showNotif("Fehler: "+e.message,"err");}
+  };
+  return React.createElement("div",null,
+    React.createElement("div",{style:{marginBottom:28}},
+      React.createElement("h1",{style:{fontSize:26,fontWeight:800,letterSpacing:"-1px"}},"Gebiete verwalten"),
+      React.createElement("p",{style:{color:"#555",fontSize:13,marginTop:4}},"Übersicht + Zuweisungen ändern")
+    ),
+    gebiete.length===0
+      ? React.createElement("div",{style:{textAlign:"center",padding:"60px 20px",color:"#444"}},
+          React.createElement("div",{style:{fontSize:48,marginBottom:16}},"🗺️"),
+          React.createElement("div",{style:{fontSize:16,fontWeight:700}},"Noch keine Gebiete")
+        )
+      : React.createElement("div",{className:"card",style:{overflow:"hidden"}},
+          React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:13}},
+            React.createElement("thead",null,
+              React.createElement("tr",{style:{borderBottom:"1px solid #1c1d26"}},
+                ...["Gebiet","Einheiten","Polygon","Zugewiesen an","Aktion"].map(h=>
+                  React.createElement("th",{key:h,style:{textAlign:"left",padding:"12px 16px",color:"#444",fontWeight:700,fontSize:10,letterSpacing:"1.2px",textTransform:"uppercase"}},h)
+                )
+              )
+            ),
+            React.createElement("tbody",null,
+              ...gebiete.map(g=>{
+                const zuw=zuweisungen.find(z=>z.gebiet_id===g.id);
+                const scout=zuw?scouts.find(s=>s.id===zuw.scouter_id):null;
+                return React.createElement("tr",{key:g.id,className:"table-row"},
+                  React.createElement("td",{style:{padding:"13px 16px"}},
+                    React.createElement("div",{style:{fontWeight:700}}),g.name,
+                    React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}}),g.plz?"PLZ: "+g.plz:"Manuell"
+                  ),
+                  React.createElement("td",{style:{padding:"13px 16px",fontFamily:"'JetBrains Mono',monospace",color:"#60a5fa"}}),g.einheiten||500,
+                  React.createElement("td",{style:{padding:"13px 16px"}}),g.polygon_coords?React.createElement("span",{className:"badge badge-green"},"✓"):React.createElement("span",{className:"badge badge-red"},"✗"),
+                  React.createElement("td",{style:{padding:"13px 16px"}},
+                    React.createElement("select",{className:"input-field",style:{width:200},value:scout?.id||"",onChange:e=>reassign(g.id,e.target.value)},
+                      React.createElement("option",{value:""},"— Nicht zugewiesen —"),
+                      ...activeScouts.map(s=>React.createElement("option",{key:s.id,value:s.id},s.name||s.email))
+                    )
+                  ),
+                  React.createElement("td",{style:{padding:"13px 16px"}},
+                    React.createElement("button",{className:"btn-danger",onClick:async()=>{
+                      if(!confirm(`"${g.name}" löschen?`))return;
+                      await sbDelWhere("zuweisungen","gebiet_id",g.id);
+                      await sbDel("gebiete",g.id);
+                      showNotif("Gelöscht","warn");await reload();
+                    }},"Löschen")
+                  )
+                );
+              })
+            )
+          )
+        )
+  );
+}
+
+// ── PERFORMANCE VIEW ──────────────────────────────────────────────
+function PerformanceView({scouts,gebiete,zuweisungen,qualifizierungen}){
+  const activeScouts=scouts.filter(s=>s.active&&!s.pending);
+  const getStats=id=>{
+    const q=qualifizierungen.filter(x=>x.scouter_id===id);
+    const gz=zuweisungen.filter(z=>z.scouter_id===id).length;
+    const qual=q.filter(x=>x.status==="qualified").length;
+    const rej=q.filter(x=>x.status==="rejected").length;
+    const open=q.filter(x=>x.status==="open").length;
+    return{total:q.length,qualified:qual,rejected:rej,open,gebiete:gz,conv:q.length>0?((qual/q.length)*100).toFixed(1):"0.0"};
+  };
+  const ranked=activeScouts.map((s,i)=>({...s,color:SCOUT_COLORS[i%SCOUT_COLORS.length],stats:getStats(s.id)})).sort((a,b)=>b.stats.qualified-a.stats.qualified);
+  const medals=["🥇","🥈","🥉"];
+  return React.createElement("div",null,
+    React.createElement("div",{style:{marginBottom:28}},
+      React.createElement("h1",{style:{fontSize:26,fontWeight:800,letterSpacing:"-1px"}},"Performance"),
+      React.createElement("p",{style:{color:"#555",fontSize:13,marginTop:4}},"Supabase Echtdaten · Live Ranking")
+    ),
+    React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:12,marginBottom:28}},
+      ...ranked.map((s,rank)=>React.createElement("div",{key:s.id,className:"card",style:{padding:"18px 22px"}},
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:18}},
+          React.createElement("div",{style:{fontSize:rank<3?28:18,fontWeight:800,minWidth:44,textAlign:"center",color:rank<3?"unset":"#333",fontFamily:"'JetBrains Mono',monospace"}}),rank<3?medals[rank]:`#${rank+1}`,
+          React.createElement("div",{style:{width:44,height:44,borderRadius:"50%",background:`linear-gradient(135deg,${s.color},${s.color}77)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff"}}),initials(s.name),
+          React.createElement("div",{style:{flex:1}},
+            React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:10}}),s.name||s.email||"—",
+            React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}},
+              ...[
+                {l:"Gebiete",v:s.stats.gebiete,c:"#60a5fa"},
+                {l:"Gesamt",v:s.stats.total,c:"#a78bfa"},
+                {l:"Termine",v:s.stats.qualified,c:"#34d399"},
+                {l:"Abgelehnt",v:s.stats.rejected,c:"#ef4444"},
+                {l:"Conv.",v:s.stats.conv+"%",c:s.color},
+              ].map((st,j)=>React.createElement("div",{key:j,style:{background:"#0d0e14",borderRadius:8,padding:"9px 10px",textAlign:"center"}},
+                React.createElement("div",{style:{fontSize:18,fontWeight:800,color:st.c,fontFamily:"'JetBrains Mono',monospace"}}),st.v,
+                React.createElement("div",{style:{fontSize:9,color:"#444",marginTop:2,letterSpacing:"1px",textTransform:"uppercase"}}),st.l
+              ))
+            )
+          )
+        )
+      ))
+    )
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
