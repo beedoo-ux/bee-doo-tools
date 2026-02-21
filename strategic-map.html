@@ -75,6 +75,23 @@ input[type=range] { width:100%; accent-color:#FDE154; }
 .alert { background:#1a0f10ee; border:1px solid #ef444460; border-radius:7px; padding:5px 12px; font-size:11px; cursor:pointer; pointer-events:all; white-space:nowrap; }
 .alert:hover { background:#2a1418; }
 
+
+/* Live draw counter */
+#draw-counter {
+  position:absolute; bottom:80px; left:50%; transform:translateX(-50%);
+  z-index:1000; background:#0f1320ee; border:1px solid #FDE154;
+  border-radius:10px; padding:10px 20px; display:none;
+  backdrop-filter:blur(4px); text-align:center; pointer-events:none;
+  min-width:220px;
+}
+#draw-counter .dc-main { font-size:26px; font-weight:700; color:#FDE154; }
+#draw-counter .dc-label { font-size:11px; color:#5c6b8a; margin-top:2px; }
+#draw-counter .dc-hint { font-size:11px; color:#5c6b8a; margin-top:6px; border-top:1px solid #1c2640; padding-top:6px; }
+#draw-counter .dc-sub { display:flex; justify-content:center; gap:16px; margin-top:6px; }
+#draw-counter .dc-stat { text-align:center; }
+#draw-counter .dc-stat .v { font-size:14px; font-weight:600; }
+#draw-counter .dc-stat .l { font-size:10px; color:#5c6b8a; }
+
 /* Draw toolbar */
 .leaflet-draw-toolbar a { background-color: #0f1320 !important; border-color: #263354 !important; }
 .leaflet-draw-toolbar a:hover { background-color: #1c2640 !important; }
@@ -135,6 +152,23 @@ input[type=range] { width:100%; accent-color:#FDE154; }
 .gebiet-label { background:transparent; border:none; font-size:10px; font-weight:600; color:#fff; text-shadow:0 0 3px #000; white-space:nowrap; }
 
 /* Legend */
+
+
+/* Live draw counter */
+#draw-counter {
+  position:absolute; bottom:80px; left:50%; transform:translateX(-50%);
+  z-index:1000; background:#0f1320ee; border:1px solid #FDE154;
+  border-radius:10px; padding:10px 20px; display:none;
+  backdrop-filter:blur(4px); text-align:center; pointer-events:none;
+  min-width:220px;
+}
+#draw-counter .dc-main { font-size:26px; font-weight:700; color:#FDE154; }
+#draw-counter .dc-label { font-size:11px; color:#5c6b8a; margin-top:2px; }
+#draw-counter .dc-hint { font-size:11px; color:#5c6b8a; margin-top:6px; border-top:1px solid #1c2640; padding-top:6px; }
+#draw-counter .dc-sub { display:flex; justify-content:center; gap:16px; margin-top:6px; }
+#draw-counter .dc-stat { text-align:center; }
+#draw-counter .dc-stat .v { font-size:14px; font-weight:600; }
+#draw-counter .dc-stat .l { font-size:10px; color:#5c6b8a; }
 
 /* Draw toolbar */
 #draw-toolbar { position:absolute; top:58px; right:10px; z-index:1000; display:flex; flex-direction:column; gap:6px; }
@@ -861,6 +895,9 @@ map.on('click', function(e) {
   
   drawPoints.push(pt);
   
+  // Update live counter
+  updateDrawCounter();
+  
   // Add dot marker
   const dotIcon = L.divIcon({ html:'<div style="width:8px;height:8px;background:#FDE154;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.5)"></div>', iconSize:[8,8], iconAnchor:[4,4], className:'' });
   const mk = L.marker(pt, {icon:dotIcon}).addTo(map);
@@ -1055,6 +1092,127 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && drawMode) cancelDraw();
   if (e.key === 'Enter' && drawMode && drawPoints.length >= 3) finishDraw();
 });
+
+
+// ─── POINT-IN-POLYGON + LIVE COUNTER ────────────────────────────────────
+function pointInPolygon(point, polygon) {
+  // Ray casting algorithm
+  const [py, px] = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [iy, ix] = polygon[i];
+    const [jy, jx] = polygon[j];
+    if (((iy > py) !== (jy > py)) && (px < (jx - ix) * (py - iy) / (jy - iy) + ix)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function polygonAreaKm2(pts) {
+  // Shoelace formula (approximate, good enough for small areas)
+  let area = 0;
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    // Convert lat/lng degrees to meters (approximate)
+    const lat1 = pts[i][0] * Math.PI / 180;
+    const lat2 = pts[j][0] * Math.PI / 180;
+    const lng1 = pts[i][1] * Math.PI / 180;
+    const lng2 = pts[j][1] * Math.PI / 180;
+    area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
+  }
+  area = Math.abs(area) * 6378137 * 6378137 / 2;
+  return area / 1e6; // m² → km²
+}
+
+function updateDrawCounter() {
+  if (drawPoints.length < 2) return;
+
+  // Need infas data loaded
+  const pts = window.INFAS_NRW || [];
+  const counter = document.getElementById('draw-counter');
+  
+  if (drawPoints.length < 3) {
+    counter.style.display = 'block';
+    document.getElementById('dc-count').textContent = '—';
+    document.getElementById('dc-hint').textContent = '✏️ Mindestens 3 Punkte für Zählung • Enter = fertig';
+    return;
+  }
+
+  counter.style.display = 'block';
+
+  // Count infas points inside current polygon
+  const count = pts.filter(p => pointInPolygon(p, drawPoints)).length;
+  const area = polygonAreaKm2(drawPoints);
+  const density = area > 0 ? Math.round(count / area) : 0;
+
+  // Animate counter
+  const el = document.getElementById('dc-count');
+  const prev = parseInt(el.textContent) || 0;
+  if (prev !== count) {
+    el.style.color = count > prev ? '#22c55e' : '#f97316';
+    setTimeout(() => el.style.color = '#FDE154', 400);
+  }
+
+  el.textContent = count.toLocaleString('de');
+  document.getElementById('dc-km2').textContent = area.toFixed(1);
+  document.getElementById('dc-pts').textContent = pts.length.toLocaleString('de');
+  document.getElementById('dc-density').textContent = density.toLocaleString('de');
+
+  const hint = drawPoints.length < 3
+    ? '✏️ Klicke Punkte auf der Karte • Enter = fertig'
+    : `📍 ${drawPoints.length} Punkte gesetzt • Enter oder Doppelklick = fertig`;
+  document.getElementById('dc-hint').textContent = hint;
+
+  // Highlight: if no infas loaded yet, show a note
+  if (pts.length === 0) {
+    document.getElementById('dc-count').textContent = '—';
+    document.getElementById('dc-hint').textContent = '⚠ Aktiviere erst den infas360-Layer für Zählung';
+  }
+}
+
+// Pre-load infas when draw mode starts (not waiting for layer toggle)
+const _origStartDraw = startDraw;
+function startDraw() {
+  _origStartDraw();
+  // Auto-load infas data in background
+  if (!window.INFAS_NRW) {
+    if (!document.querySelector('script[src="/infas_nrw.js"]')) {
+      const s = document.createElement('script');
+      s.src = '/infas_nrw.js';
+      document.head.appendChild(s);
+    }
+  }
+  document.getElementById('draw-counter').style.display = 'block';
+}
+
+// Hide counter when done
+const _origCancelDraw = cancelDraw;
+function cancelDraw() {
+  _origCancelDraw();
+  document.getElementById('draw-counter').style.display = 'none';
+}
+
+const _origFinishDraw = finishDraw;
+function finishDraw() {
+  _origFinishDraw();
+  // Keep counter visible in modal phase, update it
+  updateDrawCounter();
+}
+
+// Also pre-fill address count in modal
+const _origSaveGebiet = saveGebiet;
+async function saveGebiet() {
+  const count = parseInt(document.getElementById('dc-count').textContent.replace('.','')) || 0;
+  const area = parseFloat(document.getElementById('dc-km2').textContent) || 0;
+  // Add to notiz if empty
+  const notizEl = document.getElementById('g-notiz');
+  if (!notizEl.value && count > 0) {
+    notizEl.value = `${count.toLocaleString('de')} Adressen · ${area.toFixed(1)} km²`;
+  }
+  await _origSaveGebiet();
+}
 
 // Leaflet tooltip dark style
 const style = document.createElement('style');
@@ -1350,6 +1508,18 @@ loadGebiete();
 <div id="gebiete-panel" style="position:absolute;top:58px;right:60px;z-index:1000;width:280px;background:#0f1320ee;border:1px solid #1c2640;border-radius:10px;padding:14px;display:none;max-height:400px;overflow-y:auto;">
   <div style="font-size:13px;font-weight:700;color:#FDE154;margin-bottom:10px">📋 Gespeicherte Gebiete</div>
   <div id="gebiete-list">Lädt...</div>
+</div>
+
+
+<div id="draw-counter">
+  <div class="dc-main" id="dc-count">0</div>
+  <div class="dc-label">Adressen im Gebiet</div>
+  <div class="dc-sub">
+    <div class="dc-stat"><div class="v" id="dc-km2">—</div><div class="l">km²</div></div>
+    <div class="dc-stat"><div class="v" id="dc-pts">—</div><div class="l">Punkte</div></div>
+    <div class="dc-stat"><div class="v" id="dc-density">—</div><div class="l">Adr/km²</div></div>
+  </div>
+  <div class="dc-hint" id="dc-hint">✏️ Klicke Punkte auf der Karte • Enter = fertig</div>
 </div>
 
 </body>
