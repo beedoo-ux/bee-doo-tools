@@ -5,100 +5,172 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>bee-doo · Strategische Karte NRW</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',system-ui,sans-serif;background:#0c1222;color:#e1e7ef;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'DM Sans', system-ui, sans-serif; background:#0c1222; color:#e1e7ef; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
-nav{display:flex;align-items:center;gap:10px;padding:0 16px;height:50px;background:#0c1222;border-bottom:1px solid #1c2640;flex-shrink:0}
-.logo{font-size:17px;font-weight:700;color:#FDE154}
-.subtitle{font-size:12px;color:#5c6b8a;margin-left:4px}
-.tabs{display:flex;gap:3px;margin-left:12px}
-.tab{padding:5px 12px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:#5c6b8a}
-.tab:hover{background:#1c2640;color:#e1e7ef}
-.tab.active{background:#1c2640;color:#FDE154}
-.stats{margin-left:auto;display:flex;gap:8px}
-.stat{background:#151d30;padding:3px 10px;border-radius:6px;font-size:11px;color:#5c6b8a}
-.stat b{color:#FDE154}
+nav { display:flex; align-items:center; gap:10px; padding:0 16px; height:50px; background:#0c1222; border-bottom:1px solid #1c2640; flex-shrink:0; }
+.logo { font-size:17px; font-weight:700; color:#FDE154; }
+.subtitle { font-size:12px; color:#5c6b8a; margin-left:4px; }
+.tabs { display:flex; gap:3px; margin-left:12px; }
+.tab { padding:5px 12px; border-radius:7px; font-size:12px; font-weight:500; cursor:pointer; border:none; background:transparent; color:#5c6b8a; }
+.tab:hover { background:#1c2640; color:#e1e7ef; }
+.tab.active { background:#1c2640; color:#FDE154; }
+.stats { margin-left:auto; display:flex; gap:8px; }
+.stat { background:#151d30; padding:3px 10px; border-radius:6px; font-size:11px; color:#5c6b8a; }
+.stat b { color:#FDE154; }
 
-#map{flex:1}
+#map { flex:1; }
+/* Leaflet dark tiles */
+.leaflet-tile { filter: brightness(0.5) invert(1) contrast(2) hue-rotate(200deg) saturate(0.4) brightness(0.7); }
 
-/* Leaflet dark map filter */
-.leaflet-tile{filter:brightness(0.45) invert(1) contrast(2) hue-rotate(200deg) saturate(0.3) brightness(0.7)}
-.leaflet-container .leaflet-control-attribution{background:#0c1222aa;color:#5c6b8a;font-size:10px}
+/* Layers panel */
+#layers { position:absolute; top:58px; left:10px; z-index:1000; background:#0f1320ee; border:1px solid #1c2640; border-radius:10px; padding:12px; min-width:190px; }
+.ly-title { font-size:10px; color:#5c6b8a; font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+.ly-row { display:flex; align-items:center; gap:8px; padding:3px 0; cursor:pointer; font-size:12px; }
+.ly-row input { accent-color:#FDE154; cursor:pointer; }
+.ly-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.ly-n { margin-left:auto; font-size:10px; color:#5c6b8a; background:#151d30; padding:1px 6px; border-radius:4px; }
 
-/* PANEL LEFT: Layers */
-#panel-left{position:absolute;top:58px;left:10px;z-index:1000;display:flex;flex-direction:column;gap:8px}
+/* Detail panel */
+#detail { position:absolute; top:58px; right:10px; z-index:1000; width:300px; background:#0f1320ee; border:1px solid #1c2640; border-radius:10px; padding:14px; display:none; backdrop-filter:blur(4px); }
+#detail h3 { font-size:14px; font-weight:700; color:#FDE154; margin-bottom:10px; }
+.d-row { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #1c264030; font-size:12px; }
+.d-row:last-child { border:none; }
+.d-key { color:#5c6b8a; }
+.kpis { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px; }
+.kpi { background:#151d30; border-radius:7px; padding:8px; text-align:center; }
+.kpi .v { font-size:18px; font-weight:700; color:#FDE154; }
+.kpi .l { font-size:10px; color:#5c6b8a; margin-top:1px; }
+.close { position:absolute; top:10px; right:12px; background:none; border:none; color:#5c6b8a; cursor:pointer; font-size:16px; }
+.close:hover { color:#e1e7ef; }
+.gap-box { background:#1a0f0f; border:1px solid #ef444440; border-radius:7px; padding:10px; margin-top:8px; font-size:12px; }
+.gap-box .gh { color:#ef4444; font-weight:600; margin-bottom:6px; font-size:12px; }
+.rec-box { background:#0f1a0f; border:1px solid #fde15430; border-radius:7px; padding:10px; margin-top:6px; font-size:12px; }
+.rec-box .rh { color:#FDE154; font-weight:600; margin-bottom:6px; font-size:12px; }
 
-.panel{background:#0f1320ee;border:1px solid #1c2640;border-radius:10px;padding:12px;backdrop-filter:blur(4px)}
-.panel-title{font-size:10px;color:#5c6b8a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-
-.ly-row{display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;font-size:12px}
-.ly-row input{accent-color:#FDE154;cursor:pointer}
-.ly-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.ly-n{margin-left:auto;font-size:10px;color:#5c6b8a;background:#151d30;padding:1px 6px;border-radius:4px}
-
-/* DRAW TOOLS */
-#draw-panel{min-width:220px}
-.draw-btn{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;border:1px solid #263354;background:#151d30;color:#e1e7ef;font-size:12px;cursor:pointer;width:100%;margin-bottom:6px;transition:.15s}
-.draw-btn:hover{background:#1c2640;border-color:#FDE154}
-.draw-btn.active{background:#1c2640;border-color:#FDE154;color:#FDE154}
-.draw-btn .ico{font-size:14px;width:20px;text-align:center}
-
-/* Gebiet form */
-#gebiet-form{display:none;margin-top:8px;border-top:1px solid #263354;padding-top:10px}
-.form-label{font-size:11px;color:#5c6b8a;margin-bottom:3px;display:block}
-.form-input{width:100%;background:#151d30;border:1px solid #263354;color:#e1e7ef;border-radius:6px;padding:6px 8px;font-size:12px;margin-bottom:8px}
-.form-input:focus{outline:none;border-color:#FDE154}
-select.form-input option{background:#151d30}
-.form-row{display:flex;gap:6px;margin-bottom:8px}
-.color-swatch{width:28px;height:28px;border-radius:6px;border:2px solid transparent;cursor:pointer;transition:.15s;flex-shrink:0}
-.color-swatch.selected{border-color:#FDE154}
-.btn-save{width:100%;padding:8px;background:#FDE154;color:#0c1222;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;transition:.15s}
-.btn-save:hover{background:#fef08a}
-.btn-cancel{width:100%;padding:6px;background:transparent;color:#5c6b8a;border:1px solid #263354;border-radius:7px;font-size:12px;cursor:pointer;margin-top:4px}
-.btn-cancel:hover{background:#151d30;color:#e1e7ef}
-
-/* Zoom info */
-#zoom-info{position:absolute;bottom:48px;right:10px;z-index:1000;background:#0f1320cc;border:1px solid #1c2640;border-radius:8px;padding:6px 10px;font-size:11px;color:#5c6b8a}
-#zoom-info b{color:#FDE154}
-
-/* Detail panel RIGHT */
-#detail{position:absolute;top:58px;right:10px;z-index:1000;width:290px;background:#0f1320ee;border:1px solid #1c2640;border-radius:10px;padding:14px;display:none;backdrop-filter:blur(4px);max-height:calc(100vh - 80px);overflow-y:auto}
-#detail h3{font-size:14px;font-weight:700;color:#FDE154;margin-bottom:10px}
-.d-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1c264030;font-size:12px}
-.d-row:last-child{border:none}
-.d-key{color:#5c6b8a}
-.kpis{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
-.kpi{background:#151d30;border-radius:7px;padding:8px;text-align:center}
-.kpi .v{font-size:18px;font-weight:700;color:#FDE154}
-.kpi .l{font-size:10px;color:#5c6b8a;margin-top:1px}
-.close-btn{position:absolute;top:10px;right:12px;background:none;border:none;color:#5c6b8a;cursor:pointer;font-size:16px}
-.close-btn:hover{color:#e1e7ef}
-
-/* Gebiet-Liste */
-#gebiet-list{max-height:200px;overflow-y:auto}
-.gl-item{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #1c264030;font-size:12px;cursor:pointer}
-.gl-item:hover{color:#FDE154}
-.gl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.gl-unassigned{color:#ef4444;font-size:10px}
-.gl-scouter{color:#22c55e;font-size:10px}
-.gl-del{margin-left:auto;color:#5c6b8a;font-size:11px;cursor:pointer;padding:2px 4px;border-radius:3px}
-.gl-del:hover{color:#ef4444;background:#1c2640}
-
-/* Toast */
-#toast{position:absolute;top:60px;left:50%;transform:translateX(-50%);z-index:2000;background:#22c55e;color:#0c1222;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;display:none;pointer-events:none}
+/* ROI panel */
+#roi { position:absolute; top:58px; left:210px; z-index:1000; width:340px; background:#0f1320ee; border:1px solid #1c2640; border-radius:10px; padding:14px; display:none; backdrop-filter:blur(4px); }
+#roi h3 { font-size:14px; font-weight:700; color:#FDE154; margin-bottom:12px; }
+.sl-row { margin-bottom:10px; }
+.sl-row label { display:flex; justify-content:space-between; font-size:11px; color:#5c6b8a; margin-bottom:3px; }
+.sl-row label span { color:#FDE154; font-weight:600; }
+input[type=range] { width:100%; accent-color:#FDE154; }
+.roi-sel { width:100%; background:#151d30; border:1px solid #263354; color:#e1e7ef; border-radius:7px; padding:5px 8px; font-size:12px; margin-bottom:10px; }
+.roi-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.roi-item { background:#151d30; border-radius:7px; padding:8px; text-align:center; }
+.roi-item .rv { font-size:15px; font-weight:700; }
+.roi-item .rl { font-size:10px; color:#5c6b8a; margin-top:2px; }
+.roi-winner { grid-column:1/-1; border-radius:7px; padding:8px; text-align:center; font-size:12px; font-weight:600; margin-top:2px; }
+.w-lead { background:rgba(34,197,94,.12); color:#22c55e; border:1px solid rgba(34,197,94,.25); }
+.w-scout { background:rgba(253,225,84,.12); color:#FDE154; border:1px solid rgba(253,225,84,.25); }
 
 /* Alerts */
-#alerts{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:1000;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;pointer-events:none}
-.alert{background:#1a0f10ee;border:1px solid #ef444460;border-radius:7px;padding:5px 12px;font-size:11px;pointer-events:all;white-space:nowrap;cursor:pointer}
+#alerts { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); z-index:1000; display:flex; gap:6px; flex-wrap:wrap; justify-content:center; pointer-events:none; }
+.alert { background:#1a0f10ee; border:1px solid #ef444460; border-radius:7px; padding:5px 12px; font-size:11px; cursor:pointer; pointer-events:all; white-space:nowrap; }
+.alert:hover { background:#2a1418; }
 
-/* Leaflet draw dark */
-.leaflet-draw-toolbar a{background-color:#151d30!important;border-color:#263354!important;color:#e1e7ef!important}
-.leaflet-draw-toolbar a:hover{background-color:#1c2640!important}
+/* Draw toolbar */
+.leaflet-draw-toolbar a { background-color: #0f1320 !important; border-color: #263354 !important; }
+.leaflet-draw-toolbar a:hover { background-color: #1c2640 !important; }
+.leaflet-draw-actions a { background:#151d30 !important; color:#e1e7ef !important; border-color:#263354 !important; }
+
+/* Save modal */
+#save-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:9999; align-items:center; justify-content:center; }
+#save-modal.open { display:flex; }
+.modal-box { background:#0f1320; border:1px solid #263354; border-radius:14px; padding:24px; width:360px; box-shadow:0 20px 60px rgba(0,0,0,.8); }
+.modal-box h3 { font-size:15px; font-weight:700; color:#FDE154; margin-bottom:16px; }
+.modal-field { margin-bottom:12px; }
+.modal-field label { display:block; font-size:11px; color:#5c6b8a; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+.modal-field input, .modal-field select, .modal-field textarea { width:100%; background:#151d30; border:1px solid #263354; color:#e1e7ef; border-radius:8px; padding:8px 10px; font-size:13px; outline:none; }
+.modal-field input:focus, .modal-field select:focus { border-color:#FDE154; }
+.modal-field textarea { resize:vertical; height:60px; }
+.modal-btns { display:flex; gap:8px; margin-top:16px; }
+.btn-save { flex:1; background:#FDE154; color:#0c1222; border:none; border-radius:8px; padding:10px; font-size:13px; font-weight:700; cursor:pointer; }
+.btn-save:hover { background:#f5d633; }
+.btn-cancel { background:#1c2640; color:#5c6b8a; border:1px solid #263354; border-radius:8px; padding:10px 16px; font-size:13px; cursor:pointer; }
+.btn-cancel:hover { color:#e1e7ef; }
+
+/* Gebiet tooltip */
+.gebiet-tip { background:#151d30 !important; border:1px solid #263354 !important; color:#e1e7ef !important; font-size:12px !important; padding:6px 10px !important; }
+.gebiet-tip::before { display:none; }
+
+/* Gebiete list panel */
+#gebiete-list { position:absolute; top:58px; right:10px; z-index:1000; width:240px; background:#0f1320ee; border:1px solid #1c2640; border-radius:10px; display:none; overflow:hidden; backdrop-filter:blur(4px); }
+#gebiete-list .gl-head { padding:10px 12px; font-size:11px; color:#5c6b8a; font-weight:600; text-transform:uppercase; letter-spacing:.5px; border-bottom:1px solid #1c2640; display:flex; justify-content:space-between; align-items:center; }
+#gebiete-list .gl-head button { background:#1c2640; border:none; border-radius:5px; padding:2px 8px; font-size:10px; color:#FDE154; cursor:pointer; }
+.gl-item { padding:8px 12px; border-bottom:1px solid #1c264040; cursor:pointer; transition:.1s; }
+.gl-item:hover { background:#151d30; }
+.gl-item .gi-name { font-size:12px; font-weight:600; color:#e1e7ef; }
+.gl-item .gi-scout { font-size:11px; color:#5c6b8a; margin-top:1px; }
+.gl-item .gi-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+.gl-empty { padding:16px 12px; text-align:center; font-size:12px; color:#5c6b8a; }
+
+
+/* Draw mode */
+#draw-btn { padding:5px 12px; border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid #263354; background:#151d30; color:#e1e7ef; transition:.15s; }
+#draw-btn:hover, #draw-btn.active { background:#FDE154; color:#0c1222; border-color:#FDE154; }
+#draw-panel { position:absolute; top:58px; left:50%; transform:translateX(-50%); z-index:2000; background:#0f1320ee; border:1px solid #FDE154; border-radius:10px; padding:16px; width:360px; display:none; backdrop-filter:blur(4px); }
+#draw-panel h3 { font-size:14px; font-weight:700; color:#FDE154; margin-bottom:12px; }
+.dp-field { margin-bottom:10px; }
+.dp-field label { display:block; font-size:11px; color:#5c6b8a; margin-bottom:4px; }
+.dp-field input, .dp-field select { width:100%; background:#151d30; border:1px solid #263354; color:#e1e7ef; border-radius:7px; padding:6px 10px; font-size:13px; }
+.dp-field select option { background:#151d30; }
+.dp-actions { display:flex; gap:8px; margin-top:12px; }
+.dp-btn { flex:1; padding:8px; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer; border:none; }
+.dp-btn.primary { background:#FDE154; color:#0c1222; }
+.dp-btn.primary:hover { background:#fce535; }
+.dp-btn.secondary { background:#1c2640; color:#e1e7ef; }
+.dp-btn.danger { background:#ef444420; color:#ef4444; border:1px solid #ef444440; }
+.dp-hint { font-size:11px; color:#5c6b8a; padding:8px; background:#151d30; border-radius:6px; margin-bottom:10px; line-height:1.5; }
+.dp-status { font-size:12px; padding:6px 10px; border-radius:6px; margin-bottom:8px; display:none; }
+.dp-status.ok { background:rgba(34,197,94,.15); color:#22c55e; }
+.dp-status.err { background:rgba(239,68,68,.15); color:#ef4444; }
+/* Gebiet polygons on map */
+.gebiet-label { background:transparent; border:none; font-size:10px; font-weight:600; color:#fff; text-shadow:0 0 3px #000; white-space:nowrap; }
+
+/* Legend */
+
+/* Draw toolbar */
+#draw-toolbar { position:absolute; top:58px; right:10px; z-index:1000; display:flex; flex-direction:column; gap:6px; }
+.draw-btn { width:40px; height:40px; background:#0f1320ee; border:1px solid #1c2640; border-radius:9px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px; transition:.15s; }
+.draw-btn:hover { background:#1c2640; border-color:#FDE154; }
+.draw-btn.active { background:#1c2640; border-color:#FDE154; color:#FDE154; }
+
+/* Gebiet save modal */
+#gebiet-modal { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:2000; background:#0f1320; border:1px solid #1c2640; border-radius:12px; padding:20px; width:340px; display:none; box-shadow:0 16px 48px rgba(0,0,0,.7); }
+#gebiet-modal h3 { font-size:14px; font-weight:700; color:#FDE154; margin-bottom:14px; }
+.m-row { margin-bottom:10px; }
+.m-row label { display:block; font-size:11px; color:#5c6b8a; margin-bottom:4px; }
+.m-input { width:100%; background:#151d30; border:1px solid #263354; color:#e1e7ef; border-radius:7px; padding:7px 10px; font-size:13px; }
+.m-input:focus { outline:none; border-color:#FDE154; }
+.m-select { width:100%; background:#151d30; border:1px solid #263354; color:#e1e7ef; border-radius:7px; padding:7px 10px; font-size:13px; }
+.m-btns { display:flex; gap:8px; margin-top:14px; }
+.btn-save { flex:1; background:#FDE154; color:#0c1222; border:none; border-radius:7px; padding:9px; font-size:13px; font-weight:700; cursor:pointer; }
+.btn-save:hover { background:#fcd01a; }
+.btn-cancel { background:#1c2640; color:#5c6b8a; border:none; border-radius:7px; padding:9px; font-size:13px; cursor:pointer; flex:1; }
+.btn-cancel:hover { color:#e1e7ef; }
+.color-row { display:flex; gap:6px; }
+.color-opt { width:24px; height:24px; border-radius:50%; cursor:pointer; border:2px solid transparent; }
+.color-opt.sel { border-color:#fff; }
+
+/* Gebiete list in panel */
+.g-item { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #1c264030; font-size:12px; }
+.g-item:last-child { border:none; }
+.g-color { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.g-del { margin-left:auto; background:none; border:none; color:#5c6b8a; cursor:pointer; font-size:14px; }
+.g-del:hover { color:#ef4444; }
+
+#legend { position:absolute; bottom:50px; left:10px; z-index:1000; background:#0f1320ee; border:1px solid #1c2640; border-radius:8px; padding:10px 12px; font-size:11px; }
+.leg-row { display:flex; align-items:center; gap:7px; padding:2px 0; color:#5c6b8a; }
+.leg-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.leg-sq { width:10px; height:6px; border-radius:2px; flex-shrink:0; opacity:.5; }
 </style>
 </head>
 <body>
@@ -108,519 +180,1142 @@ select.form-input option{background:#151d30}
   <div class="subtitle">Strategische Karte · NRW · Echtdaten</div>
   <div class="tabs">
     <button class="tab active" onclick="switchTab('overview')">Übersicht</button>
-    <button class="tab" onclick="switchTab('gebiete')">✏ Gebiete</button>
     <button class="tab" onclick="switchTab('gaps')">⚠ Lücken</button>
+    <button class="tab" onclick="switchTab('roi')">ROI Rechner</button>
     <button class="tab" onclick="switchTab('heatmap')">Heatmap</button>
   </div>
+  <button onclick="toggleDrawMode()" id="btn-draw" style="margin-left:8px;background:#1c2640;border:1px solid #263354;color:#e1e7ef;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px">✏️ Gebiet zeichnen</button>
+  <button onclick="toggleGebiete()" style="background:#1c2640;border:1px solid #263354;color:#5c6b8a;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">📋 Gebiete</button>
+  <button id="draw-btn" onclick="toggleDrawMode()" title="Gebiet zeichnen">✏ Gebiet zeichnen</button>
   <div class="stats">
-    <div class="stat">VB: <b id="n-vb">44</b></div>
-    <div class="stat">Scouter: <b id="n-sc">29</b></div>
-    <div class="stat">Qualif.: <b id="n-qu">252</b></div>
-    <div class="stat">Gebiete: <b id="n-geb">0</b></div>
-    <div class="stat" id="infas-stat" style="display:none">infas: <b id="n-inf">0</b></div>
-  </div>
+    <div class="stat">VB: <b id="n-vb">—</b></div>
+    <div class="stat">Scouter: <b id="n-sc">—</b></div>
+    <div class="stat">Qualif.: <b id="n-qu">—</b></div>
+    <div class="stat">Lücken: <b id="n-gap" style="color:#ef4444">—</b></div>
+    </div>
 </nav>
 
 <div id="map"></div>
-<div id="zoom-info">Zoom: <b id="zoom-val">8</b> — Zoom ≥12 lädt infas360</div>
-<div id="toast"></div>
 
-<!-- Left panel -->
-<div id="panel-left">
-
-  <!-- Layers -->
-  <div class="panel" id="layer-panel" style="min-width:190px">
-    <div class="panel-title">Layer</div>
-    <label class="ly-row"><input type="checkbox" id="l-vb" checked onchange="toggleLayer('vb')"><div class="ly-dot" style="background:#FDE154"></div>Vertriebler<span class="ly-n">44</span></label>
-    <label class="ly-row"><input type="checkbox" id="l-sc" checked onchange="toggleLayer('sc')"><div class="ly-dot" style="background:#22c55e"></div>Scouter<span class="ly-n">29</span></label>
-    <label class="ly-row"><input type="checkbox" id="l-qu" checked onchange="toggleLayer('qu')"><div class="ly-dot" style="background:#60a5fa"></div>Qualifizierungen<span class="ly-n">252</span></label>
-    <label class="ly-row"><input type="checkbox" id="l-geb" checked onchange="toggleLayer('geb')"><div class="ly-dot" style="background:#22c55e;opacity:.5"></div>Gebiete<span class="ly-n" id="ln-geb">0</span></label>
-    <label class="ly-row"><input type="checkbox" id="l-inf" onchange="toggleLayer('inf')"><div class="ly-dot" style="background:#f97316"></div>infas360 (lazy)<span class="ly-n" id="ln-inf">—</span></label>
-  </div>
-
-  <!-- Draw panel (hidden until Gebiete tab) -->
-  <div class="panel" id="draw-panel" style="display:none;min-width:220px">
-    <div class="panel-title">Gebiet zeichnen</div>
-    <button class="draw-btn" id="btn-poly" onclick="startDraw('poly')"><span class="ico">⬡</span> Polygon zeichnen</button>
-    <button class="draw-btn" id="btn-rect" onclick="startDraw('rect')"><span class="ico">▭</span> Rechteck zeichnen</button>
-    <button class="draw-btn" id="btn-circle" onclick="startDraw('circle')"><span class="ico">◯</span> Kreis zeichnen</button>
-
-    <div id="gebiet-form">
-      <label class="form-label">Gebietsname</label>
-      <input type="text" class="form-input" id="f-name" placeholder="z.B. Bielefeld-Nord">
-      <label class="form-label">Scouter zuweisen</label>
-      <select class="form-input" id="f-scouter">
-        <option value="">— noch nicht zugewiesen —</option>
-      </select>
-      <label class="form-label">Farbe</label>
-      <div class="form-row" id="color-picker">
-        <div class="color-swatch selected" style="background:#22c55e" data-color="#22c55e" onclick="selectColor(this)"></div>
-        <div class="color-swatch" style="background:#3b82f6" data-color="#3b82f6" onclick="selectColor(this)"></div>
-        <div class="color-swatch" style="background:#f59e0b" data-color="#f59e0b" onclick="selectColor(this)"></div>
-        <div class="color-swatch" style="background:#8b5cf6" data-color="#8b5cf6" onclick="selectColor(this)"></div>
-        <div class="color-swatch" style="background:#ef4444" data-color="#ef4444" onclick="selectColor(this)"></div>
-        <div class="color-swatch" style="background:#ec4899" data-color="#ec4899" onclick="selectColor(this)"></div>
-        <div class="color-swatch" style="background:#FDE154" data-color="#FDE154" onclick="selectColor(this)"></div>
-      </div>
-      <button class="btn-save" onclick="saveGebiet()">💾 Gebiet speichern</button>
-      <button class="btn-cancel" onclick="cancelDraw()">Abbrechen</button>
-    </div>
-
-    <div style="margin-top:10px;border-top:1px solid #263354;padding-top:10px">
-      <div class="panel-title">Gespeicherte Gebiete</div>
-      <div id="gebiet-list"></div>
-    </div>
-  </div>
-
+<div id="layers">
+  <div class="ly-title">Layer</div>
+  <label class="ly-row"><input type="checkbox" id="l-vb" checked onchange="toggleLayer('vb')"><div class="ly-dot" style="background:#FDE154"></div>Vertriebler<span class="ly-n" id="ln-vb"></span></label>
+  <label class="ly-row"><input type="checkbox" id="l-sc" checked onchange="toggleLayer('sc')"><div class="ly-dot" style="background:#22c55e"></div>Scouter<span class="ly-n" id="ln-sc"></span></label>
+  <label class="ly-row"><input type="checkbox" id="l-qu" checked onchange="toggleLayer('qu')"><div class="ly-dot" style="background:#60a5fa"></div>Qualifizierungen<span class="ly-n" id="ln-qu"></span></label>
+  <label class="ly-row"><input type="checkbox" id="l-inf" onchange="toggleLayer('inf')"><div class="ly-dot" style="background:#f97316"></div>infas360 Potenzial<span class="ly-n" id="ln-inf">761</span></label>
+  <label class="ly-row"><input type="checkbox" id="l-gap" checked onchange="toggleLayer('gap')"><div class="ly-dot" style="background:#ef4444"></div>Lücken<span class="ly-n" id="ln-gap"></span></label>
 </div>
 
-<!-- Detail panel right -->
 <div id="detail">
-  <button class="close-btn" onclick="document.getElementById('detail').style.display='none'">✕</button>
+  <button class="close" onclick="document.getElementById('detail').style.display='none'">✕</button>
   <div id="detail-body"></div>
 </div>
 
-<!-- Alerts bottom -->
+<div id="roi">
+  <h3>💰 ROI Rechner</h3>
+  <div class="sl-row">
+    <label>Termine/Monat <span id="rv-t">20</span></label>
+    <input type="range" min="5" max="60" value="20" id="r-t" oninput="calcROI()">
+  </div>
+  <div class="sl-row">
+    <label>Zeitraum (Monate) <span id="rv-m">12</span></label>
+    <input type="range" min="3" max="24" value="12" id="r-m" oninput="calcROI()">
+  </div>
+  <select class="roi-sel" id="r-q" onchange="calcROI()">
+    <option value="29.9:0.18">Fenerum (€29,90/Lead · 18% Conv.)</option>
+    <option value="24.5:0.14">Verivox (€24,50/Lead · 14% Conv.)</option>
+    <option value="19.9:0.12">Check24 (€19,90/Lead · 12% Conv.)</option>
+    <option value="149:1.0">SolarMarkt (€149/Termin direkt)</option>
+    <option value="34.9:0.20">Enpal Leads (€34,90/Lead · 20% Conv.)</option>
+    <option value="27.5:0.17">Solardachbörse (€27,50/Lead · 17% Conv.)</option>
+  </select>
+  <div class="roi-grid" id="roi-result"></div>
+</div>
+
+
+<div id="draw-panel">
+  <h3>✏ Gebiet zeichnen & zuordnen</h3>
+  <div class="dp-status" id="dp-status"></div>
+  <div class="dp-hint" id="dp-hint">Klicke auf der Karte um das Gebiet zu zeichnen. Doppelklick zum Abschließen.</div>
+  <div class="dp-field">
+    <label>Gebietsname *</label>
+    <input type="text" id="dp-name" placeholder="z.B. Bielefeld-Mitte" />
+  </div>
+  <div class="dp-field">
+    <label>Scouter zuordnen</label>
+    <select id="dp-scouter">
+      <option value="">— noch nicht zugeordnet —</option>
+    </select>
+  </div>
+  <div class="dp-field">
+    <label>Notiz (optional)</label>
+    <input type="text" id="dp-notiz" placeholder="Priorität, Besonderheiten..." />
+  </div>
+  <div class="dp-actions">
+    <button class="dp-btn primary" onclick="saveGebiet()" id="dp-save" disabled>💾 Speichern</button>
+    <button class="dp-btn secondary" onclick="redrawGebiet()">↺ Neu zeichnen</button>
+    <button class="dp-btn danger" onclick="toggleDrawMode()">✕ Abbrechen</button>
+  </div>
+</div>
+
 <div id="alerts"></div>
 
+<div id="legend">
+  <div class="leg-row"><div class="leg-dot" style="background:#FDE154"></div>Vertriebler (80km Radius)</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#22c55e"></div>Scouter (30km Gebiet)</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#60a5fa"></div>Qualifizierungen</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#f97316"></div>infas360 Potenzial</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#ef4444; opacity:.6"></div>Abdeckungslücke</div>
+</div>
+
+<!-- Save modal -->
+<div id="save-modal">
+  <div class="modal-box">
+    <h3>📍 Gebiet speichern</h3>
+    <div class="modal-field">
+      <label>Name</label>
+      <input type="text" id="g-name" placeholder="z.B. Bielefeld Nord"/>
+    </div>
+    <div class="modal-field">
+      <label>Scouter zuordnen</label>
+      <select id="g-scouter">
+        <option value="">— Noch kein Scouter —</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Farbe</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="color-picker">
+        <div class="cp-dot" data-color="#22c55e" style="background:#22c55e;width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid #22c55e" onclick="selectColor('#22c55e')"></div>
+        <div class="cp-dot" data-color="#60a5fa" style="background:#60a5fa;width:22px;height:22px;border-radius:50%;cursor:pointer" onclick="selectColor('#60a5fa')"></div>
+        <div class="cp-dot" data-color="#FDE154" style="background:#FDE154;width:22px;height:22px;border-radius:50%;cursor:pointer" onclick="selectColor('#FDE154')"></div>
+        <div class="cp-dot" data-color="#f97316" style="background:#f97316;width:22px;height:22px;border-radius:50%;cursor:pointer" onclick="selectColor('#f97316')"></div>
+        <div class="cp-dot" data-color="#a78bfa" style="background:#a78bfa;width:22px;height:22px;border-radius:50%;cursor:pointer" onclick="selectColor('#a78bfa')"></div>
+        <div class="cp-dot" data-color="#f43f5e" style="background:#f43f5e;width:22px;height:22px;border-radius:50%;cursor:pointer" onclick="selectColor('#f43f5e')"></div>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Notizen (optional)</label>
+      <textarea id="g-notizen" placeholder="z.B. Fokus auf Neubaugebiete..."></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="cancelDraw()">Abbrechen</button>
+      <button class="btn-save" onclick="saveGebiet()">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Gebiete list -->
+<div id="gebiete-list">
+  <div class="gl-head">
+    Gebiete <button onclick="toggleGebiete()">✕</button>
+  </div>
+  <div id="gl-body"><div class="gl-empty">Noch keine Gebiete</div></div>
+</div>
+
 <script>
-// ─── REAL DATA ────────────────────────────────────────────────────────────────
+// ─── ECHTE bee-doo DATEN NRW ────────────────────────────────────────────────
+// Stand: 2026-02-21 | Quelle: Supabase pay_mitarbeiter + qualifizierungen + infas_adressen
 const VB = [{"id": "d4d417d7-88ca-4973-875a-589836babaca", "name": "Jannis Pfeiffer", "typ": "angestellt_vertriebler", "plz": "33604", "ort": "Bielefeld", "lat": 52.07675, "lng": 8.71995}, {"id": "ed672177-5ba8-44d7-b405-5646f3002ea3", "name": "Maximilian Koch", "typ": "angestellt_vertriebler", "plz": "33611", "ort": "Bielefeld", "lat": 51.95325, "lng": 8.77945}, {"id": "f89b2cf0-f71d-4741-b26d-3064cec0d65a", "name": "Miguel Schader", "typ": "angestellt_vertriebler", "plz": "33607", "ort": "Bielefeld", "lat": 52.008, "lng": 8.5978}, {"id": "77287cbd-95dd-4724-a1b2-d5d3b5aff7d6", "name": "Pascal Meier", "typ": "angestellt_vertriebler", "plz": "33602", "ort": "Bielefeld", "lat": 51.882, "lng": 8.525}, {"id": "f5ff643f-190b-4573-a87c-22eb82495505", "name": "Bernd Krahwinkel", "typ": "angestellt_vertriebler", "plz": "33615", "ort": "Bielefeld", "lat": 52.02, "lng": 8.46025}, {"id": "260b0dbb-c7ba-46f8-a6f8-4d7eaaefa4e0", "name": "Nick Franke", "typ": "hgb_vertriebler_haupt", "plz": "33102", "ort": "Paderborn", "lat": 51.89425, "lng": 8.6419}, {"id": "f885ea39-d183-44e2-a88e-f08f4d40c48d", "name": "Maxim Horten", "typ": "hgb_vertriebler_haupt", "plz": "52066", "ort": "Aachen", "lat": 50.7075, "lng": 5.9603}, {"id": "8a25808d-724d-43b6-b039-d46e577d89d7", "name": "Gino Ulitzka", "typ": "hgb_vertriebler_haupt", "plz": "44265", "ort": "Dortmund", "lat": 51.527, "lng": 7.52405}, {"id": "3b696d6e-b550-435c-b48f-609f817c977c", "name": "Patrick Windolph", "typ": "hgb_vertriebler_haupt", "plz": "49152", "ort": "Bad Essen", "lat": 52.29825, "lng": 8.2131}, {"id": "700ce880-88af-4d93-9dfd-caeb58222bf8", "name": "Christina Götte", "typ": "hgb_vertriebler_haupt", "plz": "47802", "ort": "Krefeld", "lat": 51.289, "lng": 6.6099}, {"id": "7204bc51-55ad-44b6-ac40-f8401c7c79a9", "name": "Matthias Götte", "typ": "hgb_vertriebler_haupt", "plz": "47802", "ort": "Krefeld", "lat": 51.284, "lng": 6.58435}, {"id": "6220575f-4c9c-44d1-a5cc-15dc7da8d1c0", "name": "Christoph Held", "typ": "hgb_vertriebler_haupt", "plz": "50170", "ort": "Kerpen", "lat": 51.01675, "lng": 6.9705}, {"id": "e87ba971-947a-43b4-9ed6-383293917fe4", "name": "Chadia Epp", "typ": "hgb_vertriebler_haupt", "plz": "33824", "ort": "Werther", "lat": 51.84725, "lng": 8.55825}, {"id": "2637a887-a824-4ee7-8035-4e4c1f25d05d", "name": "Marcel Zwanzig", "typ": "hgb_vertriebler_haupt", "plz": "48565", "ort": "Steinfurt", "lat": 51.989, "lng": 7.69755}, {"id": "93fdea5e-41e9-4d9b-9a80-bb8afba83df5", "name": "Martin Bott", "typ": "hgb_vertriebler_haupt", "plz": "48167", "ort": "Münster", "lat": 52.0335, "lng": 7.70175}, {"id": "aa038cac-d2a4-46ef-b090-e52ace9712ec", "name": "Stefan Lindner", "typ": "hgb_vertriebler_haupt", "plz": "52066", "ort": "Aachen", "lat": 50.662, "lng": 6.0429}, {"id": "02d2395d-94e6-4ee1-b795-5230acd8db2b", "name": "Lukasz Dragan", "typ": "hgb_vertriebler_haupt", "plz": "52074", "ort": "Aachen", "lat": 50.87725, "lng": 6.0114}, {"id": "666f07e3-140b-432c-9115-d1f15244ed61", "name": "Tayfun Süleymaniye", "typ": "hgb_vertriebler_haupt", "plz": "52070", "ort": "Aachen", "lat": 50.67875, "lng": 6.1136}, {"id": "51405d32-0b77-48c9-a68e-d276d23eadea", "name": "Andreas Klee", "typ": "hgb_vertriebler_haupt", "plz": "34123", "ort": "Kassel", "lat": 51.41825, "lng": 9.49685}, {"id": "bbb56bf4-ccac-4611-afd0-0cfe2c7f2880", "name": "Sven Gang", "typ": "hgb_vertriebler_haupt", "plz": "33154", "ort": "Salzkotten", "lat": 52.01375, "lng": 8.67445}, {"id": "30fb2aa0-3a74-4c7f-a322-9f07367c1d06", "name": "Anton Ratsimar", "typ": "hgb_vertriebler_haupt", "plz": "32049", "ort": "Herford", "lat": 51.9115, "lng": 8.6343}, {"id": "ae71f96f-57d7-43bb-82d0-c85245d0082b", "name": "Immanuel Tjart", "typ": "hgb_vertriebler_haupt", "plz": "48465", "ort": "Schüttorf", "lat": 51.94525, "lng": 7.54215}, {"id": "ec84fb9e-8a8b-4f7c-92cd-03f86bd93c65", "name": "Samuel Tjart", "typ": "hgb_vertriebler_haupt", "plz": "48465", "ort": "Schüttorf", "lat": 51.96975, "lng": 7.6468}, {"id": "8bd29480-1fc2-4e5b-88c8-82057594a6ff", "name": "Christian Seifert", "typ": "hgb_vertriebler_agentur", "plz": "44532", "ort": "Lünen", "lat": 51.488, "lng": 7.43025}, {"id": "235146f2-dae6-40f5-bdd3-7340d2282bba", "name": "Alicja Tulacz", "typ": "hgb_vertriebler_agentur", "plz": "40789", "ort": "Monheim", "lat": 51.2365, "lng": 6.7457}, {"id": "623371d8-b285-44b5-94c0-e3b8c2a91d6b", "name": "Martin Sturbek", "typ": "hgb_vertriebler_agentur", "plz": "52066", "ort": "Aachen", "lat": 50.82925, "lng": 6.04535}, {"id": "507ecceb-d093-42d6-bcb2-87901b24253b", "name": "Ben von Hoff", "typ": "hgb_vertriebler_haupt", "plz": "33332", "ort": "Gütersloh", "lat": 51.93, "lng": 8.7224}, {"id": "3d855ffa-2611-4583-83f3-ccc6da947abe", "name": "Pascal Schallenberg", "typ": "hgb_vertriebler_haupt", "plz": "52499", "ort": "Baesweiler", "lat": 50.86475, "lng": 6.0044}, {"id": "05c9cf56-a56b-44e1-b737-5f44fe9d8bf5", "name": "Richard Winzent", "typ": "hgb_vertriebler_haupt", "plz": "48308", "ort": "Senden", "lat": 51.92075, "lng": 7.7063}, {"id": "eca3ba77-833b-43d2-8f9c-d594b8c8a7a8", "name": "Gert Liese", "typ": "hgb_vertriebler_haupt", "plz": "34286", "ort": "Spangenberg", "lat": 51.2975, "lng": 9.6554}, {"id": "5795c54d-97b9-440d-9691-966e76e28e0f", "name": "Daniel Saweljew", "typ": "hgb_vertriebler_agentur", "plz": "49479", "ort": "Ibbenbüren", "lat": 52.38825, "lng": 8.1095}, {"id": "1bc1ab1a-1d6a-4450-b669-4b28524165b8", "name": "Henry Friesen", "typ": "hgb_vertriebler_haupt", "plz": "33803", "ort": "Steinhagen", "lat": 51.85775, "lng": 8.6825}, {"id": "58cac361-dadc-407e-8254-783539f5167f", "name": "Jonas Görgen", "typ": "hgb_vertriebler_haupt", "plz": "33649", "ort": "Bielefeld", "lat": 51.86375, "lng": 8.80115}, {"id": "2a3a00c5-35db-4585-b1e3-007b645c0861", "name": "Frank Reddig", "typ": "hgb_vertriebler_haupt", "plz": "33397", "ort": "Rietberg", "lat": 51.935, "lng": 8.63875}, {"id": "a5a8b850-a61d-4a87-8730-117d582756ad", "name": "Torsten Kiefer", "typ": "hgb_vertriebler_haupt", "plz": "44339", "ort": "Dortmund", "lat": 51.543, "lng": 7.59475}, {"id": "7981a22a-62ec-4ab2-bab7-cff20f1f9ec4", "name": "Ricardo Riedel", "typ": "hgb_vertriebler_haupt", "plz": "49090", "ort": "Osnabrück", "lat": 52.1555, "lng": 8.1123}, {"id": "a85e6117-7eb4-46ca-b525-603d6774be0c", "name": "Michael Wienold", "typ": "hgb_vertriebler_haupt", "plz": "50259", "ort": "Pulheim", "lat": 50.86725, "lng": 6.9572}, {"id": "78874445-4053-45ff-a5fc-4cea61d2bce0", "name": "Peter Neyer", "typ": "hgb_vertriebler_haupt", "plz": "59609", "ort": "Anröchte", "lat": 51.632, "lng": 7.82865}, {"id": "da0d2157-d13c-4ba4-93b1-20c278fb38e7", "name": "Anita Reddig", "typ": "hgb_vertriebler_haupt", "plz": "33397", "ort": "Rietberg", "lat": 51.89725, "lng": 8.55965}, {"id": "e9720231-eafa-447e-bd0d-d9d2bce4381b", "name": "Kevin Kraus", "typ": "hgb_vertriebler_haupt", "plz": "52078", "ort": "Aachen", "lat": 50.6735, "lng": 6.22175}, {"id": "82620963-4afe-464b-9a4e-b8db43dfa44c", "name": "Selçuk Özkaya", "typ": "hgb_vertriebler_haupt", "plz": "52477", "ort": "Alsdorf", "lat": 50.84925, "lng": 6.157}, {"id": "382f7850-c282-45fa-9b90-12784c265849", "name": "Dagmar Schmitz", "typ": "hgb_vertriebler_haupt", "plz": "40882", "ort": "Ratingen", "lat": 51.137, "lng": 6.6491}, {"id": "98591410-abfe-459c-98d5-5bfdbe2b6f72", "name": "Maxim Saweljew", "typ": "hgb_vertriebler_haupt", "plz": "48480", "ort": "Spelle", "lat": 51.904, "lng": 7.5635}, {"id": "e908da8e-43d6-4ed5-83c6-ff16f88620f5", "name": "Sebastian Mansour", "typ": "hgb_vertriebler_haupt", "plz": "52078", "ort": "Aachen", "lat": 50.6935, "lng": 5.975}];
-const SCOUTER_MARKERS = [{"id": "c5a42862-c634-4a60-a3b7-10ca035176cc", "name": "Thomas Herrmann", "typ": "angestellt_scouter", "plz": "33602", "ort": "Bielefeld", "lat": 51.999, "lng": 8.5383}, {"id": "c33a5f4d-43dd-49b2-a489-8aaf898d22e9", "name": "Cinar Onk", "typ": "angestellt_scouter", "plz": "33609", "ort": "Bielefeld", "lat": 51.96075, "lng": 8.76475}, {"id": "48dd72dc-52e3-42e6-9fff-cf1f21a0fe6e", "name": "Robin Kricke", "typ": "angestellt_scouter", "plz": "33613", "ort": "Bielefeld", "lat": 51.9155, "lng": 8.4781}, {"id": "e43493d2-a06a-4525-819b-152ba87b7888", "name": "Eduard Kitzmann", "typ": "angestellt_scouter", "plz": "57539", "ort": "Fürthen", "lat": 51.02175, "lng": 8.0935}, {"id": "f4030d47-cf63-4430-bc62-dfb8e04d4ac7", "name": "Niklas Keiluweit", "typ": "hgb_scouter", "plz": "48619", "ort": "Heek", "lat": 51.97625, "lng": 7.8008}, {"id": "081320e1-6a56-4ff2-b77c-a92b61989e57", "name": "Lukas Bauer", "typ": "angestellt_scouter", "plz": "34298", "ort": "Helsa", "lat": 51.241, "lng": 9.5672}, {"id": "9a8938e7-490b-4aae-a61e-731226f86837", "name": "Patrick Kalinowski", "typ": "hgb_scouter", "plz": "47447", "ort": "Moers", "lat": 51.373, "lng": 6.5119}, {"id": "ef59fc83-212f-4f80-a37b-882c01919578", "name": "Bojan Siemer", "typ": "hgb_scouter", "plz": "52249", "ort": "Eschweiler", "lat": 50.69, "lng": 6.17415}, {"id": "815e6dde-25f7-4f2f-afac-1fdc10eac107", "name": "Alessio Castellano", "typ": "hgb_scouter", "plz": "41462", "ort": "Neuss", "lat": 51.15425, "lng": 6.52015}, {"id": "68518a55-5dba-4fbd-9c1d-23b1f05567fe", "name": "Salvatore Castellano", "typ": "hgb_scouter", "plz": "41462", "ort": "Neuss", "lat": 51.2295, "lng": 6.55025}, {"id": "5a0a7e99-8663-4caf-b3a2-8983210a4937", "name": "Julien Jacobi", "typ": "hgb_scouter", "plz": "32676", "ort": "Lügde", "lat": 52.1365, "lng": 8.5489}, {"id": "584ae2bc-1da8-4669-8322-f41b6b96eea9", "name": "Uwe Lenkeit", "typ": "hgb_scouter", "plz": "46562", "ort": "Voerde", "lat": 51.6295, "lng": 6.6543}, {"id": "2ef71d76-85c3-4213-b1f7-d7fa11b451f4", "name": "Adam Marzier", "typ": "hgb_scouter", "plz": "49525", "ort": "Lengerich", "lat": 52.37425, "lng": 7.98735}, {"id": "a30a0c13-8fe7-4bb4-b728-1dcb89026e30", "name": "Leon Stockreiter", "typ": "hgb_scouter", "plz": "49080", "ort": "Osnabrück", "lat": 52.38, "lng": 8.20435}, {"id": "9118fc11-19cd-46fe-828d-83e10f20de2e", "name": "Gamal Al Adamy", "typ": "hgb_scouter", "plz": "44145", "ort": "Dortmund", "lat": 51.414, "lng": 7.60385}, {"id": "b3c2503e-63b2-4f7a-a25a-6b36390646b3", "name": "Yusuf Ucar", "typ": "hgb_scouter", "plz": "44289", "ort": "Dortmund", "lat": 51.557, "lng": 7.51915}, {"id": "b02bffff-2bed-48c1-b067-f9b7ace5e464", "name": "Atila Gürlük", "typ": "hgb_scouter", "plz": "52134", "ort": "Herzogenrath", "lat": 50.80475, "lng": 5.9239}, {"id": "8c0d9890-341e-422d-a970-6daac92f0151", "name": "Fahri Cakir", "typ": "hgb_scouter", "plz": "52064", "ort": "Aachen", "lat": 50.785, "lng": 6.11465}, {"id": "56847b95-acfc-46e8-8691-95900b868fd3", "name": "Niko Gulin", "typ": "hgb_scouter", "plz": "32257", "ort": "Bünde", "lat": 51.90775, "lng": 8.4425}, {"id": "6255ad1d-6ead-4e32-b640-f0edd1c0853d", "name": "Andre Kuppert", "typ": "hgb_scouter", "plz": "33330", "ort": "Gütersloh", "lat": 51.96025, "lng": 8.6636}, {"id": "eb517226-59a2-45c1-a729-fe163b894da1", "name": "Stenly Strohmaier", "typ": "hgb_scouter", "plz": "34123", "ort": "Kassel", "lat": 51.3975, "lng": 9.3516}, {"id": "cf434270-525b-4db6-bccd-6ab99938bf11", "name": "Muhammed Sahin", "typ": "hgb_scouter", "plz": "32257", "ort": "Bünde", "lat": 51.9475, "lng": 8.44775}, {"id": "6b0aca7c-7ba3-438a-83c6-6081efb74671", "name": "Oskar Schäfers", "typ": "hgb_scouter", "plz": "33098", "ort": "Paderborn", "lat": 51.8735, "lng": 8.70665}, {"id": "e5d083e2-7097-480b-9ec6-c497071ec897", "name": "Azad Yadel", "typ": "hgb_scouter", "plz": "33330", "ort": "Gütersloh", "lat": 51.87575, "lng": 8.57995}, {"id": "7a8b000e-128c-43bc-ab33-45d06c46b732", "name": "Leon Ellermann", "typ": "hgb_scouter", "plz": "49163", "ort": "Bohmte", "lat": 52.389, "lng": 8.04755}, {"id": "b4ded56b-cecd-4202-80b6-9044d73dc0a9", "name": "Klaus Peter Bolte", "typ": "angestellt_scouter", "plz": "33102", "ort": "Paderborn", "lat": 51.97625, "lng": 8.76475}, {"id": "cc0ceccd-a650-432a-82f9-a2256e68a75b", "name": "Danyildiz Kadir", "typ": "hgb_scouter", "plz": "50170", "ort": "Kerpen", "lat": 50.978, "lng": 6.86655}, {"id": "34911461-0153-4c6b-833f-7df40bc3a4ec", "name": "Jonas Leuchtenberger", "typ": "hgb_scouter", "plz": "52064", "ort": "Aachen", "lat": 50.658, "lng": 6.038}, {"id": "6607e494-7a46-41b9-8d82-56d4ead91fa7", "name": "Tanja Schallenberg", "typ": "hgb_scouter", "plz": "52499", "ort": "Baesweiler", "lat": 50.828, "lng": 6.2319}];
+const SCOUTER = [{"id": "c5a42862-c634-4a60-a3b7-10ca035176cc", "name": "Thomas Herrmann", "typ": "angestellt_scouter", "plz": "33602", "ort": "Bielefeld", "lat": 51.999, "lng": 8.5383}, {"id": "c33a5f4d-43dd-49b2-a489-8aaf898d22e9", "name": "Cinar Onk", "typ": "angestellt_scouter", "plz": "33609", "ort": "Bielefeld", "lat": 51.96075, "lng": 8.76475}, {"id": "48dd72dc-52e3-42e6-9fff-cf1f21a0fe6e", "name": "Robin Kricke", "typ": "angestellt_scouter", "plz": "33613", "ort": "Bielefeld", "lat": 51.9155, "lng": 8.4781}, {"id": "e43493d2-a06a-4525-819b-152ba87b7888", "name": "Eduard Kitzmann", "typ": "angestellt_scouter", "plz": "57539", "ort": "Fürthen", "lat": 51.02175, "lng": 8.0935}, {"id": "f4030d47-cf63-4430-bc62-dfb8e04d4ac7", "name": "Niklas Keiluweit", "typ": "hgb_scouter", "plz": "48619", "ort": "Heek", "lat": 51.97625, "lng": 7.8008}, {"id": "081320e1-6a56-4ff2-b77c-a92b61989e57", "name": "Lukas Bauer", "typ": "angestellt_scouter", "plz": "34298", "ort": "Helsa", "lat": 51.241, "lng": 9.5672}, {"id": "9a8938e7-490b-4aae-a61e-731226f86837", "name": "Patrick Kalinowski", "typ": "hgb_scouter", "plz": "47447", "ort": "Moers", "lat": 51.373, "lng": 6.5119}, {"id": "ef59fc83-212f-4f80-a37b-882c01919578", "name": "Bojan Siemer", "typ": "hgb_scouter", "plz": "52249", "ort": "Eschweiler", "lat": 50.69, "lng": 6.17415}, {"id": "815e6dde-25f7-4f2f-afac-1fdc10eac107", "name": "Alessio Castellano", "typ": "hgb_scouter", "plz": "41462", "ort": "Neuss", "lat": 51.15425, "lng": 6.52015}, {"id": "68518a55-5dba-4fbd-9c1d-23b1f05567fe", "name": "Salvatore Castellano", "typ": "hgb_scouter", "plz": "41462", "ort": "Neuss", "lat": 51.2295, "lng": 6.55025}, {"id": "5a0a7e99-8663-4caf-b3a2-8983210a4937", "name": "Julien Jacobi", "typ": "hgb_scouter", "plz": "32676", "ort": "Lügde", "lat": 52.1365, "lng": 8.5489}, {"id": "584ae2bc-1da8-4669-8322-f41b6b96eea9", "name": "Uwe Lenkeit", "typ": "hgb_scouter", "plz": "46562", "ort": "Voerde", "lat": 51.6295, "lng": 6.6543}, {"id": "2ef71d76-85c3-4213-b1f7-d7fa11b451f4", "name": "Adam Marzier", "typ": "hgb_scouter", "plz": "49525", "ort": "Lengerich", "lat": 52.37425, "lng": 7.98735}, {"id": "a30a0c13-8fe7-4bb4-b728-1dcb89026e30", "name": "Leon Stockreiter", "typ": "hgb_scouter", "plz": "49080", "ort": "Osnabrück", "lat": 52.38, "lng": 8.20435}, {"id": "9118fc11-19cd-46fe-828d-83e10f20de2e", "name": "Gamal Al Adamy", "typ": "hgb_scouter", "plz": "44145", "ort": "Dortmund", "lat": 51.414, "lng": 7.60385}, {"id": "b3c2503e-63b2-4f7a-a25a-6b36390646b3", "name": "Yusuf Ucar", "typ": "hgb_scouter", "plz": "44289", "ort": "Dortmund", "lat": 51.557, "lng": 7.51915}, {"id": "b02bffff-2bed-48c1-b067-f9b7ace5e464", "name": "Atila Gürlük", "typ": "hgb_scouter", "plz": "52134", "ort": "Herzogenrath", "lat": 50.80475, "lng": 5.9239}, {"id": "8c0d9890-341e-422d-a970-6daac92f0151", "name": "Fahri Cakir", "typ": "hgb_scouter", "plz": "52064", "ort": "Aachen", "lat": 50.785, "lng": 6.11465}, {"id": "56847b95-acfc-46e8-8691-95900b868fd3", "name": "Niko Gulin", "typ": "hgb_scouter", "plz": "32257", "ort": "Bünde", "lat": 51.90775, "lng": 8.4425}, {"id": "6255ad1d-6ead-4e32-b640-f0edd1c0853d", "name": "Andre Kuppert", "typ": "hgb_scouter", "plz": "33330", "ort": "Gütersloh", "lat": 51.96025, "lng": 8.6636}, {"id": "eb517226-59a2-45c1-a729-fe163b894da1", "name": "Stenly Strohmaier", "typ": "hgb_scouter", "plz": "34123", "ort": "Kassel", "lat": 51.3975, "lng": 9.3516}, {"id": "cf434270-525b-4db6-bccd-6ab99938bf11", "name": "Muhammed Sahin", "typ": "hgb_scouter", "plz": "32257", "ort": "Bünde", "lat": 51.9475, "lng": 8.44775}, {"id": "6b0aca7c-7ba3-438a-83c6-6081efb74671", "name": "Oskar Schäfers", "typ": "hgb_scouter", "plz": "33098", "ort": "Paderborn", "lat": 51.8735, "lng": 8.70665}, {"id": "e5d083e2-7097-480b-9ec6-c497071ec897", "name": "Azad Yadel", "typ": "hgb_scouter", "plz": "33330", "ort": "Gütersloh", "lat": 51.87575, "lng": 8.57995}, {"id": "7a8b000e-128c-43bc-ab33-45d06c46b732", "name": "Leon Ellermann", "typ": "hgb_scouter", "plz": "49163", "ort": "Bohmte", "lat": 52.389, "lng": 8.04755}, {"id": "b4ded56b-cecd-4202-80b6-9044d73dc0a9", "name": "Klaus Peter Bolte", "typ": "angestellt_scouter", "plz": "33102", "ort": "Paderborn", "lat": 51.97625, "lng": 8.76475}, {"id": "cc0ceccd-a650-432a-82f9-a2256e68a75b", "name": "Danyildiz Kadir", "typ": "hgb_scouter", "plz": "50170", "ort": "Kerpen", "lat": 50.978, "lng": 6.86655}, {"id": "34911461-0153-4c6b-833f-7df40bc3a4ec", "name": "Jonas Leuchtenberger", "typ": "hgb_scouter", "plz": "52064", "ort": "Aachen", "lat": 50.658, "lng": 6.038}, {"id": "6607e494-7a46-41b9-8d82-56d4ead91fa7", "name": "Tanja Schallenberg", "typ": "hgb_scouter", "plz": "52499", "ort": "Baesweiler", "lat": 50.828, "lng": 6.2319}];
 const QUALIF = [{"id": "591b93b8-fd97-4768-9a32-7cef44da1474", "lat": 52.012426073259, "lng": 8.52342189303158, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "158b92ee-f5a4-4590-8977-cba73c4f11b9", "lat": 51.9912822580183, "lng": 8.50680297545075, "status": "unsuitable", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "59cc7f66-36ff-48c5-9a88-996d5365290e", "lat": 52.0048420002873, "lng": 8.52139146374954, "status": "revisit", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "a5605793-110f-4621-b6ea-68a240760dc5", "lat": 51.9924482299853, "lng": 8.5279231960966, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "fa3df4f3-8ab2-4148-8843-817ec264a478", "lat": 52.0150450991731, "lng": 8.53224931466126, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "6fd53cda-a7be-4cd1-906a-4388b20d6b8d", "lat": 52.0492875416161, "lng": 8.55064087332044, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "50130734-84d5-4418-a17e-6b3d2d09493e", "lat": 52.0317851390118, "lng": 8.54379687728012, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "048d8480-424d-40ba-968a-e1e78755f574", "lat": 52.0309576293232, "lng": 8.54523491493125, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "b26d6844-1053-4320-9f9c-6dfb0e4c50e8", "lat": 52.0472589527018, "lng": 8.54786682066123, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "703a9ab4-964f-47d4-b4e5-dd21b56d4a87", "lat": 52.0158552385243, "lng": 8.5015602055026, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "7f58589d-2ca5-4248-a490-c89e6b770045", "lat": 52.008515219583, "lng": 8.55675090395522, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "2c05c03d-4642-4346-a553-f144e12e5c3d", "lat": 52.0499564447242, "lng": 8.55197966449472, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "d5e5222c-1b23-41d3-b462-64aeb742ced7", "lat": 51.9975707186116, "lng": 8.5557772546189, "status": "unsuitable", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "b8ce1006-e8c8-4989-b42e-3655758cdac3", "lat": 52.0286874025744, "lng": 8.52940761518964, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "c101f9d6-8d75-4a30-9b27-140a376746d7", "lat": 52.0096399266253, "lng": 8.51739252766601, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "365e9297-d7ac-40ba-b89b-bd6da889c1f5", "lat": 52.0328258698892, "lng": 8.55688898682123, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "90ac4caa-c56a-4a01-9775-0e487ffea8b7", "lat": 52.0153690592631, "lng": 8.51598589743688, "status": "unsuitable", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "cd3e2359-1c15-4cf2-ae96-65bdd7f67f9f", "lat": 52.0023809576547, "lng": 8.51558448996342, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "5a38960f-c7a8-4ecd-aa39-5ace5752d4ea", "lat": 52.0262350209872, "lng": 8.54768607473304, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "86796241-9a1b-415c-8f14-7e57e673bb77", "lat": 52.0062179337402, "lng": 8.55010642556078, "status": "revisit", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "58c878b7-f4ed-4f5a-a68d-c4bcb3bd7e8c", "lat": 52.040679136011, "lng": 8.56386249689617, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "b8fb702f-4198-4f6c-aebd-1c64e5e04985", "lat": 52.0278102356442, "lng": 8.50466633716812, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "d0505e4e-92f6-4936-ae69-b3b5d91b8f50", "lat": 52.0360732078105, "lng": 8.55898941654078, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "f5e654e3-9a30-4e5f-b043-ffa9a66724b2", "lat": 52.0045507479381, "lng": 8.51458340929437, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "9e511681-d802-4067-acf9-29a645929ac1", "lat": 52.0180618398029, "lng": 8.56364097686246, "status": "revisit", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "593a9f1e-fd1d-499e-8414-fbed0a8bc86a", "lat": 51.9938915891667, "lng": 8.50416031072296, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "68fb62ef-172a-4e6f-8707-93c4a52e3f17", "lat": 52.0029900649289, "lng": 8.52464601910403, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "ef97ff87-38d0-46ee-bad8-70da8fd9e7f5", "lat": 52.0290263362708, "lng": 8.56111274844166, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "83bf6fa6-48b8-4601-a6fb-69562917acaa", "lat": 52.0457269779322, "lng": 8.56347336804511, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "584561d3-b064-45d2-a613-43dd43492c66", "lat": 52.017900737776, "lng": 8.51908811865289, "status": "unsuitable", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "e15d832e-58ca-4961-ab43-4b7ff989580b", "lat": 51.5046626415468, "lng": 7.42293943529612, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "4c132e19-7e43-4678-88be-8760c1538b6a", "lat": 51.4873771206225, "lng": 7.4322583201944, "status": "revisit", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "54b3d91d-10a2-45fb-b098-7367b21b73f9", "lat": 51.5232027850842, "lng": 7.48136574011892, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "499e6359-66bc-4253-ba38-f299f0128a8a", "lat": 51.5396366810305, "lng": 7.48701812418922, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "674d5e11-202b-4343-a47d-122a51d667a7", "lat": 51.4980967504467, "lng": 7.49004601011493, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "22d40799-7680-4df2-8adb-3abc801c366f", "lat": 51.532103231937, "lng": 7.48736563684814, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "2e19f335-74e5-4ef7-b1ef-fa5940693428", "lat": 51.5226053721026, "lng": 7.42143501651072, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "46dafdec-c7e3-4665-90ce-3bbe1ecdd530", "lat": 51.517740267692, "lng": 7.4283937457927, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "520b3e70-0160-4b4b-b712-844440a8d6cf", "lat": 51.5346811647829, "lng": 7.47602707761337, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "d84955f0-b2d0-43c0-83b9-ee8a2ac0d644", "lat": 51.505630237201, "lng": 7.46257750699531, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "814c18d2-8317-4b2a-9c5a-308c7a6eb272", "lat": 51.5277859309681, "lng": 7.44369422932069, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "7c8dfa21-8276-45aa-abc1-a458dd04c912", "lat": 51.5169678955398, "lng": 7.49402615357622, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "81dc4e3b-ce04-400c-8eb5-5e2ad1062df7", "lat": 51.4950890080001, "lng": 7.47485947848609, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "b61d835f-d439-4308-8ab9-6bef887c8473", "lat": 51.4993478001136, "lng": 7.4971446331718, "status": "revisit", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "df88b296-b599-49c9-8d22-15716f05d77d", "lat": 51.5345199461659, "lng": 7.4953433430769, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "0065a359-dc0e-4f03-847f-3371247491ec", "lat": 51.5276850676612, "lng": 7.42728549432999, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "1b5683b4-e97a-4391-aa75-bda5ae046792", "lat": 51.4953919993078, "lng": 7.47103533806018, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "d5db5099-1e7e-45b8-80a4-66969ecbe57f", "lat": 51.5163681545062, "lng": 7.43736966511775, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "f11068fe-7a61-444a-b1de-427f98040d7f", "lat": 51.5065274794883, "lng": 7.48582606237174, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "9ffc2868-dfca-45ce-8eb7-e38732e08ebc", "lat": 51.5333147311426, "lng": 7.42496120586212, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "00f5755c-03f5-450c-82a0-47cb84fd2c65", "lat": 51.5186187394311, "lng": 7.49301297822667, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "40d0e64a-e016-4ea8-937c-55334ff16885", "lat": 51.5027460954659, "lng": 7.49887254121503, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "9dfca840-6c76-4295-9edd-cd8de4ec3bfd", "lat": 51.490366131902, "lng": 7.46507255802124, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "9a0dc1f5-a1f4-41d4-9173-5a6ec59d065a", "lat": 51.498600480331, "lng": 7.47276854111477, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "75e2f4dd-848c-468d-a10f-9822e86264b0", "lat": 51.4980884305585, "lng": 7.44108240858028, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "39038d66-cf75-4c3a-ba17-ddb85deee878", "lat": 51.5279766696245, "lng": 7.44563665691088, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "bd8abf07-6291-4c0c-9ccc-96a5817767e9", "lat": 51.5104749255291, "lng": 7.44663219049906, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "08bada3c-791a-42b0-9dc9-8ae2bed6cc69", "lat": 51.4979696426835, "lng": 7.48462052136309, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "04cd58cf-0c41-4de8-bafe-db1f95f19d1b", "lat": 51.5006381989687, "lng": 7.44973972367897, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "35d76315-03c1-42dd-a3d7-90e45c374491", "lat": 50.9870753313035, "lng": 6.87755138212951, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "5c53416c-ce43-4c9a-8844-e9b9a95b61ec", "lat": 50.9563411245022, "lng": 6.92033243304418, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "84239809-0f41-4744-80ba-af29f0919876", "lat": 50.9706960435378, "lng": 6.93592578943211, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "294f99c9-156d-4fd8-abb2-1e1cea30c99c", "lat": 50.9608832014981, "lng": 6.87846254214413, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "df6df90a-0d39-4638-a524-e3b4d8f30668", "lat": 50.9872783064249, "lng": 6.94757150378336, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "6b95dfe2-d4a5-47b5-a461-fac9f2e14ad8", "lat": 50.9854184065706, "lng": 6.89256944913045, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "5a7bcd18-3f3a-430f-beb7-4c02271efee2", "lat": 50.9683577115801, "lng": 6.87793892632881, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "0e3fd561-abba-440f-bd69-0a43835b639c", "lat": 50.9352320911603, "lng": 6.91826497939985, "status": "unsuitable", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "9dac12e0-87f2-4c3a-98a5-cc6dd0469df2", "lat": 50.9685859196792, "lng": 6.93018480527947, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "0cbb3f1d-dbcc-4b73-8efa-5ba34bed64b5", "lat": 50.9319466129558, "lng": 6.92028113807072, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "e1112aeb-a45e-4982-931e-871d8e27a545", "lat": 50.9516938755101, "lng": 6.87853165317411, "status": "unsuitable", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "c6feb757-2fb2-499f-805b-ce29f55fd461", "lat": 50.9879956698516, "lng": 6.89290186771925, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "3593ba84-6303-4a2f-acf0-0c7bcd931a9a", "lat": 50.9729755044104, "lng": 6.94082647440661, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "13c442cb-ed74-4ca3-8776-188b4f653681", "lat": 50.9776405265085, "lng": 6.94676132294123, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "2275b477-f359-45fc-911f-70be972d8383", "lat": 50.9434890555208, "lng": 6.94259602175891, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "a9519dae-71ae-4ba2-ae62-c082024dd9bb", "lat": 50.9862696088693, "lng": 6.88009730961719, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "103d1dc3-875f-41ed-93e9-290ba469c349", "lat": 51.5170549713083, "lng": 7.46712416758282, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "c58f40e2-ec18-4826-a51f-d5d2d10a02a2", "lat": 51.5161949614658, "lng": 7.47330509229958, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "1789dec8-dd5f-4805-a04f-e20c720a6e5a", "lat": 50.9466663836129, "lng": 6.9225189264057, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "97910969-f2d4-406e-9bd4-550450ae74ac", "lat": 50.9614482090975, "lng": 6.92373967528832, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "ea29a89b-225e-4489-8374-4d8b3e203fd8", "lat": 50.9548857974339, "lng": 6.88510221079496, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "9785bac8-5044-4769-842e-0fa90fd6aab9", "lat": 50.9760545462314, "lng": 6.88491676981139, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "7e82110a-23b5-4364-9ea8-8242d9322d21", "lat": 50.9445981087737, "lng": 6.94871668300332, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "38d87df8-f21e-4921-8e88-2938196523c8", "lat": 50.9564471040263, "lng": 6.91102764903682, "status": "unsuitable", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "b7935f0e-2242-4d47-a44c-e573156ef29c", "lat": 50.9679409749198, "lng": 6.91527928330033, "status": "unsuitable", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "f84e94d9-e241-444f-b4ed-51e2dc3404fb", "lat": 50.9422978288482, "lng": 6.91782307157936, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "4b3c6217-410b-4f74-8e45-490a9c2b7c94", "lat": 50.9321679835057, "lng": 6.88605277309912, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "a745b27b-a40e-4702-8b2c-4cb185f5837c", "lat": 50.9702540312355, "lng": 6.90154039470187, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "17100b09-6108-4980-a2b4-a6a9428bf4f1", "lat": 50.9633663633296, "lng": 6.88314340514329, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "095578e9-b5da-48ad-ae0c-44c90fafced5", "lat": 50.9693770814095, "lng": 6.88268116431104, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "7e3d60e7-a6d2-4f3d-bef7-590d220ef82f", "lat": 50.9607962052021, "lng": 6.87938151798042, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "21980bcc-5be7-4892-8c56-f45dda3bd863", "lat": 50.9769985734359, "lng": 6.89052995783918, "status": "unsuitable", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "b292159f-1981-44ce-ae7f-e9a60110ad46", "lat": 50.9656642443288, "lng": 6.94133056917303, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "828ed32d-a0b8-4107-bc1c-b86701d1dbf9", "lat": 50.9469551378558, "lng": 6.92849882682069, "status": "unsuitable", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "b7463bde-55d4-41e1-906e-7a66333810f2", "lat": 50.1199105355095, "lng": 8.66628933427569, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "aeaf2d5b-01f5-4c25-98e2-9941ac9a648b", "lat": 50.0903037480146, "lng": 8.66463777262023, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "142d483c-28d3-44a5-bfc3-95c2baa8ca87", "lat": 50.110804266484, "lng": 8.6929324206899, "status": "revisit", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "a2678d99-5ceb-4672-99b1-41b4458f20c6", "lat": 50.0971404988367, "lng": 8.64796572848471, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "51cd102f-d1d8-4f50-b0c9-0f957ce8af11", "lat": 50.0810933518432, "lng": 8.66232280247295, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "889e031e-f5a6-483e-8c78-b8923721726b", "lat": 50.0689903853895, "lng": 8.6687457455512, "status": "open", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "bc029f85-311c-46ef-aff6-a17efbf7c13e", "lat": 50.0865236304109, "lng": 8.67506591548378, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "70717fb9-34c6-4d00-b064-b0fb2705c877", "lat": 50.0879568317167, "lng": 8.68263702099546, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "4807c294-c3d1-42ba-999d-6f1ae4321d8e", "lat": 50.1040876155606, "lng": 8.66333176063802, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "8d690707-c6e5-4b06-8177-fb12b4712b47", "lat": 50.1014278743059, "lng": 8.70323241134044, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "ccd34faf-f19a-4a49-b5f7-5c8c037cef08", "lat": 50.0623299586835, "lng": 8.71523879778036, "status": "revisit", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "def53d75-0e78-43e1-83da-81302274bd15", "lat": 50.1106861263877, "lng": 8.65340983821068, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "62d19fcc-2d34-462d-8ebf-75f2af80ce26", "lat": 50.1077236835036, "lng": 8.69288537412724, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "b43088d8-b40b-4a36-8cc0-2ac92374148e", "lat": 50.1103016404732, "lng": 8.66148150512502, "status": "open", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "6e310518-2f9e-4ea2-ac87-c0493ab09dd8", "lat": 50.1198906713648, "lng": 8.64036413819134, "status": "open", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "adb5c1a2-d2fc-4a89-b331-5c6f8c81fcda", "lat": 50.091450862672, "lng": 8.66105917159873, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "69498494-f58b-40b9-8d26-2bc11b7ccae9", "lat": 50.1008130295412, "lng": 8.67549272249808, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "d79e62cf-3fcc-4e93-9b59-b783a0d9fd42", "lat": 50.074615248985, "lng": 8.66229304226085, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "1524ed0a-c79d-4ae6-99ce-e80020b0562b", "lat": 50.0770878139449, "lng": 8.69961389656343, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "8cdccda5-0306-4769-8e79-39a8925d3ea2", "lat": 50.1070757073035, "lng": 8.71020739064658, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "61574c51-1139-4fce-8ba6-5ee35cfcc9a2", "lat": 50.1198777777867, "lng": 8.70088392641135, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "20d0bc99-68de-4381-b44c-c98dff396f78", "lat": 50.0777573451705, "lng": 8.6809934579265, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "f59a2619-2963-4564-980f-fb73b6d03c8e", "lat": 50.0665495243963, "lng": 8.71614711407432, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "e1ae48dd-4187-426c-9f58-2e5e1a9ff265", "lat": 50.0959460227252, "lng": 8.69267455506586, "status": "revisit", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "ebe9aacc-ec71-47bc-aa7c-8f00c8e55cca", "lat": 50.1016197815182, "lng": 8.70146438928554, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "bbe1fee3-bd32-4ce2-876b-fcade6b784af", "lat": 50.0727141820605, "lng": 8.65120348923465, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "0e6a254f-a3ef-4304-98bb-bad7a0211e4d", "lat": 50.0759343412781, "lng": 8.64041947952842, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "8e25b111-7e2d-4375-b27e-1f4184106c01", "lat": 50.1065057095779, "lng": 8.66995148997288, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "1473a9a9-c2be-421b-9499-5e03afacc8e7", "lat": 50.0797180056087, "lng": 8.71741423698738, "status": "open", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "0d635335-c2dc-490e-a2ce-dde76bdf9199", "lat": 50.1170651382554, "lng": 8.66207924306709, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "f3677522-340a-49e7-9727-b02e09908fa6", "lat": 50.0947073759786, "lng": 8.68746490976684, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "a26c10d9-1692-4a66-bbad-367569a68237", "lat": 50.0634805756223, "lng": 8.69491588745536, "status": "revisit", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "9aad62e2-4a5b-4f51-a808-12deb49fd6d0", "lat": 50.1055510794344, "lng": 8.68308747920001, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "e0972dad-a558-49a9-8a57-c8724b1f8455", "lat": 50.1146982137641, "lng": 8.68570417294025, "status": "revisit", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "4aedaf55-ff10-4bf2-8fbc-f8fc74a50507", "lat": 50.0917694952064, "lng": 8.69270936980033, "status": "revisit", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "ad07a29f-cdd8-41e7-ac5e-eaf54aa29ffb", "lat": 50.1119336912448, "lng": 8.6532802539724, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "5b1c30f7-83f3-41ad-86af-c674cfbd7727", "lat": 52.0034867898734, "lng": 8.53858452684011, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "b75440d1-b2f7-42dd-b55b-f22b8d154491", "lat": 52.0107704672394, "lng": 8.55337660011362, "status": "unsuitable", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "e343a401-7afb-4091-ac10-24ac38652468", "lat": 51.9997885259599, "lng": 8.52525752289682, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "d23d4270-222e-4b3a-a6d0-4f6d1aacdc8b", "lat": 52.0418393734229, "lng": 8.55799499602204, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "e6a8a88c-1d9e-4abc-b1c8-89edd7b95d7b", "lat": 52.0333495901129, "lng": 8.56408592217075, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "85f599bd-c350-4300-94e8-50b256f0b6e8", "lat": 51.9993517629198, "lng": 8.51555953627018, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "6f70ac2b-6a69-40e8-85e8-b0881e867065", "lat": 52.0140741705632, "lng": 8.51923070506711, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "18ae894f-dd54-42a3-90ac-2dfdcc7a5c8b", "lat": 52.0169030108397, "lng": 8.49026687634753, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "359e2af7-0823-49d9-8455-e2080e26e135", "lat": 52.0259990870564, "lng": 8.49038311710635, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "74ce26db-e354-4bcc-b335-2ba0aa897a1d", "lat": 52.0129251637037, "lng": 8.50052877175316, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "e0b67709-e88e-49d7-99f9-14b2aea0744e", "lat": 51.9986386303316, "lng": 8.53570719649255, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "12e60d86-be61-4f73-9b5f-671d6c4d4e18", "lat": 51.9930960338703, "lng": 8.50879032999837, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "1ce4859a-424d-448f-9082-62ba1c25c6c1", "lat": 52.0095039667873, "lng": 8.56138923652106, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "7466fb69-23dd-4c9a-bd97-0434c75f6cb4", "lat": 51.9915908420219, "lng": 8.55659374459149, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "ef58eafb-f366-4fff-bbe5-9b06a2a1cd2a", "lat": 52.040864883205, "lng": 8.56978120867673, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "377ee160-00be-404c-85e1-08f5f71246e3", "lat": 52.0307392644026, "lng": 8.53548796853933, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "4896bfa7-8865-4aac-b43a-ff21e4cc1784", "lat": 52.0398158168234, "lng": 8.52484573004799, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "d961b882-b016-4d46-ac48-bd4075d49aac", "lat": 51.9903971208882, "lng": 8.52739340898643, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "b2fc06bb-7af6-4d69-895d-789401e81ddc", "lat": 52.0028138350409, "lng": 8.50791176344643, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "3a388ca1-0a6f-45d0-bafe-b36ef217782a", "lat": 52.0336053192911, "lng": 8.56723201367917, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "ae836fa6-e508-4efe-bd7a-0a157cc9db9f", "lat": 52.0020013460145, "lng": 8.51510654018743, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "d6613db9-e3f1-4e0b-b379-f2e9d2f88163", "lat": 52.0484209273569, "lng": 8.51106260564138, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "a48748d1-7a39-4d6b-a8fa-cc0dde10de2d", "lat": 52.0338900911456, "lng": 8.53647071054809, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "ac7963d3-f02d-4fad-8667-d8c183fce178", "lat": 52.0180027151693, "lng": 8.50034477871521, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "2093f5ea-ee07-4c29-90cd-c7ec5158e7f6", "lat": 51.9940977273104, "lng": 8.49609308884576, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "b745702e-281b-482f-9509-ed8cfe51642d", "lat": 52.0470410989097, "lng": 8.5329613563923, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "9df2cc73-d8d5-4a05-b262-b09bb1c3c31b", "lat": 52.021677002867, "lng": 8.53870120079026, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "1f9a74d6-32c6-4064-9c79-367be50bc53b", "lat": 52.0138523334582, "lng": 8.5097360948788, "status": "open", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "7acdb257-5796-4adb-a4fc-4cf299bd3605", "lat": 51.4887345141717, "lng": 7.48482735789547, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "b55a8760-be08-404c-a9b1-c310c60b8f15", "lat": 51.5077836214551, "lng": 7.48075859476541, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "0fdcdf8f-c98e-4d9e-97d8-6841fbefbe70", "lat": 51.5116968816557, "lng": 7.425265252486, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "84b80dce-177f-4686-8485-4306c8734752", "lat": 51.5282092658142, "lng": 7.47607796046046, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "75f4b810-138e-4ba6-b4c2-b5a927ad0287", "lat": 51.5135433118305, "lng": 7.43482514755868, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "876b5a15-0401-41c8-b69c-383a3f7883c4", "lat": 51.5252621111316, "lng": 7.45100810826863, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "0ce96f5e-98ea-4c64-aa27-fda5049ace68", "lat": 51.5426293685538, "lng": 7.4211384048033, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "4046c02a-3593-4a85-bdf2-d422ccaa775b", "lat": 51.5301448875892, "lng": 7.46134099609105, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "e62e36c2-a858-4b9a-b20e-d4a0fb7827d6", "lat": 51.5254791528504, "lng": 7.44593267813026, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "662a72aa-5e11-4e25-b439-9c2072ab26c0", "lat": 51.5230787804796, "lng": 7.44729592332377, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "d9e561f9-5779-4e45-adc0-d085c7bfb561", "lat": 51.5132570444938, "lng": 7.44789858114671, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "f969d48f-a5a9-4fc4-a90d-45766ecd4c9e", "lat": 51.5177513642738, "lng": 7.43682139931871, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "230d8c3e-d7c9-4530-9572-e29faf0284de", "lat": 51.4982689484167, "lng": 7.44615621485195, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "281b03de-bc58-461b-b433-f410a8b58ea0", "lat": 51.5106945337599, "lng": 7.47429331874938, "status": "revisit", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "dc26b388-1195-4bdd-8f21-2b6dbcd3a9bd", "lat": 51.5070630068581, "lng": 7.45551668230581, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "92eaabde-276b-4f73-99e5-223f0ce0ec05", "lat": 51.4984206370073, "lng": 7.43372417550148, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "234191a0-d53f-41bf-b0a5-718cbe111fb9", "lat": 50.9660378741827, "lng": 6.92684614463847, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "cd3164cd-df94-4166-9ac3-590bb43114b5", "lat": 50.9679848348289, "lng": 6.88575973531104, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "c13a7650-ec7f-4c71-8c46-5dc3bbb5d260", "lat": 50.931713452591, "lng": 6.8849926075322, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "900cb5bd-0f41-45f4-a68b-2510fb13102d", "lat": 50.9571493355967, "lng": 6.92451094628212, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "77a2d6d1-ee23-4124-988c-29259b299f99", "lat": 50.9466234371426, "lng": 6.88543074192839, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "0865e725-de52-4e93-acde-8dfecd041a2a", "lat": 50.9863896761793, "lng": 6.90409172024744, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "6268d042-b73b-4b9d-a48d-9ff175ef3cae", "lat": 50.9318860905923, "lng": 6.92434232034046, "status": "revisit", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "1dc33553-ee22-4d5d-8d90-b6326c34c6d4", "lat": 50.9447241519186, "lng": 6.93419152244082, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "027c81b3-cf49-4cf1-a201-406119ce0526", "lat": 50.9356579150042, "lng": 6.89487204545553, "status": "revisit", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "769f2fbf-4749-4c8f-8f7b-8e1e1e083b03", "lat": 50.9322751333828, "lng": 6.91126754130949, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "ec0040a9-1aee-4f9d-80ab-1a3bbd43ecea", "lat": 50.9387137502941, "lng": 6.94795439054713, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "c901a9c4-1590-4ff0-b379-64e9ac72caa0", "lat": 51.9933495736957, "lng": 8.5664441288796, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "c827d703-7d2b-491c-a1e6-0b362b5109e7", "lat": 51.9978670321956, "lng": 8.51783873852075, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "73e8e12d-1e8d-4de7-96d3-aba6e44e20bf", "lat": 52.0191488472846, "lng": 8.56195082434865, "status": "revisit", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "4a59a091-19a4-440e-9fd6-5be890cb2114", "lat": 51.9940377606613, "lng": 8.50738649175312, "status": "revisit", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "d12d4565-392d-453f-a935-5b25a046b7b4", "lat": 52.0074980370375, "lng": 8.49380922890015, "status": "qualified", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "e3aba994-f4b9-4a6d-8508-3cb7f2186368", "lat": 52.0107039349718, "lng": 8.52149881523657, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "8dfbdc44-f1ea-4e48-babf-f2f2c9c84674", "lat": 52.0017593239499, "lng": 8.52738696105144, "status": "rejected", "scouter_id": "41eb0276-2aae-4b5a-85a4-515bcfc21e17"}, {"id": "5b19aa05-f7f9-45c4-93a7-28596ec2e686", "lat": 51.5298137273026, "lng": 7.45564433809238, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "8c1fa643-b77e-4368-b248-847222adabe6", "lat": 51.5443969661764, "lng": 7.42315979221926, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "ff8c8702-3800-4915-babb-4a5f05a7faaa", "lat": 51.4955330705971, "lng": 7.49171029956516, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "9a415ecd-d5f9-4c80-b5b7-964a3b738bf1", "lat": 51.5391459210374, "lng": 7.44944453224338, "status": "revisit", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "68bcca69-3870-4a18-b83d-7d04f45867cf", "lat": 51.527245840293, "lng": 7.47751319840559, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "ed8e4ab0-c646-4a7e-b65f-b2728288b42c", "lat": 51.4990861507588, "lng": 7.42474445728606, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "027af4db-0c21-4c44-838b-fb48fcb0cf06", "lat": 51.540125295558, "lng": 7.42502272160976, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "30902ab5-f151-47de-862b-4956733b44dc", "lat": 51.4881349003453, "lng": 7.45398151542344, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "0ac173db-a626-4385-9160-3b8ee756cf73", "lat": 51.5268943852366, "lng": 7.43532406607231, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "1c8d7d0f-57f2-4639-a7b4-dfa634488ecf", "lat": 51.510623218166, "lng": 7.49687609565425, "status": "rejected", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "1fdeedc7-d5d4-4b57-a105-03814b1db297", "lat": 51.5327178493057, "lng": 7.4507068075305, "status": "revisit", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "fecf0c48-462f-494e-856e-4a4b51829413", "lat": 51.5407902707627, "lng": 7.47163766952595, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "930efd45-17d6-4102-8e66-4ca994224a68", "lat": 51.5304861060153, "lng": 7.43109810586695, "status": "unsuitable", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "2184bef8-1d9e-4a4f-8b62-13f843f391bc", "lat": 51.5241204681864, "lng": 7.42322168306302, "status": "open", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "0c46241e-2a13-4c6b-b0dc-55b1666d8c3e", "lat": 51.5125402000924, "lng": 7.47290281949292, "status": "revisit", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "ac3e12b8-d50c-4c54-b8b1-a0ea735c33d4", "lat": 51.5172486784602, "lng": 7.46662415349388, "status": "qualified", "scouter_id": "78d96354-5e65-4ad8-b705-7848041083e8"}, {"id": "1f2500dd-3eb1-4bc3-b37c-4e6a2596c777", "lat": 50.9569736634537, "lng": 6.9014908467853, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "d157f73b-d4c8-401d-9e34-8f49c7e1a9f9", "lat": 50.9313289895274, "lng": 6.88441346390388, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "ade68035-29b1-4135-9014-a82e4468b49e", "lat": 50.9342797120521, "lng": 6.92816004385463, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "4aa73f50-c8a7-4c3e-b39a-7ffebe3771ba", "lat": 50.9532022196023, "lng": 6.94644618410434, "status": "qualified", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "097864a1-dbcd-44fb-bef8-5628b75559d0", "lat": 50.9720939365816, "lng": 6.89035504474774, "status": "unsuitable", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "e505b645-8c8e-46de-846a-30c8fbc2838d", "lat": 50.9426546294056, "lng": 6.88311932146506, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "c13f00b3-333b-4d86-873b-8ba2596e1506", "lat": 50.9729166334621, "lng": 6.89263913998253, "status": "open", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "e478886e-24a6-425a-8d92-95350c8a10e4", "lat": 50.9811040112273, "lng": 6.89929407373375, "status": "unsuitable", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "82e67c1e-63ca-4e20-a9af-336cab4864ab", "lat": 50.9647321277747, "lng": 6.92948811246417, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "c32a1510-7caf-43df-8525-1610dac6ddca", "lat": 50.9418870296989, "lng": 6.89530292689137, "status": "rejected", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "4d00d158-d8a6-4073-9bb4-09e25c53292c", "lat": 50.9600497298001, "lng": 6.88912215437234, "status": "revisit", "scouter_id": "90761bf7-4b36-4922-a31a-c978e924eba6"}, {"id": "854f08f7-b7e1-4117-8c4f-a13917dd4c86", "lat": 50.0925197659, "lng": 8.66943022037609, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "92c67937-39fa-44dc-a126-cdfc28745fcb", "lat": 50.0778448210439, "lng": 8.65859745562393, "status": "revisit", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "7347ba37-32d5-4740-b3d5-a71c21de371b", "lat": 50.1190783703086, "lng": 8.6472521890138, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "f8607ae0-bf03-4ced-8838-04d63d59b564", "lat": 50.0850426065022, "lng": 8.65585129870197, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "ff22e59e-7958-4749-aa64-747109420b01", "lat": 50.1187520633077, "lng": 8.68330748663804, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "f038a1d8-5c95-414e-9cab-685f79387682", "lat": 50.0789283409438, "lng": 8.64049224539269, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "1a1e9b06-05de-45ec-80d1-a2883660d519", "lat": 50.1086073849574, "lng": 8.69148863586633, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "7f7907c4-c992-4a56-aafd-f02b42f107ce", "lat": 50.0668301511934, "lng": 8.69215983381928, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "9bd6e987-d58a-4794-bbe5-cea45f2a81f8", "lat": 50.0777191702567, "lng": 8.68340718493388, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "b9733c69-9f23-495b-87ee-8ff9bc7882a5", "lat": 50.0658742825315, "lng": 8.66625095372003, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "a16e7f06-b57f-47bd-9499-3e9f4bd6f3b6", "lat": 50.1162783404157, "lng": 8.65696834437771, "status": "revisit", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "b122292c-aa36-43d1-bd2f-8efa27358a42", "lat": 50.083534701862, "lng": 8.64968314281582, "status": "revisit", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "c8b8cf48-34bc-4739-af91-4e936b0c1836", "lat": 50.1160424778661, "lng": 8.64695786558198, "status": "open", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "2cf94f12-506f-4250-9562-d965e0f83af6", "lat": 50.0772396648986, "lng": 8.68176632097862, "status": "revisit", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "f50ff58d-df20-4524-b6d6-79bc0924f4a3", "lat": 50.1172205996609, "lng": 8.64167354092212, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "d9c9d72b-61d3-4773-a471-3e4a8c62f6e5", "lat": 50.0948558653077, "lng": 8.66471972961197, "status": "open", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "8ebcf555-0f5c-471f-bbc0-06930a933050", "lat": 50.0645163616791, "lng": 8.67101002654063, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "e0eec421-1809-4a45-9b06-d21e965e3f04", "lat": 50.0727533043312, "lng": 8.65996793910471, "status": "open", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "15aaa3c3-569e-4901-a536-765ef7ccc4b2", "lat": 50.0854051530263, "lng": 8.69413161275554, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "034344cd-8f59-4b4f-a968-3fcb405694bb", "lat": 50.0657319657112, "lng": 8.6978075947892, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "1eb64eed-02ea-44ad-8d86-82f3c4abd301", "lat": 50.08086629485, "lng": 8.71425844516508, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "ffdbe188-98ac-4a81-b687-cb7372aa4218", "lat": 50.064717256552, "lng": 8.70642902579705, "status": "open", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "250d92f3-33fb-40cd-ad82-112829e1026d", "lat": 50.0753757862547, "lng": 8.71643072660546, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "680bceb5-53ce-4d92-8bb9-993b64c3328b", "lat": 50.1086764043923, "lng": 8.6585319274939, "status": "unsuitable", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "fa249b74-f27d-4feb-91b5-83ec701de648", "lat": 50.096155165947, "lng": 8.66874181049651, "status": "open", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "5bcfa8a0-0c3e-4a62-baad-08355935dd13", "lat": 50.0849827465451, "lng": 8.67386457557448, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "b8ae621b-8b90-4bf6-8f36-6e5395146bd2", "lat": 50.0605154300491, "lng": 8.68352648756123, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "9cad43f3-69cf-4220-958f-d21cc51fb651", "lat": 50.1114838209661, "lng": 8.64346566648911, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "3cd847c8-0a94-413e-ba18-951d4cac733d", "lat": 50.1006275606188, "lng": 8.66024524482881, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "58167e12-d3a8-4689-b5b8-7c23c24d09ff", "lat": 50.1167780577905, "lng": 8.64411532623187, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "ca00d52e-cb21-4fc3-84f6-43052fd1d194", "lat": 50.0940840615189, "lng": 8.67467098528009, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "76b355b5-be6f-4c09-bf62-718745198e47", "lat": 50.0913892052797, "lng": 8.67704469079858, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "2d181844-739d-4e71-ad5d-d507c42e1b25", "lat": 50.081446852307, "lng": 8.71069589496469, "status": "rejected", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}, {"id": "6ff4e177-8688-47df-a414-a07fcc269f01", "lat": 50.1032889820068, "lng": 8.65368199695112, "status": "qualified", "scouter_id": "205a2f1a-7c04-492d-bf0d-0480dd282e0e"}];
-const SCOUTER_ALL = [{"id": "d4d417d7-88ca-4973-875a-589836babaca", "name": "Jannis Pfeiffer", "plz": "33604", "ort": "Bielefeld"}, {"id": "ed672177-5ba8-44d7-b405-5646f3002ea3", "name": "Maximilian Koch", "plz": "33611", "ort": "Bielefeld"}, {"id": "c5a42862-c634-4a60-a3b7-10ca035176cc", "name": "Thomas Herrmann", "plz": "33602", "ort": "Bielefeld"}, {"id": "f89b2cf0-f71d-4741-b26d-3064cec0d65a", "name": "Miguel Schader", "plz": "33607", "ort": "Bielefeld"}, {"id": "c33a5f4d-43dd-49b2-a489-8aaf898d22e9", "name": "Cinar Onk", "plz": "33609", "ort": "Bielefeld"}, {"id": "77287cbd-95dd-4724-a1b2-d5d3b5aff7d6", "name": "Pascal Meier", "plz": "33602", "ort": "Bielefeld"}, {"id": "48dd72dc-52e3-42e6-9fff-cf1f21a0fe6e", "name": "Robin Kricke", "plz": "33613", "ort": "Bielefeld"}, {"id": "f5ff643f-190b-4573-a87c-22eb82495505", "name": "Bernd Krahwinkel", "plz": "33615", "ort": "Bielefeld"}, {"id": "260b0dbb-c7ba-46f8-a6f8-4d7eaaefa4e0", "name": "Nick Franke", "plz": "33102", "ort": "Paderborn"}, {"id": "f885ea39-d183-44e2-a88e-f08f4d40c48d", "name": "Maxim Horten", "plz": "52066", "ort": "Aachen"}, {"id": "8a25808d-724d-43b6-b039-d46e577d89d7", "name": "Gino Ulitzka", "plz": "44265", "ort": "Dortmund"}, {"id": "3b696d6e-b550-435c-b48f-609f817c977c", "name": "Patrick Windolph", "plz": "49152", "ort": "Bad Essen"}, {"id": "700ce880-88af-4d93-9dfd-caeb58222bf8", "name": "Christina Götte", "plz": "47802", "ort": "Krefeld"}, {"id": "7204bc51-55ad-44b6-ac40-f8401c7c79a9", "name": "Matthias Götte", "plz": "47802", "ort": "Krefeld"}, {"id": "6220575f-4c9c-44d1-a5cc-15dc7da8d1c0", "name": "Christoph Held", "plz": "50170", "ort": "Kerpen"}, {"id": "e87ba971-947a-43b4-9ed6-383293917fe4", "name": "Chadia Epp", "plz": "33824", "ort": "Werther"}, {"id": "2637a887-a824-4ee7-8035-4e4c1f25d05d", "name": "Marcel Zwanzig", "plz": "48565", "ort": "Steinfurt"}, {"id": "e43493d2-a06a-4525-819b-152ba87b7888", "name": "Eduard Kitzmann", "plz": "57539", "ort": "Fürthen"}, {"id": "93fdea5e-41e9-4d9b-9a80-bb8afba83df5", "name": "Martin Bott", "plz": "48167", "ort": "Münster"}, {"id": "f4030d47-cf63-4430-bc62-dfb8e04d4ac7", "name": "Niklas Keiluweit", "plz": "48619", "ort": "Heek"}, {"id": "aa038cac-d2a4-46ef-b090-e52ace9712ec", "name": "Stefan Lindner", "plz": "52066", "ort": "Aachen"}, {"id": "081320e1-6a56-4ff2-b77c-a92b61989e57", "name": "Lukas Bauer", "plz": "34298", "ort": "Helsa"}, {"id": "02d2395d-94e6-4ee1-b795-5230acd8db2b", "name": "Lukasz Dragan", "plz": "52074", "ort": "Aachen"}, {"id": "9a8938e7-490b-4aae-a61e-731226f86837", "name": "Patrick Kalinowski", "plz": "47447", "ort": "Moers"}, {"id": "666f07e3-140b-432c-9115-d1f15244ed61", "name": "Tayfun Süleymaniye", "plz": "52070", "ort": "Aachen"}, {"id": "ef59fc83-212f-4f80-a37b-882c01919578", "name": "Bojan Siemer", "plz": "52249", "ort": "Eschweiler"}, {"id": "51405d32-0b77-48c9-a68e-d276d23eadea", "name": "Andreas Klee", "plz": "34123", "ort": "Kassel"}, {"id": "bbb56bf4-ccac-4611-afd0-0cfe2c7f2880", "name": "Sven Gang", "plz": "33154", "ort": "Salzkotten"}, {"id": "d2d0c2ec-467a-4feb-8f45-6f67a77ca3fc", "name": "Carlos Eichler", "plz": "39116", "ort": "Magdeburg"}, {"id": "30fb2aa0-3a74-4c7f-a322-9f07367c1d06", "name": "Anton Ratsimar", "plz": "32049", "ort": "Herford"}, {"id": "815e6dde-25f7-4f2f-afac-1fdc10eac107", "name": "Alessio Castellano", "plz": "41462", "ort": "Neuss"}, {"id": "68518a55-5dba-4fbd-9c1d-23b1f05567fe", "name": "Salvatore Castellano", "plz": "41462", "ort": "Neuss"}, {"id": "5a0a7e99-8663-4caf-b3a2-8983210a4937", "name": "Julien Jacobi", "plz": "32676", "ort": "Lügde"}, {"id": "9c921f6b-e714-47af-9b66-286e2c74933d", "name": "Victor Faulstich", "plz": "36041", "ort": "Fulda"}, {"id": "584ae2bc-1da8-4669-8322-f41b6b96eea9", "name": "Uwe Lenkeit", "plz": "46562", "ort": "Voerde"}, {"id": "2ef71d76-85c3-4213-b1f7-d7fa11b451f4", "name": "Adam Marzier", "plz": "49525", "ort": "Lengerich"}, {"id": "a30a0c13-8fe7-4bb4-b728-1dcb89026e30", "name": "Leon Stockreiter", "plz": "49080", "ort": "Osnabrück"}, {"id": "9118fc11-19cd-46fe-828d-83e10f20de2e", "name": "Gamal Al Adamy", "plz": "44145", "ort": "Dortmund"}, {"id": "b3c2503e-63b2-4f7a-a25a-6b36390646b3", "name": "Yusuf Ucar", "plz": "44289", "ort": "Dortmund"}, {"id": "b02bffff-2bed-48c1-b067-f9b7ace5e464", "name": "Atila Gürlük", "plz": "52134", "ort": "Herzogenrath"}, {"id": "8c0d9890-341e-422d-a970-6daac92f0151", "name": "Fahri Cakir", "plz": "52064", "ort": "Aachen"}, {"id": "56847b95-acfc-46e8-8691-95900b868fd3", "name": "Niko Gulin", "plz": "32257", "ort": "Bünde"}, {"id": "ae71f96f-57d7-43bb-82d0-c85245d0082b", "name": "Immanuel Tjart", "plz": "48465", "ort": "Schüttorf"}, {"id": "ec84fb9e-8a8b-4f7c-92cd-03f86bd93c65", "name": "Samuel Tjart", "plz": "48465", "ort": "Schüttorf"}, {"id": "8bd29480-1fc2-4e5b-88c8-82057594a6ff", "name": "Christian Seifert", "plz": "44532", "ort": "Lünen"}, {"id": "235146f2-dae6-40f5-bdd3-7340d2282bba", "name": "Alicja Tulacz", "plz": "40789", "ort": "Monheim"}, {"id": "623371d8-b285-44b5-94c0-e3b8c2a91d6b", "name": "Martin Sturbek", "plz": "52066", "ort": "Aachen"}, {"id": "507ecceb-d093-42d6-bcb2-87901b24253b", "name": "Ben von Hoff", "plz": "33332", "ort": "Gütersloh"}, {"id": "3d855ffa-2611-4583-83f3-ccc6da947abe", "name": "Pascal Schallenberg", "plz": "52499", "ort": "Baesweiler"}, {"id": "05c9cf56-a56b-44e1-b737-5f44fe9d8bf5", "name": "Richard Winzent", "plz": "48308", "ort": "Senden"}, {"id": "b187d88d-6e30-420b-aae9-4bbb70cc940d", "name": "Teyrone Simon", "plz": "39112", "ort": "Magdeburg"}, {"id": "08a833fe-7cd0-48ed-a8ac-7f2d36210ab0", "name": "Steffen Waldheim", "plz": "39104", "ort": "Magdeburg"}, {"id": "6255ad1d-6ead-4e32-b640-f0edd1c0853d", "name": "Andre Kuppert", "plz": "33330", "ort": "Gütersloh"}, {"id": "eb517226-59a2-45c1-a729-fe163b894da1", "name": "Stenly Strohmaier", "plz": "34123", "ort": "Kassel"}, {"id": "cf434270-525b-4db6-bccd-6ab99938bf11", "name": "Muhammed Sahin", "plz": "32257", "ort": "Bünde"}, {"id": "eca3ba77-833b-43d2-8f9c-d594b8c8a7a8", "name": "Gert Liese", "plz": "34286", "ort": "Spangenberg"}, {"id": "6b0aca7c-7ba3-438a-83c6-6081efb74671", "name": "Oskar Schäfers", "plz": "33098", "ort": "Paderborn"}, {"id": "5795c54d-97b9-440d-9691-966e76e28e0f", "name": "Daniel Saweljew", "plz": "49479", "ort": "Ibbenbüren"}, {"id": "e5d083e2-7097-480b-9ec6-c497071ec897", "name": "Azad Yadel", "plz": "33330", "ort": "Gütersloh"}, {"id": "7a8b000e-128c-43bc-ab33-45d06c46b732", "name": "Leon Ellermann", "plz": "49163", "ort": "Bohmte"}, {"id": "1bc1ab1a-1d6a-4450-b669-4b28524165b8", "name": "Henry Friesen", "plz": "33803", "ort": "Steinhagen"}, {"id": "b4ded56b-cecd-4202-80b6-9044d73dc0a9", "name": "Klaus Peter Bolte", "plz": "33102", "ort": "Paderborn"}, {"id": "58cac361-dadc-407e-8254-783539f5167f", "name": "Jonas Görgen", "plz": "33649", "ort": "Bielefeld"}, {"id": "2a3a00c5-35db-4585-b1e3-007b645c0861", "name": "Frank Reddig", "plz": "33397", "ort": "Rietberg"}, {"id": "a5a8b850-a61d-4a87-8730-117d582756ad", "name": "Torsten Kiefer", "plz": "44339", "ort": "Dortmund"}, {"id": "cc0ceccd-a650-432a-82f9-a2256e68a75b", "name": "Danyildiz Kadir", "plz": "50170", "ort": "Kerpen"}, {"id": "7981a22a-62ec-4ab2-bab7-cff20f1f9ec4", "name": "Ricardo Riedel", "plz": "49090", "ort": "Osnabrück"}, {"id": "a85e6117-7eb4-46ca-b525-603d6774be0c", "name": "Michael Wienold", "plz": "50259", "ort": "Pulheim"}, {"id": "78874445-4053-45ff-a5fc-4cea61d2bce0", "name": "Peter Neyer", "plz": "59609", "ort": "Anröchte"}, {"id": "da0d2157-d13c-4ba4-93b1-20c278fb38e7", "name": "Anita Reddig", "plz": "33397", "ort": "Rietberg"}, {"id": "34911461-0153-4c6b-833f-7df40bc3a4ec", "name": "Jonas Leuchtenberger", "plz": "52064", "ort": "Aachen"}, {"id": "e9720231-eafa-447e-bd0d-d9d2bce4381b", "name": "Kevin Kraus", "plz": "52078", "ort": "Aachen"}, {"id": "82620963-4afe-464b-9a4e-b8db43dfa44c", "name": "Selçuk Özkaya", "plz": "52477", "ort": "Alsdorf"}, {"id": "382f7850-c282-45fa-9b90-12784c265849", "name": "Dagmar Schmitz", "plz": "40882", "ort": "Ratingen"}, {"id": "6607e494-7a46-41b9-8d82-56d4ead91fa7", "name": "Tanja Schallenberg", "plz": "52499", "ort": "Baesweiler"}, {"id": "98591410-abfe-459c-98d5-5bfdbe2b6f72", "name": "Maxim Saweljew", "plz": "48480", "ort": "Spelle"}, {"id": "e908da8e-43d6-4ed5-83c6-ff16f88620f5", "name": "Sebastian Mansour", "plz": "52078", "ort": "Aachen"}];
+const INFAS = [[51.73461, 7.43724], [51.82101, 7.46595], [51.82774, 7.46554], [51.7524, 7.45499], [51.76384, 7.47988], [51.76437, 7.47774], [51.7634, 7.47949], [51.78461, 7.46812], [51.78287, 7.46557], [51.78235, 7.46006], [51.78442, 7.48428], [51.78771, 7.49031], [51.78735, 7.48883], [51.7737, 7.46984], [51.77397, 7.47061], [51.81646, 7.46574], [51.81883, 7.46203], [51.81954, 7.45377], [51.81957, 7.45641], [51.77361, 7.43254], [51.81308, 7.45061], [51.81509, 7.45653], [51.81453, 7.45178], [51.77689, 7.45873], [51.78532, 7.45498], [51.75607, 7.386], [51.772, 7.4386], [51.79693, 7.47095], [50.55246, 6.89007], [50.55147, 6.88956], [50.54994, 6.8837], [50.60056, 6.89581], [50.54908, 6.88827], [50.54854, 6.89083], [50.54872, 6.88933], [51.7682, 7.39162], [51.76972, 7.44474], [51.76177, 7.48254], [51.76273, 7.48027], [51.82057, 7.4623], [51.81973, 7.46429], [51.77251, 7.48787], [51.7998, 7.41003], [51.8042, 7.41166], [51.76551, 7.4067], [51.76385, 7.40713], [51.7948, 7.49656], [51.80224, 7.49248], [51.79396, 7.49279], [51.79507, 7.49568], [51.79143, 7.49624], [51.76127, 7.41684], [51.75881, 7.42271], [51.81855, 8.12251], [51.76816, 7.43455], [51.75561, 7.41238], [51.77869, 7.43247], [51.77867, 7.43552], [51.77826, 7.43346], [51.76036, 7.3974], [51.78775, 7.46995], [51.78754, 7.47245], [51.76672, 7.40895], [51.75848, 7.48243], [51.81936, 8.12261], [51.77115, 7.45929], [51.77467, 7.45615], [51.80841, 7.46082], [51.7948, 7.4689], [51.76775, 7.46947], [51.76743, 7.47022], [51.76439, 7.46649], [51.79161, 7.45182], [51.80299, 7.48542], [51.76861, 7.48002], [51.77071, 7.50242], [51.81075, 7.46027], [51.80087, 7.43287], [51.80314, 7.42942], [51.80183, 7.45178], [51.75856, 7.40358], [50.63997, 7.36103], [51.79036, 7.50336], [51.76504, 7.42035], [51.76546, 7.4175], [51.76571, 7.41697], [50.67988, 7.43024], [51.75945, 7.48455], [51.76079, 7.48418], [51.75999, 7.48364], [51.75602, 7.48346], [51.82554, 7.46382], [51.82375, 7.46124], [50.65452, 7.42873], [50.65472, 7.42795], [50.65365, 7.43061], [51.771, 7.47705], [50.67231, 7.42507], [50.67298, 7.4254], [50.6723, 7.3507], [51.77643, 7.45171], [51.77262, 7.45029], [50.65646, 7.42587], [50.65201, 7.42646], [50.68807, 7.37984], [50.66164, 7.37292], [51.79855, 7.41759], [51.79854, 7.42811], [51.79904, 7.42081], [51.8095, 8.15764], [51.81624, 8.13182], [51.82074, 8.13003], [51.82277, 8.12618], [51.76386, 7.38451], [51.76066, 7.38808], [51.75947, 7.38276], [50.6476, 7.46462], [50.64698, 7.46752], [50.63189, 7.37402], [50.63167, 7.3727], [51.76166, 7.46978], [51.75953, 7.469], [50.6717, 7.42537], [50.68067, 7.40925], [50.66991, 7.3494], [51.76229, 7.3666], [50.64499, 7.41877], [51.77896, 7.49038], [51.78327, 7.44936], [50.66362, 7.30083], [51.81628, 8.13673], [51.81562, 8.12962], [51.81465, 8.14536], [51.81064, 8.13024], [51.81137, 8.12645], [51.8064, 8.13688], [50.66836, 7.3415], [51.80871, 7.46816], [51.78351, 7.51337], [51.77916, 7.49971], [51.77887, 7.49822], [51.78081, 7.49559], [51.806, 7.45716], [51.81154, 7.44992], [51.78409, 7.47868], [51.78599, 7.47407], [51.78501, 7.47518], [51.76213, 7.47503], [51.76363, 7.4717], [51.79317, 7.39894], [50.67343, 7.35726], [51.76945, 7.48543], [51.80899, 8.13944], [51.82394, 8.13492], [51.43004, 8.94804], [51.45252, 9.03777], [52.22558, 8.40901], [51.44317, 9.05705], [51.42913, 9.04913], [51.44654, 8.93803], [51.44801, 8.96568], [50.59498, 7.38122], [51.77867, 7.42385], [51.80328, 7.46057], [51.80611, 7.44147], [51.8089, 7.44166], [51.75732, 7.49898], [51.72919, 7.41834], [51.7576, 7.36834], [52.26877, 8.45502], [52.21979, 8.41429], [51.81427, 7.47266], [51.81232, 7.46923], [52.24734, 8.43767], [52.27572, 8.43183], [52.24694, 8.4432], [52.32831, 8.35331], [52.32118, 8.3515], [52.33084, 8.35092], [52.32577, 8.35228], [52.31826, 8.34481], [52.31761, 8.34117], [52.29152, 8.38248], [52.32745, 8.38049], [52.33459, 8.36708], [52.22927, 8.43336], [52.25317, 8.42746], [52.32295, 8.31629], [52.32511, 8.33105], [52.32749, 8.34856], [52.30107, 8.37328], [52.3071, 8.35117], [52.34527, 8.35651], [52.3393, 8.38322], [52.33952, 8.38276], [52.33942, 8.38729], [52.33369, 8.41126], [52.25362, 8.50164], [52.35474, 8.4391], [52.35366, 8.41641], [52.35642, 8.42663], [52.35737, 8.42546], [52.30927, 8.37013], [52.31069, 8.37748], [52.31263, 8.37564], [52.32774, 8.42098], [52.32475, 8.42533], [52.21689, 8.42205], [52.2304, 8.41654], [52.23044, 8.40911], [52.22264, 8.41999], [52.22185, 8.41771], [52.21476, 8.42004], [50.86813, 7.29017], [50.88413, 7.2659], [50.86899, 7.29268], [50.87788, 7.26829], [52.21619, 8.42033], [52.22832, 8.4239], [52.32137, 8.36221], [52.32014, 8.36113], [52.32458, 8.35837], [52.32249, 8.36007], [52.33187, 8.36611], [52.31992, 8.37269], [52.35517, 8.40377], [52.32002, 8.40251], [52.31614, 8.40179], [52.32052, 8.43339], [52.23146, 8.4233], [52.20597, 8.47566], [50.88675, 7.26966], [50.86997, 7.25734], [50.87334, 7.26267], [52.24464, 8.43836], [52.24491, 8.43528], [50.90363, 7.22276], [50.85701, 7.26157], [50.85421, 7.22932], [50.8759, 7.23818], [50.8773, 7.2459], [50.87597, 7.23839], [50.87016, 7.1606], [52.31831, 8.43648], [52.30425, 8.3474], [52.32397, 8.37294], [52.35744, 8.40281], [52.31792, 8.35206], [52.29962, 8.42362], [52.24777, 8.44004], [52.24297, 8.43651], [52.23607, 8.4359], [52.23112, 8.42931], [52.2084, 8.46979], [50.86252, 7.22286], [50.87617, 7.17962], [50.8756, 7.1815], [50.84141, 7.19434], [50.84163, 7.19508], [50.84154, 7.20108], [50.87692, 7.20626], [50.87842, 7.2048], [52.30151, 8.42794], [52.34596, 8.44104], [52.34712, 8.43649], [52.29762, 8.36996], [52.3199, 8.38414], [52.38054, 8.41215], [52.33685, 8.42736], [52.33677, 8.42668], [52.30505, 8.39487], [52.29662, 8.39686], [52.29602, 8.39513], [52.29983, 8.38691], [52.3063, 8.43313], [52.30287, 8.42231], [52.32772, 8.42817], [52.33025, 8.43304], [52.35342, 8.44208], [52.34333, 8.43347], [52.32483, 8.3948], [52.3463, 8.37375], [52.34565, 8.37274], [52.34553, 8.37401], [52.29815, 8.41889], [52.29779, 8.41868], [52.29527, 8.3938], [52.35741, 8.41066], [52.31491, 8.35283], [52.33129, 8.37419], [52.32895, 8.37262], [52.29763, 8.40153], [52.33357, 8.41305], [52.36807, 8.39122], [52.32751, 8.41637], [52.35733, 8.40931], [52.35717, 8.40657], [52.3562, 8.40456], [52.32273, 8.42243], [52.32307, 8.42493], [52.30522, 8.41453], [52.30817, 8.40317], [52.33552, 8.41138], [52.33594, 8.39548], [52.36994, 8.38096], [52.36929, 8.39185], [52.36412, 8.39362], [52.30258, 8.37344], [52.30701, 8.39789], [52.35075, 8.34816], [52.3112, 8.35886], [52.30394, 8.36492], [52.34349, 8.39296], [52.34538, 8.38106], [52.34488, 8.38349], [52.33227, 8.35406], [52.33093, 8.35498], [52.33256, 8.35082], [52.30243, 8.36256], [52.30398, 8.36221], [52.30217, 8.36241], [52.31903, 8.41063], [52.3205, 8.41263], [52.34278, 8.37671], [52.29996, 8.36831], [52.2991, 8.36935], [52.29865, 8.36243], [52.36528, 8.40338], [52.29372, 8.38364], [52.32466, 8.40298], [52.32852, 8.40482], [52.32395, 8.40214], [52.32967, 8.41146], [50.98663, 7.37204], [52.33167, 8.35947], [52.33135, 8.36022], [52.3331, 8.35752], [51.00105, 7.42643], [52.33119, 9.45829], [52.32756, 9.43958], [50.99121, 7.45471], [50.99543, 7.45108], [50.95227, 7.41508], [50.97338, 7.40051], [50.98112, 7.43504], [50.98274, 7.42962], [50.96203, 7.39697], [51.10384, 9.4781], [52.30079, 9.43322], [52.33432, 9.3452], [50.96894, 7.4024], [50.94259, 7.42225], [50.94049, 7.42312], [50.97556, 7.39016], [50.95068, 7.40586], [50.94932, 7.40765], [50.96938, 7.4026], [50.9717, 7.40336], [50.95919, 7.3929], [52.19585, 8.79901], [52.16224, 8.85185], [52.16152, 8.84596], [52.25035, 8.82759], [52.16697, 8.85303], [52.16523, 8.85056], [52.16507, 8.84344], [52.21597, 8.82013], [52.21106, 8.82952], [52.20454, 8.82102], [52.20334, 8.82047], [52.22047, 8.83296], [52.22037, 8.82997], [52.21986, 8.83137], [52.17958, 8.7928], [52.22309, 8.83754], [52.21786, 8.83961], [52.17375, 8.77511], [52.17461, 8.7743], [52.22633, 8.8478], [52.13058, 7.05064], [52.13241, 7.10511], [52.22128, 8.84905], [52.20671, 8.83241], [52.20981, 8.83018], [52.1568, 8.82458], [51.24046, 6.136], [51.25736, 6.08361], [51.23516, 6.12976], [51.24137, 6.0929], [52.1552, 8.82506], [52.20019, 8.80923], [51.21853, 6.12851], [51.22962, 6.12021], [51.22537, 6.11504], [51.23139, 6.11042], [51.23201, 6.11222], [51.23827, 6.10587], [51.25155, 6.10253], [51.2294, 6.11308], [51.23445, 6.09169], [51.23474, 6.09088], [51.24031, 6.10093], [51.26284, 6.08842], [52.19929, 8.81331], [52.20042, 8.8188], [52.19433, 8.81928], [52.19604, 8.82055], [52.18748, 8.80331], [52.19808, 8.80812], [52.24667, 8.83564], [51.26117, 6.08932], [51.24, 6.10623], [51.24779, 6.14182], [51.24863, 6.14175], [51.24082, 6.13983], [51.24209, 6.13571], [51.25012, 6.14344], [52.39551, 9.47646], [52.39492, 9.47592], [51.24312, 6.14167], [51.24496, 6.1398], [51.23744, 6.10927], [51.23834, 6.11219], [51.2359, 6.09708], [51.26236, 6.13845], [51.25965, 6.13351], [52.25134, 8.84021], [52.15992, 8.84476], [52.21191, 8.83403], [52.24271, 8.86199], [52.23853, 8.85608], [51.2607, 6.13019], [51.22927, 6.10699], [51.23032, 6.10591], [51.25008, 6.09216], [51.24207, 6.08836], [51.24764, 6.09282], [51.25818, 6.09006], [51.25897, 6.08906], [51.25846, 6.08975], [51.25321, 6.09446], [52.79856, 8.1842], [52.7958, 8.1683], [50.19881, 7.88642], [50.181, 7.89721], [50.18073, 7.89738], [50.19672, 7.88116], [50.22038, 7.89605], [50.22361, 7.88888], [51.10277, 9.47571], [50.15246, 7.67679], [50.13428, 7.65232], [50.13057, 7.65661], [50.15566, 7.67658], [50.12105, 7.62176], [50.13531, 7.64001], [50.14538, 7.6371], [50.15514, 7.6747], [51.10289, 9.47603], [50.14515, 7.63844], [50.16643, 7.64463], [50.12171, 7.65564], [50.12783, 7.65703], [50.1262, 7.65374], [50.12907, 7.65888], [51.21852, 8.37901], [51.21825, 8.37287], [51.20938, 8.39261], [50.67709, 7.88692], [50.65816, 7.82523], [50.67074, 7.82701], [51.14601, 6.37522], [51.33594, 6.68276], [51.34115, 6.6838], [50.6209, 7.82927], [50.62066, 7.8265], [51.33999, 6.68563], [51.33221, 6.65195], [51.32786, 6.64612], [50.6184, 7.85103], [51.3287, 6.6964], [51.32648, 6.69827], [51.3258, 6.65541], [51.33139, 6.65235], [51.3215, 6.6503], [51.32631, 6.70445], [51.32709, 6.70311], [51.33459, 6.68859], [51.32144, 6.63985], [51.32302, 6.63892], [51.32064, 6.64027], [51.33386, 6.68267], [52.42079, 6.99346], [52.39796, 6.92938], [52.39647, 6.92969], [52.40111, 6.91331], [51.32208, 6.69204], [51.34142, 6.68351], [51.34015, 6.68909], [51.33198, 6.65014], [51.33181, 6.65089], [51.32944, 6.64671], [51.33456, 6.70046], [51.33144, 6.68875], [51.332, 6.68967], [51.32603, 6.69287], [51.33104, 6.68724], [50.621, 7.8465], [50.62454, 7.84108], [50.61658, 7.85944], [50.61638, 7.84944], [51.31607, 6.6249], [51.32777, 6.64212], [51.33689, 6.70841], [52.40549, 6.88867], [52.41904, 6.89602], [52.40553, 6.8752], [52.41648, 6.89091], [52.41345, 6.89056], [52.41044, 6.85752], [52.39721, 6.89348], [52.39784, 6.90485], [50.62216, 7.85288], [50.62875, 7.86693], [52.28572, 8.46894], [52.28767, 8.49693], [50.62178, 7.80872], [50.62264, 7.79598], [52.41129, 6.87369], [52.40995, 6.87241], [52.41032, 6.87704], [52.40763, 6.9023], [52.41061, 6.85134], [52.40758, 6.89108], [52.40825, 6.88476], [52.40577, 6.88756], [50.62263, 7.80911], [52.30205, 8.45606], [52.29211, 8.52755], [52.29095, 8.51059], [52.29512, 8.50628], [52.25915, 8.55171], [52.26797, 8.55632], [52.27419, 8.56966], [50.66061, 7.79874], [51.45007, 7.32537], [51.45475, 7.44979], [51.45607, 7.44519], [52.2738, 8.56113], [52.27481, 8.56576], [52.28853, 8.49755], [52.2902, 8.5089], [52.29044, 8.5086], [52.29784, 8.4898], [52.30182, 8.504], [52.31419, 8.50511], [52.30889, 8.50693], [52.3155, 8.53865], [52.29511, 8.49351], [52.29301, 8.49565], [52.29818, 8.49569], [52.2982, 8.49262], [52.29095, 8.46992], [52.2892, 8.4652], [52.30612, 8.48942], [51.42725, 7.37031], [51.42978, 7.36713], [50.64454, 7.904], [51.46072, 7.40455], [51.44256, 7.37504], [51.91612, 8.37986], [51.90885, 8.42854], [51.91151, 8.42725], [51.9097, 8.42494], [51.44307, 7.38599], [51.44317, 7.37637], [51.44914, 7.38314], [51.45521, 7.44496], [51.45471, 7.44852], [51.43454, 7.38868], [51.93002, 8.48735], [51.9407, 8.45445], [51.9146, 8.42704], [51.94207, 8.39856], [51.46949, 7.4221], [51.46656, 7.41781], [50.6398, 7.8955], [50.58379, 7.81763], [50.63505, 7.7514], [51.43763, 7.36098], [51.43835, 7.30216], [51.43618, 7.31248], [51.43693, 7.31636], [50.20516, 7.7306], [51.44059, 7.37204], [51.43562, 7.36291], [51.44009, 7.36083], [51.43766, 7.34216], [51.43629, 7.34853], [50.2123, 7.74901], [50.21287, 7.74718], [50.47982, 7.75808], [50.48199, 7.75804], [50.4808, 7.75735], [50.45302, 7.76052], [50.45722, 7.79212], [50.49792, 7.7407], [50.49938, 7.74022], [50.47587, 7.73859], [50.47746, 7.72637], [50.47554, 7.73591], [50.47677, 7.72846], [50.47532, 7.73493], [51.44221, 7.35386], [51.43322, 7.37851], [51.44175, 7.35562], [50.18744, 7.69678], [50.18787, 7.69511], [51.43929, 7.30649], [51.42, 7.27907], [51.43734, 7.37592], [50.17594, 7.69048], [50.45997, 7.75992], [50.45553, 7.76704], [50.45092, 7.80156], [52.57803, 8.17944], [52.63554, 8.12204], [52.58439, 8.11428], [51.43838, 7.36055], [50.1885, 7.69203], [51.45824, 7.35051], [51.4689, 7.37203], [51.47236, 7.36409], [51.46729, 7.35934], [52.61457, 8.14021], [52.5743, 8.15896], [52.60501, 8.18246], [52.60444, 8.17611], [51.4421, 7.39754], [51.43976, 7.40336], [51.2099, 7.99284], [51.2125, 7.99466], [51.21253, 8.0012], [51.2222, 8.00492], [51.20632, 7.99861], [51.20846, 8.00657], [51.20243, 7.95647], [51.20111, 8.0212], [51.20032, 8.02226], [51.20804, 7.98716], [51.20273, 7.98413], [51.2169, 8.01625], [51.21449, 8.00788], [51.19929, 7.95946], [51.20231, 7.95828], [51.20187, 7.95706], [51.20043, 8.02554], [51.2008, 8.01376], [51.19809, 7.986], [52.79211, 8.64016], [52.79336, 8.60587], [52.25197, 8.31293], [52.24962, 8.29588], [52.25037, 8.29224], [52.25011, 8.29923], [52.24684, 8.32297], [52.26138, 8.28054], [52.26163, 8.26831], [52.28086, 8.27909], [52.27702, 8.27824], [52.27368, 8.3085], [52.23546, 8.30647], [52.23157, 8.30497], [52.25169, 8.31919], [52.2545, 8.31402], [52.25488, 8.31404], [52.2828, 8.29097], [52.79801, 8.59578], [52.79296, 8.62784], [52.78943, 8.63009], [52.79135, 8.62636], [52.25246, 8.29047], [52.27016, 8.28184], [52.27021, 8.27975], [52.26966, 8.28013], [52.26917, 8.27883], [52.27287, 8.26679], [52.26643, 8.28046], [52.26693, 8.28246], [52.25844, 8.30724], [52.25492, 8.30581], [52.79677, 8.60901], [52.79726, 8.6156], [51.63922, 6.20658], [51.65549, 6.1639], [51.61157, 6.17021], [51.60877, 6.17026], [51.66893, 6.24046], [51.6655, 6.23617], [51.66163, 6.15127], [51.67312, 6.23483], [52.27293, 8.29708], [52.25821, 8.29247], [52.27171, 8.27746], [52.26198, 8.27487], [52.26093, 8.32032], [52.26507, 8.31526], [52.23444, 8.31728], [52.23908, 8.29479], [52.24045, 8.29796], [52.25781, 8.31503], [52.25828, 8.31424], [52.26022, 8.317], [52.25628, 8.31121], [52.25943, 8.31296], [52.26787, 8.27388], [51.62887, 6.11754], [51.62945, 6.1115], [51.64937, 6.23193], [51.62802, 6.12863], [51.62824, 6.13026], [51.62745, 6.13199], [51.622, 6.13187], [52.24632, 8.29441], [52.24591, 8.29668], [52.24934, 8.3021], [52.24933, 8.31807], [52.24546, 8.31652], [52.24781, 8.31765], [51.65266, 6.22159], [51.65224, 6.22022], [51.63082, 6.24748], [51.63069, 6.24723], [51.65352, 6.22226], [51.65322, 6.22435], [51.65202, 6.22309], [51.63299, 6.13921], [51.66097, 6.1781], [51.63113, 6.18952], [51.63034, 6.25262], [51.64987, 6.21452], [51.67066, 6.19009], [51.65064, 6.11409], [51.64688, 6.102], [51.62962, 6.25511], [51.62249, 6.23204], [51.62481, 6.2369], [51.61859, 6.21057], [51.62766, 6.23923], [51.63196, 6.2298], [51.66242, 6.15777], [51.63287, 6.13076], [51.61584, 6.19088], [51.61354, 6.19008], [51.6122, 6.18983], [51.61437, 6.20064], [51.61531, 6.19862], [51.61972, 6.27128], [51.62084, 6.25507], [51.62312, 6.27296], [51.62234, 6.27192]];
 
-const SB_URL = "https://hqzpemfaljxcysyqssng.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwidHJvbGUiOiJhbm9uIiwiaWF0IjoxNzM5Nzk1NjM5LCJleHAiOjIwNTUzNzE2Mzl9.S0nE4BNGZnaTb2D5p1ssjYMDMy-3LSlMAp"; // anon key - read only
-
-// ─── MAP ─────────────────────────────────────────────────────────────────────
-const map = L.map('map', {zoomControl:false}).setView([51.6, 7.8], 8);
+// ─── MAP INIT ─────────────────────────────────────────────────────────────────
+const map = L.map('map', {zoomControl:false}).setView([51.5, 7.5], 8);
 L.control.zoom({position:'bottomright'}).addTo(map);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution:'© OpenStreetMap', maxZoom:19
+  attribution:'© OpenStreetMap',
+  maxZoom:18
 }).addTo(map);
 
-const layers = {
-  vb: L.layerGroup().addTo(map),
-  sc: L.layerGroup().addTo(map),
-  qu: L.layerGroup().addTo(map),
-  geb: L.layerGroup().addTo(map),
-  inf: L.layerGroup()
-};
+// Layer groups
+const layers = { vb:L.layerGroup(), sc:L.layerGroup(), qu:L.layerGroup(), inf:L.layerGroup(), gap:L.layerGroup() };
+layers.vb.addTo(map); layers.sc.addTo(map); layers.qu.addTo(map); layers.gap.addTo(map);
 
-// Draw feature group
-const drawnItems = new L.FeatureGroup().addTo(map);
-let drawControl, currentDrawer = null, pendingLayer = null, selectedColor = '#22c55e';
-
-// Gebiete in memory
-let GEBIETE = [{"id": "5826287f-9ff3-43ba-bfd8-e15aad63e74a", "name": "Bielefeld-Mitte", "polygon": {"type": "Polygon", "coordinates": [[[8.505, 51.995], [8.555, 51.995], [8.555, 52.045], [8.505, 52.045], [8.505, 51.995]]]}, "scouter_id": null, "farbe": "#22c55e"}, {"id": "b1", "name": "Bielefeld-Brackwede", "polygon": {"type": "Polygon", "coordinates": [[[8.46, 51.97], [8.51, 51.97], [8.51, 52.0], [8.46, 52.0], [8.46, 51.97]]]}, "scouter_id": null, "farbe": "#3b82f6"}, {"id": "b2", "name": "Dortmund-Innenstadt", "polygon": {"type": "Polygon", "coordinates": [[[7.43, 51.49], [7.53, 51.49], [7.53, 51.53], [7.43, 51.53], [7.43, 51.49]]]}, "scouter_id": null, "farbe": "#f59e0b"}, {"id": "b3", "name": "Köln-Ehrenfeld", "polygon": {"type": "Polygon", "coordinates": [[[6.91, 50.93], [6.96, 50.93], [6.96, 50.97], [6.91, 50.97], [6.91, 50.93]]]}, "scouter_id": null, "farbe": "#8b5cf6"}];
-
-// infas lazy cache
-let infasCache = {}, infasLoading = false, infasEnabled = false;
-
-// ─── UTILS ───────────────────────────────────────────────────────────────────
-function dist(a, b) {
+// ─── HAVERSINE ────────────────────────────────────────────────────────────────
+function dist(a,b){
   const R=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
   const s=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
   return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
 }
 
-function toast(msg, color='#22c55e') {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.style.background = color; t.style.display = 'block';
-  setTimeout(() => t.style.display='none', 2500);
-}
-
-// ─── RENDER STATIC LAYERS ────────────────────────────────────────────────────
-const qColors = {qualified:'#22c55e',unsuitable:'#ef4444',revisit:'#f59e0b',open:'#60a5fa',rejected:'#6b7280'};
-
+// ─── RENDER VB ───────────────────────────────────────────────────────────────
+const gaps = [];
 VB.forEach(vb => {
-  L.circle([vb.lat, vb.lng], {radius:80000, color:'#FDE154', fillColor:'#FDE154', fillOpacity:0.04, weight:1, opacity:0.18}).addTo(layers.vb);
-  const icon = L.divIcon({html:`<div style="width:13px;height:13px;background:#FDE154;border-radius:50%;border:2px solid #0c1222;box-shadow:0 0 6px #FDE15450"></div>`,iconSize:[13,13],iconAnchor:[6.5,6.5],className:''});
+  const nearbyScouts = SCOUTER.filter(s => dist(vb,s) < 48);
+  const isGap = nearbyScouts.length === 0;
+  if(isGap) gaps.push(vb);
+
+  // Radius circle
+  L.circle([vb.lat, vb.lng], {
+    radius: (vb.radius || 80) * 1000,
+    color: '#FDE154', fillColor: '#FDE154',
+    fillOpacity: 0.04, weight: 1, opacity: 0.2
+  }).addTo(layers.vb);
+
+  // Marker
+  const icon = L.divIcon({
+    html:`<div style="width:14px;height:14px;background:#FDE154;border-radius:50%;border:2px solid #0c1222;box-shadow:0 0 6px #FDE15460"></div>`,
+    iconSize:[14,14], iconAnchor:[7,7], className:''
+  });
   L.marker([vb.lat, vb.lng], {icon}).addTo(layers.vb)
-    .bindTooltip(`${vb.name}<br><small>${vb.typ} · ${vb.ort}</small>`, {className:'dtip'})
-    .on('click', () => showVBDetail(vb));
+    .bindTooltip(vb.name + '<br>' + vb.ort, {className:'dark-tip'})
+    .on('click', () => showVBDetail(vb, nearbyScouts));
 });
 
-SCOUTER_MARKERS.forEach(sc => {
-  L.circle([sc.lat, sc.lng], {radius:30000, color:'#22c55e', fillColor:'#22c55e', fillOpacity:0.06, weight:1.5, opacity:0.25}).addTo(layers.sc);
-  const icon = L.divIcon({html:`<div style="width:10px;height:10px;background:#22c55e;border-radius:50%;border:2px solid #0c1222;box-shadow:0 0 5px #22c55e50"></div>`,iconSize:[10,10],iconAnchor:[5,5],className:''});
+// ─── RENDER SCOUTER ──────────────────────────────────────────────────────────
+SCOUTER.forEach(sc => {
+  L.circle([sc.lat, sc.lng], {
+    radius: 30000,
+    color:'#22c55e', fillColor:'#22c55e',
+    fillOpacity:0.07, weight:1.5, opacity:0.3
+  }).addTo(layers.sc);
+
+  const icon = L.divIcon({
+    html:`<div style="width:11px;height:11px;background:#22c55e;border-radius:50%;border:2px solid #0c1222;box-shadow:0 0 5px #22c55e60"></div>`,
+    iconSize:[11,11], iconAnchor:[5.5,5.5], className:''
+  });
   L.marker([sc.lat, sc.lng], {icon}).addTo(layers.sc)
-    .bindTooltip(`🔍 ${sc.name}<br><small>${sc.ort}</small>`, {className:'dtip'})
+    .bindTooltip('🔍 '+sc.name+'<br>'+sc.ort, {className:'dark-tip'})
     .on('click', () => showSCDetail(sc));
 });
 
+// ─── RENDER QUALIF ───────────────────────────────────────────────────────────
+const qColors = {qualified:'#22c55e', unsuitable:'#ef4444', revisit:'#f59e0b', open:'#60a5fa'};
 QUALIF.forEach(q => {
-  const icon = L.divIcon({html:`<div style="width:6px;height:6px;background:${qColors[q.status]||'#60a5fa'};border-radius:50%;opacity:.8"></div>`,iconSize:[6,6],iconAnchor:[3,3],className:''});
+  const icon = L.divIcon({
+    html:`<div style="width:7px;height:7px;background:${qColors[q.status]||'#60a5fa'};border-radius:50%;opacity:.8"></div>`,
+    iconSize:[7,7], iconAnchor:[3.5,3.5], className:''
+  });
   L.marker([q.lat, q.lng], {icon, zIndexOffset:-100}).addTo(layers.qu);
 });
 
-// ─── GEBIETE ─────────────────────────────────────────────────────────────────
-function renderGebiete() {
-  layers.geb.clearLayers();
-  GEBIETE.forEach(g => renderGebiet(g));
-  document.getElementById('n-geb').textContent = GEBIETE.length;
-  document.getElementById('ln-geb').textContent = GEBIETE.length;
-  renderGebietList();
-}
-
-function renderGebiet(g) {
-  if (!g.polygon) return;
-  const poly = g.polygon;
-  let latlngs;
-  if (poly.type === 'Polygon') {
-    latlngs = poly.coordinates[0].map(c => [c[1], c[0]]);
-  } else if (poly.type === 'Circle') {
-    // Draw circle
-    const c = L.circle([poly.center[1], poly.center[0]], {
-      radius: poly.radius,
-      color: g.farbe||'#22c55e', fillColor: g.farbe||'#22c55e',
-      fillOpacity: 0.12, weight: 2, opacity: 0.7,
-      dashArray: g.scouter_id ? null : '6,4'
-    }).addTo(layers.geb);
-    c.bindTooltip(g.name + (g.scouter_id ? '' : ' ⚠'), {className:'dtip'});
-    c.on('click', () => showGebietDetail(g));
-    return;
-  } else return;
-
-  const layer = L.polygon(latlngs, {
-    color: g.farbe||'#22c55e', fillColor: g.farbe||'#22c55e',
-    fillOpacity: 0.12, weight: 2, opacity: 0.7,
-    dashArray: g.scouter_id ? null : '6,4'
-  }).addTo(layers.geb);
-  layer.bindTooltip(g.name + (g.scouter_id ? '' : ' <span style="color:#ef4444">⚠ nicht zugewiesen</span>'), {className:'dtip'});
-  layer.on('click', () => showGebietDetail(g));
-}
-
-function renderGebietList() {
-  const el = document.getElementById('gebiet-list');
-  if (!GEBIETE.length) { el.innerHTML='<div style="color:#5c6b8a;font-size:11px">Noch keine Gebiete</div>'; return; }
-  el.innerHTML = GEBIETE.map(g => {
-    const sc = SCOUTER_ALL.find(s => s.id === g.scouter_id);
-    return `<div class="gl-item" onclick="focusGebiet('${g.id}')">
-      <div class="gl-dot" style="background:${g.farbe||'#22c55e'}"></div>
-      <div>
-        <div>${g.name}</div>
-        <div class="${sc?'gl-scouter':'gl-unassigned'}">${sc?'🔍 '+sc.name:'⚠ nicht zugewiesen'}</div>
-      </div>
-      <span class="gl-del" onclick="event.stopPropagation();deleteGebiet('${g.id}')" title="Löschen">✕</span>
-    </div>`;
-  }).join('');
-}
-
-renderGebiete();
-
-// ─── DRAW CONTROLS ───────────────────────────────────────────────────────────
-function startDraw(type) {
-  cancelDraw();
-  document.querySelectorAll('.draw-btn').forEach(b => b.classList.remove('active'));
-
-  if (type === 'poly') {
-    document.getElementById('btn-poly').classList.add('active');
-    currentDrawer = new L.Draw.Polygon(map, {shapeOptions:{color:selectedColor,fillOpacity:0.15}});
-  } else if (type === 'rect') {
-    document.getElementById('btn-rect').classList.add('active');
-    currentDrawer = new L.Draw.Rectangle(map, {shapeOptions:{color:selectedColor,fillOpacity:0.15}});
-  } else if (type === 'circle') {
-    document.getElementById('btn-circle').classList.add('active');
-    currentDrawer = new L.Draw.Circle(map, {shapeOptions:{color:selectedColor,fillOpacity:0.15}});
-  }
-  currentDrawer.enable();
-  toast('Klicke auf die Karte zum Zeichnen...', '#3b82f6');
-}
-
-map.on(L.Draw.Event.CREATED, function(e) {
-  pendingLayer = e.layer;
-  drawnItems.addLayer(pendingLayer);
-  document.querySelectorAll('.draw-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('gebiet-form').style.display = 'block';
-  currentDrawer = null;
-  // suggest name from center
-  const c = pendingLayer.getBounds ? pendingLayer.getBounds().getCenter() : pendingLayer.getLatLng();
-  document.getElementById('f-name').focus();
-});
-
-function cancelDraw() {
-  if (currentDrawer) { currentDrawer.disable(); currentDrawer = null; }
-  if (pendingLayer) { drawnItems.removeLayer(pendingLayer); pendingLayer = null; }
-  document.getElementById('gebiet-form').style.display = 'none';
-  document.querySelectorAll('.draw-btn').forEach(b => b.classList.remove('active'));
-}
-
-function selectColor(el) {
-  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
-  el.classList.add('selected');
-  selectedColor = el.dataset.color;
-  if (pendingLayer) pendingLayer.setStyle({color:selectedColor, fillColor:selectedColor});
-}
-
-// Build scouter dropdown
-const sel = document.getElementById('f-scouter');
-SCOUTER_ALL.sort((a,b) => a.name.localeCompare(b.name)).forEach(s => {
-  const opt = document.createElement('option');
-  opt.value = s.id; opt.textContent = `${s.name} (${s.ort||s.plz})`;
-  sel.appendChild(opt);
-});
-
-async function saveGebiet() {
-  if (!pendingLayer) return;
-  const name = document.getElementById('f-name').value.trim();
-  if (!name) { document.getElementById('f-name').focus(); return; }
-
-  const scouterId = document.getElementById('f-scouter').value || null;
-  let polygon;
-
-  if (pendingLayer instanceof L.Circle) {
-    const c = pendingLayer.getLatLng();
-    polygon = {type:'Circle', center:[c.lng, c.lat], radius: pendingLayer.getRadius()};
-  } else {
-    const latlngs = pendingLayer.getLatLngs()[0];
-    const coords = latlngs.map(ll => [ll.lng, ll.lat]);
-    coords.push(coords[0]);
-    polygon = {type:'Polygon', coordinates:[coords]};
-  }
-
-  const gebiet = {
-    id: 'local-' + Date.now(),
-    name, scouter_id: scouterId, farbe: selectedColor, polygon,
-    active: true
-  };
-
-  // Save to Supabase
-  try {
-    const res = await fetch(SB_URL + '/rest/v1/gebiete', {
-      method: 'POST',
-      headers: {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},
-      body: JSON.stringify({name, scouter_id:scouterId, farbe:selectedColor, polygon:JSON.stringify(polygon), active:true})
-    });
-    if (res.ok) {
-      const saved = await res.json();
-      if (saved[0]) gebiet.id = saved[0].id;
-      toast('✓ Gebiet gespeichert!');
-    } else {
-      toast('⚠ Lokal gespeichert (DB Fehler)', '#f59e0b');
-    }
-  } catch(e) {
-    toast('⚠ Lokal gespeichert (Offline)', '#f59e0b');
-  }
-
-  GEBIETE.push(gebiet);
-  drawnItems.removeLayer(pendingLayer);
-  pendingLayer = null;
-  document.getElementById('gebiet-form').style.display = 'none';
-  document.getElementById('f-name').value = '';
-  renderGebiete();
-  buildAlerts();
-}
-
-async function deleteGebiet(id) {
-  GEBIETE = GEBIETE.filter(g => g.id !== id);
-  if (!id.startsWith('local-')) {
-    try {
-      await fetch(SB_URL + `/rest/v1/gebiete?id=eq.${id}`, {
-        method: 'DELETE',
-        headers: {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
-      });
-    } catch(e) {}
-  }
-  renderGebiete();
-  toast('Gebiet gelöscht', '#ef4444');
-}
-
-function focusGebiet(id) {
-  const g = GEBIETE.find(x => x.id === id);
-  if (!g) return;
-  const p = g.polygon;
-  if (p.type === 'Polygon') {
-    const latlngs = p.coordinates[0].map(c => [c[1], c[0]]);
-    map.fitBounds(latlngs);
-  } else if (p.type === 'Circle') {
-    map.setView([p.center[1], p.center[0]], 12);
-  }
-  showGebietDetail(g);
-}
-
-// ─── LAZY INFAS360 LOADING ────────────────────────────────────────────────────
-async function loadInfasForView() {
-  if (!infasEnabled) return;
-  const zoom = map.getZoom();
-  document.getElementById('zoom-val').textContent = zoom;
-
-  if (zoom < 12) {
-    // Too zoomed out - clear individual points, show message
-    layers.inf.clearLayers();
-    document.getElementById('ln-inf').textContent = 'Zoom≥12';
-    return;
-  }
-
-  const b = map.getBounds();
-  // Convert approx to PLZ range — use lat/lng bbox query
-  // Since lat/lng is only populated for some records, use UTM approximation
-  // Better: use our UTM converter in reverse, or just filter by lat/lng where available
-  const key = `${Math.round(b.getSouth()*10)},${Math.round(b.getWest()*10)},${Math.round(b.getNorth()*10)},${Math.round(b.getEast()*10)}`;
-  if (infasCache[key]) {
-    renderInfas(infasCache[key]);
-    return;
-  }
-
-  if (infasLoading) return;
-  infasLoading = true;
-  document.getElementById('ln-inf').textContent = '⟳ lädt...';
-
-  try {
-    // Load infas for this bbox — use lat/lng where available, limit 500
-    const url = `${SB_URL}/rest/v1/infas_adressen?select=lat,lng,stn,hnr,ort,status&lat=gte.${b.getSouth().toFixed(4)}&lat=lte.${b.getNorth().toFixed(4)}&lng=gte.${b.getWest().toFixed(4)}&lng=lte.${b.getEast().toFixed(4)}&limit=500`;
-    const r = await fetch(url, {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
-    const data = await r.json();
-    infasCache[key] = data;
-    renderInfas(data);
-  } catch(e) {
-    document.getElementById('ln-inf').textContent = 'Fehler';
-  }
-  infasLoading = false;
-}
-
-function renderInfas(data) {
-  layers.inf.clearLayers();
-  const valid = data.filter(a => a.lat && a.lng);
-  valid.forEach(a => {
-    const color = a.status === 'visited' ? '#5c6b8a' : '#f97316';
-    const icon = L.divIcon({html:`<div style="width:5px;height:5px;background:${color};border-radius:50%;opacity:.7"></div>`,iconSize:[5,5],iconAnchor:[2.5,2.5],className:''});
-    L.marker([a.lat, a.lng], {icon, zIndexOffset:-200}).addTo(layers.inf)
-      .bindTooltip(`${a.stn} ${a.hnr}, ${a.ort}`, {className:'dtip'});
+// ─── RENDER INFAS360 ─────────────────────────────────────────────────────────
+INFAS.forEach(a => {
+  const icon = L.divIcon({
+    html:`<div style="width:4px;height:4px;background:#f97316;border-radius:50%;opacity:.4"></div>`,
+    iconSize:[4,4], iconAnchor:[2,2], className:''
   });
-  document.getElementById('ln-inf').textContent = valid.length;
-  document.getElementById('n-inf').textContent = valid.length;
-  if (valid.length > 0) document.getElementById('infas-stat').style.display = 'block';
-}
-
-map.on('moveend zoomend', () => {
-  document.getElementById('zoom-val').textContent = map.getZoom();
-  loadInfasForView();
+  L.marker([a[0], a[1]], {icon, zIndexOffset:-200}).addTo(layers.inf);
 });
 
-// ─── TOGGLE LAYERS ────────────────────────────────────────────────────────────
-function toggleLayer(type) {
-  const show = document.getElementById('l-'+type).checked;
-  if (type === 'inf') {
-    infasEnabled = show;
-    if (show) loadInfasForView();
-    else { layers.inf.clearLayers(); document.getElementById('ln-inf').textContent='—'; }
-    return;
-  }
-  if (show) layers[type].addTo(map); else map.removeLayer(layers[type]);
-}
+// ─── RENDER GAPS ─────────────────────────────────────────────────────────────
+gaps.forEach(vb => {
+  L.circle([vb.lat, vb.lng], {
+    radius: 50000,
+    color:'#ef4444', fillColor:'#ef4444',
+    fillOpacity:0.08, weight:2, opacity:0.5,
+    dashArray:'8,6'
+  }).addTo(layers.gap).on('click', () => showGapDetail(vb));
+});
 
-// ─── TABS ────────────────────────────────────────────────────────────────────
-function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['overview','gebiete','gaps','heatmap'][i]===tab));
-  document.getElementById('draw-panel').style.display = tab==='gebiete' ? 'block' : 'none';
-
-  if (tab === 'gaps') {
-    buildAlerts();
-    const unassigned = GEBIETE.filter(g => !g.scouter_id);
-    if (unassigned.length) {
-      const p = unassigned[0].polygon;
-      if (p.type==='Polygon') map.fitBounds(p.coordinates[0].map(c=>[c[1],c[0]]));
-    }
-  }
-  if (tab === 'heatmap') {
-    document.getElementById('l-inf').checked = true;
-    toggleLayer('inf');
-    if (map.getZoom() < 12) map.setZoom(12);
-    toast('Zoom auf Gebiet für infas360-Adressen', '#3b82f6');
-  }
-  if (tab === 'overview') map.setView([51.6, 7.8], 8);
-}
+// ─── UPDATE COUNTS ───────────────────────────────────────────────────────────
+document.getElementById('n-vb').textContent = VB.length;
+document.getElementById('n-sc').textContent = SCOUTER.length;
+document.getElementById('n-qu').textContent = QUALIF.length;
+document.getElementById('n-gap').textContent = gaps.length;
+document.getElementById('ln-vb').textContent = VB.length;
+document.getElementById('ln-sc').textContent = SCOUTER.length;
+document.getElementById('ln-qu').textContent = QUALIF.length;
+document.getElementById('ln-inf').textContent = INFAS.length+' (Demo)';
+document.getElementById('ln-gap').textContent = gaps.length;
 
 // ─── ALERTS ──────────────────────────────────────────────────────────────────
-function buildAlerts() {
-  const el = document.getElementById('alerts');
-  const unassigned = GEBIETE.filter(g => !g.scouter_id);
-  el.innerHTML = '';
-  unassigned.slice(0,3).forEach(g => {
-    const a = document.createElement('div');
-    a.className = 'alert';
-    a.innerHTML = `⚠ <b>${g.name}</b> — kein Scouter zugewiesen`;
-    a.onclick = () => focusGebiet(g.id);
-    el.appendChild(a);
-  });
-}
-buildAlerts();
+const alertsEl = document.getElementById('alerts');
+gaps.slice(0,3).forEach(vb => {
+  const a = document.createElement('div');
+  a.className = 'alert';
+  a.innerHTML = `⚠ <b>${vb.name}</b> (${vb.ort}) — kein Scouter in 48km`;
+  a.onclick = () => { map.setView([vb.lat, vb.lng], 10); showGapDetail(vb); };
+  alertsEl.appendChild(a);
+});
 
 // ─── DETAIL PANELS ───────────────────────────────────────────────────────────
-function showVBDetail(vb) {
-  const nearQu = QUALIF.filter(q => dist(vb,q) < 80);
-  const qual = nearQu.filter(q=>q.status==='qualified').length;
-  const myGebiete = GEBIETE.filter(g => {
-    if (!g.polygon) return false;
-    if (g.polygon.type==='Polygon') {
-      const lats = g.polygon.coordinates[0].map(c=>c[1]);
-      const lngs = g.polygon.coordinates[0].map(c=>c[0]);
-      return vb.lat>=Math.min(...lats) && vb.lat<=Math.max(...lats) && vb.lng>=Math.min(...lngs) && vb.lng<=Math.max(...lngs);
-    }
-    return false;
-  });
+function showVBDetail(vb, scouts) {
+  const nearQu = QUALIF.filter(q => dist(vb, q) < vb.radius);
+  const qualified = nearQu.filter(q => q.status === 'qualified').length;
+  const isGap = scouts.length === 0;
+
   document.getElementById('detail-body').innerHTML = `
     <h3>👤 ${vb.name}</h3>
     <div class="kpis">
       <div class="kpi"><div class="v">${nearQu.length}</div><div class="l">Qualif. im Gebiet</div></div>
-      <div class="kpi"><div class="v">${qual}</div><div class="l">Qualifiziert</div></div>
+      <div class="kpi"><div class="v">${qualified}</div><div class="l">Davon qualifiziert</div></div>
+      <div class="kpi"><div class="v">${scouts.length}</div><div class="l">Scouter im Radius</div></div>
+      <div class="kpi"><div class="v">${nearQu.length?Math.round(qualified/nearQu.length*100):0}%</div><div class="l">Conversion</div></div>
     </div>
-    <div class="d-row"><span class="d-key">Typ</span><span>${vb.typ}</span></div>
-    <div class="d-row"><span class="d-key">Ort</span><span>${vb.ort}</span></div>
-    <div class="d-row"><span class="d-key">Gebiete im Radius</span><span>${myGebiete.length}</span></div>
+    <div class="d-row"><span class="d-key">Funktion</span><span>${vb.funktion}</span></div>
+    <div class="d-row"><span class="d-key">Standort</span><span>${vb.ort}</span></div>
+    <div class="d-row"><span class="d-key">Aktionsradius</span><span>${vb.radius||80} km</span></div>
+    ${isGap ? `<div class="gap-box"><div class="gh">⚠ Abdeckungslücke</div>Kein Scouter innerhalb 48km. Empfehlung: Online-Leads kaufen oder Scouter in ${vb.ort} rekrutieren.</div>` : ''}
   `;
   document.getElementById('detail').style.display = 'block';
 }
 
 function showSCDetail(sc) {
-  const nearQu = QUALIF.filter(q => dist(sc,q) < 30);
-  const qual = nearQu.filter(q=>q.status==='qualified').length;
-  const myGebiete = GEBIETE.filter(g => g.scouter_id === sc.id);
+  const nearQu = QUALIF.filter(q => String(q.scouter_id) === String(sc.id));
+  const qualified = nearQu.filter(q => q.status === 'qualified').length;
   document.getElementById('detail-body').innerHTML = `
     <h3>🔍 ${sc.name}</h3>
     <div class="kpis">
-      <div class="kpi"><div class="v">${nearQu.length}</div><div class="l">Besuche (30km)</div></div>
-      <div class="kpi"><div class="v">${nearQu.length?Math.round(qual/nearQu.length*100):0}%</div><div class="l">Conversion</div></div>
+      <div class="kpi"><div class="v">${nearQu.length}</div><div class="l">Besuche</div></div>
+      <div class="kpi"><div class="v">${nearQu.length?Math.round(qualified/nearQu.length*100):0}%</div><div class="l">Conversion</div></div>
     </div>
-    <div class="d-row"><span class="d-key">Ort</span><span>${sc.ort}</span></div>
-    <div class="d-row"><span class="d-key">Zugewiesene Gebiete</span><span style="color:${myGebiete.length?'#22c55e':'#ef4444'}">${myGebiete.length}</span></div>
-    ${myGebiete.map(g=>`<div class="d-row"><span class="d-key" style="color:${g.farbe}">${g.name}</span><span>✓</span></div>`).join('')}
+    <div class="d-row"><span class="d-key">Standort</span><span>${sc.ort}</span></div>
+    <div class="d-row"><span class="d-key">Qualifiziert</span><span style="color:#22c55e">${qualified}</span></div>
+    <div class="d-row"><span class="d-key">Ungeeignet</span><span style="color:#ef4444">${nearQu.filter(q=>q.status==='unsuitable').length}</span></div>
+    <div class="d-row"><span class="d-key">Revisit</span><span style="color:#f59e0b">${nearQu.filter(q=>q.status==='revisit').length}</span></div>
   `;
   document.getElementById('detail').style.display = 'block';
+}
+
+function showGapDetail(vb) {
+  const costPerTermin = Math.round(29.9/0.18);
+  const monthly30 = costPerTermin * 30;
+  const be = Math.ceil((3200+2500)/(monthly30-3200));
+  document.getElementById('detail-body').innerHTML = `
+    <h3>⚠ Abdeckungslücke</h3>
+    <div class="d-row"><span class="d-key">Vertriebler</span><span>${vb.name}</span></div>
+    <div class="d-row"><span class="d-key">Region</span><span>${vb.ort}</span></div>
+    <div class="d-row"><span class="d-key">Scouter in 48km</span><span style="color:#ef4444">0</span></div>
+    <div class="gap-box">
+      <div class="gh">📦 Option 1: Online-Leads kaufen</div>
+      <div class="d-row"><span class="d-key">Quelle</span><span>Fenerum</span></div>
+      <div class="d-row"><span class="d-key">€/Termin (eff.)</span><span>€${costPerTermin}</span></div>
+      <div class="d-row"><span class="d-key">30 Termine/Mo</span><span>€${monthly30.toLocaleString('de')}</span></div>
+    </div>
+    <div class="rec-box">
+      <div class="rh">🙋 Option 2: Scouter einstellen</div>
+      <div class="d-row"><span class="d-key">Fixkosten/Mo</span><span>€3.200</span></div>
+      <div class="d-row"><span class="d-key">Onboarding</span><span>€2.500</span></div>
+      <div class="d-row"><span class="d-key">Break-even</span><span>${be} Monate</span></div>
+    </div>
+  `;
+  document.getElementById('detail').style.display = 'block';
+  map.setView([vb.lat, vb.lng], 10);
+}
+
+// ─── TOGGLE LAYERS ───────────────────────────────────────────────────────────
+function toggleLayer(type) {
+  const show = document.getElementById('l-'+type).checked;
+  if(show) layers[type].addTo(map); else map.removeLayer(layers[type]);
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['overview','gaps','roi','heatmap'][i]===tab));
+  document.getElementById('roi').style.display = tab==='roi' ? 'block' : 'none';
+
+  if(tab==='gaps') {
+    if(gaps.length>0) map.setView([gaps[0].lat, gaps[0].lng], 9);
+    document.getElementById('l-gap').checked=true; toggleLayer('gap');
+  }
+  if(tab==='heatmap') {
+    document.getElementById('l-inf').checked=true; toggleLayer('inf');
+    document.getElementById('l-qu').checked=true; toggleLayer('qu');
+  }
+  if(tab==='overview') {
+    map.setView([51.5,7.5],8);
+  }
+}
+
+// ─── ROI RECHNER ─────────────────────────────────────────────────────────────
+function calcROI() {
+  const t = parseInt(document.getElementById('r-t').value);
+  const m = parseInt(document.getElementById('r-m').value);
+  document.getElementById('rv-t').textContent = t;
+  document.getElementById('rv-m').textContent = m;
+  const [preis,conv] = document.getElementById('r-q').value.split(':').map(Number);
+  const leadsProMo = Math.ceil(t/conv);
+  const leadMo = Math.round(leadsProMo*preis);
+  const leadGes = leadMo*m;
+  const scoutGes = 3200*m+2500;
+  const diff = Math.abs(scoutGes-leadGes);
+  const winner = leadGes < scoutGes ? 'lead' : 'scout';
+  const be = (leadMo>3200) ? Math.ceil(5700/(leadMo-3200)) : null;
+
+  document.getElementById('roi-result').innerHTML=`
+    <div class="roi-item"><div class="rv" style="color:#f97316">€${leadMo.toLocaleString('de')}</div><div class="rl">Leads/Monat</div></div>
+    <div class="roi-item"><div class="rv" style="color:#f97316">€${leadGes.toLocaleString('de')}</div><div class="rl">Leads ${m} Mo.</div></div>
+    <div class="roi-item"><div class="rv" style="color:#FDE154">€3.200</div><div class="rl">Scout Fix/Mo.</div></div>
+    <div class="roi-item"><div class="rv" style="color:#FDE154">€${scoutGes.toLocaleString('de')}</div><div class="rl">Scout ${m} Mo.</div></div>
+    <div class="roi-winner ${winner==='lead'?'w-lead':'w-scout'}">
+      ${winner==='lead'?'📦 Leads günstiger':'🙋 Scout günstiger'} um €${diff.toLocaleString('de')}
+      ${be&&be>0&&be<=24?' · Scout lohnt sich nach '+be+' Monaten':''}
+    </div>
+  `;
+}
+calcROI();
+
+
+// ─── DRAW MODE ────────────────────────────────────────────────────────────────
+const SB_URL = window.BEEDOO_SB || 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_SVC = window.BEEDOO_SVC || '';
+
+
+let drawControl, currentPolygon = null, drawnItems;
+
+// Load + render existing gebiete on startup
+async function loadGebiete() {
+  const res = await fetch(SB_URL+'/rest/v1/gebiete?select=*&active=eq.true', {
+    headers:{'apikey':SB_SVC,'Authorization':'Bearer '+SB_SVC}
+  });
+  const gebiete = await res.json();
+  
+  if(!window._gebieteLayer) {
+    window._gebieteLayer = L.layerGroup().addTo(map);
+  } else {
+    window._gebieteLayer.clearLayers();
+  }
+  
+  gebiete.forEach(g => {
+    if(!g.polygon) return;
+    try {
+      const poly = typeof g.polygon === 'string' ? JSON.parse(g.polygon) : g.polygon;
+      // GeoJSON polygon coords are [lng,lat] → convert to [lat,lng] for Leaflet
+      const coords = poly.coordinates[0].map(c => [c[1], c[0]]);
+      const scout = SCOUTER.find(s => s.id === g.scouter_id);
+      const color = g.farbe || (scout ? '#22c55e' : '#60a5fa');
+      
+      const leafletPoly = L.polygon(coords, {
+        color: color, fillColor: color,
+        fillOpacity: 0.12, weight: 2, opacity: 0.7,
+        dashArray: g.scouter_id ? null : '6,4'
+      }).addTo(window._gebieteLayer);
+      
+      leafletPoly.bindTooltip(
+        g.name + (scout ? '<br>🔍 '+scout.name : '<br><i>nicht zugeordnet</i>'),
+        {className:'dark-tip', sticky:true}
+      );
+      
+      // Label in center
+      const center = leafletPoly.getBounds().getCenter();
+      L.marker(center, {
+        icon: L.divIcon({html:`<div class="gebiet-label">${g.name}</div>`,className:'',iconAnchor:[0,0]}),
+        interactive:false, zIndexOffset:-300
+      }).addTo(window._gebieteLayer);
+      
+      // Click to open edit panel
+      leafletPoly.on('click', () => editGebiet(g));
+    } catch(e) { console.warn('Gebiet parse error:', g.name, e); }
+  });
+}
+
+function editGebiet(g) {
+  const scout = SCOUTER.find(s => s.id === g.scouter_id);
+  document.getElementById('detail-body').innerHTML = `
+    <h3>📍 ${g.name}</h3>
+    <div class="d-row"><span class="d-key">Scouter</span><span style="color:${g.scouter_id?'#22c55e':'#f59e0b'}">${scout ? scout.name : 'nicht zugeordnet'}</span></div>
+    <div class="d-row"><span class="d-key">PLZ</span><span>${g.plz||'—'}</span></div>
+    <div class="d-row"><span class="d-key">Ort</span><span>${g.ort||'—'}</span></div>
+    ${g.notizen ? `<div class="d-row"><span class="d-key">Notiz</span><span>${g.notizen}</span></div>` : ''}
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button class="dp-btn primary" onclick="openEditMode('${g.id}','${(g.name||'').replace("'","\'")}','${g.scouter_id||''}','${(g.notizen||'').replace("'","\'")}'); document.getElementById('detail').style.display='none'" style="font-size:12px;padding:6px">✏ Bearbeiten</button>
+      <button class="dp-btn danger" onclick="deleteGebiet('${g.id}')" style="font-size:12px;padding:6px">🗑 Löschen</button>
+    </div>
+  `;
+  document.getElementById('detail').style.display='block';
+}
+
+function openEditMode(id, name, scouterId, notiz) {
+  document.getElementById('dp-name').value = name;
+  document.getElementById('dp-scouter').value = scouterId;
+  document.getElementById('dp-notiz').value = notiz;
+  document.getElementById('dp-save').dataset.editId = id;
+  document.getElementById('dp-save').disabled = false;
+  document.getElementById('dp-hint').textContent = 'Klicke "Speichern" um Scouter/Name zu ändern, oder "Neu zeichnen" für neues Polygon.';
+  showDrawPanel(true);
+}
+
+async function deleteGebiet(id) {
+  if(!confirm('Gebiet wirklich löschen?')) return;
+  await fetch(SB_URL+'/rest/v1/gebiete?id=eq.'+id, {
+    method:'PATCH',
+    headers:{'apikey':SB_SVC,'Authorization':'Bearer '+SB_SVC,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body: JSON.stringify({active:false})
+  });
+  document.getElementById('detail').style.display='none';
+  loadGebiete();
+}
+
+function populateScouterDropdown() {
+  const sel = document.getElementById('dp-scouter');
+  sel.innerHTML = '<option value="">— noch nicht zugeordnet —</option>';
+  SCOUTER.sort((a,b)=>a.name.localeCompare(b.name)).forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name + (s.ort ? ' ('+s.ort+')' : '');
+    sel.appendChild(opt);
+  });
+}
+
+function showDrawPanel(show) {
+  document.getElementById('draw-panel').style.display = show ? 'block' : 'none';
+  document.getElementById('draw-btn').classList.toggle('active', show);
+}
+
+function toggleDrawMode() {
+  const panel = document.getElementById('draw-panel');
+  const isOpen = panel.style.display === 'block';
+  if(isOpen) {
+    stopDrawing();
+    showDrawPanel(false);
+    document.getElementById('dp-save').dataset.editId = '';
+  } else {
+    populateScouterDropdown();
+    document.getElementById('dp-name').value = '';
+    document.getElementById('dp-notiz').value = '';
+    document.getElementById('dp-status').style.display = 'none';
+    document.getElementById('dp-save').disabled = true;
+    document.getElementById('dp-save').dataset.editId = '';
+    document.getElementById('dp-hint').textContent = 'Klicke auf der Karte um das Gebiet zu zeichnen. Doppelklick zum Abschließen.';
+    showDrawPanel(true);
+    startDrawing();
+  }
+}
+
+function startDrawing() {
+  if(!drawnItems) {
+    drawnItems = new L.FeatureGroup().addTo(map);
+    drawControl = new L.Control.Draw({
+      draw:{ polygon:{shapeOptions:{color:'#FDE154',fillOpacity:0.15}, allowIntersection:false}, polyline:false, rectangle:false, circle:false, marker:false, circlemarker:false },
+      edit:{ featureGroup:drawnItems, remove:false }
+    });
+  }
+  map.addControl(drawControl);
+  currentPolygon = null;
+  
+  map.on('draw:created', function(e) {
+    drawnItems.clearLayers();
+    currentPolygon = e.layer;
+    drawnItems.addLayer(currentPolygon);
+    document.getElementById('dp-save').disabled = false;
+    document.getElementById('dp-hint').textContent = '✓ Polygon gezeichnet. Name eingeben und speichern.';
+  });
+}
+
+function stopDrawing() {
+  if(drawControl) map.removeControl(drawControl);
+  if(drawnItems) drawnItems.clearLayers();
+  currentPolygon = null;
+  map.off('draw:created');
+}
+
+function redrawGebiet() {
+  if(drawnItems) drawnItems.clearLayers();
+  currentPolygon = null;
+  document.getElementById('dp-save').disabled = !document.getElementById('dp-save').dataset.editId;
+  document.getElementById('dp-hint').textContent = 'Klicke auf der Karte um das Gebiet neu zu zeichnen.';
+}
+
+async function saveGebiet() {
+  const name = document.getElementById('dp-name').value.trim();
+  const scouterId = document.getElementById('dp-scouter').value;
+  const notiz = document.getElementById('dp-notiz').value.trim();
+  const editId = document.getElementById('dp-save').dataset.editId;
+  
+  if(!name) { dpStatus('err', 'Bitte Gebietsname eingeben.'); return; }
+  
+  let polygon = null;
+  if(currentPolygon) {
+    const latlngs = currentPolygon.getLatLngs()[0];
+    const coords = latlngs.map(p => [p.lng, p.lat]);
+    coords.push(coords[0]); // close ring
+    polygon = JSON.stringify({type:'Polygon', coordinates:[coords]});
+  }
+  
+  const payload = {
+    name, notiz,
+    scouter_id: scouterId || null,
+    active: true,
+    updated_at: new Date().toISOString()
+  };
+  if(polygon) payload.polygon = polygon;
+  
+  let res;
+  if(editId) {
+    res = await fetch(SB_URL+'/rest/v1/gebiete?id=eq.'+editId, {
+      method:'PATCH',
+      headers:{'apikey':SB_SVC,'Authorization':'Bearer '+SB_SVC,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify(payload)
+    });
+  } else {
+    if(!polygon) { dpStatus('err','Bitte erst ein Gebiet zeichnen.'); return; }
+    res = await fetch(SB_URL+'/rest/v1/gebiete', {
+      method:'POST',
+      headers:{'apikey':SB_SVC,'Authorization':'Bearer '+SB_SVC,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify(payload)
+    });
+  }
+  
+  if(res.ok) {
+    dpStatus('ok', editId ? '✓ Gebiet aktualisiert!' : '✓ Gebiet gespeichert!');
+    stopDrawing(); 
+    await loadGebiete();
+    setTimeout(() => { showDrawPanel(false); }, 1200);
+  } else {
+    const err = await res.text();
+    dpStatus('err', 'Fehler: '+err.substring(0,60));
+  }
+}
+
+function dpStatus(type, msg) {
+  const el = document.getElementById('dp-status');
+  el.className = 'dp-status '+type;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// Load gebiete on startup
+loadGebiete();
+
+
+// ─── GEBIETE (Draw & Save) ───────────────────────────────────────────────
+const SB_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk3ODU3MjgsImV4cCI6MjA1NTM2MTcyOH0.2GUf8v2aT8QZGMb6W9oj7TGkMNaqCiHjIX0ALSlMAp';
+// For writes we need service key - embed it
+const SB_SVC = (window.BEEDOO_SVC || '');
+
+let drawMode = false;
+let drawPoints = [];
+let drawPolyline = null;
+let drawMarkers = [];
+let drawPolygon = null;
+let savedGebiete = [];
+let selectedColor = '#22c55e';
+
+// Populate scouter dropdown
+function populateScouterDropdown() {
+  const sel = document.getElementById('g-scouter');
+  SCOUTER.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name + (s.ort ? ' (' + s.ort + ')' : '');
+    sel.appendChild(opt);
+  });
+}
+populateScouterDropdown();
+
+function selectColor(el) {
+  document.querySelectorAll('.color-opt').forEach(e => e.classList.remove('sel'));
+  el.classList.add('sel');
+  selectedColor = el.dataset.c;
+}
+
+function startDraw() {
+  drawMode = !drawMode;
+  document.getElementById('btn-draw').classList.toggle('active', drawMode);
+  document.getElementById('map').style.cursor = drawMode ? 'crosshair' : '';
+  if (!drawMode) { cancelDraw(); return; }
+  drawPoints = []; drawMarkers = []; drawPolyline = null; drawPolygon = null;
+  // Show hint
+  showAlert('Klicke auf die Karte um Punkte zu setzen. Letzten Punkt nochmal klicken = fertig.');
+}
+
+map.on('click', function(e) {
+  if (!drawMode) return;
+  const pt = [e.latlng.lat, e.latlng.lng];
+  
+  // Close polygon if clicking near first point
+  if (drawPoints.length >= 3) {
+    const first = drawPoints[0];
+    const d = Math.sqrt((pt[0]-first[0])**2 + (pt[1]-first[1])**2);
+    if (d < 0.01) { finishDraw(); return; }
+  }
+  
+  drawPoints.push(pt);
+  
+  // Add dot marker
+  const dotIcon = L.divIcon({ html:'<div style="width:8px;height:8px;background:#FDE154;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.5)"></div>', iconSize:[8,8], iconAnchor:[4,4], className:'' });
+  const mk = L.marker(pt, {icon:dotIcon}).addTo(map);
+  drawMarkers.push(mk);
+  
+  // Update preview line
+  if (drawPolyline) map.removeLayer(drawPolyline);
+  if (drawPoints.length >= 2) {
+    drawPolyline = L.polyline(drawPoints, {color:'#FDE154', weight:2, dashArray:'6,4', opacity:.8}).addTo(map);
+  }
+  
+  // Preview polygon after 3 points
+  if (drawPolygon) map.removeLayer(drawPolygon);
+  if (drawPoints.length >= 3) {
+    drawPolygon = L.polygon(drawPoints, {color:selectedColor, fillColor:selectedColor, fillOpacity:.15, weight:2, opacity:.6}).addTo(map);
+  }
+});
+
+map.on('dblclick', function(e) {
+  if (!drawMode || drawPoints.length < 3) return;
+  L.DomEvent.stop(e);
+  finishDraw();
+});
+
+function finishDraw() {
+  if (drawPoints.length < 3) { cancelDraw(); return; }
+  drawMode = false;
+  document.getElementById('btn-draw').classList.remove('active');
+  document.getElementById('map').style.cursor = '';
+  // Show modal
+  document.getElementById('gebiet-modal').style.display = 'block';
+}
+
+function cancelDraw() {
+  drawMode = false;
+  document.getElementById('btn-draw').classList.remove('active');
+  document.getElementById('map').style.cursor = '';
+  drawMarkers.forEach(m => map.removeLayer(m));
+  if (drawPolyline) map.removeLayer(drawPolyline);
+  if (drawPolygon) map.removeLayer(drawPolygon);
+  drawPoints = []; drawMarkers = []; drawPolyline = null; drawPolygon = null;
+  document.getElementById('gebiet-modal').style.display = 'none';
+}
+
+async function saveGebiet() {
+  const name = document.getElementById('g-name').value.trim();
+  if (!name) { document.getElementById('g-name').focus(); return; }
+  
+  const scouterId = document.getElementById('g-scouter').value || null;
+  const notiz = document.getElementById('g-notiz').value.trim();
+  
+  // Build GeoJSON polygon
+  const coords = [...drawPoints, drawPoints[0]].map(p => [p[1], p[0]]); // lng,lat
+  const polygon = { type: 'Polygon', coordinates: [coords] };
+  
+  const payload = {
+    name,
+    scouter_id: scouterId || null,
+    polygon: JSON.stringify(polygon),
+    farbe: selectedColor,
+    notizen: notiz || null,
+    active: true
+  };
+  
+  const btn = document.querySelector('.btn-save');
+  btn.textContent = '⏳ Speichert...';
+  btn.disabled = true;
+  
+  try {
+    const r = await fetch(SB_URL + '/rest/v1/gebiete', {
+      method: 'POST',
+      headers: {
+        'apikey': SB_SVC,
+        'Authorization': 'Bearer ' + SB_SVC,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (r.ok) {
+      showAlert('✅ Gebiet "' + name + '" gespeichert!');
+      // Keep polygon on map permanently
+      drawMarkers.forEach(m => map.removeLayer(m));
+      if (drawPolyline) map.removeLayer(drawPolyline);
+      if (drawPolygon) map.removeLayer(drawPolygon);
+      const scouter = SCOUTER.find(s => String(s.id) === String(scouterId));
+      addGebietToMap({ name, farbe: selectedColor, polygon, id: data[0]?.id, scouter });
+      drawPoints = []; drawMarkers = []; drawPolyline = null; drawPolygon = null;
+      document.getElementById('gebiet-modal').style.display = 'none';
+      document.getElementById('g-name').value = '';
+      document.getElementById('g-notiz').value = '';
+      loadGebiete();
+    } else {
+      showAlert('❌ Fehler: ' + (data.message || JSON.stringify(data)));
+    }
+  } catch(e) {
+    showAlert('❌ Netzwerkfehler: ' + e.message);
+  }
+  btn.textContent = '💾 Speichern';
+  btn.disabled = false;
+}
+
+function addGebietToMap(g) {
+  const coords = g.polygon.coordinates[0].map(c => [c[1], c[0]]); // back to lat,lng
+  const poly = L.polygon(coords, {
+    color: g.farbe || '#22c55e',
+    fillColor: g.farbe || '#22c55e',
+    fillOpacity: 0.12, weight: 2, opacity: 0.7
+  }).addTo(layers.gebiete || map);
+  
+  const scouterName = g.scouter?.name || 'Kein Scouter';
+  poly.bindTooltip('<b>' + g.name + '</b><br>' + scouterName, {className:'dark-tip'});
+  poly.on('click', () => showGebietDetail(g, poly));
+}
+
+function showGebietDetail(g, poly) {
+  document.getElementById('detail-body').innerHTML = `
+    <h3>📍 ${g.name}</h3>
+    <div class="d-row"><span class="d-key">Scouter</span><span>${g.scouter?.name || '—'}</span></div>
+    <div class="d-row"><span class="d-key">Ort</span><span>${g.scouter?.ort || '—'}</span></div>
+    ${g.notizen ? '<div class="d-row"><span class="d-key">Notiz</span><span>' + g.notizen + '</span></div>' : ''}
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button onclick="deleteGebiet('${g.id}', this)" style="flex:1;background:#1a0f0f;border:1px solid #ef444440;color:#ef4444;border-radius:7px;padding:7px;font-size:12px;cursor:pointer">🗑 Löschen</button>
+    </div>
+  `;
+  document.getElementById('detail').style.display = 'block';
+}
+
+async function deleteGebiet(id, btn) {
+  if (!confirm('Gebiet wirklich löschen?')) return;
+  await fetch(SB_URL + '/rest/v1/gebiete?id=eq.' + id, {
+    method: 'DELETE',
+    headers: { 'apikey': SB_SVC, 'Authorization': 'Bearer ' + SB_SVC }
+  });
+  document.getElementById('detail').style.display = 'none';
+  loadGebiete();
+  showAlert('🗑 Gebiet gelöscht');
+}
+
+// Load existing gebiete from DB
+layers.gebiete = L.layerGroup().addTo(map);
+
+async function loadGebiete() {
+  const r = await fetch(SB_URL + '/rest/v1/gebiete?active=eq.true&select=*', {
+    headers: { 'apikey': SB_SVC, 'Authorization': 'Bearer ' + SB_SVC }
+  });
+  if (!r.ok) return;
+  savedGebiete = await r.json();
+  
+  map.removeLayer(layers.gebiete);
+  layers.gebiete = L.layerGroup().addTo(map);
+  
+  savedGebiete.forEach(g => {
+    try {
+      const poly = typeof g.polygon === 'string' ? JSON.parse(g.polygon) : g.polygon;
+      const scouter = SCOUTER.find(s => String(s.id) === String(g.scouter_id));
+      addGebietToMap({...g, polygon: poly, scouter});
+    } catch(e) {}
+  });
+  
+  // Update panel list
+  const list = document.getElementById('gebiete-list');
+  if (!savedGebiete.length) { list.innerHTML = '<div style="color:#5c6b8a;font-size:12px">Noch keine Gebiete eingezeichnet.</div>'; return; }
+  list.innerHTML = savedGebiete.map(g => {
+    const sc = SCOUTER.find(s => String(s.id) === String(g.scouter_id));
+    return `<div class="g-item">
+      <div class="g-color" style="background:${g.farbe||'#22c55e'}"></div>
+      <div><div style="font-weight:500">${g.name}</div><div style="color:#5c6b8a;font-size:10px">${sc?.name||'Kein Scouter'}</div></div>
+      <button class="g-del" onclick="deleteGebiet('${g.id}',this)">🗑</button>
+    </div>`;
+  }).join('');
+}
+loadGebiete();
+
+function toggleGebietePanel() {
+  const p = document.getElementById('gebiete-panel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  document.getElementById('btn-gebiete').classList.toggle('active', p.style.display !== 'none');
+}
+
+function showAlert(msg) {
+  const a = document.createElement('div');
+  a.className = 'alert ok';
+  a.textContent = msg;
+  document.getElementById('alerts').appendChild(a);
+  setTimeout(() => a.remove(), 4000);
+}
+
+// Keyboard: Escape = cancel draw, Enter = finish
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && drawMode) cancelDraw();
+  if (e.key === 'Enter' && drawMode && drawPoints.length >= 3) finishDraw();
+});
+
+// Leaflet tooltip dark style
+const style = document.createElement('style');
+style.textContent='.dark-tip{background:#151d30!important;border:1px solid #263354!important;color:#e1e7ef!important;font-size:11px!important;}.dark-tip.leaflet-tooltip-top::before{border-top-color:#263354!important}';
+document.head.appendChild(style);
+
+// ─── DRAW & GEBIETE ──────────────────────────────────────────────────────────
+ = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.LSlMAp';
+
+let pendingLayer = null;
+let selectedColor = '#22c55e';
+let drawnGebiete = [];
+const gebieteGroup = L.layerGroup().addTo(map);
+
+// Init Leaflet Draw
+const drawControl = new L.Control.Draw({
+  position: 'topright',
+  draw: {
+    polygon: {
+      allowIntersection: false,
+      showArea: true,
+      shapeOptions: { color: '#FDE154', fillOpacity: 0.15, weight: 2 }
+    },
+    rectangle: {
+      shapeOptions: { color: '#FDE154', fillOpacity: 0.15, weight: 2 }
+    },
+    circle: false, marker: false, circlemarker: false, polyline: false
+  },
+  edit: false
+});
+
+let drawEnabled = false;
+function toggleDrawMode() {
+  drawEnabled = !drawEnabled;
+  const btn = document.getElementById('btn-draw');
+  if(drawEnabled) {
+    map.addControl(drawControl);
+    btn.style.background = '#FDE154';
+    btn.style.color = '#0c1222';
+    btn.textContent = '✕ Zeichnen beenden';
+  } else {
+    map.removeControl(drawControl);
+    btn.style.background = '#1c2640';
+    btn.style.color = '#e1e7ef';
+    btn.innerHTML = '✏️ Gebiet zeichnen';
+  }
+}
+
+map.on(L.Draw.Event.CREATED, function(e) {
+  pendingLayer = e.layer;
+  // Pre-fill name suggestion
+  document.getElementById('g-name').value = '';
+  document.getElementById('g-notizen').value = '';
+  selectColor('#22c55e');
+  document.getElementById('save-modal').classList.add('open');
+  document.getElementById('g-name').focus();
+});
+
+function selectColor(c) {
+  selectedColor = c;
+  document.querySelectorAll('.cp-dot').forEach(d => {
+    d.style.border = d.dataset.color === c ? '2px solid white' : 'none';
+  });
+}
+
+function cancelDraw() {
+  pendingLayer = null;
+  document.getElementById('save-modal').classList.remove('open');
+}
+
+async function saveGebiet() {
+  if(!pendingLayer) return;
+  
+  const name = document.getElementById('g-name').value.trim() || 'Neues Gebiet';
+  const scouterId = document.getElementById('g-scouter').value || null;
+  const notizen = document.getElementById('g-notizen').value.trim() || null;
+  
+  // Get polygon coordinates
+  const latlngs = pendingLayer.getLatLngs()[0] || pendingLayer.getLatLngs();
+  const coords = (Array.isArray(latlngs[0]) ? latlngs[0] : latlngs).map(p => [p.lat, p.lng]);
+  
+  // Find scouter name
+  const scout = SCOUTER.find(s => s.id === scouterId);
+  
+  // Save to Supabase
+  const btn = document.querySelector('.btn-save');
+  btn.textContent = '⏳ Speichern...';
+  btn.disabled = true;
+  
+  try {
+    const resp = await fetch(`${SB_URL}/rest/v1/gebiete`, {
+      method: 'POST',
+      headers: {
+        'apikey': ANON, 'Authorization': 'Bearer '+ANON,
+        'Content-Type': 'application/json', 'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({
+        name, scouter_id: scouterId, farbe: selectedColor,
+        notizen, polygon: JSON.stringify(coords), active: true,
+        created_by: 'strategic-map'
+      })
+    });
+    
+    if(resp.ok) {
+      const saved = await resp.json();
+      const gebiet = Array.isArray(saved) ? saved[0] : saved;
+      
+      // Add to map
+      addGebietToMap({...gebiet, scouter_name: scout?.name});
+      drawnGebiete.push({...gebiet, scouter_name: scout?.name, latlngs: coords});
+      renderGebieteList();
+      
+      document.getElementById('save-modal').classList.remove('open');
+      pendingLayer = null;
+      showToast('✅ Gebiet "'+name+'" gespeichert!');
+    } else {
+      const err = await resp.json();
+      showToast('❌ Fehler: ' + (err.message || resp.status));
+    }
+  } catch(e) {
+    showToast('❌ Netzwerkfehler: ' + e.message);
+  }
+  
+  btn.textContent = '💾 Speichern';
+  btn.disabled = false;
+}
+
+function addGebietToMap(g) {
+  if(!g.polygon) return;
+  const coords = typeof g.polygon === 'string' ? JSON.parse(g.polygon) : g.polygon;
+  const poly = L.polygon(coords, {
+    color: g.farbe || '#22c55e',
+    fillColor: g.farbe || '#22c55e',
+    fillOpacity: 0.12, weight: 2, opacity: 0.7
+  });
+  
+  const scoutName = g.scouter_name || (g.scouter_id ? 'Scouter zugeordnet' : 'Kein Scouter');
+  poly.bindTooltip(`<b>${g.name}</b><br>🔍 ${scoutName}${g.notizen?'<br>'+g.notizen:''}`, {
+    className: 'gebiet-tip', sticky: true
+  });
+  
+  poly.on('click', () => showGebietDetail(g));
+  poly.addTo(gebieteGroup);
 }
 
 function showGebietDetail(g) {
-  const sc = SCOUTER_ALL.find(s => s.id === g.scouter_id);
-  const quInside = QUALIF.filter(q => {
-    if (!g.polygon) return false;
-    if (g.polygon.type==='Polygon') {
-      const lats=g.polygon.coordinates[0].map(c=>c[1]);
-      const lngs=g.polygon.coordinates[0].map(c=>c[0]);
-      return q.lat>=Math.min(...lats)&&q.lat<=Math.max(...lats)&&q.lng>=Math.min(...lngs)&&q.lng<=Math.max(...lngs);
-    }
-    return false;
-  });
-  const qual = quInside.filter(q=>q.status==='qualified').length;
-
+  const scout = SCOUTER.find(s => s.id === g.scouter_id);
   document.getElementById('detail-body').innerHTML = `
-    <h3 style="color:${g.farbe||'#FDE154'}">${g.name}</h3>
-    <div class="kpis">
-      <div class="kpi"><div class="v">${quInside.length}</div><div class="l">Qualifizierungen</div></div>
-      <div class="kpi"><div class="v">${qual}</div><div class="l">Davon qualifiziert</div></div>
+    <h3><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${g.farbe||'#22c55e'};margin-right:6px"></span>${g.name}</h3>
+    <div class="d-row"><span class="d-key">Scouter</span><span>${scout?.name || '— nicht zugeordnet'}</span></div>
+    <div class="d-row"><span class="d-key">Standort</span><span>${scout?.ort || '—'}</span></div>
+    ${g.notizen ? `<div class="d-row"><span class="d-key">Notizen</span><span>${g.notizen}</span></div>` : ''}
+    <div class="d-row"><span class="d-key">Erstellt</span><span>${g.created_at ? new Date(g.created_at).toLocaleDateString('de') : '—'}</span></div>
+    <div style="margin-top:10px;display:flex;gap:6px">
+      <button onclick="deleteGebiet('${g.id}')" style="background:#ef444420;border:1px solid #ef444440;color:#ef4444;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer">🗑 Löschen</button>
     </div>
-    <div class="d-row"><span class="d-key">Scouter</span><span style="color:${sc?'#22c55e':'#ef4444'}">${sc?sc.name:'⚠ nicht zugewiesen'}</span></div>
-    ${!sc ? `<div style="margin-top:8px;padding:8px;background:#1a0f10;border:1px solid #ef444440;border-radius:7px;font-size:12px;color:#ef4444">Gebiet hat keinen Scouter → Tab "Gebiete" öffnen zum Zuweisen</div>` : ''}
   `;
   document.getElementById('detail').style.display = 'block';
 }
 
-// Leaflet tooltip style
-const s = document.createElement('style');
-s.textContent = '.dtip{background:#151d30!important;border:1px solid #263354!important;color:#e1e7ef!important;font-size:11px!important;padding:4px 8px!important}.dtip.leaflet-tooltip-top::before{border-top-color:#263354!important}';
-document.head.appendChild(s);
+async function deleteGebiet(id) {
+  if(!confirm('Gebiet wirklich löschen?')) return;
+  const resp = await fetch(`${SB_URL}/rest/v1/gebiete?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: {'apikey': ANON, 'Authorization': 'Bearer '+ANON}
+  });
+  if(resp.ok) {
+    drawnGebiete = drawnGebiete.filter(g => g.id !== id);
+    gebieteGroup.clearLayers();
+    drawnGebiete.forEach(g => addGebietToMap(g));
+    renderGebieteList();
+    document.getElementById('detail').style.display = 'none';
+    showToast('🗑 Gebiet gelöscht');
+    await loadGebiete();
+  }
+}
+
+async function loadGebiete() {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/gebiete?active=eq.true&order=created_at.desc`, {
+      headers: {'apikey': ANON, 'Authorization': 'Bearer '+ANON}
+    });
+    if(r.ok) {
+      const data = await r.json();
+      gebieteGroup.clearLayers();
+      drawnGebiete = [];
+      data.forEach(g => {
+        const scout = SCOUTER.find(s => s.id === g.scouter_id);
+        const entry = {...g, scouter_name: scout?.name};
+        drawnGebiete.push(entry);
+        addGebietToMap(entry);
+      });
+      renderGebieteList();
+    }
+  } catch(e) { console.log('Gebiete load error:', e.message); }
+}
+
+function renderGebieteList() {
+  const body = document.getElementById('gl-body');
+  if(drawnGebiete.length === 0) {
+    body.innerHTML = '<div class="gl-empty">Noch keine Gebiete</div>';
+    return;
+  }
+  body.innerHTML = drawnGebiete.map(g => `
+    <div class="gl-item" onclick="focusGebiet('${g.id}')">
+      <div class="gi-name"><span class="gi-dot" style="background:${g.farbe||'#22c55e'}"></span>${g.name}</div>
+      <div class="gi-scout">🔍 ${g.scouter_name || 'Kein Scouter'}</div>
+    </div>
+  `).join('');
+}
+
+function focusGebiet(id) {
+  const g = drawnGebiete.find(x => x.id === id);
+  if(g && g.polygon) {
+    const coords = typeof g.polygon === 'string' ? JSON.parse(g.polygon) : g.polygon;
+    const latlngs = coords.map(c => [c[0], c[1]]);
+    const bounds = L.latLngBounds(latlngs);
+    map.fitBounds(bounds, {padding:[40,40]});
+    showGebietDetail(g);
+  }
+}
+
+function toggleGebiete() {
+  const el = document.getElementById('gebiete-list');
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  // Hide detail if showing gebiete list
+  if(el.style.display === 'block') document.getElementById('detail').style.display = 'none';
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#151d30;border:1px solid #263354;color:#e1e7ef;padding:8px 18px;border-radius:8px;font-size:13px;z-index:9999;pointer-events:none';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// Populate scouter dropdown
+function populateScouterDropdown() {
+  const sel = document.getElementById('g-scouter');
+  sel.innerHTML = '<option value="">— Noch kein Scouter —</option>';
+  SCOUTER.forEach(s => {
+    sel.innerHTML += `<option value="${s.id}">${s.name} (${s.ort})</option>`;
+  });
+}
+
+// Init on load
+populateScouterDropdown();
+selectColor('#22c55e');
+loadGebiete();
+
 </script>
+
+<div id="draw-toolbar">
+  <div class="draw-btn" id="btn-draw" onclick="startDraw()" title="Gebiet zeichnen">✏️</div>
+  <div class="draw-btn" id="btn-gebiete" onclick="toggleGebietePanel()" title="Alle Gebiete">📋</div>
+</div>
+
+<div id="gebiet-modal">
+  <h3>📍 Neues Gebiet speichern</h3>
+  <div class="m-row">
+    <label>Name des Gebiets</label>
+    <input class="m-input" id="g-name" placeholder="z.B. Bielefeld Ost" />
+  </div>
+  <div class="m-row">
+    <label>Scouter zuordnen</label>
+    <select class="m-select" id="g-scouter">
+      <option value="">— kein Scouter —</option>
+    </select>
+  </div>
+  <div class="m-row">
+    <label>Farbe</label>
+    <div class="color-row" id="g-colors">
+      <div class="color-opt sel" style="background:#22c55e" data-c="#22c55e" onclick="selectColor(this)"></div>
+      <div class="color-opt" style="background:#FDE154" data-c="#FDE154" onclick="selectColor(this)"></div>
+      <div class="color-opt" style="background:#60a5fa" data-c="#60a5fa" onclick="selectColor(this)"></div>
+      <div class="color-opt" style="background:#f97316" data-c="#f97316" onclick="selectColor(this)"></div>
+      <div class="color-opt" style="background:#a78bfa" data-c="#a78bfa" onclick="selectColor(this)"></div>
+      <div class="color-opt" style="background:#ef4444" data-c="#ef4444" onclick="selectColor(this)"></div>
+    </div>
+  </div>
+  <div class="m-row">
+    <label>Notiz (optional)</label>
+    <input class="m-input" id="g-notiz" placeholder="z.B. Prioritätsgebiet Q2" />
+  </div>
+  <div class="m-btns">
+    <button class="btn-cancel" onclick="cancelDraw()">Abbrechen</button>
+    <button class="btn-save" onclick="saveGebiet()">💾 Speichern</button>
+  </div>
+</div>
+
+<div id="gebiete-panel" style="position:absolute;top:58px;right:60px;z-index:1000;width:280px;background:#0f1320ee;border:1px solid #1c2640;border-radius:10px;padding:14px;display:none;max-height:400px;overflow-y:auto;">
+  <div style="font-size:13px;font-weight:700;color:#FDE154;margin-bottom:10px">📋 Gespeicherte Gebiete</div>
+  <div id="gebiete-list">Lädt...</div>
+</div>
+
 </body>
 </html>
