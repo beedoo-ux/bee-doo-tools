@@ -1,0 +1,1681 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>bee-doo · PAY</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#root{height:100%}
+body{background:#0A0A0B;color:#F0F0F4;font-family:'DM Sans',sans-serif;overflow:hidden}
+button,select,input,textarea{color:inherit;font-family:inherit}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:#111113}
+::-webkit-scrollbar-thumb{background:#2A2A33;border-radius:4px}
+.back{position:fixed;top:9px;left:10px;z-index:999;background:#16161A;border:1px solid #2A2A33;color:#8A8A9A;padding:5px 12px;border-radius:7px;font-size:11px;cursor:pointer;text-decoration:none;transition:all .15s}
+.back:hover{border-color:#FDE154;color:#FDE154}
+@media(max-width:700px){.back{display:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes slideIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
+tr.row:hover td{background:#FFFFFF05!important}
+.inp{width:100%;background:#111113;border:1px solid #2A2A33;border-radius:6px;padding:7px 10px;font-size:12px;outline:none;transition:border-color .15s}
+.inp:focus{border-color:#FDE15450}
+</style>
+</head>
+<body>
+<a href="index.html" class="back">&#8592; Launcher</a>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo,useCallback,useEffect,useRef}=React;
+
+// ── SUPABASE ──────────────────────────────────────────────────────
+const SB="https://hqzpemfaljxcysyqssng.supabase.co";
+const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const H={apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json"};
+const db={
+  get:async(t,p="")=>{const r=await fetch(SB+"/rest/v1/"+t+p,{headers:H});if(!r.ok)throw new Error(await r.text());return r.json()},
+  post:async(t,b)=>{const r=await fetch(SB+"/rest/v1/"+t,{method:"POST",headers:{...H,Prefer:"return=representation"},body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return r.json()},
+  patch:async(t,w,b)=>{const r=await fetch(SB+"/rest/v1/"+t+"?"+w,{method:"PATCH",headers:{...H,Prefer:"return=representation"},body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return r.json()},
+  upsert:async(t,b)=>{const r=await fetch(SB+"/rest/v1/"+t,{method:"POST",headers:{...H,Prefer:"return=representation,resolution=merge-duplicates"},body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return r.json()},
+  del:async(t,w)=>{await fetch(SB+"/rest/v1/"+t+"?"+w,{method:"DELETE",headers:H})}
+};
+
+// ── DESIGN ───────────────────────────────────────────────────────
+const C={
+  bg:"#0A0A0B",sur:"#111113",card:"#16161A",b:"#1E1E24",bl:"#2A2A33",
+  Y:"#FDE154",YD:"#FDE15415",tx:"#F0F0F4",ts:"#8A8A9A",tm:"#4A4A5A",
+  G:"#34D399",GD:"#34D39915",R:"#F87171",RD:"#F8717115",
+  O:"#FBBF24",OD:"#FBBF2415",B:"#60A5FA",BD:"#60A5FA15",
+  P:"#A78BFA",PD:"#A78BFA15",T:"#2DD4BF",TD:"#2DD4BF15",
+  Pk:"#F472B6",PkD:"#F472B615"
+};
+
+// ── HELPERS ───────────────────────────────────────────────────────
+const eur=n=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",minimumFractionDigits:0}).format(+n||0);
+const eur2=n=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",minimumFractionDigits:2,maximumFractionDigits:2}).format(+n||0);
+const pct=(a,b)=>b?Math.round(a/b*100):0;
+const MO=["","Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+const MOL=["","Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const TLBL={angestellt_scouter:"Ang. Scouter",hgb_scouter:"§84 Scout",angestellt_vertriebler:"Ang. VB",hgb_vertriebler_agentur:"§84 VB Ag.",hgb_vertriebler_haupt:"§84 VB Hpt."};
+const TCLR={angestellt_scouter:C.B,hgb_scouter:C.P,angestellt_vertriebler:C.G,hgb_vertriebler_agentur:C.O,hgb_vertriebler_haupt:C.Y};
+const PICS={sale_basis:"⚡",termin_sf:"📅",eigenlead:"🎯",empfehlung:"👥",speichererweiterung:"🔋"};
+const STCFG={entwurf:{l:"Offen",c:C.O,bg:C.OD},freigegeben:{l:"Freigeg.",c:C.B,bg:C.BD},ausgezahlt:{l:"Bezahlt",c:C.G,bg:C.GD}};
+const QICD={scout_app:"🗺️",field_app:"⚡",manuell:"✋"};
+
+// Abzug-Kategorien
+const ABZ_KAT={
+  auto:     {icon:"🚗",label:"Fahrzeug",    color:C.O},
+  equipment:{icon:"💻",label:"Equipment",   color:C.B},
+  werkzeug: {icon:"🔧",label:"Werkzeug",    color:C.T},
+  uniform:  {icon:"👕",label:"Bekleidung",  color:C.P},
+  schulung: {icon:"🎓",label:"Schulung",    color:C.Pk},
+  sonstiges:{icon:"📋",label:"Sonstiges",   color:C.ts}
+};
+
+// Liegt ein Abzug in diesem Monat?
+function abzugAktivInMonat(a, bM, bJ) {
+  if(!a.aktiv) return false;
+  // Startdatum prüfen
+  const startOk = a.jahr_start < bJ || (a.jahr_start===bJ && a.monat_start<=bM);
+  if(!startOk) return false;
+  if(a.typ==="einmalig") return a.monat_start===bM && a.jahr_start===bJ;
+  // Wiederkehrend: kein Ende oder Ende noch nicht erreicht
+  if(!a.monat_ende||!a.jahr_ende) return true;
+  const endeOk = a.jahr_ende > bJ || (a.jahr_ende===bJ && a.monat_ende>=bM);
+  return endeOk;
+}
+
+// Abzüge für einen MA in diesem Monat
+function getAbzuegeForMa(alle, maId, bM, bJ) {
+  return alle.filter(a=>a.mitarbeiter_id===maId && abzugAktivInMonat(a,bM,bJ));
+}
+
+// Kranktage → Gehaltsabzug
+const krankenAbzug=(g,k,at)=>(!k||k<=0||!g)?0:Math.round((g/at)*k*100)/100;
+
+// ── BERECHNUNG ────────────────────────────────────────────────────
+function calcAll(auftraege,mitarb,regeln,vorschuesse,kranktage,abzuege,bM,bJ){
+  const RM=Object.fromEntries(regeln.map(r=>[r.id,r]));
+  const MM=Object.fromEntries(mitarb.map(m=>[m.id,m]));
+  const VM=Object.fromEntries(vorschuesse.map(v=>[v.mitarbeiter_id,+v.betrag]));
+  const KM=Object.fromEntries(kranktage.map(k=>[k.mitarbeiter_id,k]));
+
+  const rel=auftraege.filter(a=>{
+    const d=new Date(a.auftrags_datum);
+    return d.getMonth()+1===bM&&d.getFullYear()===bJ&&a.zahlungsstatus!=="offen"&&a.zahlungsstatus!=="storniert"
+  });
+  const sc={};
+  rel.forEach(a=>{if(a.vertriebler_id)sc[a.vertriebler_id]=(sc[a.vertriebler_id]||0)+1});
+
+  const E={};
+  const init=id=>{
+    if(!E[id]){
+      const ma=MM[id];if(!ma)return null;
+      const k=KM[id];
+      const mAbzuege=getAbzuegeForMa(abzuege,id,bM,bJ);
+      const abzugSumme=mAbzuege.reduce((s,a)=>s+(+a.betrag),0);
+      const krankAbz=ma.typ.startsWith("angestellt")?krankenAbzug(+ma.grundgehalt,k?.tage||0,k?.arbeitstage_monat||21):0;
+      E[id]={ma,regel:RM[ma.provisions_regel_id],pos:[],sales:sc[id]||0,staf_bonus:0,staf_ok:false,gesamt:0,vorschuss:VM[id]||0,krank:k||null,krank_abzug:krankAbz,abzuege:mAbzuege,abzug_summe:abzugSumme,netto:0};
+    }
+    return E[id]
+  };
+
+  rel.forEach(a=>{
+    if(a.vertriebler_id){
+      const e=init(a.vertriebler_id);if(!e||!e.regel)return;
+      const r=e.regel,cnt=sc[a.vertriebler_id]||0,sa=r.rueckwirkend&&cnt>=r.staffel_schwelle;
+      const rate=sa?+r.staffel_betrag_sale:+r.basis_betrag_sale;
+      e.pos.push({typ:"sale_basis",nr:a.auftrag_nr,aid:a.id,kunde:a.kunde_name,betrag:rate,info:sa?"Staffel "+eur(r.staffel_betrag_sale):"Basis "+eur(r.basis_betrag_sale),sa});
+      if(a.lead_quelle==="eigenlead" &&+r.betrag_eigenlead>0)  e.pos.push({typ:"eigenlead",         nr:a.auftrag_nr,aid:a.id,kunde:a.kunde_name,betrag:+r.betrag_eigenlead, info:"Eigenlead"});
+      if(a.lead_quelle==="empfehlung"&&+r.betrag_empfehlung>0) e.pos.push({typ:"empfehlung",        nr:a.auftrag_nr,aid:a.id,kunde:a.kunde_name,betrag:+r.betrag_empfehlung,info:"Empfehlung"});
+      if(a.speichererweiterung       &&+r.betrag_speicher>0)    e.pos.push({typ:"speichererweiterung",nr:a.auftrag_nr,aid:a.id,kunde:a.kunde_name,betrag:+r.betrag_speicher, info:"Speicher +"});
+    }
+    if(a.scouter_id){
+      const e=init(a.scouter_id);if(!e||!e.regel)return;const r=e.regel;
+      if(a.termin_stattgefunden&&+r.betrag_termin_sf>0) e.pos.push({typ:"termin_sf", nr:a.auftrag_nr,aid:a.id,kunde:a.kunde_name,betrag:+r.betrag_termin_sf,info:"Termin SF"});
+      if(+r.basis_betrag_sale>0)                        e.pos.push({typ:"sale_basis",nr:a.auftrag_nr,aid:a.id,kunde:a.kunde_name,betrag:+r.basis_betrag_sale,info:"Sale Bonus"});
+    }
+  });
+  mitarb.filter(m=>m.typ.startsWith("angestellt")).forEach(m=>init(m.id));
+  Object.values(E).forEach(e=>{
+    if(!e.regel)return;
+    if(e.regel.rueckwirkend&&e.sales>=e.regel.staffel_schwelle){
+      e.staf_bonus=(+e.regel.staffel_betrag_sale-+e.regel.basis_betrag_sale)*e.pos.filter(p=>p.typ==="sale_basis"&&!p.info.includes("Bonus")).length;
+      e.staf_ok=true;
+    }
+    e.gesamt=e.pos.reduce((s,p)=>s+p.betrag,0);
+    e.netto=Math.max(0,e.gesamt-e.vorschuss-e.krank_abzug-e.abzug_summe);
+  });
+  return{E,rel}
+}
+
+// ── DATEV CSV ─────────────────────────────────────────────────────
+function exportDATEV(eintraege,bM,bJ){
+  const rows=[["Mitarbeiter","Typ","Kürzel","Brutto €","Kranktage","Krankabzug €","Vorschuss €","Abzüge €","Netto €","Staffel","Status"]];
+  eintraege.forEach(e=>rows.push([e.ma.vorname+" "+e.ma.nachname,TLBL[e.ma.typ]||e.ma.typ,e.ma.kuerzel,e.gesamt.toFixed(2),(e.krank?.tage||0),(e.krank_abzug||0).toFixed(2),e.vorschuss.toFixed(2),e.abzug_summe.toFixed(2),e.netto.toFixed(2),e.staf_ok?"Ja":"Nein",STCFG[e.status]?.l||e.status]));
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(";")).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`beedoo-pay-${bJ}-${String(bM).padStart(2,"0")}.csv`;a.click();
+}
+
+// ── SLACK ─────────────────────────────────────────────────────────
+async function sendSlack(wh,blocks){if(!wh)return;try{await fetch(wh,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({blocks})})}catch(e){}}
+function slackBlocks(e,bM,bJ,action){
+  return[
+    {type:"section",text:{type:"mrkdwn",text:`${action==="ausgezahlt"?"💸":"✅"} *Abrechnung ${MOL[bM]} ${bJ}*`}},
+    {type:"section",fields:[
+      {type:"mrkdwn",text:`*Mitarbeiter:*\n${e.ma.vorname} ${e.ma.nachname} (${e.ma.kuerzel})`},
+      {type:"mrkdwn",text:`*Netto:*\n${eur(e.netto)}`},
+      {type:"mrkdwn",text:`*Brutto:*\n${eur(e.gesamt)}`},
+      {type:"mrkdwn",text:`*Sales:*\n${e.sales}${e.staf_ok?" ⚡":""}`},
+      ...(e.vorschuss>0?[{type:"mrkdwn",text:`*Vorschuss:*\n-${eur(e.vorschuss)}`}]:[]),
+      ...(e.abzug_summe>0?[{type:"mrkdwn",text:`*Abzüge:*\n-${eur(e.abzug_summe)}`}]:[]),
+      ...(e.krank_abzug>0?[{type:"mrkdwn",text:`*Kranktage (${e.krank?.tage}d):*\n-${eur(e.krank_abzug)}`}]:[]),
+    ]},{type:"divider"}
+  ]
+}
+
+// ── PDF ───────────────────────────────────────────────────────────
+// ── PORTAL-SPEICHERUNG ────────────────────────────────────────────
+async function saveToPortal(e, bM, bJ) {
+  const ma=e.ma;
+  const belegNr=`${bJ}-${String(bM).padStart(2,"0")}-${ma.kuerzel}`;
+  // HTML generieren (gleiche Funktion, ohne print-Dialog)
+  const htmlContent = buildPDFHtml(e, bM, bJ);
+  const payload = {
+    mitarbeiter_id: ma.id,
+    monat: bM,
+    jahr: bJ,
+    beleg_nr: belegNr,
+    html_content: htmlContent,
+    gesamt_betrag: e.gesamt,
+    netto_betrag: e.netto,
+    status: "erstellt"
+  };
+  const r = await fetch(SB+"/rest/v1/pay_dokumente", {
+    method:"POST",
+    headers:{...H,Prefer:"return=representation,resolution=merge-duplicates"},
+    body:JSON.stringify(payload)
+  });
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+function buildPDFHtml(e,bM,bJ){
+  const ma=e.ma,r=e.regel,isHgb=ma.typ.startsWith("hgb");
+  const today=new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"});
+  const belegNr=`${bJ}-${String(bM).padStart(2,"0")}-${ma.kuerzel}`;
+  const n2=v=>new Intl.NumberFormat("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2}).format(+v||0);
+  const posRows=e.pos.length>0
+    ? e.pos.map(p=>`<tr><td style="padding:6px 8px;border-bottom:1px solid #eee;color:#555">${p.nr||"–"}</td><td style="padding:6px 8px;border-bottom:1px solid #eee">${p.kunde||"–"}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;color:#555">${p.info}${p.sa?" ⚡":""}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${n2(p.betrag)}</td></tr>`).join("")
+    : `<tr><td colspan="4" style="padding:10px 8px;color:#999;font-style:italic">Keine Einzelpositionen erfasst</td></tr>`;
+  const staffelRow=e.staf_ok&&r?`<tr style="background:#fffbeb"><td colspan="3" style="padding:6px 8px;border-bottom:1px solid #fde68a;color:#92400e"><b>Staffelbonus: ${e.sales} Sales ≥ ${r.staffel_schwelle} – rückw. ${n2(r.staffel_betrag_sale)} €/Sale</b></td><td style="padding:6px 8px;border-bottom:1px solid #fde68a;text-align:right;color:#92400e;font-weight:700">+${n2(e.staf_bonus)}</td></tr>`:"";
+  const abzugSum=e.abzug_summe||0;
+  const gesamtAbzuege=abzugSum+(e.krank_abzug||0)+(e.vorschuss||0);
+  const finRows=[
+    {l:"Provisionen (Sales)",v:n2(e.gesamt),bold:false,clr:""},
+    ...(e.staf_ok?[{l:`⚡ Staffelbonus (${e.sales} Sales)`,v:"+"+n2(e.staf_bonus),bold:false,clr:"#92400e"}]:[]),
+    ...(abzugSum>0?[{l:"Abzüge",v:"-"+n2(abzugSum),bold:false,clr:"#991b1b"}]:[]),
+    ...(e.krank_abzug>0?[{l:`Kranktage-Abzug (${e.krank?.tage} Tage)`,v:"-"+n2(e.krank_abzug),bold:false,clr:"#991b1b"}]:[]),
+    ...(e.vorschuss>0?[{l:"Vorschuss",v:"-"+n2(e.vorschuss),bold:false,clr:"#991b1b"}]:[]),
+    {l:"Zwischensumme",v:n2(e.gesamt-gesamtAbzuege),bold:true,clr:""},
+    {l:"Auszahlungssumme",v:n2(e.netto),bold:true,clr:"#166534",big:true},
+  ].map(row=>`<tr style="${row.big?"border-top:2px solid #111;background:#f0fdf4":""}"><td style="padding:${row.big?"9":"6"}px 10px;border-bottom:1px solid #eee;${row.bold?"font-weight:700;":""}color:${row.clr||"#111"};${row.big?"font-size:14px":""}">${row.l}</td><td style="padding:${row.big?"9":"6"}px 10px;border-bottom:1px solid #eee;text-align:right;${row.bold?"font-weight:700;":""}color:${row.clr||"#111"};${row.big?"font-size:14px":""}">${row.v}</td></tr>`).join("");
+  const rightTable=e.abzuege&&e.abzuege.length>0
+    ? `<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr style="background:#f5f5f5"><th style="padding:6px 8px;font-size:9px;text-transform:uppercase;color:#888;text-align:left;border-bottom:2px solid #ddd">Bezeichnung</th><th style="padding:6px 8px;font-size:9px;text-transform:uppercase;color:#888;border-bottom:2px solid #ddd">Typ</th><th style="padding:6px 8px;font-size:9px;text-transform:uppercase;color:#888;text-align:right;border-bottom:2px solid #ddd">Betrag</th></tr></thead><tbody>${e.abzuege.map(a=>`<tr><td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:10px">${(ABZ_KAT[a.kategorie]||ABZ_KAT.sonstiges).icon} ${a.bezeichnung}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:9px;color:${a.typ==="wiederkehrend"?"#b45309":"#1d4ed8"}">${a.typ==="wiederkehrend"?"↻ mtl.":"1× einmalig"}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right;font-size:10px;color:#991b1b;font-weight:600">${n2(a.betrag)}</td></tr>`).join("")}<tr style="background:#fef2f2"><td colspan="2" style="padding:6px 8px;font-weight:700;font-size:10px">Gesamt</td><td style="padding:6px 8px;text-align:right;font-weight:700;color:#991b1b">${n2(abzugSum)}</td></tr></tbody></table>`
+    : r&&r.staffel_schwelle<999?`<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr style="background:#f5f5f5"><th colspan="2" style="padding:6px 8px;font-size:9px;text-transform:uppercase;color:#888;text-align:left;border-bottom:2px solid #ddd">Staffel-Modell</th></tr></thead><tbody><tr><td style="padding:5px 8px;font-size:10px;color:#555">Basis je Sale</td><td style="padding:5px 8px;text-align:right;font-size:10px">${n2(r.basis_betrag_sale)}</td></tr><tr><td style="padding:5px 8px;font-size:10px;color:#555">Staffel ab</td><td style="padding:5px 8px;text-align:right;font-size:10px">${r.staffel_schwelle} Sales</td></tr><tr><td style="padding:5px 8px;font-size:10px;color:#555">Erreicht?</td><td style="padding:5px 8px;text-align:right;font-size:10px;font-weight:700;color:${e.staf_ok?"#166534":"#991b1b"}">${e.staf_ok?"✓ Ja":"Nein ("+e.sales+"/"+r.staffel_schwelle+")"}</td></tr>${e.staf_ok?`<tr style="background:#fffbeb"><td style="padding:5px 8px;font-size:10px;font-weight:700;color:#92400e">Staffelbonus</td><td style="padding:5px 8px;text-align:right;font-weight:700;color:#92400e">+${n2(e.staf_bonus)}</td></tr>`:""}</tbody></table>`
+    : `<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr style="background:#f5f5f5"><th colspan="2" style="padding:6px 8px;font-size:9px;text-transform:uppercase;color:#888;border-bottom:2px solid #ddd">Sales-Übersicht</th></tr></thead><tbody><tr><td style="padding:5px 8px;font-size:10px;color:#555">Sales</td><td style="padding:5px 8px;text-align:right;font-weight:700">${e.sales}</td></tr><tr><td style="padding:5px 8px;font-size:10px;color:#555">Rate</td><td style="padding:5px 8px;text-align:right">${r?n2(r.basis_betrag_sale):"–"}</td></tr></tbody></table>`;
+  const rightTitle=e.abzuege&&e.abzuege.length>0?"Abzüge-Konto":r&&r.staffel_schwelle<999?"Staffel-Info":"Sales-Info";
+
+  return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Gutschrift ${belegNr}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11.5px;color:#111;background:#fff}.page{width:210mm;min-height:297mm;padding:15mm 18mm 20mm;margin:0 auto;position:relative}@media print{body{margin:0}.page{padding:12mm 16mm 16mm;page-break-after:always}}.topbar{font-size:9px;color:#555;border-bottom:1px solid #ddd;padding-bottom:6px;margin-bottom:14px}.logo-area{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}.bee-logo{font-family:Arial Black,Arial;font-size:28px;font-weight:900;letter-spacing:-1px;color:#111;line-height:1}.bee-logo span{color:#FDE154}.bee-sub{font-size:9px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-top:2px}.date-block{text-align:right;font-size:11px;line-height:1.8}.date-block .lbl{color:#888}.addr-block{font-size:11.5px;line-height:1.7;margin-bottom:20px}.addr-block .name{font-size:13px;font-weight:700}.beleg-nr{font-size:22px;font-weight:700;color:#111;margin-bottom:2px}.beleg-sub{font-size:12px;color:#666;margin-bottom:14px}.two-col{display:grid;grid-template-columns:58% 40%;gap:2%}.box-title{font-size:11px;font-weight:700;color:#E07800;margin-bottom:6px}table.fin{width:100%;border-collapse:collapse;font-size:11px}table.fin td{padding:6px 10px;border-bottom:1px solid #eee}.fin-label{color:#E07800}.legal{margin-top:18px;font-size:10.5px;color:#555;line-height:1.6;border-top:1px solid #eee;padding-top:10px}.footer{position:absolute;bottom:14mm;left:18mm;right:18mm;border-top:1px solid #ddd;padding-top:8px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}.ft-col{font-size:8.5px;color:#666;line-height:1.6}.ft-col .ft-hd{display:flex;align-items:center;gap:5px;margin-bottom:3px;font-weight:700;color:#111;font-size:9px}.ft-icon{width:16px;height:16px;background:#111;border-radius:2px;display:flex;align-items:center;justify-content:center;flex-shrink:0}.ft-icon span{font-size:8px;font-weight:900;color:#FDE154;font-family:Arial Black}table.pos{width:100%;border-collapse:collapse;font-size:10.5px}table.pos th{background:#f5f5f5;padding:6px 8px;text-align:left;border-bottom:2px solid #ddd;font-size:9px;text-transform:uppercase;color:#888}table.pos td{padding:6px 8px;border-bottom:1px solid #eee}</style>
+</head><body>
+<div class="page">
+  <div class="topbar">Telecommunication · eBusiness · Solar &amp; Wärmepumpe · Sales-Promotion</div>
+  <div class="logo-area"><div><div class="bee-logo">bee<span>-doo</span></div><div class="bee-sub">Energy for you</div></div><div class="date-block"><div><span class="lbl">Datum: </span><b>${today}</b></div><div><span class="lbl">Leistungszeitraum: </span><b>${bJ}/${String(bM).padStart(2,"0")}</b></div></div></div>
+  <div style="font-size:9px;color:#888;border-bottom:1px dotted #ccc;padding-bottom:4px;margin-bottom:10px">bee-doo GmbH · Am Stadtholz 39 · D-33609 Bielefeld</div>
+  <div class="addr-block"><div class="name">${ma.vorname} ${ma.nachname}</div><div style="color:#888;font-size:10.5px">${(TLBL[ma.typ]||ma.typ)} · ${ma.kuerzel}</div></div>
+  <div class="beleg-nr">Gutschrift-Belegnummer: ${belegNr}</div>
+  <div class="beleg-sub">${ma.vorname} ${ma.nachname} · Leistungszeitraum ${MOL[bM]} ${bJ}</div>
+  <hr style="border:none;border-top:1px solid #eee;margin-bottom:14px">
+  <div class="two-col"><div><table class="fin"><tbody>${finRows}</tbody></table></div><div><div class="box-title">${rightTitle}</div>${rightTable}</div></div>
+  ${isHgb?`<div style="margin-top:18px;font-size:10.5px;color:#555;border-top:1px solid #eee;padding-top:10px">Gem. Kleinunternehmerregelung §19 Abs. 1 UStG von der Umsatzsteuer befreit. Diese Gutschrift gemäß §14 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers.</div>`:`<div style="margin-top:18px;font-size:10.5px;color:#555;border-top:1px solid #eee;padding-top:10px">Abrechnung für angestellten Mitarbeiter. Auszahlungssumme gemäß Arbeitsvertrag und Provisionsregelung ${bJ}.</div>`}
+  <div class="footer"><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Firmensitz</div>bee-doo GmbH<br>Am Stadtholz 39<br>D-33609 Bielefeld</div><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Kontakt</div>www.bee-doo.de<br>info@bee-doo.de<br>Fon: 0800 22 33 664</div><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Bankverbindung</div>IBAN DE90 2545 0110<br>0031 0399 85<br>BIC NOLADE21SWB</div><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Geschäftsführer</div>Patrick Grabowski<br>Olaf Schader<br>HRB 201542 Hannover</div></div>
+</div>
+<div class="page">
+  <div class="topbar">Provisionen ${MOL[bM]} ${bJ}</div>
+  <div style="margin-bottom:16px"><div style="font-size:18px;font-weight:700">${ma.vorname} ${ma.nachname} <span style="font-size:12px;color:#888;font-weight:400">(${ma.kuerzel})</span></div></div>
+  <div style="color:#E07800;font-weight:700;font-size:11px;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:4px">Zusammenfassung</div>
+  <table style="width:60%;border-collapse:collapse;font-size:11px;margin-bottom:20px"><thead><tr style="background:#f5f5f5"><th style="padding:6px 10px;border-bottom:2px solid #ddd;text-align:left;font-size:9px;text-transform:uppercase;color:#888">Position</th><th style="padding:6px 10px;border-bottom:2px solid #ddd;text-align:right;font-size:9px;text-transform:uppercase;color:#888">Anzahl</th><th style="padding:6px 10px;border-bottom:2px solid #ddd;text-align:right;font-size:9px;text-transform:uppercase;color:#888">Summe</th></tr></thead><tbody><tr><td style="padding:6px 10px;border-bottom:1px solid #eee">Provisionen</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${e.pos.length}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${n2(e.gesamt)}</td></tr>${abzugSum>0?`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#991b1b">Abzüge</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;color:#991b1b">${e.abzuege.length}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;color:#991b1b">-${n2(abzugSum)}</td></tr>`:""}${e.vorschuss>0?`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#991b1b">Vorschuss</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">–</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;color:#991b1b">-${n2(e.vorschuss)}</td></tr>`:""}<tr style="font-weight:700;border-top:2px solid #111"><td style="padding:7px 10px">Summe:</td><td style="padding:7px 10px;text-align:right">${e.pos.length}</td><td style="padding:7px 10px;text-align:right;color:#166534">${n2(e.netto)}</td></tr></tbody></table>
+  <div style="color:#E07800;font-weight:700;font-size:11px;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:4px">Einzelpositionen</div>
+  <table class="pos"><thead><tr><th>Auftrag</th><th>Kunde</th><th>Art</th><th style="text-align:right">Provision</th></tr></thead><tbody>${posRows}${staffelRow}<tr style="font-weight:700;border-top:2px solid #333;background:#f9f9f9"><td colspan="3" style="padding:7px 8px">Summe</td><td style="padding:7px 8px;text-align:right;font-size:13px">${n2(e.gesamt)}</td></tr></tbody></table>
+  <div class="footer"><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Firmensitz</div>bee-doo GmbH<br>Am Stadtholz 39<br>D-33609 Bielefeld</div><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Kontakt</div>www.bee-doo.de<br>info@bee-doo.de<br>Fon: 0800 22 33 664</div><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Bankverbindung</div>IBAN DE90 2545 0110<br>0031 0399 85<br>BIC NOLADE21SWB</div><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Geschäftsführer</div>Patrick Grabowski<br>Olaf Schader<br>HRB 201542 Hannover</div></div>
+</div>
+</body></html>`;
+}
+
+// ── SV-BERECHNUNG 2026 ────────────────────────────────────────────
+function calcSV(brutto, settings, ma) {
+  const s = settings;
+  const g = v => parseFloat(s[v]||0);
+
+  // Beitragsbemessungsgrenzen
+  const bbgKV = g('bbg_kv_2026'); // 66.150
+  const bbgRV = g('bbg_rv_2026'); // 96.600
+
+  const baseKV = Math.min(brutto * 12, bbgKV) / 12;
+  const baseRV = Math.min(brutto * 12, bbgRV) / 12;
+
+  const kv_an = Math.round(baseKV * g('sv_kv_an') / 100 * 100) / 100;
+  const pv_an = Math.round(baseKV * g('sv_pv_an') / 100 * 100) / 100;
+  const rv_an = Math.round(baseRV * g('sv_rv_an') / 100 * 100) / 100;
+  const av_an = Math.round(baseRV * g('sv_av_an') / 100 * 100) / 100;
+
+  const kv_ag = Math.round(baseKV * g('sv_kv_ag') / 100 * 100) / 100;
+  const pv_ag = Math.round(baseKV * g('sv_pv_ag') / 100 * 100) / 100;
+  const rv_ag = Math.round(baseRV * g('sv_rv_ag') / 100 * 100) / 100;
+  const av_ag = Math.round(baseRV * g('sv_av_ag') / 100 * 100) / 100;
+
+  const sv_an_gesamt = kv_an + pv_an + rv_an + av_an;
+
+  // Vereinfachte Lohnsteuer-Schätzung (Näherung – echte Berechnung via DATEV)
+  const jBrutto = brutto * 12;
+  const stKl = parseInt(ma.steuerklasse||'1');
+  const freibetrag = [0,11784,23568,11784,0,0,11784][stKl]||11784;
+  const zvE = Math.max(0, jBrutto - freibetrag - sv_an_gesamt*12);
+  let jLst = 0;
+  if(zvE > 0 && zvE <= 17005) jLst = zvE * 0.14 * (1 - 5/zvE);
+  else if(zvE <= 66760) jLst = (228.74 * zvE/10000 - 2397) * zvE/10000 + 965.58;
+  else if(zvE <= 277825) jLst = (108.59 * zvE/10000 - 11602.21) * zvE/10000 + 16440;
+  else jLst = zvE * 0.45 - 18936.88;
+  const mLst = Math.max(0, Math.round(jLst / 12 * 100) / 100);
+
+  // Soli (vereinfacht)
+  const soliSatz = g('soli_satz') / 100;
+  const soliFrei = g('soli_freigrenze');
+  const mSoli = jBrutto > soliFrei ? Math.round(mLst * soliSatz * 100) / 100 : 0;
+
+  // Kirchensteuer
+  const kstSatz = g('kst_bgl') / 100;
+  const mKst = (ma.konfession && ma.konfession !== 'keine') ? Math.round(mLst * kstSatz * 100) / 100 : 0;
+
+  const abzuege_an = sv_an_gesamt + mLst + mSoli + mKst;
+
+  return {
+    kv_an, pv_an, rv_an, av_an, sv_an_gesamt,
+    kv_ag, pv_ag, rv_ag, av_ag,
+    mLst, mSoli, mKst,
+    abzuege_an,
+    nettoApprox: Math.max(0, brutto - abzuege_an)
+  };
+}
+
+// ── PDF GUTSCHRIFT (HGB §84) ───────────────────────────────────────
+function pdfHGB(e, bM, bJ, settings) {
+  const ma = e.ma, r = e.regel;
+  const n2 = v => new Intl.NumberFormat("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2}).format(+v||0);
+  const today = new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"});
+  const belegNr = `${bJ}-${String(bM).padStart(2,"0")}-${ma.kuerzel}`;
+  const adresse = [ma.strasse&&ma.hausnr?`${ma.strasse} ${ma.hausnr}`:"", ma.plz&&ma.ort?`${ma.plz} ${ma.ort}`:""].filter(Boolean).join("<br>");
+  const stNr = ma.steuernummer || "⚠️ nicht hinterlegt";
+  const ustid = ma.ustid || "";
+  const beedooUstId = settings.beedoo_ustid || "DE363829401";
+  const beedooStNr = settings.beedoo_steuernr || "320/5706/4015";
+  const abzugSum = e.abzug_summe||0;
+  const gesamtAbzuege = abzugSum + (e.krank_abzug||0) + (e.vorschuss||0);
+
+  const posRows = e.pos.length > 0
+    ? e.pos.map(p=>`<tr><td style="padding:5px 8px;border-bottom:1px solid #eee;color:#555;font-size:10px">${p.nr||"–"}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:10px">${p.kunde||"–"}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;color:#555;font-size:10px">${p.info}${p.sa?" ⚡":""}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600;font-size:10px">${n2(p.betrag)}</td></tr>`).join("")
+    : `<tr><td colspan="4" style="padding:8px;color:#999;font-style:italic;font-size:10px">Keine Einzelpositionen</td></tr>`;
+
+  const rightTable = e.abzuege&&e.abzuege.length>0 ? `
+    <div style="font-size:10px;font-weight:700;color:#E07800;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid #eee">Abzüge-Konto</div>
+    <table style="width:100%;border-collapse:collapse;font-size:10px">
+      <thead><tr style="background:#f5f5f5"><th style="padding:4px 7px;text-align:left;font-size:9px;color:#888;border-bottom:1px solid #ddd">Bezeichnung</th><th style="padding:4px 7px;text-align:left;font-size:9px;color:#888;border-bottom:1px solid #ddd">Typ</th><th style="padding:4px 7px;text-align:right;font-size:9px;color:#888;border-bottom:1px solid #ddd">Betrag</th></tr></thead>
+      <tbody>
+        ${e.abzuege.map(a=>`<tr><td style="padding:4px 7px;border-bottom:1px solid #eee">${(ABZ_KAT[a.kategorie]||ABZ_KAT.sonstiges).icon} ${a.bezeichnung}</td><td style="padding:4px 7px;border-bottom:1px solid #eee;color:${a.typ==="wiederkehrend"?"#b45309":"#1d4ed8"};font-size:9px">${a.typ==="wiederkehrend"?"↻ mtl.":"1×"}</td><td style="padding:4px 7px;border-bottom:1px solid #eee;text-align:right;color:#991b1b;font-weight:600">${n2(a.betrag)}</td></tr>`).join("")}
+        <tr style="background:#fef2f2"><td colspan="2" style="padding:5px 7px;font-weight:700;font-size:10px">Summe</td><td style="padding:5px 7px;text-align:right;font-weight:700;color:#991b1b">${n2(abzugSum)}</td></tr>
+      </tbody>
+    </table>` : r&&r.staffel_schwelle<999 ? `
+    <div style="font-size:10px;font-weight:700;color:#E07800;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid #eee">Staffel-Modell</div>
+    <table style="width:100%;border-collapse:collapse;font-size:10px">
+      <tbody>
+        <tr><td style="padding:4px 7px;border-bottom:1px solid #eee;color:#555">Basis je Sale</td><td style="padding:4px 7px;border-bottom:1px solid #eee;text-align:right">${n2(r.basis_betrag_sale)}</td></tr>
+        <tr><td style="padding:4px 7px;border-bottom:1px solid #eee;color:#555">Staffel ab</td><td style="padding:4px 7px;border-bottom:1px solid #eee;text-align:right">${r.staffel_schwelle} Sales</td></tr>
+        <tr><td style="padding:4px 7px;border-bottom:1px solid #eee;color:#555">Staffelrate</td><td style="padding:4px 7px;border-bottom:1px solid #eee;text-align:right">${n2(r.staffel_betrag_sale)}</td></tr>
+        <tr><td style="padding:4px 7px;border-bottom:1px solid #eee;color:#555">Erreicht?</td><td style="padding:4px 7px;border-bottom:1px solid #eee;text-align:right;font-weight:700;color:${e.staf_ok?"#166534":"#991b1b"}">${e.staf_ok?"✓ Ja ("+e.sales+" Sales)":"Nein ("+e.sales+"/"+r.staffel_schwelle+")"}</td></tr>
+        ${e.staf_ok?`<tr style="background:#fffbeb"><td style="padding:4px 7px;font-weight:700;color:#92400e">Staffelbonus</td><td style="padding:4px 7px;text-align:right;font-weight:700;color:#92400e">+${n2(e.staf_bonus)}</td></tr>`:""}
+      </tbody>
+    </table>` : `
+    <div style="font-size:10px;font-weight:700;color:#E07800;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid #eee">Sales ${MOL[bM]} ${bJ}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:10px">
+      <tbody>
+        <tr><td style="padding:4px 7px;border-bottom:1px solid #eee;color:#555">Abgerechnete Sales</td><td style="padding:4px 7px;text-align:right;font-weight:700">${e.sales}</td></tr>
+        <tr><td style="padding:4px 7px;border-bottom:1px solid #eee;color:#555">Rate je Sale</td><td style="padding:4px 7px;text-align:right">${r?n2(r.basis_betrag_sale):"–"}</td></tr>
+      </tbody>
+    </table>`;
+
+  const footer = `<div style="position:fixed;bottom:10mm;left:16mm;right:16mm;border-top:1px solid #ddd;padding-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+    <div style="font-size:8px;color:#666;line-height:1.6"><b style="font-size:9px;color:#111;display:block;margin-bottom:2px">Firmensitz</b>bee-doo GmbH<br>Am Stadtholz 39<br>D-33609 Bielefeld</div>
+    <div style="font-size:8px;color:#666;line-height:1.6"><b style="font-size:9px;color:#111;display:block;margin-bottom:2px">Kontakt</b>www.bee-doo.de<br>info@bee-doo.de<br>Fon: 0800 22 33 664</div>
+    <div style="font-size:8px;color:#666;line-height:1.6"><b style="font-size:9px;color:#111;display:block;margin-bottom:2px">Bankverbindung</b>IBAN DE90 2545 0110<br>0031 0399 85<br>BIC NOLADE21SWB</div>
+    <div style="font-size:8px;color:#666;line-height:1.6"><b style="font-size:9px;color:#111;display:block;margin-bottom:2px">Geschäftsführer</b>Patrick Grabowski<br>Olaf Schader<br>${settings.beedoo_hrnr||"HRB 201542"} ${settings.beedoo_amtsgericht||"Hannover"}</div>
+  </div>`;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Gutschrift ${belegNr}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff}
+.pg{width:210mm;min-height:297mm;padding:14mm 16mm 28mm;margin:0 auto;position:relative}
+@media print{.pg{page-break-after:always;padding:12mm 14mm 28mm}}
+</style>
+</head><body>
+
+<!-- SEITE 1 -->
+<div class="pg">
+  <!-- Topbar -->
+  <div style="font-size:8.5px;color:#555;border-bottom:1px solid #ddd;padding-bottom:5px;margin-bottom:12px">
+    Telecommunication · eBusiness · Solar &amp; Wärmepumpe · Sales-Promotion
+    <span style="float:right">USt-IdNr.: ${beedooUstId} · Steuernummer: ${beedooStNr}</span>
+  </div>
+
+  <!-- Logo + Datum -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+    <div>
+      <div style="font-family:Arial Black,Arial;font-size:26px;font-weight:900;letter-spacing:-1px">bee<span style="color:#FDE154">-doo</span></div>
+      <div style="font-size:8.5px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-top:1px">Energy for you</div>
+    </div>
+    <div style="text-align:right;font-size:11px;line-height:1.8">
+      <div><span style="color:#888">Datum:&nbsp;</span><b>${today}</b></div>
+      <div><span style="color:#888">Leistungszeitraum:&nbsp;</span><b>${bJ}/${String(bM).padStart(2,"0")}</b></div>
+    </div>
+  </div>
+
+  <!-- Absender (klein) -->
+  <div style="font-size:8.5px;color:#888;border-bottom:1px dotted #ccc;padding-bottom:4px;margin-bottom:10px">
+    bee-doo GmbH · Am Stadtholz 39 · D-33609 Bielefeld
+  </div>
+
+  <!-- Empfänger -->
+  <div style="font-size:12px;font-weight:700;margin-bottom:2px">${ma.vorname} ${ma.nachname}</div>
+  ${adresse ? `<div style="font-size:11px;color:#444;line-height:1.7;margin-bottom:2px">${adresse}</div>` : `<div style="font-size:10px;color:#f87171;margin-bottom:2px">⚠️ Adresse nicht hinterlegt</div>`}
+  <div style="font-size:9.5px;color:#888;margin-bottom:14px">
+    ${stNr ? `Steuernr.: ${stNr}` : ""}${ustid ? ` · USt-IdNr.: ${ustid}` : ""}
+  </div>
+
+  <!-- Titel -->
+  <div style="font-size:19px;font-weight:700;margin-bottom:2px">Gutschrift-Belegnummer: ${belegNr}</div>
+  <div style="font-size:11px;color:#666;margin-bottom:12px">${ma.vorname} ${ma.nachname} &nbsp;·&nbsp; Leistungszeitraum ${MOL[bM]} ${bJ}</div>
+  <div style="border-top:1px solid #eee;margin-bottom:12px"></div>
+
+  <!-- Zweispaltig -->
+  <div style="display:grid;grid-template-columns:56% 42%;gap:2%">
+    <!-- LINKS: Finanztabelle -->
+    <div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <tbody>
+          <tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#E07800">Provisionen (Vermittlung Solar/WP)</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${n2(e.gesamt)}</td></tr>
+          ${e.staf_ok?`<tr style="background:#fffbeb"><td style="padding:6px 10px;border-bottom:1px solid #fde68a;color:#92400e">Staffelbonus (${e.sales} Sales)</td><td style="padding:6px 10px;border-bottom:1px solid #fde68a;text-align:right;color:#92400e">+${n2(e.staf_bonus)}</td></tr>`:""}
+          <tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#E07800">Rückforderungen</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">0,00</td></tr>
+          <tr><td style="padding:6px 10px;border-bottom:2px solid #999;font-weight:700">Zwischensumme</td><td style="padding:6px 10px;border-bottom:2px solid #999;text-align:right;font-weight:700">${n2(e.gesamt - (e.vorschuss||0) - abzugSum)}</td></tr>
+          ${e.vorschuss>0?`<tr style="background:#fef2f2"><td style="padding:6px 10px;border-bottom:1px solid #fca5a5;color:#991b1b">Vorschuss-Verrechnung</td><td style="padding:6px 10px;border-bottom:1px solid #fca5a5;text-align:right;color:#991b1b">-${n2(e.vorschuss)}</td></tr>`:""}
+          ${abzugSum>0?`<tr style="background:#fef2f2"><td style="padding:6px 10px;border-bottom:1px solid #fca5a5;color:#991b1b">Sachkosten-Abzüge</td><td style="padding:6px 10px;border-bottom:1px solid #fca5a5;text-align:right;color:#991b1b">-${n2(abzugSum)}</td></tr>`:""}
+          <tr><td style="padding:6px 10px;border-bottom:1px solid #eee">Umsatzsteuer (gem. §19 Abs. 1 UStG)</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">0,00</td></tr>
+          <tr style="background:#f0fdf4;border-top:2px solid #111"><td style="padding:9px 10px;font-weight:800;font-size:13px">Auszahlungssumme</td><td style="padding:9px 10px;text-align:right;font-weight:800;font-size:13px;color:#166534">${n2(e.netto)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- RECHTS -->
+    <div>${rightTable}</div>
+  </div>
+
+  <!-- Rechtlicher Hinweis -->
+  <div style="margin-top:16px;font-size:10px;color:#555;line-height:1.6;border-top:1px solid #eee;padding-top:10px">
+    Gem. Kleinunternehmerregelung §19 Abs. 1 UStG von der Umsatzsteuer befreit. Diese Gutschrift gemäß §14 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers. Empfänger: ${ma.vorname} ${ma.nachname}${ma.steuernummer?`, Steuernr. ${ma.steuernummer}`:""}. Aussteller: bee-doo GmbH, ${beedooUstId}.
+  </div>
+
+  ${footer}
+</div>
+
+<!-- SEITE 2: Einzelpositionen -->
+<div class="pg">
+  <div style="font-size:8.5px;color:#555;border-bottom:1px solid #ddd;padding-bottom:5px;margin-bottom:12px">Provisionen ${MOL[bM]} ${bJ}</div>
+  <div style="font-size:17px;font-weight:700;margin-bottom:14px">${ma.vorname} ${ma.nachname} <span style="font-size:11px;color:#888;font-weight:400">(${ma.kuerzel})</span></div>
+
+  <div style="color:#E07800;font-weight:700;font-size:11px;margin-bottom:7px;border-bottom:1px solid #eee;padding-bottom:3px">Zusammenfassung</div>
+  <table style="width:55%;border-collapse:collapse;font-size:11px;margin-bottom:18px">
+    <thead><tr style="background:#f5f5f5"><th style="padding:5px 8px;border-bottom:2px solid #ddd;text-align:left;font-size:9px;text-transform:uppercase;color:#888">Mitarbeiter</th><th style="padding:5px 8px;border-bottom:2px solid #ddd;text-align:right;font-size:9px;text-transform:uppercase;color:#888">Anzahl</th><th style="padding:5px 8px;border-bottom:2px solid #ddd;text-align:right;font-size:9px;text-transform:uppercase;color:#888">Summe</th></tr></thead>
+    <tbody>
+      <tr><td style="padding:5px 8px;border-bottom:1px solid #eee">[${ma.kuerzel}] ${ma.vorname} ${ma.nachname}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${e.pos.length}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${n2(e.gesamt)}</td></tr>
+      <tr style="font-weight:700;border-top:2px solid #111"><td style="padding:6px 8px">Summe:</td><td style="padding:6px 8px;text-align:right">${e.pos.length}</td><td style="padding:6px 8px;text-align:right;color:#166534">${n2(e.netto)}</td></tr>
+    </tbody>
+  </table>
+
+  <div style="color:#E07800;font-weight:700;font-size:11px;margin-bottom:7px;border-bottom:1px solid #eee;padding-bottom:3px">Einzelpositionen</div>
+  <table style="width:100%;border-collapse:collapse;font-size:10.5px">
+    <thead><tr style="background:#f5f5f5"><th style="padding:5px 8px;border-bottom:2px solid #ddd;text-align:left;font-size:9px;text-transform:uppercase;color:#888">Auftrag</th><th style="padding:5px 8px;border-bottom:2px solid #ddd;text-align:left;font-size:9px;text-transform:uppercase;color:#888">Kunde</th><th style="padding:5px 8px;border-bottom:2px solid #ddd;text-align:left;font-size:9px;text-transform:uppercase;color:#888">Art</th><th style="padding:5px 8px;border-bottom:2px solid #ddd;text-align:right;font-size:9px;text-transform:uppercase;color:#888">Provision</th></tr></thead>
+    <tbody>
+      ${posRows}
+      ${e.staf_ok&&r?`<tr style="background:#fffbeb"><td colspan="3" style="padding:5px 8px;color:#92400e;font-size:10px"><b>⚡ Staffelbonus: ${e.sales} Sales ≥ ${r.staffel_schwelle}</b></td><td style="padding:5px 8px;text-align:right;color:#92400e;font-weight:700">+${n2(e.staf_bonus)}</td></tr>`:""}
+      <tr style="font-weight:700;border-top:2px solid #333;background:#f9f9f9"><td colspan="3" style="padding:6px 8px">Summe</td><td style="padding:6px 8px;text-align:right;font-size:12px">${n2(e.gesamt)}</td></tr>
+    </tbody>
+  </table>
+  ${footer}
+</div>
+</body></html>`;
+}
+
+// ── PDF ENTGELTABRECHNUNG (Angestellte) ───────────────────────────
+function pdfAngestellt(e, bM, bJ, settings) {
+  const ma = e.ma, r = e.regel;
+  const n2 = v => new Intl.NumberFormat("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2}).format(+v||0);
+  const today = new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"});
+  const belegNr = `ENTG-${bJ}-${String(bM).padStart(2,"0")}-${ma.kuerzel}`;
+  const brutto = e.gesamt + (parseFloat(ma.grundgehalt)||0);
+  const sv = calcSV(brutto, settings, ma);
+  const abzugSum = e.abzug_summe||0;
+  const nettoAusz = Math.max(0, brutto - sv.abzuege_an - (e.vorschuss||0) - abzugSum - (e.krank_abzug||0));
+  const adresse = [ma.strasse&&ma.hausnr?`${ma.strasse} ${ma.hausnr}`:"", ma.plz&&ma.ort?`${ma.plz} ${ma.ort}`:""].filter(Boolean).join(", ");
+  const gebDat = ma.geburtsdatum ? new Date(ma.geburtsdatum).toLocaleDateString("de-DE") : "–";
+  const beedooStNr = settings.beedoo_steuernr || "320/5706/4015";
+  const beedooHR = `${settings.beedoo_hrnr||"HRB 201542"} ${settings.beedoo_amtsgericht||"Hannover"}`;
+
+  const footer = `<div style="position:fixed;bottom:10mm;left:14mm;right:14mm;border-top:1px solid #ddd;padding-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+    <div style="font-size:8px;color:#666;line-height:1.6"><b style="font-size:9px;color:#111;display:block;margin-bottom:2px">Arbeitgeber</b>bee-doo GmbH<br>Am Stadtholz 39<br>D-33609 Bielefeld</div>
+    <div style="font-size:8px;color:#666;line-height:1.6"><b style="font-size:9px;color:#111;display:block;margin-bottom:2px">Registrierung</b>Steuernr. ${beedooStNr}<br>${beedooHR}<br>www.bee-doo.de</div>
+    <div style="font-size:8px;color:#666;line-height:1.6"><b style="font-size:9px;color:#111;display:block;margin-bottom:2px">Bankverbindung</b>IBAN DE90 2545 0110<br>0031 0399 85<br>BIC NOLADE21SWB</div>
+    <div style="font-size:8px;color:#666;line-height:1.6"><b style="font-size:9px;color:#111;display:block;margin-bottom:2px">Geschäftsführer</b>Patrick Grabowski<br>Olaf Schader<br>info@bee-doo.de</div>
+  </div>`;
+
+  const row = (l,v,clr,bold,bg,indent) => `<tr style="background:${bg||"#fff"}">
+    <td style="padding:${bold?"7":"5"}px 10px;border-bottom:1px solid #eee;${indent?"padding-left:20px;color:#666":""}${bold?"font-weight:700":""}${clr?";color:"+clr:""};font-size:${bold?"12":"11"}px">${l}</td>
+    <td style="padding:${bold?"7":"5"}px 10px;border-bottom:1px solid #eee;text-align:right;${bold?"font-weight:700":""}${clr?";color:"+clr:""};font-size:${bold?"12":"11"}px">${v}</td>
+  </tr>`;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Entgeltabrechnung ${belegNr}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff}.pg{width:210mm;min-height:297mm;padding:12mm 14mm 28mm;margin:0 auto;position:relative}@media print{.pg{page-break-after:always;padding:10mm 14mm 28mm}}</style>
+</head><body>
+<div class="pg">
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #FDE154;padding-bottom:10px;margin-bottom:14px">
+    <div>
+      <div style="font-family:Arial Black,Arial;font-size:24px;font-weight:900;letter-spacing:-1px">bee<span style="color:#FDE154">-doo</span></div>
+      <div style="font-size:8px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-top:2px">Energy for you</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:14px;font-weight:700;color:#111">ENTGELTABRECHNUNG</div>
+      <div style="font-size:10px;color:#666;margin-top:2px">${MOL[bM]} ${bJ} &nbsp;·&nbsp; Belegnr.: ${belegNr}</div>
+      <div style="font-size:10px;color:#666">Erstellt: ${today}</div>
+    </div>
+  </div>
+
+  <!-- Stammdaten-Karten -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <!-- Arbeitnehmer -->
+    <div style="border:1px solid #e5e5e5;border-radius:6px;padding:10px">
+      <div style="font-size:9px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Arbeitnehmer</div>
+      <div style="font-size:12.5px;font-weight:700;margin-bottom:3px">${ma.vorname} ${ma.nachname}</div>
+      <div style="font-size:10px;color:#555;line-height:1.6">
+        ${adresse||"⚠️ Adresse fehlt"}<br>
+        Steuer-ID: ${ma.steuer_id||"⚠️ fehlt"} &nbsp;·&nbsp; SVNR: ${ma.svnr||"⚠️ fehlt"}<br>
+        Steuerklasse: ${ma.steuerklasse||"–"} &nbsp;·&nbsp; Kirchensteuer: ${ma.konfession&&ma.konfession!=="keine"?ma.konfession:"keine"}<br>
+        Krankenkasse: ${ma.kv_kasse||"–"}<br>
+        Geburtsdatum: ${gebDat}
+      </div>
+    </div>
+    <!-- Arbeitgeber -->
+    <div style="border:1px solid #e5e5e5;border-radius:6px;padding:10px">
+      <div style="font-size:9px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Arbeitgeber</div>
+      <div style="font-size:12.5px;font-weight:700;margin-bottom:3px">bee-doo GmbH</div>
+      <div style="font-size:10px;color:#555;line-height:1.6">
+        Am Stadtholz 39, D-33609 Bielefeld<br>
+        Steuernr.: ${beedooStNr}<br>
+        Beschäftigt seit: ${ma.eintrittsdatum?new Date(ma.eintrittsdatum).toLocaleDateString("de-DE"):"–"}<br>
+        Beschäftigungsart: Angestellt / Vollzeit<br>
+        Abrechnungszeitraum: 01.${String(bM).padStart(2,"0")}.${bJ} – ${new Date(bJ,bM,0).getDate()}.${String(bM).padStart(2,"0")}.${bJ}
+      </div>
+    </div>
+  </div>
+
+  <!-- Haupttabelle -->
+  <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Lohn- und Gehaltsbestandteile</div>
+  <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px">
+    <thead><tr style="background:#f5f5f5"><th style="padding:6px 10px;text-align:left;border-bottom:2px solid #ddd;font-size:9.5px;text-transform:uppercase;color:#555">Position</th><th style="padding:6px 10px;text-align:right;border-bottom:2px solid #ddd;font-size:9.5px;text-transform:uppercase;color:#555">Betrag €</th></tr></thead>
+    <tbody>
+      ${row("Grundgehalt",n2(ma.grundgehalt||0),"","","")}
+      ${e.pos.length>0?row("Provisionen (variable Vergütung)",n2(e.gesamt),"","",""):""}
+      ${e.staf_ok?row("⚡ Staffelbonus","+"+n2(e.staf_bonus),"#92400e","","#fffbeb"):""}
+      ${row("BRUTTO-ENTGELT",n2(brutto),"#111",true,"#f9f9f9")}
+      <tr style="background:#f9fafb"><td colspan="2" style="padding:5px 10px;font-size:9px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px">Gesetzliche Abzüge Arbeitnehmer</td></tr>
+      ${row("Krankenversicherung AN ("+n2(parseFloat(settings.sv_kv_an||7.3))+"%)","-"+n2(sv.kv_an),"#991b1b","","","yes")}
+      ${row("Pflegeversicherung AN ("+n2(parseFloat(settings.sv_pv_an||1.7))+"%)","-"+n2(sv.pv_an),"#991b1b","","","yes")}
+      ${row("Rentenversicherung AN ("+n2(parseFloat(settings.sv_rv_an||9.3))+"%)","-"+n2(sv.rv_an),"#991b1b","","","yes")}
+      ${row("Arbeitslosenversicherung AN ("+n2(parseFloat(settings.sv_av_an||1.3))+"%)","-"+n2(sv.av_an),"#991b1b","","","yes")}
+      ${row("Summe Sozialversicherung AN","-"+n2(sv.sv_an_gesamt),"#991b1b",true,"")}
+      ${row("Lohnsteuer (Kl. "+( ma.steuerklasse||"1")+" – Näherungswert*)","-"+n2(sv.mLst),"#991b1b","","")}
+      ${row("Solidaritätszuschlag","-"+n2(sv.mSoli),"#991b1b","","")}
+      ${row("Kirchensteuer"+(ma.konfession&&ma.konfession!=="keine"?" ("+ma.konfession+")":" (keine)"),"-"+n2(sv.mKst),"#991b1b","","")}
+      ${e.krank_abzug>0?row("Kranktage-Abzug ("+( e.krank?.tage||0)+" Tage)","-"+n2(e.krank_abzug),"#991b1b","","#fef2f2"):""}
+      ${e.vorschuss>0?row("Vorschuss-Verrechnung","-"+n2(e.vorschuss),"#991b1b","","#fef2f2"):""}
+      ${abzugSum>0?row("Sachkosten-Abzüge (Fahrzeug/Equipment)","-"+n2(abzugSum),"#991b1b","","#fef2f2"):""}
+      ${row("NETTO-AUSZAHLUNGSBETRAG",n2(nettoAusz),"#166534",true,"#f0fdf4")}
+    </tbody>
+  </table>
+
+  <!-- AG-Kosten Info -->
+  <div style="background:#f9fafb;border:1px solid #e5e5e5;border-radius:6px;padding:10px;margin-bottom:10px">
+    <div style="font-size:9px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px">Arbeitgeberanteile (zur Information)</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:10px">
+      <div><span style="color:#888">KV AG (${n2(settings.sv_kv_ag||7.3)}%)</span><br><b>${n2(sv.kv_ag)} €</b></div>
+      <div><span style="color:#888">PV AG (${n2(settings.sv_pv_ag||1.7)}%)</span><br><b>${n2(sv.pv_ag)} €</b></div>
+      <div><span style="color:#888">RV AG (${n2(settings.sv_rv_ag||9.3)}%)</span><br><b>${n2(sv.rv_ag)} €</b></div>
+      <div><span style="color:#888">AV AG (${n2(settings.sv_av_ag||1.3)}%)</span><br><b>${n2(sv.av_ag)} €</b></div>
+    </div>
+    <div style="font-size:10px;margin-top:6px;color:#555">Gesamtkosten AG: <b>${n2(brutto + sv.kv_ag + sv.pv_ag + sv.rv_ag + sv.av_ag)} €</b></div>
+  </div>
+
+  <!-- Hinweis -->
+  <div style="font-size:9px;color:#888;line-height:1.6;border-top:1px solid #eee;padding-top:8px">
+    * Die Lohnsteuer ist ein Näherungswert. Die rechtsverbindliche Abrechnung erfolgt durch den Steuerberater / DATEV. Diese Abrechnung dient der internen Information gem. §108 GewO.<br>
+    Bitte prüfen Sie die Angaben und wenden Sie sich bei Abweichungen an die Buchhaltung: info@bee-doo.de
+  </div>
+
+  ${footer}
+</div>
+</body></html>`;
+}
+
+// ── MAIN PDF DISPATCHER ───────────────────────────────────────────
+async function doPDF(e, bM, bJ, settingsArg) {
+  const ma = e.ma;
+  const isHgb = ma.typ.startsWith("hgb");
+
+  // Settings aus Supabase holen falls nicht übergeben
+  let settings = settingsArg || {};
+  if(!settingsArg) {
+    try {
+      const res = await fetch(SB+"/rest/v1/pay_settings", {headers: H});
+      const arr = await res.json();
+      settings = Object.fromEntries(arr.map(s=>[s.key, s.value]));
+    } catch(err) { console.warn("Settings nicht geladen:", err); }
+  }
+
+  // MA-Daten nochmal frisch holen (mit neuen Feldern)
+  try {
+    const res = await fetch(SB+"/rest/v1/pay_mitarbeiter?id=eq."+ma.id+"&select=*", {headers: H});
+    const arr = await res.json();
+    if(arr[0]) Object.assign(e.ma, arr[0]);
+  } catch(err) { console.warn("MA-Daten nicht nachgeladen:", err); }
+
+  const html = isHgb ? pdfHGB(e, bM, bJ, settings) : pdfAngestellt(e, bM, bJ, settings);
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>w.print(), 600);
+}
+
+
+// ── ATOMS ─────────────────────────────────────────────────────────
+const Spi=({s=18,color})=><div style={{width:s,height:s,border:`2px solid ${C.b}`,borderTop:`2px solid ${color||C.Y}`,borderRadius:"50%",animation:"spin .7s linear infinite",flexShrink:0}}/>;
+const Badge=({c,bg,l})=><span style={{background:bg,color:c,border:`1px solid ${c}30`,borderRadius:3,padding:"1px 6px",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{l}</span>;
+const Chip=({c,l})=><span style={{background:`${c}20`,color:c,borderRadius:3,padding:"1px 6px",fontSize:9,fontWeight:700,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</span>;
+const Pill=({c,bg,l,n})=><div style={{background:bg||`${c}15`,border:`1px solid ${c}22`,borderRadius:6,padding:"5px 12px",display:"flex",flexDirection:"column",gap:1,minWidth:88,flexShrink:0}}>
+  <div style={{fontSize:8,color:`${c}90`,fontWeight:700,textTransform:"uppercase",letterSpacing:.5}}>{l}</div>
+  <div style={{fontSize:17,fontWeight:800,color:c,letterSpacing:-.5}}>{n}</div>
+</div>;
+const IBtn=({onClick,label,color,disabled})=><button onClick={onClick} disabled={disabled} style={{background:`${color}18`,border:`1px solid ${color}28`,color,borderRadius:5,padding:"5px 11px",fontSize:11,fontWeight:700,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.4:1,whiteSpace:"nowrap"}}>
+  {label}
+</button>;
+const LabelRow=({k,v,vc})=><div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${C.b}`,fontSize:11}}><span style={{color:C.ts}}>{k}</span><span style={{fontWeight:600,color:vc||C.tx}}>{v}</span></div>;
+function Delta({curr,prev}){
+  if(prev===undefined||prev===null)return<span style={{color:C.tm,fontSize:9}}>–</span>;
+  const d=curr-prev;if(Math.abs(d)<1)return<span style={{color:C.tm,fontSize:9}}>±0</span>;
+  return<span style={{color:d>0?C.G:C.R,fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{d>0?"▲":"▼"} {eur(Math.abs(d))}</span>
+}
+function NumEdit({val,onSave,min=0,max=99,color=C.Y}){
+  const [v,setV]=useState(String(val));const [ed,setEd]=useState(false);
+  if(!ed)return<span onClick={()=>setEd(true)} style={{color,fontWeight:700,fontSize:12,cursor:"pointer",borderBottom:`1px dashed ${color}50`,padding:"0 2px"}}>{val||"–"}</span>;
+  return<input autoFocus type="number" value={v} min={min} max={max}
+    onChange={e=>setV(e.target.value)}
+    onBlur={()=>{onSave(Math.max(min,Math.min(max,+v||0)));setEd(false)}}
+    onKeyDown={e=>{if(e.key==="Enter"){onSave(Math.max(min,Math.min(max,+v||0)));setEd(false)}if(e.key==="Escape")setEd(false)}}
+    style={{width:36,background:C.sur,border:`1px solid ${color}`,borderRadius:4,padding:"1px 4px",fontSize:11,textAlign:"center",color}}
+  />
+}
+function Toast({msg,type,onClose}){
+  useEffect(()=>{const t=setTimeout(onClose,4000);return()=>clearTimeout(t)},[]);
+  return<div style={{position:"fixed",bottom:20,right:20,background:type==="error"?C.R:C.G,color:"#000",padding:"9px 16px",borderRadius:8,fontWeight:700,fontSize:12,zIndex:9999,boxShadow:"0 4px 24px rgba(0,0,0,.7)",display:"flex",gap:8,alignItems:"center",animation:"slideIn .2s ease"}}>{type==="error"?"⚠️":"✓"} {msg}<button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",marginLeft:4}}>×</button></div>
+}
+
+// ── ABZ MODAL COMPONENT ───────────────────────────────────────────
+function AbzModal({alle,mitarb,bM,bJ,onClose,onChange,showToast}){
+  const LEER={mitarbeiter_id:"",bezeichnung:"",betrag:"",typ:"wiederkehrend",kategorie:"auto",monat_start:bM,jahr_start:bJ,monat_ende:"",jahr_ende:"",notiz:""};
+  const [form,setForm]=useState(LEER);
+  const [saving,setSaving]=useState(false);
+  const [expandMa,setExpMa]=useState(null);
+
+  // Alle aktiven Abzüge gruppiert nach MA
+  const gruppiertAlle=useMemo(()=>{
+    const map={};
+    alle.filter(a=>a.aktiv).forEach(a=>{
+      if(!map[a.mitarbeiter_id])map[a.mitarbeiter_id]=[];
+      map[a.mitarbeiter_id].push(a);
+    });
+    return map;
+  },[alle]);
+
+  const save=async()=>{
+    if(!form.mitarbeiter_id||!form.bezeichnung||!form.betrag)return;
+    setSaving(true);
+    try{
+      const payload={
+        mitarbeiter_id:form.mitarbeiter_id,bezeichnung:form.bezeichnung,betrag:+form.betrag,
+        typ:form.typ,kategorie:form.kategorie,
+        monat_start:+form.monat_start,jahr_start:+form.jahr_start,notiz:form.notiz,aktiv:true,
+        ...(form.typ==="wiederkehrend"&&form.monat_ende&&form.jahr_ende?{monat_ende:+form.monat_ende,jahr_ende:+form.jahr_ende}:{monat_ende:null,jahr_ende:null})
+      };
+      const res=await db.post("pay_abzuege",payload);
+      onChange([...alle,res[0]]);
+      setForm(LEER);
+      showToast("Abzug gespeichert ✓");
+    }catch(e){showToast(e.message,"error");}
+    finally{setSaving(false);}
+  };
+
+  const toggle=async(id,aktiv)=>{
+    try{await db.patch("pay_abzuege","id=eq."+id,{aktiv:!aktiv});onChange(alle.map(a=>a.id===id?{...a,aktiv:!aktiv}:a));}catch(e){showToast(e.message,"error");}
+  };
+  const remove=async(id)=>{
+    if(!confirm("Abzug wirklich löschen?"))return;
+    try{await db.del("pay_abzuege","id=eq."+id);onChange(alle.filter(a=>a.id!==id));showToast("Abzug gelöscht");}catch(e){showToast(e.message,"error");}
+  };
+
+  const maHatAktiv=maId=>gruppe=>gruppiertAlle[maId]?.some(a=>abzugAktivInMonat(a,bM,bJ));
+  const totalAktiv=mitarb.reduce((s,m)=>{const active=getAbzuegeForMa(alle,m.id,bM,bJ);return s+active.reduce((x,a)=>x+(+a.betrag),0)},0);
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.8)",zIndex:600,display:"flex",alignItems:"flex-start",justifyContent:"flex-end"}} onClick={onClose}>
+      <div style={{background:C.card,borderLeft:`1px solid ${C.b}`,width:560,height:"100%",overflow:"auto",animation:"slideIn .25s ease"}} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{background:C.sur,borderBottom:`1px solid ${C.b}`,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:10}}>
+          <div>
+            <div style={{fontWeight:800,fontSize:15}}>➖ Abzüge verwalten</div>
+            <div style={{fontSize:10,color:C.ts,marginTop:1}}>{MO[bM]} {bJ} · Gesamt aktiv: <b style={{color:C.R}}>{eur(totalAktiv)}</b></div>
+          </div>
+          <button onClick={onClose} style={{background:C.card,border:`1px solid ${C.b}`,color:C.ts,borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:12}}>× Schließen</button>
+        </div>
+
+        <div style={{padding:16}}>
+          {/* Neuen Abzug anlegen */}
+          <div style={{background:C.sur,borderRadius:10,padding:16,marginBottom:18,border:`1px solid ${C.b}`}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:C.tx}}>+ Neuen Abzug anlegen</div>
+
+            {/* Zeile 1: MA + Typ */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:8,marginBottom:8}}>
+              <div>
+                <div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Mitarbeiter *</div>
+                <select value={form.mitarbeiter_id} onChange={e=>setForm(p=>({...p,mitarbeiter_id:e.target.value}))} className="inp" style={{width:"100%"}}>
+                  <option value="">– auswählen –</option>
+                  {mitarb.map(m=><option key={m.id} value={m.id}>{m.vorname} {m.nachname} ({m.kuerzel})</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Typ *</div>
+                <div style={{display:"flex",gap:0,borderRadius:6,overflow:"hidden",border:`1px solid ${C.bl}`}}>
+                  {[["einmalig","1× Einmalig"],["wiederkehrend","↻ Monatlich"]].map(([k,l])=>(
+                    <button key={k} onClick={()=>setForm(p=>({...p,typ:k}))}
+                      style={{flex:1,padding:"7px 10px",background:form.typ===k?`${C.Y}20`:"transparent",border:"none",borderRight:k==="einmalig"?`1px solid ${C.bl}`:"none",color:form.typ===k?C.Y:C.ts,fontSize:11,fontWeight:form.typ===k?700:500,cursor:"pointer",whiteSpace:"nowrap"}}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Zeile 2: Bezeichnung */}
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Bezeichnung *</div>
+              <input value={form.bezeichnung} onChange={e=>setForm(p=>({...p,bezeichnung:e.target.value}))} placeholder='z.B. "VW Polo – Leasingrate"' className="inp"/>
+            </div>
+
+            {/* Zeile 3: Betrag + Kategorie */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <div>
+                <div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Betrag € *</div>
+                <input type="number" value={form.betrag} onChange={e=>setForm(p=>({...p,betrag:e.target.value}))} placeholder="z.B. 280" className="inp"/>
+              </div>
+              <div>
+                <div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Kategorie</div>
+                <select value={form.kategorie} onChange={e=>setForm(p=>({...p,kategorie:e.target.value}))} className="inp" style={{width:"100%"}}>
+                  {Object.entries(ABZ_KAT).map(([k,v])=><option key={k} value={k}>{v.icon} {v.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Zeile 4: Zeitraum */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <div>
+                <div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>
+                  {form.typ==="einmalig"?"Monat (einmalig)":"Startmonat"}
+                </div>
+                <input type="month" value={`${form.jahr_start}-${String(form.monat_start).padStart(2,"0")}`}
+                  onChange={e=>{const[y,m]=e.target.value.split("-");setForm(p=>({...p,monat_start:+m,jahr_start:+y}))}}
+                  className="inp"/>
+              </div>
+              {form.typ==="wiederkehrend"&&(
+                <div>
+                  <div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Endet (leer = unbegrenzt)</div>
+                  <input type="month"
+                    value={form.monat_ende&&form.jahr_ende?`${form.jahr_ende}-${String(form.monat_ende).padStart(2,"0")}`:""} 
+                    onChange={e=>{if(!e.target.value){setForm(p=>({...p,monat_ende:"",jahr_ende:""}));return;}const[y,m]=e.target.value.split("-");setForm(p=>({...p,monat_ende:+m,jahr_ende:+y}))}}
+                    className="inp"/>
+                </div>
+              )}
+            </div>
+
+            {/* Notiz */}
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Notiz / Grund</div>
+              <input value={form.notiz} onChange={e=>setForm(p=>({...p,notiz:e.target.value}))} placeholder="Optionale Erläuterung" className="inp"/>
+            </div>
+
+            <button onClick={save} disabled={!form.mitarbeiter_id||!form.bezeichnung||!form.betrag||saving}
+              style={{width:"100%",background:`${C.R}20`,border:`1px solid ${C.R}35`,color:C.R,borderRadius:7,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:!form.mitarbeiter_id||!form.bezeichnung||!form.betrag?0.5:1}}>
+              {saving&&<Spi s={15} color={C.R}/>}
+              {form.typ==="einmalig"?"Einmaligen Abzug speichern":"Monatlichen Abzug anlegen"}
+            </button>
+          </div>
+
+          {/* Bestehende Abzüge nach MA */}
+          <div style={{fontSize:10,fontWeight:700,color:C.ts,textTransform:"uppercase",marginBottom:10,letterSpacing:.5}}>
+            Alle Abzüge ({alle.filter(a=>a.aktiv).length} aktiv)
+          </div>
+
+          {mitarb.map(ma=>{
+            const maAbzuege=alle.filter(a=>a.mitarbeiter_id===ma.id);
+            if(maAbzuege.length===0)return null;
+            const aktivImMonat=getAbzuegeForMa(alle,ma.id,bM,bJ);
+            const summeMonat=aktivImMonat.reduce((s,a)=>s+(+a.betrag),0);
+            const isExp=expandMa===ma.id;
+            return(
+              <div key={ma.id} style={{background:C.sur,borderRadius:8,marginBottom:8,overflow:"hidden",border:`1px solid ${summeMonat>0?C.R+"30":C.b}`}}>
+                {/* MA Header */}
+                <button onClick={()=>setExpMa(isExp?null:ma.id)} style={{width:"100%",background:"none",border:"none",cursor:"pointer",padding:"10px 14px",display:"flex",alignItems:"center",gap:10,textAlign:"left"}}>
+                  <Chip c={TCLR[ma.typ]||C.ts} l={TLBL[ma.typ]||ma.typ}/>
+                  <div style={{flex:1}}>
+                    <span style={{fontWeight:600,fontSize:12,color:C.tx}}>{ma.vorname} {ma.nachname}</span>
+                    <span style={{fontSize:10,color:C.tm,marginLeft:6}}>{ma.kuerzel}</span>
+                  </div>
+                  {summeMonat>0&&<span style={{background:C.RD,color:C.R,border:`1px solid ${C.R}25`,borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700}}>
+                    {MO[bM]}: -{eur(summeMonat)}
+                  </span>}
+                  <span style={{color:C.tm,fontSize:12}}>{isExp?"▲":"▼"}</span>
+                </button>
+
+                {isExp&&(
+                  <div style={{borderTop:`1px solid ${C.b}`,padding:"0 14px 10px"}}>
+                    {maAbzuege.map(a=>{
+                      const kat=ABZ_KAT[a.kategorie]||ABZ_KAT.sonstiges;
+                      const aktivJetzt=abzugAktivInMonat(a,bM,bJ);
+                      const laufend=a.typ==="wiederkehrend";
+                      return(
+                        <div key={a.id} style={{display:"flex",gap:10,padding:"9px 0",borderBottom:`1px solid ${C.b}`,alignItems:"flex-start",opacity:a.aktiv?1:0.4}}>
+                          <div style={{fontSize:18,flexShrink:0,marginTop:1}}>{kat.icon}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:2}}>
+                              <span style={{fontWeight:600,fontSize:12}}>{a.bezeichnung}</span>
+                              <span style={{background:laufend?`${C.O}20`:`${C.B}20`,color:laufend?C.O:C.B,borderRadius:3,padding:"1px 6px",fontSize:9,fontWeight:700}}>
+                                {laufend?"↻ monatl.":"1× einmalig"}
+                              </span>
+                              {aktivJetzt&&<span style={{background:C.RD,color:C.R,borderRadius:3,padding:"1px 6px",fontSize:9,fontWeight:700}}>aktiv {MO[bM]}</span>}
+                            </div>
+                            <div style={{fontSize:10,color:C.ts}}>
+                              Ab {MO[a.monat_start]} {a.jahr_start}
+                              {laufend&&(a.monat_ende?` bis ${MO[a.monat_ende]} ${a.jahr_ende}`:" · unbegrenzt")}
+                              {a.notiz&&<span style={{color:C.tm}}> · {a.notiz}</span>}
+                            </div>
+                          </div>
+                          <div style={{textAlign:"right",flexShrink:0}}>
+                            <div style={{fontWeight:800,fontSize:13,color:C.R}}>-{eur(a.betrag)}</div>
+                            {laufend&&<div style={{fontSize:9,color:C.tm}}>pro Monat</div>}
+                          </div>
+                          <div style={{display:"flex",gap:4,flexShrink:0,marginTop:2}}>
+                            <button onClick={()=>toggle(a.id,a.aktiv)} title={a.aktiv?"Deaktivieren":"Aktivieren"}
+                              style={{background:a.aktiv?C.GD:C.sur,border:`1px solid ${a.aktiv?C.G+"30":C.bl}`,color:a.aktiv?C.G:C.ts,borderRadius:4,padding:"2px 7px",fontSize:10,cursor:"pointer",fontWeight:700}}>
+                              {a.aktiv?"✓":"○"}
+                            </button>
+                            <button onClick={()=>remove(a.id)}
+                              style={{background:C.RD,border:`1px solid ${C.R}25`,color:C.R,borderRadius:4,padding:"2px 7px",fontSize:10,cursor:"pointer",fontWeight:700}}>
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {alle.length===0&&<div style={{textAlign:"center",padding:24,color:C.tm,fontSize:12}}>Noch keine Abzüge angelegt</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────
+
+// ── PIN LOCK ──────────────────────────────────────────────────────
+const SESSION_KEY = "beedoo_pay_auth";
+
+function PinLock({onUnlock}){
+  const [pin,setPin]=useState("");
+  const [err,setErr]=useState("");
+  const [attempts,setAttempts]=useState(0);
+  const [loading,setLd]=useState(false);
+  const [locked,setLocked]=useState(false);
+  const [lockLeft,setLockLeft]=useState(0);
+  const [hint,setHint]=useState("");
+  const maxAttempts=5;
+  const inputRef=useRef();
+
+  useEffect(()=>{
+    // Load hint from Supabase
+    fetch(SB+"/rest/v1/pay_settings?key=in.(pay_pin_hint,pay_max_attempts)",{headers:H})
+      .then(r=>r.json()).then(arr=>{
+        const m=Object.fromEntries(arr.map(s=>[s.key,s.value]));
+        if(m.pay_pin_hint) setHint(m.pay_pin_hint);
+      }).catch(()=>{});
+    // Focus input
+    setTimeout(()=>inputRef.current?.focus(),100);
+    // Check lockout
+    const lockUntil=+sessionStorage.getItem("pay_lock_until")||0;
+    if(lockUntil>Date.now()){
+      setLocked(true);
+      startCountdown(lockUntil);
+    }
+    const att=+sessionStorage.getItem("pay_attempts")||0;
+    setAttempts(att);
+  },[]);
+
+  const startCountdown=(until)=>{
+    const tick=()=>{
+      const left=Math.ceil((until-Date.now())/1000);
+      if(left<=0){setLocked(false);setLockLeft(0);sessionStorage.removeItem("pay_lock_until");sessionStorage.removeItem("pay_attempts");setAttempts(0);}
+      else{setLockLeft(left);setTimeout(tick,1000);}
+    };tick();
+  };
+
+  const handleKey=(e)=>{
+    if(e.key==="Enter") check();
+    // Numeric only
+    if(!/[0-9]/.test(e.key)&&e.key!=="Backspace"&&e.key!=="Delete") e.preventDefault();
+  };
+
+  const check=async()=>{
+    if(locked||loading||pin.length<4) return;
+    setLd(true);setErr("");
+    try{
+      const r=await fetch(SB+"/rest/v1/pay_settings?key=eq.pay_admin_pin",{headers:H});
+      const arr=await r.json();
+      const correctPin=arr[0]?.value||"";
+      if(pin===correctPin){
+        // Success
+        sessionStorage.setItem(SESSION_KEY,"1");
+        sessionStorage.removeItem("pay_attempts");
+        sessionStorage.removeItem("pay_lock_until");
+        setErr("");
+        onUnlock();
+      } else {
+        const newAtt=(attempts+1);
+        setAttempts(newAtt);
+        sessionStorage.setItem("pay_attempts",newAtt);
+        if(newAtt>=maxAttempts){
+          const until=Date.now()+5*60*1000; // 5 min lockout
+          sessionStorage.setItem("pay_lock_until",until);
+          setLocked(true);
+          startCountdown(until);
+          setErr("Zu viele Versuche – 5 Minuten gesperrt.");
+        } else {
+          setErr(`Falscher PIN. Noch ${maxAttempts-newAtt} Versuch${maxAttempts-newAtt!==1?"e":""}.`);
+          setPin("");
+          setTimeout(()=>inputRef.current?.focus(),50);
+        }
+      }
+    }catch(e){setErr("Verbindungsfehler – bitte erneut versuchen.");}
+    finally{setLd(false);}
+  };
+
+  const dots=Array.from({length:6}).map((_,i)=>(
+    <div key={i} style={{
+      width:14,height:14,borderRadius:"50%",
+      background:i<pin.length?"#FDE154":"transparent",
+      border:"2px solid "+( i<pin.length?"#FDE154":"#2A2A33"),
+      transition:"all .15s"
+    }}/>
+  ));
+
+  return(
+    <div style={{height:"100vh",background:"#0A0A0B",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}>
+      <div style={{width:320,animation:"fadeIn .3s ease"}}>
+        {/* Logo */}
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <div style={{fontSize:36,fontWeight:900,letterSpacing:-2,color:"#F0F0F4"}}>
+            bee<span style={{color:"#FDE154"}}>-doo</span>
+          </div>
+          <div style={{fontSize:10,color:"#4A4A5A",letterSpacing:2,textTransform:"uppercase",marginTop:4}}>PAY · Geschäftsführung</div>
+        </div>
+
+        {/* Lock card */}
+        <div style={{background:"#111113",border:"1px solid #1E1E24",borderRadius:16,padding:"28px 24px",boxShadow:"0 24px 64px rgba(0,0,0,.6)"}}>
+          <div style={{textAlign:"center",marginBottom:24}}>
+            <div style={{fontSize:32,marginBottom:8}}>{locked?"🔒":"🔐"}</div>
+            <div style={{fontSize:15,fontWeight:700,color:"#F0F0F4"}}>Zugang gesperrt</div>
+            <div style={{fontSize:11,color:"#4A4A5A",marginTop:4}}>
+              {locked?`Zu viele Fehlversuche – noch ${lockLeft}s`:"PIN eingeben um fortzufahren"}
+            </div>
+          </div>
+
+          {/* PIN dots */}
+          <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:20}}>
+            {dots}
+          </div>
+
+          {/* Hidden input */}
+          <input
+            ref={inputRef}
+            type="password"
+            inputMode="numeric"
+            maxLength={6}
+            value={pin}
+            onChange={e=>{ if(!locked) setPin(e.target.value.replace(/\D/g,"")); }}
+            onKeyDown={handleKey}
+            disabled={locked||loading}
+            style={{
+              width:"100%",background:"#16161A",border:`1.5px solid ${err?"#F87171":"#2A2A33"}`,
+              borderRadius:10,padding:"12px 16px",fontSize:20,textAlign:"center",
+              color:"#F0F0F4",outline:"none",letterSpacing:6,fontFamily:"monospace",
+              marginBottom:err?8:16
+            }}
+            placeholder="• • • • •"
+          />
+
+          {err&&<div style={{color:"#F87171",fontSize:11,textAlign:"center",marginBottom:12,fontWeight:600}}>⚠ {err}</div>}
+          {hint&&err&&!locked&&<div style={{color:"#4A4A5A",fontSize:10,textAlign:"center",marginBottom:12}}>Hinweis: {hint}</div>}
+
+          <button
+            onClick={check}
+            disabled={locked||loading||pin.length<4}
+            style={{
+              width:"100%",background:locked||pin.length<4?"#1E1E24":"#FDE154",
+              border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:800,
+              color:locked||pin.length<4?"#4A4A5A":"#0A0A0B",cursor:locked||pin.length<4?"not-allowed":"pointer",
+              transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:8
+            }}>
+            {loading
+              ? <><div style={{width:16,height:16,border:"2px solid #0A0A0B30",borderTop:"2px solid #0A0A0B",borderRadius:"50%",animation:"spin .6s linear infinite"}}/> Prüfe...</>
+              : locked ? `Gesperrt (${lockLeft}s)` : "Entsperren"}
+          </button>
+        </div>
+
+        {/* Footer hint */}
+        <div style={{textAlign:"center",marginTop:20,fontSize:10,color:"#2A2A33"}}>
+          bee-doo GmbH · Nur für Geschäftsführung
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── WRAPPER (checks session) ──────────────────────────────────────
+function Root(){
+  const [auth,setAuth]=useState(()=>sessionStorage.getItem(SESSION_KEY)==="1");
+  if(!auth) return <PinLock onUnlock={()=>setAuth(true)}/>;
+  return <App/>;
+}
+
+
+function App(){
+  const [tab,setTab]=useState("main");
+  const [abrMonat,setAM]=useState("2026-02");
+  const [selMa,setSel]=useState(null);
+  const [filter,setFilter]=useState("alle");
+
+  const [mitarb,setMA]=useState([]);
+  const [regeln,setRG]=useState([]);
+  const [auftraege,setAU]=useState([]);
+  const [auftraegeVorm,setAUV]=useState([]);
+  const [abr,setABR]=useState([]);
+  const [abrVorm,setABRV]=useState([]);
+  const [vorschuesse,setVS]=useState([]);
+  const [kranktage,setKT]=useState([]);
+  const [abzuege,setABZ]=useState([]);
+  const [slackWH,setSlackWH]=useState("");
+  const [slackOn,setSlackOn]=useState(false);
+
+  const [loading,setLd]=useState(true);
+  const [saving,setSv]=useState({});
+  const [toast,setToast]=useState(null);
+  const [showVSModal,setShowVS]=useState(false);
+  const [showAbzModal,setShowAbz]=useState(false);
+  const [showSettings,setShowSt]=useState(false);
+  const [vsForm,setVSF]=useState({ma_id:"",betrag:"",grund:"",quelle:"manuell"});
+  const [vsLoading,setVSLd]=useState(false);
+  const [ktSaving,setKTSv]=useState({});
+
+  const ok=msg=>setToast({msg,type:"success"});
+  const err=msg=>setToast({msg,type:"error"});
+
+  const [aJ,aMN]=abrMonat.split("-").map(Number);
+  const bM=aMN===1?12:aMN-1, bJ=aMN===1?aJ-1:aJ;
+  const vM=bM===1?12:bM-1, vJ=bM===1?bJ-1:bJ;
+
+  useEffect(()=>{
+    setLd(true);
+    const m1=String(bM).padStart(2,"0"),m2=bM===12?"01":String(bM+1).padStart(2,"0"),y2=bM===12?bJ+1:bJ;
+    const vm1=String(vM).padStart(2,"0"),vm2=vM===12?"01":String(vM+1).padStart(2,"0"),vy2=vM===12?vJ+1:vJ;
+    Promise.all([
+      db.get("pay_mitarbeiter","?aktiv=eq.true&order=nachname.asc"),
+      db.get("provisions_regeln","?aktiv=eq.true"),
+      db.get("pay_auftraege",`?auftrags_datum=gte.${bJ}-${m1}-01&auftrags_datum=lt.${y2}-${m2}-01&order=auftrags_datum.asc`),
+      db.get("pay_auftraege",`?auftrags_datum=gte.${vJ}-${vm1}-01&auftrags_datum=lt.${vy2}-${vm2}-01`),
+      db.get("pay_abrechnungen",`?monat=eq.${bM}&jahr=eq.${bJ}`),
+      db.get("pay_abrechnungen",`?monat=eq.${vM}&jahr=eq.${vJ}`),
+      db.get("pay_vorschuesse",`?monat=eq.${bM}&jahr=eq.${bJ}`),
+      db.get("pay_krankheitstage",`?monat=eq.${bM}&jahr=eq.${bJ}`),
+      db.get("pay_abzuege","?aktiv=eq.true&order=erstellt_am.desc"),
+      db.get("pay_settings",""),
+    ]).then(([ma,r,a,av,ab,abv,vs,kt,abz,settings])=>{
+      setMA(ma);setRG(r);setAU(a);setAUV(av);setABR(ab);setABRV(abv);setVS(vs);setKT(kt);setABZ(abz);
+      const sMap=Object.fromEntries(settings.map(s=>[s.key,s.value]));
+      setSlackWH(sMap.slack_webhook||"");setSlackOn(sMap.slack_enabled==="true");
+    }).catch(e=>err("Ladefehler: "+e.message)).finally(()=>setLd(false));
+  },[bM,bJ]);
+
+  const {E,rel}=useMemo(()=>calcAll(auftraege,mitarb,regeln,vorschuesse,kranktage,abzuege,bM,bJ),[auftraege,mitarb,regeln,vorschuesse,kranktage,abzuege,bM,bJ]);
+  const {E:EV}=useMemo(()=>calcAll(auftraegeVorm,mitarb,regeln,[],[],[],vM,vJ),[auftraegeVorm,mitarb,regeln,vM,vJ]);
+
+  const eintraege=useMemo(()=>{
+    const AM=Object.fromEntries(abr.map(a=>[a.mitarbeiter_id,a]));
+    let arr=Object.values(E).map(e=>({...e,abr:AM[e.ma.id]||null,status:AM[e.ma.id]?.status||"entwurf",abr_id:AM[e.ma.id]?.id||null,prevNetto:EV[e.ma.id]?.netto??null})).sort((a,b)=>b.gesamt-a.gesamt);
+    if(filter==="offen")     arr=arr.filter(e=>e.status==="entwurf");
+    if(filter==="freigeg")   arr=arr.filter(e=>e.status==="freigegeben");
+    if(filter==="bezahlt")   arr=arr.filter(e=>e.status==="ausgezahlt");
+    if(filter==="staffel")   arr=arr.filter(e=>e.staf_ok);
+    if(filter==="vorschuss") arr=arr.filter(e=>e.vorschuss>0);
+    if(filter==="krank")     arr=arr.filter(e=>e.krank?.tage>0);
+    if(filter==="abzuege")   arr=arr.filter(e=>e.abzug_summe>0);
+    return arr;
+  },[E,EV,abr,filter]);
+
+  const setSt=useCallback(async(maId,ns)=>{
+    setSv(s=>({...s,[maId]:true}));
+    try{
+      const e=eintraege.find(e=>e.ma.id===maId);if(!e)return;
+      const pl={mitarbeiter_id:maId,monat:bM,jahr:bJ,status:ns,gesamt_betrag:e.gesamt,provisions_summe:e.gesamt,staffel_bonus:e.staf_bonus||0,staffel_erreicht:e.staf_ok||false,sales_count:e.sales,
+        ...(ns==="freigegeben"?{freigegeben_am:new Date().toISOString()}:{}),
+        ...(ns==="ausgezahlt"?{ausgezahlt_am:new Date().toISOString()}:{})};
+      const res=await db.upsert("pay_abrechnungen",pl);
+      if(ns==="freigegeben"&&!e.abr_id){const aid=res[0]?.id;if(aid)await db.post("pay_provisionen",e.pos.map(p=>({auftrag_id:p.aid,mitarbeiter_id:maId,abrechnung_id:aid,typ:p.typ,betrag:p.betrag,monat_bezug:bM,jahr_bezug:bJ,status:"freigegeben",staffel_angewendet:p.sa||false,staffel_sales_count:e.sales,freigegeben_am:new Date().toISOString()})));}
+      if(ns==="ausgezahlt"&&e.abr_id){
+        await db.patch("pay_provisionen","abrechnung_id=eq."+e.abr_id,{status:"bezahlt",bezahlt_am:new Date().toISOString()});
+        if(e.vorschuss>0)await db.patch("pay_vorschuesse","mitarbeiter_id=eq."+maId+"&monat=eq."+bM+"&jahr=eq."+bJ,{verrechnet_am:new Date().toISOString()});
+      }
+      if(slackOn&&slackWH)await sendSlack(slackWH,slackBlocks(e,bM,bJ,ns));
+      setABR(prev=>{const idx=prev.findIndex(a=>a.mitarbeiter_id===maId&&a.monat===bM&&a.jahr===bJ);const upd=res[0]||{...pl,id:e.abr_id};if(idx>=0){const n=[...prev];n[idx]=upd;return n;}return[...prev,upd]});
+      ok(e.ma.vorname+" "+e.ma.nachname+" → "+(ns==="ausgezahlt"?"Ausgezahlt ✓":"Freigegeben ✓")+(slackOn?" · Slack ✓":""));
+    }catch(e){err(e.message);}finally{setSv(s=>({...s,[maId]:false}));}
+  },[eintraege,bM,bJ,slackOn,slackWH]);
+
+  const setAll=useCallback(async ns=>{for(const e of eintraege.filter(e=>ns==="freigegeben"?e.status==="entwurf":e.status==="freigegeben"))await setSt(e.ma.id,ns)},[eintraege,setSt]);
+
+  const saveKranktage=useCallback(async(maId,tage)=>{
+    setKTSv(s=>({...s,[maId]:true}));
+    try{const res=await db.upsert("pay_krankheitstage",{mitarbeiter_id:maId,monat:bM,jahr:bJ,tage,arbeitstage_monat:21});setKT(prev=>{const idx=prev.findIndex(k=>k.mitarbeiter_id===maId);const upd=res[0]||{mitarbeiter_id:maId,tage};if(idx>=0){const n=[...prev];n[idx]=upd;return n;}return[...prev,upd]});if(tage>0)ok("Kranktage: "+eur(krankenAbzug(+mitarb.find(m=>m.id===maId)?.grundgehalt||0,tage,21))+" Abzug");}
+    catch(e){err(e.message);}finally{setKTSv(s=>({...s,[maId]:false}));}
+  },[bM,bJ,mitarb]);
+
+  const saveVS=async()=>{
+    if(!vsForm.ma_id||!vsForm.betrag)return;setVSLd(true);
+    try{const res=await db.upsert("pay_vorschuesse",{mitarbeiter_id:vsForm.ma_id,betrag:+vsForm.betrag,monat:bM,jahr:bJ,grund:vsForm.grund,quelle:vsForm.quelle});setVS(prev=>{const idx=prev.findIndex(v=>v.mitarbeiter_id===vsForm.ma_id);const upd=res[0]||{mitarbeiter_id:vsForm.ma_id,betrag:+vsForm.betrag};if(idx>=0){const n=[...prev];n[idx]=upd;return n;}return[...prev,upd]});setVSF({ma_id:"",betrag:"",grund:"",quelle:"manuell"});setShowVS(false);ok("Vorschuss gespeichert ✓");}
+    catch(e){err(e.message);}finally{setVSLd(false);}
+  };
+  const delVS=async maId=>{try{await db.del("pay_vorschuesse","mitarbeiter_id=eq."+maId+"&monat=eq."+bM+"&jahr=eq."+bJ);setVS(prev=>prev.filter(v=>v.mitarbeiter_id!==maId));ok("Vorschuss gelöscht");}catch(e){err(e.message);}};
+  const saveSlack=async()=>{try{await db.upsert("pay_settings",[{key:"slack_webhook",value:slackWH},{key:"slack_enabled",value:String(slackOn)}]);ok("Einstellungen gespeichert ✓");setShowSt(false);}catch(e){err(e.message);}};
+  const testSlack=async()=>{if(!slackWH){err("Kein Webhook eingetragen");return;}await sendSlack(slackWH,[{type:"section",text:{type:"mrkdwn",text:"🟡 *bee-doo PAY* – Testbenachrichtigung ✓"}}]);ok("Testnachricht gesendet!");};
+
+  // Stats
+  const allE=Object.values(E).map(e=>({...e,status:abr.find(a=>a.mitarbeiter_id===e.ma.id)?.status||"entwurf"}));
+  const cA=allE.filter(e=>e.status==="ausgezahlt").length;
+  const cF=allE.filter(e=>e.status==="freigegeben").length;
+  const cO=allE.filter(e=>e.status==="entwurf").length;
+  const totB=allE.reduce((s,e)=>s+e.gesamt,0);
+  const totN=allE.reduce((s,e)=>s+e.netto,0);
+  const totVS=vorschuesse.reduce((s,v)=>s+(+v.betrag),0);
+  const totKR=allE.reduce((s,e)=>s+(e.krank_abzug||0),0);
+  const totABZ=allE.reduce((s,e)=>s+(e.abzug_summe||0),0);
+  const cStaf=allE.filter(e=>e.staf_ok).length;
+  const cKrank=kranktage.filter(k=>k.tage>0).length;
+  const cAbzMA=new Set(abzuege.filter(a=>abzugAktivInMonat(a,bM,bJ)).map(a=>a.mitarbeiter_id)).size;
+  const cOff=auftraege.filter(a=>a.zahlungsstatus==="offen").length;
+  const isSav=Object.values(saving).some(Boolean);
+  const radar=Object.values(E).filter(e=>e.regel&&e.regel.staffel_schwelle<999&&!e.staf_ok&&e.regel.staffel_schwelle-e.sales<=3&&e.regel.staffel_schwelle-e.sales>0).sort((a,b)=>(a.regel.staffel_schwelle-a.sales)-(b.regel.staffel_schwelle-b.sales));
+  const selEntry=eintraege.find(e=>e.ma.id===selMa)||allE.find(e=>e.ma.id===selMa);
+
+  // ── RESPONSIVE ────────────────────────────────────────────────
+  const [isMob,setIsMob]=useState(window.innerWidth<700);
+  useEffect(()=>{const fn=()=>setIsMob(window.innerWidth<700);window.addEventListener("resize",fn);return()=>window.removeEventListener("resize",fn)},[]);
+
+  const tabBtn=(id,lb,dis)=><button onClick={()=>!dis&&setTab(id)} style={{background:tab===id?C.YD:"none",border:"none",cursor:dis?"default":"pointer",padding:isMob?"6px 12px":"4px 10px",borderRadius:5,fontSize:isMob?13:12,fontWeight:tab===id?700:500,color:dis?C.tm:tab===id?C.Y:C.ts,borderBottom:tab===id?`2px solid ${C.Y}`:"2px solid transparent",flex:isMob?1:undefined,textAlign:"center"}}>{lb}</button>;
+
+  // ── MOBILE KARTEN-VIEW ────────────────────────────────────────
+  const MobileCard=({e})=>{
+    const sc=STCFG[e.status]||STCFG.entwurf;
+    const tc=TCLR[e.ma.typ]||C.tx;
+    const sw=e.regel?.staffel_schwelle;
+    const iS=saving[e.ma.id];
+    const hasAbz=e.abzuege?.length>0;
+    const totalAbz=e.abzug_summe||0;
+    return(
+      <div style={{background:C.card,borderRadius:12,margin:"0 12px 10px",border:`1px solid ${C.b}`,overflow:"hidden"}}>
+        {/* Kopfzeile */}
+        <div style={{padding:"12px 14px 8px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:800,fontSize:16,lineHeight:1.2}}>{e.ma.vorname} {e.ma.nachname}</div>
+            <div style={{fontSize:11,color:C.tm,marginTop:2}}>{e.ma.kuerzel}{e.ma.typ.startsWith("angestellt")&&e.ma.grundgehalt>0?" · Basis "+eur(e.ma.grundgehalt):""}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
+            <Chip c={tc} l={TLBL[e.ma.typ]||e.ma.typ}/>
+            <Badge c={sc.c} bg={sc.bg} l={sc.l}/>
+          </div>
+        </div>
+
+        {/* Staffel-Fortschritt */}
+        {sw&&sw<999&&!e.staf_ok&&(
+          <div style={{padding:"0 14px 8px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+              <span style={{fontSize:10,color:C.O,fontWeight:600}}>Staffel: {e.sales}/{sw} Sales</span>
+              <span style={{fontSize:10,color:C.O}}>{sw-e.sales}× fehlen</span>
+            </div>
+            <div style={{height:4,background:C.b,borderRadius:2}}><div style={{width:`${pct(e.sales,sw)}%`,height:"100%",background:C.O,borderRadius:2}}/></div>
+          </div>
+        )}
+        {e.staf_ok&&(
+          <div style={{margin:"0 14px 8px",background:`${C.Y}15`,border:`1px solid ${C.Y}25`,borderRadius:6,padding:"6px 10px",display:"flex",gap:6,alignItems:"center"}}>
+            <span>⚡</span><span style={{fontWeight:700,fontSize:12,color:C.Y}}>Staffel! {e.sales} Sales · +{eur(e.staf_bonus)}</span>
+          </div>
+        )}
+
+        {/* Zahlen-Block */}
+        <div style={{background:C.sur,padding:"10px 14px",borderTop:`1px solid ${C.b}`}}>
+          {/* Zeile 1: Provision + Abzüge */}
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <div><div style={{fontSize:9,color:C.tm,textTransform:"uppercase",fontWeight:600,marginBottom:1}}>Provision</div><div style={{fontWeight:700,fontSize:14}}>{eur(e.gesamt)}</div></div>
+            {(e.vorschuss>0||hasAbz||e.krank_abzug>0)&&(
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:9,color:C.tm,textTransform:"uppercase",fontWeight:600,marginBottom:1}}>Abzüge</div>
+                <div style={{fontWeight:700,fontSize:13,color:C.R}}>
+                  {[e.vorschuss>0&&`-${eur(e.vorschuss)}`,totalAbz>0&&`-${eur(totalAbz)}`,e.krank_abzug>0&&`🤒-${eur(e.krank_abzug)}`].filter(Boolean).join("  ")}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Netto-Balken */}
+          <div style={{background:`${C.G}15`,border:`1px solid ${C.G}25`,borderRadius:7,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:12,color:C.G,fontWeight:600}}>NETTO</span>
+            <span style={{fontWeight:900,fontSize:20,color:C.G,letterSpacing:-.5}}>{eur(e.netto)}</span>
+            {e.prevNetto!==null&&<Delta curr={e.netto} prev={e.prevNetto}/>}
+          </div>
+        </div>
+
+        {/* Aktionen */}
+        <div style={{padding:"10px 14px",display:"flex",gap:8,borderTop:`1px solid ${C.b}`}}>
+          {iS?<Spi s={20}/>:<>
+            {e.status==="entwurf"&&(
+              <button onClick={()=>setSt(e.ma.id,"freigegeben")} style={{flex:1,background:C.BD,border:`1px solid ${C.B}30`,color:C.B,borderRadius:8,padding:"9px",fontSize:13,fontWeight:700,cursor:"pointer"}}>✓ Freigeben</button>
+            )}
+            {e.status==="freigegeben"&&(
+              <button onClick={()=>setSt(e.ma.id,"ausgezahlt")} style={{flex:1,background:C.GD,border:`1px solid ${C.G}30`,color:C.G,borderRadius:8,padding:"9px",fontSize:13,fontWeight:700,cursor:"pointer"}}>💸 Ausgezahlt</button>
+            )}
+            {e.status==="ausgezahlt"&&(
+              <div style={{flex:1,textAlign:"center",color:C.G,fontWeight:700,fontSize:13,alignSelf:"center"}}>✓ Ausgezahlt</div>
+            )}
+            <button onClick={()=>{setSel(e.ma.id);setTab("detail")}} style={{background:C.YD,border:`1px solid ${C.Y}25`,color:C.Y,borderRadius:8,padding:"9px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Detail</button>
+            <button onClick={()=>doPDF(e,bM,bJ)} style={{background:C.sur,border:`1px solid ${C.bl}`,color:C.ts,borderRadius:8,padding:"9px 12px",fontSize:12,cursor:"pointer"}}>PDF</button>
+          </>}
+        </div>
+      </div>
+    )
+  };
+
+  return(
+  <div style={{display:"flex",flexDirection:"column",height:"100vh",background:C.bg}}>
+    {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
+    {showAbzModal&&<AbzModal alle={abzuege} mitarb={mitarb} bM={bM} bJ={bJ} onClose={()=>setShowAbz(false)} onChange={setABZ} showToast={(m,t)=>setToast({msg:m,type:t||"success"})}/>}
+
+    {/* ═══ HEADER ═══════════════════════════════════════════════ */}
+    {isMob?(
+      /* ── MOBILE HEADER ── */
+      <div style={{background:C.sur,borderBottom:`1px solid ${C.b}`,flexShrink:0}}>
+        <div style={{padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontWeight:900,fontSize:18,letterSpacing:-.5}}>bee<span style={{color:C.Y}}>-doo</span><span style={{fontWeight:400,fontSize:12,color:C.ts,marginLeft:5}}>PAY</span></div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {isSav&&<Spi s={15}/>}
+            {cOff>0&&<span style={{background:C.OD,color:C.O,border:`1px solid ${C.O}25`,borderRadius:5,padding:"3px 8px",fontSize:11,fontWeight:700,animation:"pulse 2s infinite"}}>⚠️ {cOff}</span>}
+            <input type="month" value={abrMonat} onChange={e=>setAM(e.target.value)} style={{background:C.card,border:`1px solid ${C.bl}`,color:C.tx,borderRadius:6,padding:"5px 8px",fontSize:12}}/>
+            <button onClick={()=>setShowSt(true)} style={{background:C.card,border:`1px solid ${C.bl}`,color:C.ts,borderRadius:6,padding:"6px 10px",fontSize:14,cursor:"pointer"}}>⚙️</button>
+          </div>
+        </div>
+        {/* Tabs als Bottom-Nav-Style */}
+        <div style={{display:"flex",borderTop:`1px solid ${C.b}`}}>
+          {tabBtn("main","Übersicht")}
+          {tabBtn("detail","Detail",!selMa)}
+          {tabBtn("modelle","Modelle")}
+        </div>
+      </div>
+    ):(
+      /* ── DESKTOP HEADER ── */
+      <div style={{background:C.sur,borderBottom:`1px solid ${C.b}`,padding:"0 12px 0 108px",display:"flex",alignItems:"center",justifyContent:"space-between",height:46,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <div style={{fontWeight:900,fontSize:16,letterSpacing:-.5,marginRight:8}}>bee<span style={{color:C.Y}}>-doo</span><span style={{fontWeight:400,fontSize:11,color:C.ts,marginLeft:4}}>PAY</span></div>
+          {tabBtn("main","Übersicht")}{tabBtn("detail","Detail",!selMa)}{tabBtn("modelle","Modelle")}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          {isSav&&<Spi s={14}/>}
+          {cOff>0&&<span style={{background:C.OD,color:C.O,border:`1px solid ${C.O}22`,borderRadius:4,padding:"2px 7px",fontSize:10,fontWeight:700,animation:"pulse 2s infinite"}}>⚠️ {cOff} offen</span>}
+          {slackOn&&<span title="Slack aktiv">🟢</span>}
+          <input type="month" value={abrMonat} onChange={e=>setAM(e.target.value)} style={{background:C.card,border:`1px solid ${C.bl}`,color:C.tx,borderRadius:5,padding:"3px 8px",fontSize:11,width:128}}/>
+          <IBtn onClick={()=>exportDATEV(eintraege,bM,bJ)} label="⬇ DATEV" color={C.G}/>
+          <IBtn onClick={()=>(async()=>{const res=await fetch(SB+"/rest/v1/pay_settings",{headers:H});const arr=await res.json();const s=Object.fromEntries(arr.map(x=>[x.key,x.value]));for(const e of eintraege){await doPDF(e,bM,bJ,s);await new Promise(r=>setTimeout(r,800))}})()} label="🖨️ PDFs" color={C.Y}/>
+          <button onClick={()=>setShowSt(true)} style={{background:C.sur,border:`1px solid ${C.bl}`,color:C.ts,borderRadius:5,padding:"5px 8px",fontSize:12,cursor:"pointer"}}>⚙️</button>
+        </div>
+      </div>
+    )}
+
+    {/* ═══ KPI STRIP ════════════════════════════════════════════ */}
+    {isMob?(
+      /* ── MOBILE KPI: 2×2 Grid ── */
+      <div style={{background:C.card,borderBottom:`1px solid ${C.b}`,padding:"10px 12px",flexShrink:0}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+          <div style={{background:C.sur,borderRadius:8,padding:"8px 12px",border:`1px solid ${C.Y}20`}}>
+            <div style={{fontSize:9,color:`${C.Y}80`,fontWeight:700,textTransform:"uppercase",marginBottom:2}}>Brutto Provision</div>
+            <div style={{fontWeight:800,fontSize:18,color:C.Y,letterSpacing:-.5}}>{eur(totB)}</div>
+          </div>
+          <div style={{background:C.GD,borderRadius:8,padding:"8px 12px",border:`1px solid ${C.G}25`}}>
+            <div style={{fontSize:9,color:`${C.G}80`,fontWeight:700,textTransform:"uppercase",marginBottom:2}}>Netto Auszahlung</div>
+            <div style={{fontWeight:800,fontSize:18,color:C.G,letterSpacing:-.5}}>{eur(totN)}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
+          {[
+            {c:C.G,  bg:C.GD,  l:`✓ Ausgezahlt (${cA})`, n:eur(allE.filter(e=>e.status==="ausgezahlt").reduce((s,e)=>s+e.netto,0))},
+            {c:C.B,  bg:C.BD,  l:`Freigegeben (${cF})`,  n:eur(allE.filter(e=>e.status==="freigegeben").reduce((s,e)=>s+e.netto,0))},
+            {c:C.O,  bg:C.OD,  l:`Offen (${cO})`,        n:eur(allE.filter(e=>e.status==="entwurf").reduce((s,e)=>s+e.gesamt,0))},
+            ...(totVS>0?[{c:C.R,bg:C.RD,l:`Vorschüsse (${vorschuesse.length})`,n:eur(totVS)}]:[]),
+            ...(totABZ>0?[{c:"#F472B6",bg:"#F472B615",l:`Abzüge (${cAbzMA} MA)`,n:eur(totABZ)}]:[]),
+            ...(totKR>0?[{c:C.T,bg:C.TD,l:`Krank (${cKrank}×)`,n:eur(totKR)}]:[]),
+            ...(cStaf>0?[{c:C.P,bg:C.PD,l:`Staffeln`,n:cStaf+" ⚡"}]:[]),
+          ].map((p,i)=>(
+            <div key={i} style={{background:p.bg,border:`1px solid ${p.c}22`,borderRadius:7,padding:"5px 10px",flexShrink:0}}>
+              <div style={{fontSize:8,color:`${p.c}80`,fontWeight:700,textTransform:"uppercase",marginBottom:1}}>{p.l}</div>
+              <div style={{fontWeight:800,fontSize:14,color:p.c}}>{p.n}</div>
+            </div>
+          ))}
+        </div>
+        {radar.length>0&&<div style={{marginTop:8,background:C.OD,border:`1px solid ${C.O}22`,borderRadius:6,padding:"5px 10px",display:"flex",gap:8,alignItems:"center",overflowX:"auto"}}>
+          <span style={{fontSize:9,fontWeight:700,color:C.O,textTransform:"uppercase",flexShrink:0}}>⚡ Staffel-Radar</span>
+          {radar.map(e=><span key={e.ma.id} style={{background:C.sur,borderRadius:4,padding:"2px 8px",fontSize:12,color:C.tx,fontWeight:600,flexShrink:0}}>{e.ma.kuerzel} <span style={{color:C.O}}>–{e.regel.staffel_schwelle-e.sales}×</span></span>)}
+        </div>}
+      </div>
+    ):(
+      /* ── DESKTOP KPI ── */
+      <div style={{background:C.card,borderBottom:`1px solid ${C.b}`,padding:"5px 12px",display:"flex",gap:7,alignItems:"center",flexShrink:0,overflowX:"auto"}}>
+        <Pill c={C.Y}  l="Brutto Provision"   n={eur(totB)}/>
+        <Pill c={C.G}  l="Netto Auszahlung"   n={eur(totN)} bg={C.GD}/>
+        <div style={{width:1,height:34,background:C.b,flexShrink:0}}/>
+        <Pill c={C.G}  l={`✓ Ausgezahlt (${cA})`} n={eur(allE.filter(e=>e.status==="ausgezahlt").reduce((s,e)=>s+e.netto,0))} bg={C.GD}/>
+        <Pill c={C.B}  l={`Freigegeben (${cF})`}   n={eur(allE.filter(e=>e.status==="freigegeben").reduce((s,e)=>s+e.netto,0))} bg={C.BD}/>
+        <Pill c={C.O}  l={`Offen (${cO})`}          n={eur(allE.filter(e=>e.status==="entwurf").reduce((s,e)=>s+e.gesamt,0))} bg={C.OD}/>
+        <div style={{width:1,height:34,background:C.b,flexShrink:0}}/>
+        <Pill c={C.R}  l={`Vorschüsse (${vorschuesse.length})`}     n={eur(totVS)} bg={C.RD}/>
+        <Pill c={C.Pk||"#F472B6"} l={`Abzüge (${cAbzMA} MA)`}      n={eur(totABZ)} bg={C.PkD||"#F472B615"}/>
+        <Pill c={C.T}  l={`Krank (${cKrank}×)`}      n={eur(totKR)} bg={C.TD}/>
+        <Pill c={C.P}  l={`Staffeln (${cStaf})`}     n={cStaf+" ⚡"} bg={C.PD}/>
+        {radar.length>0&&<div style={{marginLeft:"auto",background:C.OD,border:`1px solid ${C.O}22`,borderRadius:6,padding:"4px 10px",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+          <span style={{fontSize:8,fontWeight:700,color:C.O,textTransform:"uppercase"}}>⚡ Radar</span>
+          {radar.map(e=><span key={e.ma.id} style={{background:C.sur,borderRadius:4,padding:"2px 7px",fontSize:11,color:C.tx,fontWeight:600}}>{e.ma.kuerzel} <span style={{color:C.O}}>–{e.regel.staffel_schwelle-e.sales}x</span></span>)}
+        </div>}
+      </div>
+    )}
+
+    {/* ═══ ACTION BAR ═══════════════════════════════════════════ */}
+    {isMob?(
+      /* ── MOBILE ACTION BAR ── */
+      <div style={{background:C.sur,borderBottom:`1px solid ${C.b}`,padding:"8px 12px",flexShrink:0}}>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          <button onClick={()=>setAll("freigegeben")} disabled={cO===0||isSav} style={{flex:1,background:C.BD,border:`1px solid ${C.B}30`,color:C.B,borderRadius:8,padding:"9px",fontSize:12,fontWeight:700,cursor:cO===0?"not-allowed":"pointer",opacity:cO===0?0.4:1}}>✓ Alle freigeben ({cO})</button>
+          <button onClick={()=>setAll("ausgezahlt")} disabled={cF===0||isSav} style={{flex:1,background:C.GD,border:`1px solid ${C.G}30`,color:C.G,borderRadius:8,padding:"9px",fontSize:12,fontWeight:700,cursor:cF===0?"not-allowed":"pointer",opacity:cF===0?0.4:1}}>💸 Alle auszahlen ({cF})</button>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>setShowVS(true)} style={{flex:1,background:C.RD,border:`1px solid ${C.R}30`,color:C.R,borderRadius:8,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Vorschuss</button>
+          <button onClick={()=>setShowAbz(true)} style={{flex:1,background:"#F472B615",border:"1px solid #F472B630",color:"#F472B6",borderRadius:8,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer"}}>➖ Abzüge</button>
+          <button onClick={()=>exportDATEV(eintraege,bM,bJ)} style={{background:C.GD,border:`1px solid ${C.G}30`,color:C.G,borderRadius:8,padding:"8px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>⬇</button>
+        </div>
+        {/* Filter scroll */}
+        <div style={{display:"flex",gap:6,overflowX:"auto",marginTop:8,paddingBottom:2}}>
+          {[["alle","Alle",C.ts],["offen","Offen",C.O],["freigeg","Freigeg.",C.B],["bezahlt","Ausgez.",C.G],["staffel","⚡ Staffel",C.Y],["vorschuss","Vorschuss",C.R],["abzuege","Abzüge","#F472B6"],["krank","🤒 Krank",C.T]].map(([k,l,c])=>(
+            <button key={k} onClick={()=>setFilter(k)} style={{background:filter===k?`${c}25`:"none",border:`1px solid ${filter===k?c+"50":C.b}`,color:filter===k?c:C.tm,borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:filter===k?700:500,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>{l}</button>
+          ))}
+        </div>
+      </div>
+    ):(
+      /* ── DESKTOP ACTION BAR ── */
+      <div style={{background:C.sur,borderBottom:`1px solid ${C.b}`,padding:"5px 12px",display:"flex",alignItems:"center",gap:6,flexShrink:0,flexWrap:"wrap"}}>
+        <IBtn onClick={()=>setAll("freigegeben")} label={`✓ Alle freigeben (${cO})`} color={C.B} disabled={cO===0||isSav}/>
+        <IBtn onClick={()=>setAll("ausgezahlt")}  label={`💸 Alle auszahlen (${cF})`}  color={C.G} disabled={cF===0||isSav}/>
+        <div style={{width:1,height:18,background:C.b}}/>
+        <IBtn onClick={()=>setShowVS(true)}  label="+ Vorschuss" color={C.R}/>
+        <IBtn onClick={()=>setShowAbz(true)} label="➖ Abzüge" color={"#F472B6"}/>
+        <IBtn onClick={async()=>{
+          setSv(s=>({...s,_portal:true}));
+          let n=0;
+          for(const e of eintraege){try{await saveToPortal(e,bM,bJ);n++;}catch(err){}}
+          setSv(s=>({...s,_portal:false}));
+          ok(`📤 ${n} Abrechnungen ins Portal gespeichert ✓`);
+        }} label={`📤 Alle ins Portal (${eintraege.length})`} color={C.T} disabled={eintraege.length===0||saving._portal}/>
+        <div style={{width:1,height:18,background:C.b}}/>
+        {[["alle","Alle",C.ts],["offen","Offen",C.O],["freigeg","Freigeg.",C.B],["bezahlt","Ausgez.",C.G],["staffel","⚡",C.Y],["vorschuss","Vorschuss",C.R],["abzuege","Abzüge","#F472B6"],["krank","🤒 Krank",C.T]].map(([k,l,c])=>(
+          <button key={k} onClick={()=>setFilter(k)} style={{background:filter===k?`${c}20`:"none",border:`1px solid ${filter===k?c+"40":C.b}`,color:filter===k?c:C.tm,borderRadius:4,padding:"3px 9px",fontSize:10,fontWeight:filter===k?700:500,cursor:"pointer"}}>
+            {l}
+          </button>
+        ))}
+        <div style={{marginLeft:"auto",fontSize:10,color:C.tm}}>{eintraege.length} Einträge · {MO[bM]} {bJ}</div>
+      </div>
+    )}
+
+    {/* ═══ CONTENT ══════════════════════════════════════════════ */}
+    <div style={{flex:1,overflow:"hidden",display:"flex",minHeight:0}}>
+    {loading?(
+      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:12,color:C.ts}}><Spi s={28}/> Lade Daten...</div>
+
+    ):tab==="main"&&isMob?(
+      /* ─── MOBILE KARTEN-LIST ────────────────────────────────── */
+      <div style={{flex:1,overflowY:"auto",paddingTop:10,paddingBottom:20}}>
+        {eintraege.length===0?(
+          <div style={{textAlign:"center",padding:40,color:C.tm}}>Keine Einträge für diesen Filter</div>
+        ):eintraege.map(e=><MobileCard key={e.ma.id} e={e}/>)}
+        {/* Summen-Footer */}
+        {eintraege.length>0&&<div style={{margin:"10px 12px 0",background:C.card,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.bl}`}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.ts,textTransform:"uppercase",marginBottom:8}}>Gesamt · {eintraege.length} Mitarbeiter</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+            <div><div style={{fontSize:9,color:C.tm,marginBottom:1}}>Brutto</div><div style={{fontWeight:700,fontSize:14}}>{eur(totB)}</div></div>
+            <div><div style={{fontSize:9,color:C.R,marginBottom:1}}>Abzüge</div><div style={{fontWeight:700,fontSize:14,color:C.R}}>-{eur(totVS+totABZ+totKR)}</div></div>
+            <div><div style={{fontSize:9,color:C.G,marginBottom:1}}>Netto</div><div style={{fontWeight:800,fontSize:16,color:C.G}}>{eur(totN)}</div></div>
+          </div>
+        </div>}
+      </div>
+
+    ):tab==="main"?(
+      /* ─── HAUPTTABELLE ──────────────────────────────────────── */
+      <div style={{flex:1,overflowY:"auto",overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:1060}}>
+          <thead style={{position:"sticky",top:0,zIndex:10}}>
+            <tr style={{background:C.card,borderBottom:`2px solid ${C.b}`}}>
+              {[["Mitarbeiter","20%"],["Typ","8%"],["Sales","5%"],["Staffel","9%"],["Krank","7%"],["Provision","8%"],["Vorschuss","7%"],["Abzüge","9%"],["Netto","8%"],["vs "+MO[vM],"7%"],["Status","5%"],["","7%"]].map(([h,w])=>(
+                <th key={h} style={{width:w,padding:"7px 10px",textAlign:["Provision","Vorschuss","Netto","vs "+MO[vM],"Krank"].includes(h)?"right":"left",fontSize:9,fontWeight:700,color:C.tm,textTransform:"uppercase",letterSpacing:.5}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {eintraege.length===0?(
+              <tr><td colSpan={12} style={{padding:40,textAlign:"center",color:C.tm}}>Keine Einträge für diesen Filter</td></tr>
+            ):eintraege.map((e,i)=>{
+              const sc=STCFG[e.status]||STCFG.entwurf;
+              const tc=TCLR[e.ma.typ]||C.tx;
+              const sw=e.regel?.staffel_schwelle;
+              const isA=e.ma.typ.startsWith("angestellt");
+              const iS=saving[e.ma.id];
+              const iKS=ktSaving[e.ma.id];
+              // Abzüge dieses MA kompakt
+              const abzTop=e.abzuege.slice(0,2);
+              const abzRest=e.abzuege.length-2;
+              return(
+                <tr key={e.ma.id} className="row" style={{borderBottom:`1px solid ${C.b}`,cursor:"pointer"}} onClick={()=>{setSel(e.ma.id);setTab("detail")}}>
+                  <td style={{padding:"7px 10px"}}>
+                    <div style={{fontWeight:600,fontSize:12}}>{e.ma.vorname} {e.ma.nachname}</div>
+                    <div style={{fontSize:9,color:C.tm}}>{e.ma.kuerzel}{isA&&e.ma.grundgehalt>0?" · "+eur(e.ma.grundgehalt):""}</div>
+                  </td>
+                  <td style={{padding:"7px 10px"}}><Chip c={tc} l={TLBL[e.ma.typ]||e.ma.typ}/></td>
+                  <td style={{padding:"7px 10px"}}><div style={{fontWeight:700,fontSize:13,color:e.staf_ok?C.Y:C.tx}}>{e.sales}</div>{sw&&sw<999&&<div style={{fontSize:9,color:C.tm}}>/{sw}</div>}</td>
+                  <td style={{padding:"7px 10px"}}>
+                    {e.staf_ok?<span style={{color:C.Y,fontSize:11,fontWeight:700}}>⚡ +{eur(e.staf_bonus)}</span>
+                     :sw&&sw<999?<div><div style={{width:"90%",height:3,background:C.b,borderRadius:2,marginBottom:2}}><div style={{width:`${pct(e.sales,sw)}%`,height:"100%",background:C.O,borderRadius:2}}/></div><div style={{fontSize:9,color:C.O}}>{sw-e.sales}x fehlt</div></div>
+                     :<span style={{color:C.tm,fontSize:10}}>–</span>}
+                  </td>
+                  <td style={{padding:"7px 10px",textAlign:"right"}} onClick={ev=>ev.stopPropagation()}>
+                    {isA?<div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>{iKS?<Spi s={11} color={C.T}/>:null}<NumEdit val={e.krank?.tage||0} onSave={v=>saveKranktage(e.ma.id,v)} color={C.T}/><span style={{fontSize:9,color:C.tm}}>d</span></div>
+                      {(e.krank_abzug||0)>0&&<span style={{color:C.T,fontSize:9,fontWeight:700}}>-{eur(e.krank_abzug)}</span>}
+                    </div>:<span style={{color:C.tm,fontSize:10}}>–</span>}
+                  </td>
+                  <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,fontSize:12}}>{eur(e.gesamt)}</td>
+                  <td style={{padding:"7px 10px",textAlign:"right"}}>{e.vorschuss>0?<span style={{color:C.R,fontWeight:700,fontSize:11}}>-{eur(e.vorschuss)}</span>:<span style={{color:C.tm,fontSize:10}}>–</span>}</td>
+                  <td style={{padding:"7px 10px"}} onClick={ev=>ev.stopPropagation()}>
+                    {e.abzuege.length>0?(
+                      <div>
+                        {abzTop.map((a,i)=>{const kat=ABZ_KAT[a.kategorie]||ABZ_KAT.sonstiges;return(
+                          <div key={a.id} style={{display:"flex",alignItems:"center",gap:4,marginBottom:i<abzTop.length-1?3:0}}>
+                            <span style={{fontSize:10}}>{kat.icon}</span>
+                            <span style={{fontSize:10,color:C.ts,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.bezeichnung}</span>
+                            <span style={{color:"#F472B6",fontWeight:700,fontSize:10,flexShrink:0}}>-{eur(a.betrag)}</span>
+                            {a.typ==="wiederkehrend"&&<span style={{fontSize:8,color:C.O}}>↻</span>}
+                          </div>
+                        )})}
+                        {abzRest>0&&<div style={{fontSize:9,color:C.tm,marginTop:2}}>+{abzRest} weitere</div>}
+                        <div style={{fontSize:10,fontWeight:700,color:"#F472B6",borderTop:`1px solid ${C.b}`,marginTop:3,paddingTop:3}}>Σ -{eur(e.abzug_summe)}</div>
+                      </div>
+                    ):<button onClick={ev=>{ev.stopPropagation();setSel(e.ma.id);setShowAbz(true)}} style={{background:"none",border:`1px dashed ${C.b}`,color:C.tm,borderRadius:4,padding:"2px 8px",fontSize:10,cursor:"pointer"}}>+ Abzug</button>}
+                  </td>
+                  <td style={{padding:"7px 10px",textAlign:"right",fontWeight:800,fontSize:13,color:C.G}}>{eur(e.netto)}</td>
+                  <td style={{padding:"7px 10px",textAlign:"right"}}><Delta curr={e.netto} prev={e.prevNetto}/></td>
+                  <td style={{padding:"7px 10px"}} onClick={ev=>ev.stopPropagation()}><Badge c={sc.c} bg={sc.bg} l={sc.l}/></td>
+                  <td style={{padding:"5px 8px"}} onClick={ev=>ev.stopPropagation()}>
+                    <div style={{display:"flex",gap:3}}>
+                      {iS?<Spi s={13}/>:<>
+                        {e.status==="entwurf"     &&<button onClick={()=>setSt(e.ma.id,"freigegeben")} style={{background:C.BD,border:`1px solid ${C.B}25`,color:C.B,borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>}
+                        {e.status==="freigegeben" &&<button onClick={()=>setSt(e.ma.id,"ausgezahlt")}  style={{background:C.GD,border:`1px solid ${C.G}25`,color:C.G,borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>💸</button>}
+                        <button onClick={()=>doPDF(e,bM,bJ)} style={{background:C.YD,border:`1px solid ${C.Y}18`,color:C.Y,borderRadius:4,padding:"2px 6px",fontSize:10,cursor:"pointer"}}>PDF</button>
+                        <button onClick={async ev=>{ev.stopPropagation();setSv(s=>({...s,["p"+e.ma.id]:true}));try{await saveToPortal(e,bM,bJ);ok(e.ma.kuerzel+" → Portal ✓");}catch(ex){err(ex.message);}finally{setSv(s=>({...s,["p"+e.ma.id]:false}));}}} title="Ins Berater-Portal speichern" style={{background:`${C.T}18`,border:`1px solid ${C.T}25`,color:C.T,borderRadius:4,padding:"2px 6px",fontSize:10,cursor:"pointer"}}>{saving["p"+e.ma.id]?<Spi s={10} color={C.T}/>:"📤"}</button>
+                      </>}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+          {eintraege.length>0&&<tfoot style={{position:"sticky",bottom:0}}>
+            <tr style={{borderTop:`2px solid ${C.bl}`,background:C.card}}>
+              <td colSpan={4} style={{padding:"7px 10px",fontWeight:700,fontSize:10,color:C.ts}}>GESAMT · {eintraege.length} Mitarbeiter</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,fontSize:11,color:C.T}}>-{eur(totKR)}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,fontSize:12,color:C.tx}}>{eur(totB)}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,fontSize:11,color:C.R}}>-{eur(totVS)}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,fontSize:11,color:"#F472B6"}}>-{eur(totABZ)}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontWeight:900,fontSize:14,color:C.G}}>{eur(totN)}</td>
+              <td colSpan={3}/>
+            </tr>
+          </tfoot>}
+        </table>
+      </div>
+
+    ):tab==="detail"&&selEntry?(
+      /* ─── DETAIL ────────────────────────────────────────────── */
+      <div style={{flex:1,overflowY:"auto",padding:18,animation:"fadeIn .2s ease"}}>
+        <button onClick={()=>setTab("main")} style={{background:"none",border:"none",color:C.ts,cursor:"pointer",fontSize:11,marginBottom:12,padding:0}}>← Zurück</button>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+              <h2 style={{fontSize:19,fontWeight:800}}>{selEntry.ma.vorname} {selEntry.ma.nachname}</h2>
+              <Chip c={TCLR[selEntry.ma.typ]||C.tx} l={TLBL[selEntry.ma.typ]||selEntry.ma.typ}/>
+              {selEntry.status&&<Badge c={STCFG[selEntry.status]?.c||C.O} bg={STCFG[selEntry.status]?.bg||C.OD} l={STCFG[selEntry.status]?.l||"Offen"}/>}
+              {selEntry.prevNetto!==null&&<span style={{fontSize:11,color:C.ts}}>vs {MO[vM]}: <Delta curr={selEntry.netto} prev={selEntry.prevNetto}/></span>}
+            </div>
+            <div style={{fontSize:11,color:C.ts}}>{MOL[bM]} {bJ} · {selEntry.pos?.length||0} Positionen</div>
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {saving[selEntry.ma.id]?<Spi s={20}/>:<>
+              {selEntry.status==="entwurf"     &&<IBtn onClick={()=>setSt(selEntry.ma.id,"freigegeben")} label="✓ Freigeben" color={C.B}/>}
+              {selEntry.status==="freigegeben" &&<IBtn onClick={()=>setSt(selEntry.ma.id,"ausgezahlt")}  label="💸 Ausgezahlt" color={C.G}/>}
+              {selEntry.status==="ausgezahlt"  &&<span style={{color:C.G,fontSize:11,fontWeight:700,alignSelf:"center"}}>✓ Ausgezahlt</span>}
+            </>}
+            <IBtn onClick={()=>setShowAbz(true)} label="➖ Abzüge" color={"#F472B6"}/>
+            <IBtn onClick={()=>doPDF(selEntry,bM,bJ)} label="🖨️ PDF" color={C.Y}/>
+            <IBtn onClick={async()=>{setSv(s=>({...s,portalDet:true}));try{await saveToPortal(selEntry,bM,bJ);ok(selEntry.ma.kuerzel+" → Portal ✓");}catch(ex){err(ex.message);}finally{setSv(s=>({...s,portalDet:false}));}}} label={saving.portalDet?"⏳":"📤 Portal"} color={C.T}/>
+          </div>
+        </div>
+
+        {selEntry.staf_ok&&<div style={{background:`${C.Y}12`,border:`1px solid ${C.Y}22`,borderRadius:7,padding:"9px 13px",marginBottom:10,display:"flex",gap:10,alignItems:"center"}}><span>⚡</span><div><div style={{fontWeight:700,color:C.Y,fontSize:12}}>Staffel! {selEntry.sales} Sales ≥ {selEntry.regel?.staffel_schwelle}</div><div style={{color:C.ts,fontSize:11}}>Rückwirkend {eur(selEntry.regel?.staffel_betrag_sale)}/Sale · +{eur(selEntry.staf_bonus)}</div></div></div>}
+        {selEntry.krank_abzug>0&&<div style={{background:C.TD,border:`1px solid ${C.T}22`,borderRadius:7,padding:"9px 13px",marginBottom:10,display:"flex",gap:10,alignItems:"center"}}><span>🤒</span><div><div style={{fontWeight:700,color:C.T,fontSize:12}}>{selEntry.krank?.tage} Kranktage · -{eur(selEntry.krank_abzug)}</div><div style={{color:C.ts,fontSize:11}}>{selEntry.krank?.notiz||"Grundgehalt anteilig"}</div></div></div>}
+        {selEntry.vorschuss>0&&<div style={{background:C.RD,border:`1px solid ${C.R}22`,borderRadius:7,padding:"9px 13px",marginBottom:10,display:"flex",gap:10,alignItems:"center"}}><span>✋</span><div><div style={{fontWeight:700,color:C.R,fontSize:12}}>Vorschuss -{eur(selEntry.vorschuss)}</div></div></div>}
+        {selEntry.abzuege?.length>0&&<div style={{background:"#F472B615",border:"1px solid #F472B625",borderRadius:7,padding:"9px 13px",marginBottom:10}}>
+          <div style={{fontWeight:700,color:"#F472B6",fontSize:12,marginBottom:6}}>➖ Abzüge ({selEntry.abzuege.length}) · -{eur(selEntry.abzug_summe)}</div>
+          {selEntry.abzuege.map(a=>{const kat=ABZ_KAT[a.kategorie]||ABZ_KAT.sonstiges;return(
+            <div key={a.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:11,padding:"3px 0",borderBottom:`1px solid ${C.b}`}}>
+              <span>{kat.icon}</span>
+              <span style={{flex:1,color:C.ts}}>{a.bezeichnung}</span>
+              <span style={{fontSize:9,color:a.typ==="wiederkehrend"?C.O:C.B,fontWeight:700}}>{a.typ==="wiederkehrend"?"↻ mtl.":"1×"}</span>
+              {a.notiz&&<span style={{fontSize:9,color:C.tm}}>· {a.notiz}</span>}
+              <span style={{fontWeight:700,color:"#F472B6"}}>-{eur(a.betrag)}</span>
+            </div>
+          )})}
+        </div>}
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:8,padding:13}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.ts,textTransform:"uppercase",marginBottom:10}}>Abrechnung</div>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <tbody>
+                {(selEntry.pos||[]).map((p,i)=>(
+                  <tr key={i} style={{borderTop:`1px solid ${C.b}`}}>
+                    <td style={{padding:"5px 0",fontSize:11}}><div style={{fontWeight:600}}>{p.nr}</div><div style={{fontSize:9,color:C.tm}}>{p.kunde}</div></td>
+                    <td style={{padding:"5px 0 5px 8px",fontSize:10,color:C.ts}}>{PICS[p.typ]||"•"} {p.info}{p.sa&&<span style={{color:C.Y,marginLeft:3}}>⚡</span>}</td>
+                    <td style={{padding:"5px 0",textAlign:"right",fontWeight:700,fontSize:11}}>{eur(p.betrag)}</td>
+                  </tr>
+                ))}
+                <tr style={{borderTop:`1px solid ${C.bl}`}}><td colSpan={2} style={{padding:"5px 0",fontWeight:600,fontSize:11}}>Brutto</td><td style={{padding:"5px 0",textAlign:"right",fontWeight:700,fontSize:13}}>{eur(selEntry.gesamt)}</td></tr>
+                {(selEntry.abzuege||[]).map(a=>{const kat=ABZ_KAT[a.kategorie]||ABZ_KAT.sonstiges;return<tr key={a.id}><td colSpan={2} style={{padding:"4px 0",color:"#F472B6",fontSize:10}}>{kat.icon} {a.bezeichnung}{a.typ==="wiederkehrend"?" (↻)":""}</td><td style={{padding:"4px 0",textAlign:"right",color:"#F472B6",fontWeight:700,fontSize:11}}>-{eur(a.betrag)}</td></tr>})}
+                {selEntry.krank_abzug>0&&<tr><td colSpan={2} style={{padding:"4px 0",color:C.T,fontSize:10}}>🤒 Krank ({selEntry.krank?.tage}d)</td><td style={{padding:"4px 0",textAlign:"right",color:C.T,fontWeight:700,fontSize:11}}>-{eur(selEntry.krank_abzug)}</td></tr>}
+                {selEntry.vorschuss>0&&<tr><td colSpan={2} style={{padding:"4px 0",color:C.R,fontSize:10}}>✋ Vorschuss</td><td style={{padding:"4px 0",textAlign:"right",color:C.R,fontWeight:700,fontSize:11}}>-{eur(selEntry.vorschuss)}</td></tr>}
+                <tr style={{borderTop:`2px solid ${C.bl}`}}><td colSpan={2} style={{padding:"6px 0",fontWeight:800,fontSize:12,color:C.G}}>NETTO</td><td style={{padding:"6px 0",textAlign:"right",fontWeight:900,fontSize:15,color:C.G}}>{eur(selEntry.netto)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:8,padding:13}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.ts,textTransform:"uppercase",marginBottom:10}}>Mitarbeiter</div>
+              {[["Typ",TLBL[selEntry.ma.typ]||selEntry.ma.typ],...(selEntry.ma.typ.startsWith("angestellt")?[["Grundgehalt",eur(selEntry.ma.grundgehalt)]]:[] ),...(selEntry.ma.auto_zuschuss>0?[["Auto",eur(selEntry.ma.auto_zuschuss)+"/Mo"]]:[] ),["Sales",selEntry.sales],...(selEntry.prevNetto!==null?[["Vormonat",eur(selEntry.prevNetto)]]:[] )].map(([k,v])=><LabelRow key={k} k={k} v={v}/>)}
+              {selEntry.ma.typ.startsWith("angestellt")&&<div style={{marginTop:8}}><div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:4}}>🤒 Kranktage</div><div style={{display:"flex",alignItems:"center",gap:8}}>{ktSaving[selEntry.ma.id]?<Spi s={13} color={C.T}/>:null}<NumEdit val={selEntry.krank?.tage||0} onSave={v=>saveKranktage(selEntry.ma.id,v)} color={C.T}/><span style={{fontSize:10,color:C.ts}}>Tage · -{eur(selEntry.krank_abzug)}</span></div></div>}
+            </div>
+            {selEntry.regel&&<div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:8,padding:13}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.ts,textTransform:"uppercase",marginBottom:10}}>Modell</div>
+              {[["Basis",eur(selEntry.regel.basis_betrag_sale)],selEntry.regel.staffel_schwelle<999&&["Staffel",`${selEntry.regel.staffel_schwelle} → ${eur(selEntry.regel.staffel_betrag_sale)}`],selEntry.regel.rueckwirkend&&["Rückwirkend","✓"],+selEntry.regel.betrag_termin_sf>0&&["Termin SF",eur(selEntry.regel.betrag_termin_sf)],+selEntry.regel.betrag_eigenlead>0&&["Eigenlead",eur(selEntry.regel.betrag_eigenlead)]].filter(Boolean).map(([k,v])=><LabelRow key={k} k={k} v={v}/>)}
+            </div>}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:10}}>
+          {eintraege.map(e=><button key={e.ma.id} onClick={()=>setSel(e.ma.id)} style={{background:e.ma.id===selMa?C.YD:C.sur,border:`1px solid ${e.ma.id===selMa?C.Y+"40":C.b}`,color:e.ma.id===selMa?C.Y:C.ts,borderRadius:5,padding:"3px 9px",fontSize:10,fontWeight:600,cursor:"pointer"}}>{e.ma.kuerzel}</button>)}
+        </div>
+      </div>
+
+    ):tab==="modelle"?(
+      /* ─── MODELLE ───────────────────────────────────────────── */
+      <div style={{flex:1,overflowY:"auto",padding:18,animation:"fadeIn .2s ease"}}>
+        <div style={{marginBottom:14}}><h2 style={{fontSize:17,fontWeight:800}}>Provisions-Modelle</h2><div style={{fontSize:11,color:C.ts}}>{regeln.length} aktiv</div></div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
+          {regeln.map(r=>{const tc=TCLR[r.mitarbeiter_typ]||C.tx;return(
+            <div key={r.id} style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:8,padding:13,borderLeft:`3px solid ${tc}`}}>
+              <div style={{fontWeight:800,fontSize:13,marginBottom:1}}>{r.modell_name}</div>
+              <div style={{fontSize:8,color:C.tm,marginBottom:10,textTransform:"uppercase"}}>{r.mitarbeiter_typ}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+                {[["Sale Basis",eur(r.basis_betrag_sale)],r.staffel_schwelle<999&&["Staffel ab",r.staffel_schwelle+" Sales"],r.staffel_schwelle<999&&["Staffel Rate",eur(r.staffel_betrag_sale)],r.rueckwirkend&&["Rückwirkend","✓"],+r.betrag_termin_sf>0&&["Termin SF",eur(r.betrag_termin_sf)],+r.betrag_eigenlead>0&&["Eigenlead",eur(r.betrag_eigenlead)],+r.betrag_empfehlung>0&&["Empfehlung",eur(r.betrag_empfehlung)],+r.betrag_speicher>0&&["Speicher",eur(r.betrag_speicher)]].filter(Boolean).map(([k,v])=>(
+                  <div key={k} style={{background:C.sur,borderRadius:5,padding:"6px 8px"}}><div style={{fontSize:8,color:C.tm,textTransform:"uppercase",marginBottom:1}}>{k}</div><div style={{fontWeight:700,fontSize:11,color:tc}}>{v}</div></div>
+                ))}
+              </div>
+            </div>
+          )})}
+        </div>
+      </div>
+    ):null}
+    </div>
+
+    {/* ═══ VORSCHUSS MODAL ══════════════════════════════════════ */}
+    {showVSModal&&(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowVS(false)}>
+        <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:12,padding:22,width:400,maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div><div style={{fontWeight:800,fontSize:15}}>Vorschuss erfassen</div><div style={{fontSize:10,color:C.ts}}>Abzug von der Provision</div></div>
+            <button onClick={()=>setShowVS(false)} style={{background:C.sur,border:`1px solid ${C.b}`,color:C.ts,borderRadius:6,padding:"3px 9px",cursor:"pointer"}}>×</button>
+          </div>
+          {vorschuesse.length>0&&<div style={{marginBottom:12}}>
+            {vorschuesse.map(v=>{const ma=mitarb.find(m=>m.id===v.mitarbeiter_id);return(
+              <div key={v.id||v.mitarbeiter_id} style={{background:C.sur,borderRadius:6,padding:"7px 10px",marginBottom:5,display:"flex",gap:8,alignItems:"center"}}>
+                <span style={{fontSize:13}}>{QICD[v.quelle]||"✋"}</span>
+                <div style={{flex:1}}><div style={{fontWeight:600,fontSize:11}}>{ma?ma.vorname+" "+ma.nachname:"?"}</div><div style={{fontSize:9,color:C.ts}}>{v.grund||v.quelle}</div></div>
+                <span style={{color:C.R,fontWeight:700,fontSize:12}}>{eur(v.betrag)}</span>
+                <button onClick={()=>delVS(v.mitarbeiter_id)} style={{background:C.RD,border:`1px solid ${C.R}22`,color:C.R,borderRadius:4,padding:"2px 7px",fontSize:10,cursor:"pointer"}}>✕</button>
+              </div>
+            )})}
+          </div>}
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <div><div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Mitarbeiter *</div><select value={vsForm.ma_id} onChange={e=>setVSF(p=>({...p,ma_id:e.target.value}))} className="inp" style={{width:"100%"}}><option value="">– auswählen –</option>{mitarb.map(m=><option key={m.id} value={m.id}>{m.vorname} {m.nachname}</option>)}</select></div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><div><div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Betrag €</div><input type="number" value={vsForm.betrag} onChange={e=>setVSF(p=>({...p,betrag:e.target.value}))} placeholder="200" className="inp"/></div><div><div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Quelle</div><select value={vsForm.quelle} onChange={e=>setVSF(p=>({...p,quelle:e.target.value}))} className="inp" style={{width:"100%"}}><option value="manuell">✋ Manuell</option><option value="scout_app">🗺️ Scout App</option><option value="field_app">⚡ Field App</option></select></div></div>
+            <div><div style={{fontSize:9,fontWeight:600,color:C.ts,marginBottom:3}}>Grund</div><input value={vsForm.grund} onChange={e=>setVSF(p=>({...p,grund:e.target.value}))} placeholder="Grund" className="inp"/></div>
+            <button onClick={saveVS} disabled={!vsForm.ma_id||!vsForm.betrag||vsLoading} style={{background:C.RD,border:`1px solid ${C.R}28`,color:C.R,borderRadius:7,padding:"9px",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{vsLoading&&<Spi s={15} color={C.R}/>} Speichern</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ═══ SETTINGS MODAL ═══════════════════════════════════════ */}
+    {showSettings&&(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowSt(false)}>
+        <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:12,padding:22,width:440}} onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontWeight:800,fontSize:15}}>⚙️ Einstellungen</div>
+            <button onClick={()=>setShowSt(false)} style={{background:C.sur,border:`1px solid ${C.b}`,color:C.ts,borderRadius:6,padding:"3px 9px",cursor:"pointer"}}>×</button>
+          </div>
+          <div style={{background:C.sur,borderRadius:8,padding:13,marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <div><div style={{fontWeight:700,fontSize:13}}>🔔 Slack</div><div style={{fontSize:10,color:C.ts}}>Automatische Benachrichtigungen</div></div>
+              <button onClick={()=>setSlackOn(!slackOn)} style={{background:slackOn?C.GD:C.sur,border:`1px solid ${slackOn?C.G+"35":C.bl}`,color:slackOn?C.G:C.ts,borderRadius:20,padding:"4px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{slackOn?"🟢 Aktiv":"⚪ Inaktiv"}</button>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <input value={slackWH} onChange={e=>setSlackWH(e.target.value)} placeholder="https://hooks.slack.com/services/..." className="inp" style={{flex:1,fontSize:11}}/>
+              <button onClick={async()=>{if(!slackWH){err("Kein Webhook");return;}await sendSlack(slackWH,[{type:"section",text:{type:"mrkdwn",text:"🟡 *bee-doo PAY* – Test ✓"}}]);ok("Gesendet!");}} style={{background:C.BD,border:`1px solid ${C.B}28`,color:C.B,borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Test</button>
+            </div>
+          </div>
+          <div style={{background:C.sur,borderRadius:8,padding:13,marginBottom:12}}>
+            <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>ℹ️ Status</div>
+            {[["Bezugsmonat",MOL[bM]+" "+bJ],["Aufträge",rel.length],["Abzüge aktiv",abzuege.filter(a=>abzugAktivInMonat(a,bM,bJ)).length],["Vorschüsse",vorschuesse.length],["Kranktage",kranktage.filter(k=>k.tage>0).length]].map(([k,v])=><LabelRow key={k} k={k} v={v}/>)}
+          </div>
+          <button onClick={saveSlack} style={{width:"100%",background:C.YD,border:`1px solid ${C.Y}28`,color:C.Y,borderRadius:7,padding:"10px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Einstellungen speichern</button>
+        </div>
+      </div>
+    )}
+  </div>
+  )
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
+</script>
+</body>
+</html>
