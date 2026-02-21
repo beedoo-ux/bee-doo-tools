@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>bee-doo · Bauengel</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; } body { background: #0c1222; color: #e1e7ef; } button, select, input, textarea { color: inherit; font-family: inherit; } .back-btn { position: fixed; top: 10px; left: 10px; z-index: 9999; background: #151d30; border: 1px solid #263354; color: #5c6b8a; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-family: 'DM Sans', sans-serif; cursor: pointer; text-decoration: none; transition: all .15s; } .back-btn:hover { border-color: #FDE154; color: #FDE154; }</style>
+</head>
+<body>
+<a href="index.html" class="back-btn">← Launcher</a>
+<div id="root"></div>
+<script>
+const { useState, useRef } = React;
+const Y = "#FDE154", D = "#0c1222", C = "#151d30", C2 = "#1c2640", B = "#263354", T = "#e1e7ef", M = "#5c6b8a", G = "#34D399", W = "#FBBF24", R = "#F87171", BL = "#60A5FA", P = "#A78BFA";
+const PHASES = {
+  vorkontakt: {
+    title: "Vorkontakt",
+    sub: "1-2 Tage vor Montage",
+    icon: "\u{1F4DE}",
+    color: BL,
+    goal: "Der Kunde kennt seinen Bauengel und f\xFChlt sich vorbereitet.",
+    script: "Guten Tag Herr/Frau [Name], mein Name ist [Bauengel-Name] von bee-doo. Ich bin Ihr pers\xF6nlicher Ansprechpartner f\xFCr die Montage Ihrer Solaranlage am [Datum]. Ich begleite Sie an beiden Montagetagen und stehe Ihnen f\xFCr alle Fragen zur Verf\xFCgung.",
+    checks: [
+      { id: "vk1", t: "Kunde telefonisch oder per WhatsApp erreicht", c: true },
+      { id: "vk2", t: "Montagetermine best\xE4tigt (Tag 1: DC, Tag 2: AC)", c: true },
+      { id: "vk3", t: "Zugang zum Dach / Ger\xFCststellplatz gekl\xE4rt", c: true },
+      { id: "vk4", t: "Besonderheiten abgefragt (Hund, Tor, Schl\xFCssel, Parken)", c: false },
+      { id: "vk5", t: "Kunde \xFCber Ablauf beider Tage informiert", c: true },
+      { id: "vk6", t: "Kontaktdaten des Bauengels \xFCbermittelt", c: true },
+      { id: "vk7", t: "Kundenw\xFCnsche / Sonderw\xFCnsche notiert", c: false },
+      { id: "vk8", t: "Ankunftszeit f\xFCr Tag 1 best\xE4tigt", c: true }
+    ]
+  },
+  tag1: {
+    title: "Tag 1 - DC-Montage",
+    sub: "Dach & Module",
+    icon: "\u{1F3E0}",
+    color: Y,
+    goal: "Saubere Dachmontage, Kunde f\xFChlt sich betreut, Dokumentation beginnt.",
+    sections: [
+      { title: "Morgens - Ankunft", checks: [
+        { id: "t1m1", t: "Vor Ort BEVOR Monteure eintreffen (mind. 15 Min vorher)", c: true },
+        { id: "t1m2", t: "Begr\xFC\xDFung des Kunden, kurze Vorstellung", c: true },
+        { id: "t1m3", t: "Erkl\xE4rung: Was passiert heute? (Module aufs Dach)", c: true },
+        { id: "t1m4", t: "Fotos VORHER: Dach, Fassade, Z\xE4hlerkasten (Ist-Zustand)", c: true },
+        { id: "t1m5", t: "Begr\xFC\xDFung des Montage-Teams, kurzer Austausch", c: false },
+        { id: "t1m6", t: "Pr\xFCfung: Richtiges Material angeliefert?", c: true },
+        { id: "t1m7", t: "BEE-DOO BANNER AM GERUEST AUFHAENGEN (falls Ger\xFCst vorhanden)", c: true },
+        { id: "t1m8", t: "Foto vom Banner am Ger\xFCst f\xFCr Dokumentation", c: true }
+      ] },
+      { title: "W\xE4hrend Montage", checks: [
+        { id: "t1w1", t: "Regelm\xE4\xDFige Kontrolle der Arbeiten auf dem Dach", c: true },
+        { id: "t1w2", t: "Sauberkeit der Baustelle pr\xFCfen (Verpackungsm\xFCll)", c: false },
+        { id: "t1w3", t: "Modulverlegung kontrollieren (Ausrichtung, Abst\xE4nde, Befestigung)", c: true },
+        { id: "t1w4", t: "Kabelf\xFChrung pr\xFCfen (ordentlich verlegt, keine losen Kabel)", c: true },
+        { id: "t1w5", t: "Zwischenfeedback an den Kunden: Alles l\xE4uft nach Plan", c: true },
+        { id: "t1w6", t: "Fotos w\xE4hrend Montage (Schienen, Module, Kabelkanal)", c: true },
+        { id: "t1w7", t: "Bei Problemen: sofort intern eskalieren, Kunde informieren", c: true },
+        { id: "t1w8", t: "FLYER bei direkten Nachbarn einwerfen (links, rechts, gegen\xFCber)", c: true },
+        { id: "t1w9", t: "Bei Gelegenheit Nachbarn pers\xF6nlich ansprechen", c: false },
+        { id: "t1w0", t: "Nachbar-Leads erfassen (Name, Adresse, Interesse)", c: false }
+      ] },
+      { title: "Abschluss Tag 1", checks: [
+        { id: "t1a1", t: "Fotos NACHHER: Dach mit Modulen von verschiedenen Perspektiven", c: true },
+        { id: "t1a2", t: "Baustelle aufger\xE4umt? Verpackungsm\xFCll entsorgt?", c: true },
+        { id: "t1a3", t: "Kurzes Abschlussgespr\xE4ch mit dem Kunden: Offene Fragen?", c: true },
+        { id: "t1a4", t: "Kunden \xFCber Tag 2 informieren (Wann kommt wer? Was passiert?)", c: true },
+        { id: "t1a5", t: "Status an Disposition / Innendienst melden", c: true },
+        { id: "t1a6", t: "Anzahl verteilter Flyer und Nachbar-Kontakte dokumentieren", c: false }
+      ] }
+    ]
+  },
+  tag2: {
+    title: "Tag 2 - AC-Montage",
+    sub: "Elektro & Inbetriebnahme",
+    icon: "\u26A1",
+    color: G,
+    goal: "Professionelle Elektroinstallation, erfolgreiche Inbetriebnahme, App-Einweisung.",
+    sections: [
+      { title: "Morgens - Ankunft", checks: [
+        { id: "t2m1", t: "Wieder VOR den Elektrikern vor Ort", c: true },
+        { id: "t2m2", t: "Begr\xFC\xDFung Kunde: Heute wird Ihre Anlage zum Leben erweckt!", c: true },
+        { id: "t2m3", t: "Erkl\xE4rung: Was passiert heute? (Wechselrichter, Z\xE4hlerschrank)", c: true },
+        { id: "t2m4", t: "Fotos: Z\xE4hlerschrank vorher, geplante Wechselrichter-Position", c: true },
+        { id: "t2m5", t: "Pr\xFCfen: Banner am Ger\xFCst noch korrekt / sichtbar?", c: false }
+      ] },
+      { title: "W\xE4hrend Montage", checks: [
+        { id: "t2w1", t: "Wechselrichter-Installation \xFCberwachen (Position, Befestigung)", c: true },
+        { id: "t2w2", t: "Z\xE4hlerschrankarbeiten kontrollieren", c: true },
+        { id: "t2w3", t: "Kabelf\xFChrung im Haus pr\xFCfen (ordentlich, sauber, beschriftet)", c: true },
+        { id: "t2w4", t: "Speicher-Installation pr\xFCfen (falls vorhanden)", c: false },
+        { id: "t2w5", t: "Sauberkeit im Haus kontrollieren (Schuhe, Abdeckung, Staub)", c: true },
+        { id: "t2w6", t: "Fotos aller Installationsschritte", c: true },
+        { id: "t2w7", t: "Weitere Nachbarn mit Flyern versorgen (n\xE4chster Ring)", c: false },
+        { id: "t2w8", t: "Gespr\xE4che mit interessierten Nachbarn f\xFChren", c: false },
+        { id: "t2w9", t: "Nachbar-Leads erfassen", c: false }
+      ] },
+      { title: "Inbetriebnahme & App-Einweisung", checks: [
+        { id: "t2i1", t: "Inbetriebnahme mit dem Kunden ZUSAMMEN erleben", c: true },
+        { id: "t2i2", t: "Schauen Sie, Ihre Anlage produziert bereits [X] Watt!", c: true },
+        { id: "t2i3", t: "APP: Gemeinsam mit dem Kunden installieren / \xF6ffnen", c: true },
+        { id: "t2i4", t: "APP: Dashboard erkl\xE4ren - Produktion, Tages\xFCbersicht, Eigenverbrauch", c: true },
+        { id: "t2i5", t: "APP: Historische Daten und Statistiken zeigen", c: true },
+        { id: "t2i6", t: "APP: Benachrichtigungen / Alarme einrichten", c: true },
+        { id: "t2i7", t: "APP: H\xE4ufige Fragen klaeren (Schwankungen, Nacht=0, etc.)", c: true },
+        { id: "t2i8", t: "Sicherstellen: Kunde kann App eigenst\xE4ndig bedienen", c: true },
+        { id: "t2i9", t: "\xDCbergabeprotokoll mit Kunden durchgehen und unterschreiben", c: true },
+        { id: "t2ia", t: "Fotos NACHHER: Wechselrichter, Z\xE4hlerschrank, Gesamtansicht", c: true },
+        { id: "t2ib", t: "Sauberkeit final pr\xFCfen - Baustelle sauberer als vorher", c: true }
+      ] }
+    ]
+  },
+  \u00FCbergabe: {
+    title: "\xDCbergabe & Marketing",
+    sub: "Emotionaler H\xF6hepunkt",
+    icon: "\u{1F381}",
+    color: P,
+    goal: "Der Kunde wird zum Fan und Empfehler. Maximale Sichtbarkeit in der Nachbarschaft.",
+    sections: [
+      { title: "\xDCbergabe", checks: [
+        { id: "ue1", t: "Dokumentationsmappe / digitale Doku dem Kunden \xFCbergeben", c: true },
+        { id: "ue2", t: "Merci-Schachtel + pers\xF6nliche Dankeskarte \xFCberreichen", c: true },
+        { id: "ue3", t: "Vielen Dank f\xFCr Ihr Vertrauen - wir hoffen, Sie sind rundum zufrieden", c: true },
+        { id: "ue4", t: "Bestaetigen: K\xF6nnen Sie die App gut bedienen? Noch Fragen?", c: true },
+        { id: "ue5", t: "Google-Bewertung ansprechen + QR-Code zeigen / Karte \xFCbergeben", c: true },
+        { id: "ue6", t: "Weiterempfehlung: Kennen Sie jemanden mit Solar-Interesse?", c: true },
+        { id: "ue7", t: "Optional: Foto mit Kunde vor seiner Anlage (mit Erlaubnis)", c: false },
+        { id: "ue8", t: "Verabschiedung: Bei Fragen k\xF6nnen Sie sich jederzeit melden", c: true }
+      ] },
+      { title: "Nachbarschaftsmarketing - Abschluss", checks: [
+        { id: "nm1", t: "Banner am Ger\xFCst korrekt aufgeh\xE4ngt und sichtbar (Foto gemacht)", c: true },
+        { id: "nm2", t: "Flyer bei allen direkten Nachbarn eingeworfen (mind. 10-20 Haushalte)", c: true },
+        { id: "nm3", t: "Pers\xF6nliche Gespr\xE4che mit Nachbarn gef\xFChrt (wo m\xF6glich)", c: false },
+        { id: "nm4", t: "Alle Nachbar-Leads in App erfasst (Name, Adresse, Interesse, Telefon)", c: true },
+        { id: "nm5", t: "Banner nach Ger\xFCstabbau eingesammelt (oder koordiniert)", c: false },
+        { id: "nm6", t: "Gesamtzahl verteilter Flyer dokumentiert", c: true },
+        { id: "nm7", t: "Gesamtzahl Nachbar-Gespr\xE4che dokumentiert", c: true },
+        { id: "nm8", t: "Leads an Vertrieb \xFCbergeben (innerhalb 24h!)", c: true }
+      ] }
+    ]
+  }
+};
+const PHOTO_CATS = [
+  { id: "vorher", label: "Vorher", icon: "\u{1F534}", items: ["Dach (mehrere Winkel)", "Fassade", "Z\xE4hlerkasten", "Keller/Technikraum"] },
+  { id: "dc", label: "DC-Montage", icon: "\u{1F7E1}", items: ["Schienenmontage", "Modulverlegung", "Kabelf\xFChrung Dach", "Dachdurchf\xFChrung"] },
+  { id: "ac", label: "AC-Montage", icon: "\u{1F7E2}", items: ["Wechselrichter-Position", "Z\xE4hlerschrank offen", "Kabelkanal", "Speicher"] },
+  { id: "nachher", label: "Nachher", icon: "\u{1F535}", items: ["Dach mit Modulen (mehrere Winkel)", "Wechselrichter", "Z\xE4hlerschrank geschlossen"] },
+  { id: "ibn", label: "Inbetriebnahme", icon: "\u26A1", items: ["Display Wechselrichter mit Leistung", "Monitoring-App Screenshot"] },
+  { id: "banner", label: "Banner", icon: "\u{1F6A9}", items: ["Banner am Ger\xFCst (Vorderansicht von Stra\xDFe)"] },
+  { id: "ueb", label: "\xDCbergabe", icon: "\u{1F381}", items: ["Kunde mit Merci (mit Erlaubnis)", "Unterschriebenes Protokoll"] }
+];
+const ESK = [
+  { s: "Gruen", color: G, sit: "Kleinigkeiten, kosmetisch", act: "Bauengel kl\xE4rt direkt mit Monteur" },
+  { s: "Gelb", color: W, sit: "Qualit\xE4tsm\xE4ngel, Verz\xF6gerung", act: "Sofort Teamleiter informieren + Foto" },
+  { s: "Rot", color: R, sit: "Grobe Fehler, Sicherheit", act: "Montage stoppen, Disposition anrufen" }
+];
+const KPIS = [
+  { l: "Kundenzufriedenheit (NPS)", t: "\u2265 70" },
+  { l: "Google-Bewertungen", t: "\u2265 60% Quote" },
+  { l: "Schnitt Google-Sterne", t: "\u2265 4,8" },
+  { l: "Weiterempfehlungsquote", t: "\u2265 20%" },
+  { l: "Reklamationsquote", t: "\u2264 3%" },
+  { l: "App-Einweisung", t: "100%" },
+  { l: "Flyer verteilt / Einsatz", t: "\u2265 15" },
+  { l: "Nachbar-Leads / Einsatz", t: "\u2265 2" },
+  { l: "Banner aufgeh\xE4ngt", t: "100%" }
+];
+const APPFAQ = [
+  { q: "Warum zeigt die App nachts 0 Watt?", a: "Normal - ohne Sonne keine Produktion. Startet morgens automatisch." },
+  { q: "Warum schwankt die Leistung?", a: "Wolken, Temperatur und Tageszeit beeinflussen die Produktion. V\xF6llig normal." },
+  { q: "Was bedeutet Eigenverbrauch?", a: "Der Strom, den Sie selbst nutzen statt einzuspeisen. Je h\xF6her, desto besser." },
+  { q: "Was bei Fehlermeldung?", a: "Erst pr\xFCfen ob echtes Problem. Bei Unsicherheit: bee-doo Service anrufen." },
+  { q: "Kann mein Partner die App auch nutzen?", a: "Ja - Zweites Login / Familienzugang einrichten." }
+];
+const inp = { width: "100%", padding: "10px 14px", background: D, border: "1px solid " + B, borderRadius: 10, color: T, fontSize: 14, outline: "none", boxSizing: "border-box" };
+const crd = (x) => ({ background: C, border: "1px solid " + B, borderRadius: 14, padding: 16, marginBottom: 12, ...x });
+function Badge({ children, color: cl = Y }) {
+  return /* @__PURE__ */ React.createElement("span", { style: { background: cl + "18", color: cl, padding: "2px 7px", borderRadius: 5, fontSize: 10, fontWeight: 700, marginLeft: 6, verticalAlign: "middle" } }, children);
+}
+function PBar({ value, max, color: cl = Y, h = 5 }) {
+  return /* @__PURE__ */ React.createElement("div", { style: { height: h, background: B, borderRadius: h, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { height: "100%", width: (max > 0 ? value / max * 100 : 0) + "%", background: cl, borderRadius: h, transition: "width 0.4s ease" } }));
+}
+function ERate({ value, onChange }) {
+  return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, justifyContent: "center" } }, ["\u{1F61E}", "\u{1F610}", "\u{1F642}", "\u{1F60A}", "\u{1F929}"].map((e, i) => /* @__PURE__ */ React.createElement("button", { key: i, onClick: () => onChange(i + 1), style: { width: 42, height: 42, borderRadius: 10, border: value === i + 1 ? "2px solid " + Y : "1px solid " + B, background: value === i + 1 ? Y + "18" : "transparent", fontSize: 20, cursor: "pointer", transform: value === i + 1 ? "scale(1.12)" : "scale(1)", transition: "all 0.15s" } }, e)));
+}
+function SigPad({ onSave, saved }) {
+  const ref = useRef(null);
+  const [dr, setDr] = useState(false);
+  const [has, setHas] = useState(false);
+  const pos = (e) => {
+    const r = ref.current.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  };
+  const start = (e) => {
+    e.preventDefault();
+    const c = ref.current.getContext("2d");
+    const p = pos(e);
+    c.beginPath();
+    c.moveTo(p.x, p.y);
+    setDr(true);
+  };
+  const draw = (e) => {
+    if (!dr) return;
+    e.preventDefault();
+    const c = ref.current.getContext("2d");
+    const p = pos(e);
+    c.lineTo(p.x, p.y);
+    c.strokeStyle = T;
+    c.lineWidth = 2;
+    c.lineCap = "round";
+    c.stroke();
+    setHas(true);
+  };
+  const stop = () => setDr(false);
+  const clear = () => {
+    ref.current.getContext("2d").clearRect(0, 0, 400, 120);
+    setHas(false);
+  };
+  if (saved) return /* @__PURE__ */ React.createElement("div", { style: crd({ textAlign: "center", padding: 20 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, color: G } }, "\u2713"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: G, fontSize: 14 } }, "Unterschrift gespeichert"));
+  return /* @__PURE__ */ React.createElement("div", { style: crd() }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: T, fontSize: 14, marginBottom: 8 } }, "Kundenunterschrift (\xDCbergabeprotokoll)"), /* @__PURE__ */ React.createElement("canvas", { ref, width: 400, height: 120, onMouseDown: start, onMouseMove: draw, onMouseUp: stop, onMouseLeave: stop, onTouchStart: start, onTouchMove: draw, onTouchEnd: stop, style: { width: "100%", height: 120, background: D, border: "1px solid " + B, borderRadius: 8, cursor: "crosshair", touchAction: "none" } }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: clear, style: { flex: 1, padding: 8, background: "transparent", border: "1px solid " + B, borderRadius: 8, color: M, cursor: "pointer", fontSize: 12 } }, "Zuruecksetzen"), /* @__PURE__ */ React.createElement("button", { onClick: () => has && onSave(), style: { flex: 1, padding: 8, background: has ? Y : B, color: has ? D : M, border: "none", borderRadius: 8, fontWeight: 700, cursor: has ? "pointer" : "default", fontSize: 12 } }, "Speichern")));
+}
+function BauengelApp() {
+  const [tab, setTab] = useState("dash");
+  const [ph, setPh] = useState("vorkontakt");
+  const [proj, setProj] = useState({ name: "", addr: "", size: "", team: "", dc: "", ac: "", nr: "", ger\u00FCst: true, notes: "" });
+  const [chk, setChk] = useState({});
+  const [cNotes, setCNotes] = useState({});
+  const [noteFor, setNoteFor] = useState(null);
+  const [photos, setPhotos] = useState({});
+  const [leads, setLeads] = useState([]);
+  const [nl, setNl] = useState({ name: "", addr: "", phone: "", interest: "Hoch", notes: "" });
+  const [sat, setSat] = useState({});
+  const [komm, setKomm] = useState("");
+  const [sig, setSig] = useState(false);
+  const [flyer, setFlyer] = useState(0);
+  const [gespr, setGespr] = useState(0);
+  const [esk, setEsk] = useState(null);
+  const [eskNote, setEskNote] = useState("");
+  const [showQR, setShowQR] = useState(false);
+  const [showFAQ, setShowFAQ] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [toast, setToast] = useState(null);
+  const allChks = (() => {
+    let a = [];
+    Object.values(PHASES).forEach((p) => {
+      if (p.checks) a = [...a, ...p.checks];
+      if (p.sections) p.sections.forEach((s) => {
+        a = [...a, ...s.checks];
+      });
+    });
+    return a;
+  })();
+  const totalChks = allChks.length;
+  const doneChks = allChks.filter((c) => chk[c.id]).length;
+  const phChks = (k) => {
+    const p = PHASES[k];
+    let a = [];
+    if (p.checks) a = p.checks;
+    if (p.sections) p.sections.forEach((s) => {
+      a = [...a, ...s.checks];
+    });
+    return a;
+  };
+  const phProg = (k) => {
+    const c = phChks(k);
+    return c.length === 0 ? 0 : Math.round(c.filter((x) => chk[x.id]).length / c.length * 100);
+  };
+  const totalPhotos = Object.values(photos).reduce((s, a) => s + a.length, 0);
+  const satVals = Object.values(sat);
+  const avgSat = satVals.length > 0 ? (satVals.reduce((a, b) => a + b, 0) / satVals.length).toFixed(1) : null;
+  const toggle = (id) => setChk((p) => ({ ...p, [id]: !p[id] }));
+  const addPhoto = (catId, item) => {
+    setPhotos((p) => ({ ...p, [catId]: [...p[catId] || [], { id: Date.now(), item, time: (/* @__PURE__ */ new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) }] }));
+    doToast("Foto dokumentiert");
+  };
+  const addLead = () => {
+    if (!nl.name) return;
+    setLeads((p) => [...p, { ...nl, id: Date.now(), ref: "Nachbar von " + (proj.name || "[Kunde]") + ", " + (proj.addr || "[Adresse]"), dt: (/* @__PURE__ */ new Date()).toLocaleDateString("de-DE") }]);
+    setNl({ name: "", addr: "", phone: "", interest: "Hoch", notes: "" });
+    doToast("Lead erfasst");
+  };
+  const doToast = (m) => {
+    setToast(m);
+    setTimeout(() => setToast(null), 2500);
+  };
+  const submit = () => {
+    setSent(true);
+    doToast("Bauengel-Bericht gesendet!");
+    setTimeout(() => setSent(false), 3e3);
+  };
+  const TABS = [{ id: "dash", icon: "\u{1F4CA}", l: "Dashboard" }, { id: "phase", icon: "\u{1F4CB}", l: "Checklisten" }, { id: "photos", icon: "\u{1F4F7}", l: "Fotos" }, { id: "leads", icon: "\u{1F3D8}", l: "Leads" }, { id: "bew", icon: "\u2B50", l: "Bewertung" }, { id: "tools", icon: "\u{1F6E0}", l: "Tools" }, { id: "report", icon: "\u{1F4E4}", l: "Bericht" }];
+  const renderChk = (item) => /* @__PURE__ */ React.createElement("div", { key: item.id, style: { display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 12px", background: chk[item.id] ? G + "08" : "transparent", borderBottom: "1px solid " + D } }, /* @__PURE__ */ React.createElement("button", { onClick: () => toggle(item.id), style: { width: 24, height: 24, borderRadius: 6, flexShrink: 0, marginTop: 1, border: chk[item.id] ? "none" : "2px solid " + B, background: chk[item.id] ? G : "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 700 } }, chk[item.id] ? "\u2713" : ""), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { color: chk[item.id] ? M : T, fontSize: 13, fontWeight: 500, lineHeight: 1.4, textDecoration: chk[item.id] ? "line-through" : "none" } }, item.t, item.c && /* @__PURE__ */ React.createElement(Badge, { color: R }, "PFLICHT")), noteFor === item.id && /* @__PURE__ */ React.createElement("textarea", { value: cNotes[item.id] || "", onChange: (e) => setCNotes((p) => ({ ...p, [item.id]: e.target.value })), placeholder: "Anmerkung...", style: { ...inp, marginTop: 6, minHeight: 45, resize: "vertical", fontSize: 12 } })), /* @__PURE__ */ React.createElement("button", { onClick: () => setNoteFor(noteFor === item.id ? null : item.id), style: { background: cNotes[item.id] ? Y + "18" : "transparent", border: "none", borderRadius: 5, padding: "2px 5px", fontSize: 12, color: cNotes[item.id] ? Y : M, cursor: "pointer", flexShrink: 0 } }, "\u{1F4DD}"));
+  return /* @__PURE__ */ React.createElement("div", { style: { background: D, minHeight: "100vh", fontFamily: "'DM Sans',sans-serif", color: T } }, /* @__PURE__ */ React.createElement("div", { style: { background: "linear-gradient(135deg," + C + " 0%," + D + " 100%)", borderBottom: "1px solid " + B, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 100 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: Y, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 800, color: D } }, "b"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 15, color: T, letterSpacing: -0.5 } }, "bee-doo ", /* @__PURE__ */ React.createElement("span", { style: { color: Y } }, "BAUENGEL")), proj.name && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: M } }, proj.name, " - ", proj.addr))), /* @__PURE__ */ React.createElement("button", { onClick: submit, style: { background: Y, color: D, border: "none", borderRadius: 8, padding: "7px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer" } }, sent ? "\u2713 Gesendet!" : "\u{1F4E4} Senden")), /* @__PURE__ */ React.createElement("div", { style: { padding: "10px 16px", display: "flex", gap: 4, background: C, borderBottom: "1px solid " + B } }, Object.entries(PHASES).map(([k, p]) => {
+    const pg = phProg(k);
+    return /* @__PURE__ */ React.createElement("button", { key: k, onClick: () => {
+      setPh(k);
+      setTab("phase");
+    }, style: { flex: 1, padding: "8px 4px", borderRadius: 8, cursor: "pointer", background: ph === k && tab === "phase" ? p.color + "15" : "transparent", border: "1px solid " + (ph === k && tab === "phase" ? p.color + "40" : "transparent"), textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16 } }, p.icon), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 600, color: ph === k ? p.color : M, marginTop: 2 } }, p.title.split("-")[0].trim()), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 4 } }, /* @__PURE__ */ React.createElement(PBar, { value: pg, max: 100, color: pg === 100 ? G : p.color, h: 3 })));
+  })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 2, padding: "8px 12px", overflowX: "auto", borderBottom: "1px solid " + B } }, TABS.map((t) => /* @__PURE__ */ React.createElement("button", { key: t.id, onClick: () => setTab(t.id), style: { background: tab === t.id ? Y : "transparent", color: tab === t.id ? D : M, border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: tab === t.id ? 700 : 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, t.icon), t.l))), /* @__PURE__ */ React.createElement("div", { style: { padding: "14px 16px", maxWidth: 700, margin: "0 auto" } }, tab === "dash" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: crd() }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: T, marginBottom: 10 } }, "Einsatzdaten"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, [["Kundenname *", "name", "Max Mustermann", "text"], ["Auftragsnr.", "nr", "BD-2026-...", "text"], ["Tag 1 (DC)", "dc", "", "date"], ["Tag 2 (AC)", "ac", "", "date"], ["Anlagengr\xF6\xDFe", "size", "10,8 kWp", "text"], ["Montageteam", "team", "Team Alpha", "text"]].map(([l, k, p, ty]) => /* @__PURE__ */ React.createElement("div", { key: k }, /* @__PURE__ */ React.createElement("label", { style: { color: M, fontSize: 10, display: "block", marginBottom: 2 } }, l), /* @__PURE__ */ React.createElement("input", { type: ty, style: { ...inp, padding: "8px 10px", fontSize: 13 }, value: proj[k], placeholder: p, onChange: (e) => setProj((x) => ({ ...x, [k]: e.target.value })) }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1/-1" } }, /* @__PURE__ */ React.createElement("label", { style: { color: M, fontSize: 10, display: "block", marginBottom: 2 } }, "Adresse *"), /* @__PURE__ */ React.createElement("input", { style: { ...inp, padding: "8px 10px", fontSize: 13 }, value: proj.addr, placeholder: "Musterstra\xDFe 1, 33602 Bielefeld", onChange: (e) => setProj((x) => ({ ...x, addr: e.target.value })) })), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1/-1", display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setProj((x) => ({ ...x, ger\u00FCst: !x.ger\u00FCst })), style: { width: 22, height: 22, borderRadius: 5, border: "none", cursor: "pointer", background: proj.ger\u00FCst ? Y : B, color: D, fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" } }, proj.ger\u00FCst ? "\u2713" : ""), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: T } }, "Ger\xFCst vorhanden (Banner-Pflicht)")), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1/-1" } }, /* @__PURE__ */ React.createElement("label", { style: { color: M, fontSize: 10, display: "block", marginBottom: 2 } }, "Besonderheiten"), /* @__PURE__ */ React.createElement("input", { style: { ...inp, padding: "8px 10px", fontSize: 13 }, value: proj.notes, placeholder: "Hund, Tor, Schl\xFCssel, Parken...", onChange: (e) => setProj((x) => ({ ...x, notes: e.target.value })) })))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 } }, Object.entries(PHASES).map(([k, p]) => {
+    const pg = phProg(k);
+    const pc = phChks(k);
+    const dn = pc.filter((c) => chk[c.id]).length;
+    return /* @__PURE__ */ React.createElement("button", { key: k, onClick: () => {
+      setPh(k);
+      setTab("phase");
+    }, style: { ...crd({ marginBottom: 0, cursor: "pointer", textAlign: "left", border: "1px solid " + (pg === 100 ? G + "40" : B) }) } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20 } }, p.icon), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: T } }, p.title), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: M } }, p.sub))), /* @__PURE__ */ React.createElement(PBar, { value: dn, max: pc.length, color: pg === 100 ? G : p.color }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: pg === 100 ? G : M, marginTop: 4, fontWeight: 600 } }, pg === 100 ? "\u2713 Abgeschlossen" : dn + "/" + pc.length + " - " + pg + "%"));
+  })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 } }, [{ l: "Fotos", v: totalPhotos, c: totalPhotos >= 10 ? G : Y }, { l: "Leads", v: leads.length, c: leads.length >= 2 ? G : Y }, { l: "Flyer", v: flyer, c: flyer >= 15 ? G : W }, { l: "Bewertung", v: avgSat || "-", c: T }].map((s, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { ...crd({ marginBottom: 0, textAlign: "center", padding: 10 }) } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: s.c } }, s.v), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: M } }, s.l))))), tab === "phase" && (() => {
+    const p = PHASES[ph];
+    const pc = phChks(ph);
+    const dn = pc.filter((c) => chk[c.id]).length;
+    const pg = phProg(ph);
+    return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { ...crd({ background: "linear-gradient(135deg," + p.color + "10," + D + ")", border: "1px solid " + p.color + "25" }) } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 28 } }, p.icon), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 17, color: T } }, p.title), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: p.color } }, p.sub)), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", fontWeight: 800, fontSize: 20, color: pg === 100 ? G : p.color } }, pg, "%")), /* @__PURE__ */ React.createElement(PBar, { value: dn, max: pc.length, color: pg === 100 ? G : p.color, h: 4 }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: M, marginTop: 8, fontStyle: "italic" } }, "Ziel: ", p.goal)), p.script && /* @__PURE__ */ React.createElement("div", { style: { ...crd({ background: BL + "08", border: "1px solid " + BL + "20" }) } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: BL, marginBottom: 6 } }, "Gespr\xE4chsleitfaden"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: T, lineHeight: 1.5, fontStyle: "italic" } }, p.script)), p.checks && /* @__PURE__ */ React.createElement("div", { style: { ...crd({ padding: 0, overflow: "hidden" }) } }, p.checks.map(renderChk)), p.sections && p.sections.map((sec, si) => /* @__PURE__ */ React.createElement("div", { key: si, style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: T, padding: "8px 0 6px", display: "flex", alignItems: "center", gap: 6 } }, sec.title, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: M, fontWeight: 500 } }, "(", sec.checks.filter((c) => chk[c.id]).length, "/", sec.checks.length, ")")), /* @__PURE__ */ React.createElement("div", { style: { ...crd({ padding: 0, overflow: "hidden" }) } }, sec.checks.map(renderChk)))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8 } }, Object.keys(PHASES).map((k) => /* @__PURE__ */ React.createElement("button", { key: k, onClick: () => setPh(k), style: { flex: 1, padding: "10px 4px", borderRadius: 8, cursor: "pointer", background: k === ph ? PHASES[k].color + "15" : C, border: "1px solid " + (k === ph ? PHASES[k].color + "40" : B), textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16 } }, PHASES[k].icon), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, fontWeight: 600, color: k === ph ? PHASES[k].color : M, marginTop: 2 } }, PHASES[k].title.split("-")[0].trim())))));
+  })(), tab === "photos" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, color: T, marginBottom: 4 } }, "Pflichtfotos nach Phase"), /* @__PURE__ */ React.createElement("div", { style: { color: M, fontSize: 12, marginBottom: 14 } }, "Qualit\xE4tsnachweis, Reklamationsschutz und Marketingmaterial."), PHOTO_CATS.map((cat) => {
+    const cp = photos[cat.id] || [];
+    const done = cp.length >= cat.items.length;
+    return /* @__PURE__ */ React.createElement("div", { key: cat.id, style: { ...crd({ border: "1px solid " + (done ? G + "30" : B) }) } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16 } }, cat.icon), /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 14, color: T } }, cat.label)), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: done ? G : M, fontWeight: 600 } }, cp.length, "/", cat.items.length, done ? " \u2713" : "")), cat.items.map((item, i) => {
+      const tk = cp.find((p) => p.item === item);
+      return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", background: tk ? G + "08" : D, borderRadius: 8, marginBottom: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: tk ? G : T, fontWeight: 500 } }, tk ? "\u2713 " : "", item), tk ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: M } }, tk.time) : /* @__PURE__ */ React.createElement("button", { onClick: () => addPhoto(cat.id, item), style: { background: Y, color: D, border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "Foto"));
+    }));
+  })), tab === "leads" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, color: T, marginBottom: 4 } }, "Nachbarschaftsmarketing"), /* @__PURE__ */ React.createElement("div", { style: { color: M, fontSize: 12, marginBottom: 14 } }, "Jede Baustelle ist eine Werbefl\xE4che. Ziel: min. 2 Leads, min. 15 Flyer."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: crd({ marginBottom: 0, textAlign: "center", padding: 12 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: M } }, "Flyer verteilt"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 6 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setFlyer(Math.max(0, flyer - 1)), style: { width: 26, height: 26, borderRadius: 6, background: C2, border: "1px solid " + B, color: T, cursor: "pointer", fontSize: 14 } }, "-"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 22, fontWeight: 800, color: flyer >= 15 ? G : W } }, flyer), /* @__PURE__ */ React.createElement("button", { onClick: () => setFlyer(flyer + 1), style: { width: 26, height: 26, borderRadius: 6, background: Y, border: "none", color: D, cursor: "pointer", fontSize: 14, fontWeight: 700 } }, "+")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: flyer >= 15 ? G : M, marginTop: 4 } }, "Ziel: min. 15")), /* @__PURE__ */ React.createElement("div", { style: crd({ marginBottom: 0, textAlign: "center", padding: 12 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: M } }, "Gespr\xE4che"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 6 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setGespr(Math.max(0, gespr - 1)), style: { width: 26, height: 26, borderRadius: 6, background: C2, border: "1px solid " + B, color: T, cursor: "pointer", fontSize: 14 } }, "-"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 22, fontWeight: 800, color: T } }, gespr), /* @__PURE__ */ React.createElement("button", { onClick: () => setGespr(gespr + 1), style: { width: 26, height: 26, borderRadius: 6, background: Y, border: "none", color: D, cursor: "pointer", fontSize: 14, fontWeight: 700 } }, "+")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: M, marginTop: 4 } }, "dokumentieren")), /* @__PURE__ */ React.createElement("div", { style: crd({ marginBottom: 0, textAlign: "center", padding: 12 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: M } }, "Leads erfasst"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: leads.length >= 2 ? G : Y, marginTop: 6 } }, leads.length), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: leads.length >= 2 ? G : W, marginTop: 4 } }, "Ziel: min. 2"))), /* @__PURE__ */ React.createElement("div", { style: crd() }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: T, marginBottom: 10 } }, "Nachbar-Lead erfassen"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: M, fontSize: 10, display: "block", marginBottom: 2 } }, "Name *"), /* @__PURE__ */ React.createElement("input", { style: { ...inp, fontSize: 13, padding: "8px 10px" }, value: nl.name, onChange: (e) => setNl((x) => ({ ...x, name: e.target.value })), placeholder: "Nachbar Name" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: M, fontSize: 10, display: "block", marginBottom: 2 } }, "Telefon"), /* @__PURE__ */ React.createElement("input", { style: { ...inp, fontSize: 13, padding: "8px 10px" }, value: nl.phone, onChange: (e) => setNl((x) => ({ ...x, phone: e.target.value })), placeholder: "0521..." })), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1/-1" } }, /* @__PURE__ */ React.createElement("label", { style: { color: M, fontSize: 10, display: "block", marginBottom: 2 } }, "Adresse"), /* @__PURE__ */ React.createElement("input", { style: { ...inp, fontSize: 13, padding: "8px 10px" }, value: nl.addr, onChange: (e) => setNl((x) => ({ ...x, addr: e.target.value })), placeholder: "Nachbarstra\xDFe 5" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: M, fontSize: 10, display: "block", marginBottom: 2 } }, "Interesse-Level"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4 } }, ["Hoch", "Mittel", "Niedrig"].map((lv) => /* @__PURE__ */ React.createElement("button", { key: lv, onClick: () => setNl((x) => ({ ...x, interest: lv })), style: { flex: 1, padding: "7px 4px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", background: nl.interest === lv ? lv === "Hoch" ? G + "18" : lv === "Mittel" ? W + "18" : M + "18" : D, border: "1px solid " + (nl.interest === lv ? lv === "Hoch" ? G : lv === "Mittel" ? W : M : B), color: nl.interest === lv ? lv === "Hoch" ? G : lv === "Mittel" ? W : M : M } }, lv)))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: M, fontSize: 10, display: "block", marginBottom: 2 } }, "Notizen"), /* @__PURE__ */ React.createElement("input", { style: { ...inp, fontSize: 13, padding: "8px 10px" }, value: nl.notes, onChange: (e) => setNl((x) => ({ ...x, notes: e.target.value })), placeholder: "z.B. gro\xDFes S\xFCddach" }))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: M, marginTop: 8 } }, "Referenz: ", /* @__PURE__ */ React.createElement("span", { style: { color: BL } }, "Nachbar von ", proj.name || "[Kunde]", ", ", proj.addr || "[Adresse]")), /* @__PURE__ */ React.createElement("button", { onClick: addLead, disabled: !nl.name, style: { marginTop: 10, width: "100%", padding: "10px", borderRadius: 8, border: "none", background: nl.name ? Y : B, color: nl.name ? D : M, fontWeight: 700, fontSize: 13, cursor: nl.name ? "pointer" : "default" } }, "+ Lead erfassen - Vertrieb (24h)")), leads.map((l) => /* @__PURE__ */ React.createElement("div", { key: l.id, style: { ...crd({ padding: 12, borderLeft: "3px solid " + (l.interest === "Hoch" ? G : l.interest === "Mittel" ? W : M) }) } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 600, color: T, fontSize: 14 } }, l.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: M } }, l.addr, " - ", l.phone || "kein Tel."), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: BL, marginTop: 3 } }, l.ref)), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, /* @__PURE__ */ React.createElement(Badge, { color: l.interest === "Hoch" ? G : l.interest === "Mittel" ? W : M }, l.interest), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: M, marginTop: 4 } }, l.dt)))))), tab === "bew" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, color: T, marginBottom: 4 } }, "Kundenbewertung & \xDCbergabe"), /* @__PURE__ */ React.createElement("div", { style: { color: M, fontSize: 12, marginBottom: 14 } }, "Ziel: min. 60% Google-Bewertungsquote, min. 4,8 Sterne"), ["P\xFCnktlichkeit des Teams", "Freundlichkeit & Kommunikation", "Sauberkeit der Arbeit", "Qualit\xE4t der Installation", "Einweisung & App-Erkl\xE4rung", "Gesamtzufriedenheit"].map((q, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { ...crd({ padding: 12 }) } }, /* @__PURE__ */ React.createElement("div", { style: { color: T, fontWeight: 600, fontSize: 13, marginBottom: 8, textAlign: "center" } }, q), /* @__PURE__ */ React.createElement(ERate, { value: sat[i] || 0, onChange: (v) => setSat((p) => ({ ...p, [i]: v })) }))), /* @__PURE__ */ React.createElement("textarea", { value: komm, onChange: (e) => setKomm(e.target.value), placeholder: "Kundenkommentar...", style: { ...inp, minHeight: 70, resize: "vertical", marginBottom: 12 } }), avgSat && /* @__PURE__ */ React.createElement("div", { style: { ...crd({ textAlign: "center" }) } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: M } }, "Durchschnitt"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, fontWeight: 800, color: Y } }, avgSat, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14, color: M } }, "/5")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24 } }, ["\u{1F61E}", "\u{1F610}", "\u{1F642}", "\u{1F60A}", "\u{1F929}"][Math.round(avgSat) - 1])), /* @__PURE__ */ React.createElement(SigPad, { onSave: () => setSig(true), saved: sig }), avgSat && parseFloat(avgSat) >= 4 && /* @__PURE__ */ React.createElement("div", { style: { ...crd({ background: "linear-gradient(135deg," + BL + "08," + P + "08)", border: "1px solid " + BL + "25", textAlign: "center" }) } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, marginBottom: 6 } }, "Tolle Bewertung!"), /* @__PURE__ */ React.createElement("div", { style: { color: M, fontSize: 12, marginBottom: 10 } }, "Jetzt Google-Bewertung ansprechen - QR-Code zeigen:"), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowQR(!showQR), style: { background: BL, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 12, cursor: "pointer" } }, showQR ? "Ausblenden" : "Google Review QR-Code"), showQR && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, padding: 14, background: "#fff", borderRadius: 10, display: "inline-block" } }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 120 120", width: "120", height: "120" }, /* @__PURE__ */ React.createElement("rect", { x: "0", y: "0", width: "36", height: "36", fill: "#222", rx: "4" }), /* @__PURE__ */ React.createElement("rect", { x: "4", y: "4", width: "28", height: "28", fill: "#fff", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "8", y: "8", width: "20", height: "20", fill: "#222", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "84", y: "0", width: "36", height: "36", fill: "#222", rx: "4" }), /* @__PURE__ */ React.createElement("rect", { x: "88", y: "4", width: "28", height: "28", fill: "#fff", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "92", y: "8", width: "20", height: "20", fill: "#222", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "0", y: "84", width: "36", height: "36", fill: "#222", rx: "4" }), /* @__PURE__ */ React.createElement("rect", { x: "4", y: "88", width: "28", height: "28", fill: "#fff", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "8", y: "92", width: "20", height: "20", fill: "#222", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "48", y: "0", width: "10", height: "10", fill: "#222" }), /* @__PURE__ */ React.createElement("rect", { x: "60", y: "12", width: "10", height: "10", fill: "#222" }), /* @__PURE__ */ React.createElement("rect", { x: "48", y: "48", width: "10", height: "10", fill: "#222" }), /* @__PURE__ */ React.createElement("rect", { x: "72", y: "48", width: "10", height: "10", fill: "#222" }), /* @__PURE__ */ React.createElement("rect", { x: "96", y: "72", width: "10", height: "10", fill: "#222" }), /* @__PURE__ */ React.createElement("rect", { x: "38", y: "38", width: "44", height: "44", fill: Y, rx: "8" }), /* @__PURE__ */ React.createElement("text", { x: "60", y: "66", textAnchor: "middle", fontSize: "20", fontWeight: "800", fill: D }, "b")), /* @__PURE__ */ React.createElement("div", { style: { color: "#333", fontSize: 10, fontWeight: 700, marginTop: 4 } }, "bee-doo GmbH bewerten")))), tab === "tools" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, color: T, marginBottom: 14 } }, "Bauengel-Tools"), /* @__PURE__ */ React.createElement("div", { style: crd() }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: T, marginBottom: 10 } }, "Eskalation"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 10 } }, ESK.map((e) => /* @__PURE__ */ React.createElement("button", { key: e.s, onClick: () => setEsk(esk === e.s ? null : e.s), style: { flex: 1, padding: "10px 6px", borderRadius: 8, cursor: "pointer", textAlign: "center", background: esk === e.s ? e.color + "18" : D, border: "2px solid " + (esk === e.s ? e.color : B) } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: e.color, marginTop: 2 } }, e.s), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: M, marginTop: 2 } }, e.sit), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T, marginTop: 4, fontWeight: 600 } }, e.act)))), esk && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("textarea", { value: eskNote, onChange: (e) => setEskNote(e.target.value), placeholder: "Problem beschreiben...", style: { ...inp, minHeight: 60, resize: "vertical", marginBottom: 8 } }), /* @__PURE__ */ React.createElement("button", { onClick: () => {
+    doToast(esk + " Eskalation gemeldet!");
+    setEsk(null);
+    setEskNote("");
+  }, style: { width: "100%", padding: "10px", borderRadius: 8, border: "none", background: ESK.find((e) => e.s === esk)?.color || W, color: D, fontWeight: 700, fontSize: 13, cursor: "pointer" } }, "Eskalation melden"))), /* @__PURE__ */ React.createElement("div", { style: crd() }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: T } }, "App-Einweisung FAQ"), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowFAQ(!showFAQ), style: { background: BL + "18", color: BL, border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, showFAQ ? "Ausblenden" : "Anzeigen")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: M, marginTop: 6 } }, "7 Schritte: App \xF6ffnen - Dashboard - \xDCbersichten - Eigenverbrauch - Benachrichtigungen - FAQ - Kunde testen lassen"), showFAQ && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10 } }, APPFAQ.map((f, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { padding: "8px 10px", background: D, borderRadius: 8, marginBottom: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: BL } }, f.q), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T, marginTop: 2 } }, f.a))))), /* @__PURE__ */ React.createElement("div", { style: crd() }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: T, marginBottom: 8 } }, "Merci-Kit Checkliste"), ["Merci-Schachtel (250g)", "Pers\xF6nliche Dankeskarte", "Visitenkarten", "Flyer Kunden-werben-Kunden", "QR-Code-Karte Google-Bewertung", "Nachbarschafts-Flyer (mind. 30 Stk.)", "bee-doo Banner (mind. 2 Stk.)", "Kabelbinder / Befestigungsmaterial"].map((item, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid " + D } }, /* @__PURE__ */ React.createElement("div", { style: { width: 6, height: 6, borderRadius: "50%", background: Y } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: T } }, item)))), /* @__PURE__ */ React.createElement("div", { style: crd() }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: T, marginBottom: 8 } }, "KPI-Ziele"), KPIS.map((k, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid " + D } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: T } }, k.l), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: Y } }, k.t))))), tab === "report" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, color: T, marginBottom: 14 } }, "Bauengel-Bericht"), /* @__PURE__ */ React.createElement("div", { style: crd() }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: T, marginBottom: 10 } }, "Vollst\xE4ndigkeitscheck"), [
+    { l: "Einsatzdaten ausgef\xFCllt", ok: !!(proj.name && proj.addr) },
+    { l: "Vorkontakt abgeschlossen", ok: phProg("vorkontakt") === 100 },
+    { l: "Tag 1 (DC) abgeschlossen", ok: phProg("tag1") === 100 },
+    { l: "Tag 2 (AC) abgeschlossen", ok: phProg("tag2") === 100 },
+    { l: "\xDCbergabe & Marketing abgeschlossen", ok: phProg("\xFCbergabe") === 100 },
+    { l: "Pflichtfotos komplett (min. 10)", ok: totalPhotos >= 10 },
+    { l: "Kundenbewertung erhalten", ok: Object.keys(sat).length >= 6 },
+    { l: "Kundenunterschrift vorhanden", ok: sig },
+    { l: "Nachbar-Leads erfasst (min. 2)", ok: leads.length >= 2 },
+    { l: "Flyer verteilt (min. 15)", ok: flyer >= 15 }
+  ].map((c, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid " + D } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: 5, background: c.ok ? G + "18" : R + "12", color: c.ok ? G : R, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 } }, c.ok ? "\u2713" : "\u2715"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: c.ok ? M : T } }, c.l)))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 14 } }, [{ l: "Gesamtfortschritt", v: Math.round(doneChks / totalChks * 100) + "%", c: doneChks === totalChks ? G : Y }, { l: "Leads", v: leads.length, c: leads.length >= 2 ? G : W }, { l: "Bewertung", v: avgSat || "-", c: T }].map((s, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { ...crd({ marginBottom: 0, textAlign: "center", padding: 12 }) } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: s.c } }, s.v), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: M } }, s.l)))), /* @__PURE__ */ React.createElement("button", { onClick: submit, style: { width: "100%", padding: "14px", background: Y, color: D, border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: "pointer" } }, "Bauengel-Bericht absenden"))), toast && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: G, color: D, padding: "12px 24px", borderRadius: 12, fontWeight: 700, fontSize: 14, boxShadow: "0 6px 24px rgba(0,0,0,0.3)", zIndex: 200 } }, toast), /* @__PURE__ */ React.createElement("style", null, `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');`));
+}
+ReactDOM.render(React.createElement(BauengelApp), document.getElementById("root"));
+</script>
+</body>
+</html>
