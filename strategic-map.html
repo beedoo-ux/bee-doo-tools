@@ -3,509 +3,423 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>bee-doo · Strategische Karte</title>
+<title>bee-doo · Strategische Karte NRW</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',sans-serif;background:#0c1222;color:#e1e7ef;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'DM Sans', system-ui, sans-serif; background:#0c1222; color:#e1e7ef; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
-/* NAV */
-nav{display:flex;align-items:center;gap:12px;padding:0 16px;height:52px;background:#0c1222;border-bottom:1px solid #1c2640;flex-shrink:0;z-index:100}
-.logo{font-size:18px;font-weight:700;color:#FDE154;margin-right:8px}
-.nav-tabs{display:flex;gap:4px}
-.tab{padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:.15s;border:none;background:transparent;color:#5c6b8a}
-.tab:hover{background:#1c2640;color:#e1e7ef}
-.tab.active{background:#1c2640;color:#FDE154}
-.nav-right{margin-left:auto;display:flex;gap:8px;align-items:center}
-.badge{background:#1c2640;padding:4px 10px;border-radius:6px;font-size:12px;color:#5c6b8a}
-.badge span{color:#FDE154;font-weight:600}
+nav { display:flex; align-items:center; gap:10px; padding:0 16px; height:50px; background:#0c1222; border-bottom:1px solid #1c2640; flex-shrink:0; }
+.logo { font-size:17px; font-weight:700; color:#FDE154; }
+.subtitle { font-size:12px; color:#5c6b8a; margin-left:4px; }
+.tabs { display:flex; gap:3px; margin-left:12px; }
+.tab { padding:5px 12px; border-radius:7px; font-size:12px; font-weight:500; cursor:pointer; border:none; background:transparent; color:#5c6b8a; }
+.tab:hover { background:#1c2640; color:#e1e7ef; }
+.tab.active { background:#1c2640; color:#FDE154; }
+.stats { margin-left:auto; display:flex; gap:8px; }
+.stat { background:#151d30; padding:3px 10px; border-radius:6px; font-size:11px; color:#5c6b8a; }
+.stat b { color:#FDE154; }
 
-/* LAYERS PANEL */
-#layers{position:absolute;top:60px;left:12px;z-index:50;background:#0f1320;border:1px solid #1c2640;border-radius:12px;padding:12px;min-width:200px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
-.layer-row{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px}
-.layer-row input{accent-color:#FDE154}
-.layer-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.layer-count{margin-left:auto;font-size:11px;color:#5c6b8a}
+#map { flex:1; }
+/* Leaflet dark tiles */
+.leaflet-tile { filter: brightness(0.5) invert(1) contrast(2) hue-rotate(200deg) saturate(0.4) brightness(0.7); }
 
-/* DETAIL PANEL */
-#detail{position:absolute;top:60px;right:12px;z-index:50;width:320px;background:#0f1320;border:1px solid #1c2640;border-radius:12px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,.5);display:none;max-height:calc(100vh-80px);overflow-y:auto}
-#detail h3{font-size:15px;font-weight:700;color:#FDE154;margin-bottom:12px}
-.kpi-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-.kpi{background:#151d30;border-radius:8px;padding:10px;text-align:center}
-.kpi .val{font-size:20px;font-weight:700;color:#FDE154}
-.kpi .lbl{font-size:11px;color:#5c6b8a;margin-top:2px}
-.info-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1c2640;font-size:13px}
-.info-row:last-child{border-bottom:none}
-.info-row .key{color:#5c6b8a}
-.close-btn{position:absolute;top:12px;right:12px;background:none;border:none;color:#5c6b8a;cursor:pointer;font-size:18px}
-.close-btn:hover{color:#e1e7ef}
+/* Layers panel */
+#layers { position:absolute; top:58px; left:10px; z-index:1000; background:#0f1320ee; border:1px solid #1c2640; border-radius:10px; padding:12px; min-width:190px; }
+.ly-title { font-size:10px; color:#5c6b8a; font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+.ly-row { display:flex; align-items:center; gap:8px; padding:3px 0; cursor:pointer; font-size:12px; }
+.ly-row input { accent-color:#FDE154; cursor:pointer; }
+.ly-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.ly-n { margin-left:auto; font-size:10px; color:#5c6b8a; background:#151d30; padding:1px 6px; border-radius:4px; }
 
-/* ALERTS */
-#alerts{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:8px;max-width:800px;flex-wrap:wrap;justify-content:center}
-.alert{background:#1c1a2e;border:1px solid #ef4444;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;transition:.15s;white-space:nowrap}
-.alert:hover{background:#2a1e30}
-.alert.warn{border-color:#f59e0b}
-.alert.ok{border-color:#22c55e}
+/* Detail panel */
+#detail { position:absolute; top:58px; right:10px; z-index:1000; width:300px; background:#0f1320ee; border:1px solid #1c2640; border-radius:10px; padding:14px; display:none; backdrop-filter:blur(4px); }
+#detail h3 { font-size:14px; font-weight:700; color:#FDE154; margin-bottom:10px; }
+.d-row { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #1c264030; font-size:12px; }
+.d-row:last-child { border:none; }
+.d-key { color:#5c6b8a; }
+.kpis { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px; }
+.kpi { background:#151d30; border-radius:7px; padding:8px; text-align:center; }
+.kpi .v { font-size:18px; font-weight:700; color:#FDE154; }
+.kpi .l { font-size:10px; color:#5c6b8a; margin-top:1px; }
+.close { position:absolute; top:10px; right:12px; background:none; border:none; color:#5c6b8a; cursor:pointer; font-size:16px; }
+.close:hover { color:#e1e7ef; }
+.gap-box { background:#1a0f0f; border:1px solid #ef444440; border-radius:7px; padding:10px; margin-top:8px; font-size:12px; }
+.gap-box .gh { color:#ef4444; font-weight:600; margin-bottom:6px; font-size:12px; }
+.rec-box { background:#0f1a0f; border:1px solid #fde15430; border-radius:7px; padding:10px; margin-top:6px; font-size:12px; }
+.rec-box .rh { color:#FDE154; font-weight:600; margin-bottom:6px; font-size:12px; }
 
-/* MAP */
-#map{flex:1;width:100%}
+/* ROI panel */
+#roi { position:absolute; top:58px; left:210px; z-index:1000; width:340px; background:#0f1320ee; border:1px solid #1c2640; border-radius:10px; padding:14px; display:none; backdrop-filter:blur(4px); }
+#roi h3 { font-size:14px; font-weight:700; color:#FDE154; margin-bottom:12px; }
+.sl-row { margin-bottom:10px; }
+.sl-row label { display:flex; justify-content:space-between; font-size:11px; color:#5c6b8a; margin-bottom:3px; }
+.sl-row label span { color:#FDE154; font-weight:600; }
+input[type=range] { width:100%; accent-color:#FDE154; }
+.roi-sel { width:100%; background:#151d30; border:1px solid #263354; color:#e1e7ef; border-radius:7px; padding:5px 8px; font-size:12px; margin-bottom:10px; }
+.roi-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.roi-item { background:#151d30; border-radius:7px; padding:8px; text-align:center; }
+.roi-item .rv { font-size:15px; font-weight:700; }
+.roi-item .rl { font-size:10px; color:#5c6b8a; margin-top:2px; }
+.roi-winner { grid-column:1/-1; border-radius:7px; padding:8px; text-align:center; font-size:12px; font-weight:600; margin-top:2px; }
+.w-lead { background:rgba(34,197,94,.12); color:#22c55e; border:1px solid rgba(34,197,94,.25); }
+.w-scout { background:rgba(253,225,84,.12); color:#FDE154; border:1px solid rgba(253,225,84,.25); }
 
-/* LOADING */
-#loader{position:absolute;inset:0;background:#0c1222;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;gap:16px}
-.spinner{width:40px;height:40px;border:3px solid #1c2640;border-top-color:#FDE154;border-radius:50%;animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-#loader p{color:#5c6b8a;font-size:14px}
-#loader .prog{color:#FDE154;font-size:12px}
+/* Alerts */
+#alerts { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); z-index:1000; display:flex; gap:6px; flex-wrap:wrap; justify-content:center; pointer-events:none; }
+.alert { background:#1a0f10ee; border:1px solid #ef444460; border-radius:7px; padding:5px 12px; font-size:11px; cursor:pointer; pointer-events:all; white-space:nowrap; }
+.alert:hover { background:#2a1418; }
 
-/* ROI PANEL */
-#roi-panel{display:none;position:absolute;top:60px;left:220px;z-index:50;background:#0f1320;border:1px solid #1c2640;border-radius:12px;padding:16px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
-#roi-panel h3{font-size:15px;font-weight:700;color:#FDE154;margin-bottom:12px}
-.slider-row{margin-bottom:12px}
-.slider-row label{display:flex;justify-content:space-between;font-size:12px;color:#5c6b8a;margin-bottom:4px}
-.slider-row label span{color:#FDE154;font-weight:600}
-input[type=range]{width:100%;accent-color:#FDE154}
-select.roi-select{width:100%;background:#151d30;border:1px solid #263354;color:#e1e7ef;border-radius:8px;padding:6px 10px;font-size:13px;margin-bottom:12px}
-.roi-result{background:#151d30;border-radius:8px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.roi-result .item{text-align:center}
-.roi-result .val{font-size:16px;font-weight:700}
-.roi-result .lbl{font-size:10px;color:#5c6b8a;margin-top:2px}
-.winner{grid-column:1/-1;text-align:center;padding:8px;border-radius:6px;font-size:13px;font-weight:600;margin-top:4px}
-.winner.leads{background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.3)}
-.winner.scout{background:rgba(253,225,84,.15);color:#FDE154;border:1px solid rgba(253,225,84,.3)}
+/* Legend */
+#legend { position:absolute; bottom:50px; left:10px; z-index:1000; background:#0f1320ee; border:1px solid #1c2640; border-radius:8px; padding:10px 12px; font-size:11px; }
+.leg-row { display:flex; align-items:center; gap:7px; padding:2px 0; color:#5c6b8a; }
+.leg-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.leg-sq { width:10px; height:6px; border-radius:2px; flex-shrink:0; opacity:.5; }
 </style>
 </head>
 <body>
-<script src="/config.js"></script>
-
-<div id="loader">
-  <div class="spinner"></div>
-  <p>Lade bee-doo Daten...</p>
-  <div class="prog" id="load-prog">Verbinde mit Datenbank...</div>
-</div>
 
 <nav>
   <div class="logo">🐝 bee-doo</div>
-  <div class="nav-tabs">
+  <div class="subtitle">Strategische Karte · NRW Demo</div>
+  <div class="tabs">
     <button class="tab active" onclick="switchTab('overview')">Übersicht</button>
     <button class="tab" onclick="switchTab('gaps')">⚠ Lücken</button>
     <button class="tab" onclick="switchTab('roi')">ROI Rechner</button>
     <button class="tab" onclick="switchTab('heatmap')">Heatmap</button>
   </div>
-  <div class="nav-right">
-    <div class="badge">VB: <span id="vb-count">—</span></div>
-    <div class="badge">Scouter: <span id="sc-count">—</span></div>
-    <div class="badge">Qualif.: <span id="qu-count">—</span></div>
-    <div class="badge">infas360: <span id="inf-count">—</span></div>
+  <div class="stats">
+    <div class="stat">VB: <b id="n-vb">—</b></div>
+    <div class="stat">Scouter: <b id="n-sc">—</b></div>
+    <div class="stat">Qualif.: <b id="n-qu">—</b></div>
+    <div class="stat">Lücken: <b id="n-gap" style="color:#ef4444">—</b></div>
   </div>
 </nav>
 
 <div id="map"></div>
 
-<!-- Layers -->
 <div id="layers">
-  <div style="font-size:11px;color:#5c6b8a;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Layer</div>
-  <label class="layer-row"><input type="checkbox" id="l-vb" checked onchange="toggleLayer('vb')"><div class="layer-dot" style="background:#FDE154"></div>Vertriebler <span class="layer-count" id="lc-vb"></span></label>
-  <label class="layer-row"><input type="checkbox" id="l-sc" checked onchange="toggleLayer('sc')"><div class="layer-dot" style="background:#22c55e"></div>Scouter <span class="layer-count" id="lc-sc"></span></label>
-  <label class="layer-row"><input type="checkbox" id="l-qu" checked onchange="toggleLayer('qu')"><div class="layer-dot" style="background:#60a5fa"></div>Qualifizierungen <span class="layer-count" id="lc-qu"></span></label>
-  <label class="layer-row"><input type="checkbox" id="l-inf" onchange="toggleLayer('inf')"><div class="layer-dot" style="background:#f97316"></div>infas360 Potenzial <span class="layer-count" id="lc-inf"></span></label>
-  <label class="layer-row"><input type="checkbox" id="l-gap" checked onchange="toggleLayer('gap')"><div class="layer-dot" style="background:#ef4444"></div>Lücken <span class="layer-count" id="lc-gap"></span></label>
+  <div class="ly-title">Layer</div>
+  <label class="ly-row"><input type="checkbox" id="l-vb" checked onchange="toggleLayer('vb')"><div class="ly-dot" style="background:#FDE154"></div>Vertriebler<span class="ly-n" id="ln-vb"></span></label>
+  <label class="ly-row"><input type="checkbox" id="l-sc" checked onchange="toggleLayer('sc')"><div class="ly-dot" style="background:#22c55e"></div>Scouter<span class="ly-n" id="ln-sc"></span></label>
+  <label class="ly-row"><input type="checkbox" id="l-qu" checked onchange="toggleLayer('qu')"><div class="ly-dot" style="background:#60a5fa"></div>Qualifizierungen<span class="ly-n" id="ln-qu"></span></label>
+  <label class="ly-row"><input type="checkbox" id="l-inf" onchange="toggleLayer('inf')"><div class="ly-dot" style="background:#f97316"></div>infas360 Potenzial<span class="ly-n" id="ln-inf"></span></label>
+  <label class="ly-row"><input type="checkbox" id="l-gap" checked onchange="toggleLayer('gap')"><div class="ly-dot" style="background:#ef4444"></div>Lücken<span class="ly-n" id="ln-gap"></span></label>
 </div>
 
-<!-- Detail Panel -->
 <div id="detail">
-  <button class="close-btn" onclick="closeDetail()">✕</button>
-  <div id="detail-content"></div>
+  <button class="close" onclick="document.getElementById('detail').style.display='none'">✕</button>
+  <div id="detail-body"></div>
 </div>
 
-<!-- ROI Panel -->
-<div id="roi-panel">
+<div id="roi">
   <h3>💰 ROI Rechner</h3>
-  <div class="slider-row">
-    <label>Termine/Monat <span id="rv-termine">20</span></label>
-    <input type="range" min="5" max="60" value="20" id="r-termine" oninput="updateROI()">
+  <div class="sl-row">
+    <label>Termine/Monat <span id="rv-t">20</span></label>
+    <input type="range" min="5" max="60" value="20" id="r-t" oninput="calcROI()">
   </div>
-  <div class="slider-row">
-    <label>Zeitraum (Monate) <span id="rv-monate">12</span></label>
-    <input type="range" min="3" max="24" value="12" id="r-monate" oninput="updateROI()">
+  <div class="sl-row">
+    <label>Zeitraum (Monate) <span id="rv-m">12</span></label>
+    <input type="range" min="3" max="24" value="12" id="r-m" oninput="calcROI()">
   </div>
-  <select class="roi-select" id="r-quelle" onchange="updateROI()">
-    <option value="fenerum:29.9:0.18">Fenerum (€29.90/Lead, 18%)</option>
-    <option value="verivox:24.5:0.14">Verivox (€24.50/Lead, 14%)</option>
-    <option value="check24:19.9:0.12">Check24 (€19.90/Lead, 12%)</option>
-    <option value="solarmarkt:149:1.0">SolarMarkt (€149/Termin direkt)</option>
-    <option value="enpal:34.9:0.20">Enpal Leads (€34.90/Lead, 20%)</option>
-    <option value="solardach:27.5:0.17">Solardachbörse (€27.50/Lead, 17%)</option>
+  <select class="roi-sel" id="r-q" onchange="calcROI()">
+    <option value="29.9:0.18">Fenerum (€29,90/Lead · 18% Conv.)</option>
+    <option value="24.5:0.14">Verivox (€24,50/Lead · 14% Conv.)</option>
+    <option value="19.9:0.12">Check24 (€19,90/Lead · 12% Conv.)</option>
+    <option value="149:1.0">SolarMarkt (€149/Termin direkt)</option>
+    <option value="34.9:0.20">Enpal Leads (€34,90/Lead · 20% Conv.)</option>
+    <option value="27.5:0.17">Solardachbörse (€27,50/Lead · 17% Conv.)</option>
   </select>
-  <div class="roi-result" id="roi-result"></div>
+  <div class="roi-grid" id="roi-result"></div>
 </div>
 
-<!-- Alerts -->
 <div id="alerts"></div>
 
+<div id="legend">
+  <div class="leg-row"><div class="leg-dot" style="background:#FDE154"></div>Vertriebler (80km Radius)</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#22c55e"></div>Scouter (30km Gebiet)</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#60a5fa"></div>Qualifizierungen</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#f97316"></div>infas360 Potenzial</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#ef4444; opacity:.6"></div>Abdeckungslücke</div>
+</div>
+
 <script>
-const SB = window.BEEDOO_SB || "https://hqzpemfaljxcysyqssng.supabase.co";
-const SVC = window.BEEDOO_SVC || "";
-const GKEY = window.BEEDOO_GKEY || "";
+// ─── TEST DATA NRW ───────────────────────────────────────────────────────────
+const VB = [
+  {id:1, name:'Thomas Müller', ort:'Bielefeld', funktion:'HGB haupt', lat:52.02, lng:8.53, radius:80},
+  {id:2, name:'Stefan Becker', ort:'Dortmund', funktion:'angestellt', lat:51.51, lng:7.46, radius:80},
+  {id:3, name:'Anna Fischer', ort:'Köln', funktion:'HGB haupt', lat:50.94, lng:6.96, radius:80},
+  {id:4, name:'Michael Wagner', ort:'Düsseldorf', funktion:'angestellt', lat:51.22, lng:6.78, radius:80},
+  {id:5, name:'Julia Schneider', ort:'Münster', funktion:'HGB haupt', lat:51.96, lng:7.63, radius:80},
+  {id:6, name:'Markus Schmidt', ort:'Aachen', funktion:'angestellt', lat:50.78, lng:6.08, radius:80},
+  {id:7, name:'Sabine Koch', ort:'Paderborn', funktion:'HGB haupt', lat:51.72, lng:8.75, radius:80},
+  {id:8, name:'Klaus Weber', ort:'Bochum', funktion:'angestellt', lat:51.48, lng:7.22, radius:80},
+  {id:9, name:'Laura Zimmermann', ort:'Siegen', funktion:'HGB haupt', lat:50.88, lng:8.02, radius:80},
+  {id:10, name:'Peter Hoffmann', ort:'Bonn', funktion:'angestellt', lat:50.73, lng:7.10, radius:80},
+];
 
-let map, heatmap, markers={vb:[],sc:[],qu:[],inf:[],gap:[]};
-let DATA = {vb:[], sc:[], qu:[], inf:[], mitarbeiter:[]};
-let currentTab = 'overview';
-let mapLoaded = false;
+const SCOUTER = [
+  {id:1, name:'Jan Richter', ort:'Bielefeld', lat:52.03, lng:8.55},
+  {id:2, name:'Mia Braun', ort:'Dortmund', lat:51.52, lng:7.48},
+  {id:3, name:'Finn Hartmann', ort:'Köln', lat:50.92, lng:6.98},
+  {id:4, name:'Lena Schulz', ort:'Münster', lat:51.97, lng:7.65},
+  // deliberately missing coverage for Düsseldorf, Aachen, Siegen, Bonn
+];
 
-// UTM32 → WGS84 (simplified, accurate enough for Germany)
-function utm32toLatLng(east, north) {
-  // Strip zone prefix if present (32xxxxxxx format)
-  const e = east > 1000000 ? east - 32000000 : east;
-  const n = north;
-  // WGS84 / UTM Zone 32N
-  const a=6378137,f=1/298.257223563,k0=0.9996;
-  const e2=2*f-f*f,e4=e2*e2,e6=e4*e2;
-  const E0=500000,N0=0;
-  const x=e-E0, y=n-N0;
-  const M=y/k0;
-  const mu=M/(a*(1-e2/4-3*e4/64-5*e6/256));
-  const phi1=mu+(3*e2/2-27*e4/32)*Math.sin(2*mu)+(21*e4/16-55*e6/32)*Math.sin(4*mu)+(151*e6/96)*Math.sin(6*mu);
-  const ep2=e2/(1-e2),N1=a/Math.sqrt(1-e2*Math.sin(phi1)**2);
-  const T1=Math.tan(phi1)**2,C1=ep2*Math.cos(phi1)**2,R1=a*(1-e2)/Math.pow(1-e2*Math.sin(phi1)**2,1.5);
-  const D=x/(N1*k0);
-  const lat=phi1-(N1*Math.tan(phi1)/R1)*(D*D/2-(5+3*T1+10*C1-4*C1*C1-9*ep2)*D*D*D*D/24+(61+90*T1+298*C1+45*T1*T1-252*ep2-3*C1*C1)*D*D*D*D*D*D/720);
-  const lng0=9*Math.PI/180; // Zone 32 central meridian
-  const lng=lng0+(D-(1+2*T1+C1)*D*D*D/6+(5-2*C1+28*T1-3*C1*C1+8*ep2+24*T1*T1)*D*D*D*D*D/120)/Math.cos(phi1);
-  return {lat:lat*180/Math.PI, lng:lng*180/Math.PI};
+// 120 fake qualifizierungen scattered around NRW
+const QUALIF = [];
+const statusPool = ['qualified','qualified','unsuitable','revisit','open'];
+for(let i=0;i<120;i++){
+  const base = VB[i%VB.length];
+  QUALIF.push({
+    id:i, lat: base.lat + (Math.sin(i*7.3)*0.4), lng: base.lng + (Math.cos(i*5.1)*0.5),
+    status: statusPool[i%5], scouter_id: SCOUTER[i%SCOUTER.length].id
+  });
 }
 
-// Haversine
+// infas360 sample points NRW (random within rough NRW bbox)
+const INFAS = [];
+for(let i=0;i<800;i++){
+  INFAS.push({
+    lat: 50.3 + Math.random()*1.9,
+    lng: 6.0 + Math.random()*2.5
+  });
+}
+
+// ─── MAP INIT ─────────────────────────────────────────────────────────────────
+const map = L.map('map', {zoomControl:false}).setView([51.5, 7.5], 8);
+L.control.zoom({position:'bottomright'}).addTo(map);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'© OpenStreetMap',
+  maxZoom:18
+}).addTo(map);
+
+// Layer groups
+const layers = { vb:L.layerGroup(), sc:L.layerGroup(), qu:L.layerGroup(), inf:L.layerGroup(), gap:L.layerGroup() };
+layers.vb.addTo(map); layers.sc.addTo(map); layers.qu.addTo(map); layers.gap.addTo(map);
+
+// ─── HAVERSINE ────────────────────────────────────────────────────────────────
 function dist(a,b){
-  const R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180;
+  const R=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
   const s=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
   return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
 }
 
-async function sb(path){
-  const r=await fetch(SB+path,{headers:{'apikey':SVC,'Authorization':'Bearer '+SVC}});
-  return r.ok ? r.json() : [];
+// ─── RENDER VB ───────────────────────────────────────────────────────────────
+const gaps = [];
+VB.forEach(vb => {
+  const nearbyScouts = SCOUTER.filter(s => dist(vb,s) < 48);
+  const isGap = nearbyScouts.length === 0;
+  if(isGap) gaps.push(vb);
+
+  // Radius circle
+  L.circle([vb.lat, vb.lng], {
+    radius: vb.radius * 1000,
+    color: '#FDE154', fillColor: '#FDE154',
+    fillOpacity: 0.04, weight: 1, opacity: 0.2
+  }).addTo(layers.vb);
+
+  // Marker
+  const icon = L.divIcon({
+    html:`<div style="width:14px;height:14px;background:#FDE154;border-radius:50%;border:2px solid #0c1222;box-shadow:0 0 6px #FDE15460"></div>`,
+    iconSize:[14,14], iconAnchor:[7,7], className:''
+  });
+  L.marker([vb.lat, vb.lng], {icon}).addTo(layers.vb)
+    .bindTooltip(vb.name + '<br>' + vb.ort, {className:'dark-tip'})
+    .on('click', () => showVBDetail(vb, nearbyScouts));
+});
+
+// ─── RENDER SCOUTER ──────────────────────────────────────────────────────────
+SCOUTER.forEach(sc => {
+  L.circle([sc.lat, sc.lng], {
+    radius: 30000,
+    color:'#22c55e', fillColor:'#22c55e',
+    fillOpacity:0.07, weight:1.5, opacity:0.3
+  }).addTo(layers.sc);
+
+  const icon = L.divIcon({
+    html:`<div style="width:11px;height:11px;background:#22c55e;border-radius:50%;border:2px solid #0c1222;box-shadow:0 0 5px #22c55e60"></div>`,
+    iconSize:[11,11], iconAnchor:[5.5,5.5], className:''
+  });
+  L.marker([sc.lat, sc.lng], {icon}).addTo(layers.sc)
+    .bindTooltip('🔍 '+sc.name+'<br>'+sc.ort, {className:'dark-tip'})
+    .on('click', () => showSCDetail(sc));
+});
+
+// ─── RENDER QUALIF ───────────────────────────────────────────────────────────
+const qColors = {qualified:'#22c55e', unsuitable:'#ef4444', revisit:'#f59e0b', open:'#60a5fa'};
+QUALIF.forEach(q => {
+  const icon = L.divIcon({
+    html:`<div style="width:7px;height:7px;background:${qColors[q.status]||'#60a5fa'};border-radius:50%;opacity:.8"></div>`,
+    iconSize:[7,7], iconAnchor:[3.5,3.5], className:''
+  });
+  L.marker([q.lat, q.lng], {icon, zIndexOffset:-100}).addTo(layers.qu);
+});
+
+// ─── RENDER INFAS360 ─────────────────────────────────────────────────────────
+INFAS.forEach(a => {
+  const icon = L.divIcon({
+    html:`<div style="width:4px;height:4px;background:#f97316;border-radius:50%;opacity:.4"></div>`,
+    iconSize:[4,4], iconAnchor:[2,2], className:''
+  });
+  L.marker([a.lat, a.lng], {icon, zIndexOffset:-200}).addTo(layers.inf);
+});
+
+// ─── RENDER GAPS ─────────────────────────────────────────────────────────────
+gaps.forEach(vb => {
+  L.circle([vb.lat, vb.lng], {
+    radius: 50000,
+    color:'#ef4444', fillColor:'#ef4444',
+    fillOpacity:0.08, weight:2, opacity:0.5,
+    dashArray:'8,6'
+  }).addTo(layers.gap).on('click', () => showGapDetail(vb));
+});
+
+// ─── UPDATE COUNTS ───────────────────────────────────────────────────────────
+document.getElementById('n-vb').textContent = VB.length;
+document.getElementById('n-sc').textContent = SCOUTER.length;
+document.getElementById('n-qu').textContent = QUALIF.length;
+document.getElementById('n-gap').textContent = gaps.length;
+document.getElementById('ln-vb').textContent = VB.length;
+document.getElementById('ln-sc').textContent = SCOUTER.length;
+document.getElementById('ln-qu').textContent = QUALIF.length;
+document.getElementById('ln-inf').textContent = INFAS.length+' (Demo)';
+document.getElementById('ln-gap').textContent = gaps.length;
+
+// ─── ALERTS ──────────────────────────────────────────────────────────────────
+const alertsEl = document.getElementById('alerts');
+gaps.slice(0,3).forEach(vb => {
+  const a = document.createElement('div');
+  a.className = 'alert';
+  a.innerHTML = `⚠ <b>${vb.name}</b> (${vb.ort}) — kein Scouter in 48km`;
+  a.onclick = () => { map.setView([vb.lat, vb.lng], 10); showGapDetail(vb); };
+  alertsEl.appendChild(a);
+});
+
+// ─── DETAIL PANELS ───────────────────────────────────────────────────────────
+function showVBDetail(vb, scouts) {
+  const nearQu = QUALIF.filter(q => dist(vb, q) < vb.radius);
+  const qualified = nearQu.filter(q => q.status === 'qualified').length;
+  const isGap = scouts.length === 0;
+
+  document.getElementById('detail-body').innerHTML = `
+    <h3>👤 ${vb.name}</h3>
+    <div class="kpis">
+      <div class="kpi"><div class="v">${nearQu.length}</div><div class="l">Qualif. im Gebiet</div></div>
+      <div class="kpi"><div class="v">${qualified}</div><div class="l">Davon qualifiziert</div></div>
+      <div class="kpi"><div class="v">${scouts.length}</div><div class="l">Scouter im Radius</div></div>
+      <div class="kpi"><div class="v">${nearQu.length?Math.round(qualified/nearQu.length*100):0}%</div><div class="l">Conversion</div></div>
+    </div>
+    <div class="d-row"><span class="d-key">Funktion</span><span>${vb.funktion}</span></div>
+    <div class="d-row"><span class="d-key">Standort</span><span>${vb.ort}</span></div>
+    <div class="d-row"><span class="d-key">Aktionsradius</span><span>${vb.radius} km</span></div>
+    ${isGap ? `<div class="gap-box"><div class="gh">⚠ Abdeckungslücke</div>Kein Scouter innerhalb 48km. Empfehlung: Online-Leads kaufen oder Scouter in ${vb.ort} rekrutieren.</div>` : ''}
+  `;
+  document.getElementById('detail').style.display = 'block';
 }
 
-function prog(t){document.getElementById('load-prog').textContent=t}
-
-async function loadData(){
-  prog('Lade Mitarbeiter...');
-  DATA.mitarbeiter = await sb('/rest/v1/pay_mitarbeiter?select=id,name,funktion,ort,plz,status&status=eq.aktiv&limit=300');
-  
-  // VB: vertriebler + HGB
-  DATA.vb = DATA.mitarbeiter.filter(m=>['vertriebler','HGB haupt','HGB agentur','angestellt'].includes(m.funktion)||m.funktion?.includes('vertriebl'));
-  DATA.sc = DATA.mitarbeiter.filter(m=>m.funktion?.toLowerCase().includes('scout'));
-  
-  prog('Lade Qualifizierungen...');
-  DATA.qu = await sb('/rest/v1/qualifizierungen?select=id,lat,lng,status,scouter_id,created_at&lat=not.is.null&limit=500');
-  
-  prog('Lade infas360 Potenzial (Sample)...');
-  // Load sample of infas360 addresses with coords for heatmap
-  // Get addresses with lat/lng already computed, or use UTM conversion
-  const infWithLatLng = await sb('/rest/v1/infas_adressen?select=id,plz,ort,stn,hnr,lat,lng,utm32east,utm32north,status&limit=2000&order=id.asc');
-  DATA.inf = infWithLatLng.filter(a => {
-    if(a.lat && a.lng) return true;
-    if(a.utm32east && a.utm32north){
-      const c=utm32toLatLng(a.utm32east,a.utm32north);
-      a.lat=c.lat; a.lng=c.lng;
-      return c.lat>47 && c.lat<55 && c.lng>6 && c.lng<15; // Germany bounds
-    }
-    return false;
-  });
-  
-  document.getElementById('vb-count').textContent = DATA.vb.length;
-  document.getElementById('sc-count').textContent = DATA.sc.length;
-  document.getElementById('qu-count').textContent = DATA.qu.length;
-  document.getElementById('inf-count').textContent = '23.4M';
-  document.getElementById('lc-vb').textContent = DATA.vb.length;
-  document.getElementById('lc-sc').textContent = DATA.sc.length;
-  document.getElementById('lc-qu').textContent = DATA.qu.length;
-  document.getElementById('lc-inf').textContent = DATA.inf.length+' (Sample)';
-  
-  prog('Karte wird initialisiert...');
+function showSCDetail(sc) {
+  const nearQu = QUALIF.filter(q => q.scouter_id === sc.id);
+  const qualified = nearQu.filter(q => q.status === 'qualified').length;
+  document.getElementById('detail-body').innerHTML = `
+    <h3>🔍 ${sc.name}</h3>
+    <div class="kpis">
+      <div class="kpi"><div class="v">${nearQu.length}</div><div class="l">Besuche</div></div>
+      <div class="kpi"><div class="v">${nearQu.length?Math.round(qualified/nearQu.length*100):0}%</div><div class="l">Conversion</div></div>
+    </div>
+    <div class="d-row"><span class="d-key">Standort</span><span>${sc.ort}</span></div>
+    <div class="d-row"><span class="d-key">Qualifiziert</span><span style="color:#22c55e">${qualified}</span></div>
+    <div class="d-row"><span class="d-key">Ungeeignet</span><span style="color:#ef4444">${nearQu.filter(q=>q.status==='unsuitable').length}</span></div>
+    <div class="d-row"><span class="d-key">Revisit</span><span style="color:#f59e0b">${nearQu.filter(q=>q.status==='revisit').length}</span></div>
+  `;
+  document.getElementById('detail').style.display = 'block';
 }
 
-// PLZ2 → rough coords for geocoding
-const PLZ2={10:{lat:52.52,lng:13.40},11:{lat:52.50,lng:13.38},12:{lat:52.45,lng:13.43},13:{lat:52.57,lng:13.32},14:{lat:52.42,lng:13.20},20:{lat:53.57,lng:9.99},21:{lat:53.47,lng:10.20},22:{lat:53.60,lng:10.05},23:{lat:53.87,lng:10.68},24:{lat:54.32,lng:10.13},25:{lat:53.90,lng:9.50},26:{lat:53.14,lng:8.21},27:{lat:53.07,lng:8.81},28:{lat:53.07,lng:8.81},30:{lat:52.37,lng:9.73},31:{lat:52.10,lng:9.38},32:{lat:52.03,lng:8.53},33:{lat:51.97,lng:8.63},34:{lat:51.32,lng:9.50},35:{lat:50.58,lng:8.68},36:{lat:50.55,lng:9.68},37:{lat:51.53,lng:9.93},38:{lat:52.27,lng:10.52},39:{lat:52.13,lng:11.62},40:{lat:51.22,lng:6.78},41:{lat:51.20,lng:6.44},42:{lat:51.27,lng:7.18},44:{lat:51.51,lng:7.46},45:{lat:51.45,lng:7.01},46:{lat:51.67,lng:6.62},47:{lat:51.33,lng:6.57},48:{lat:51.96,lng:7.63},49:{lat:52.27,lng:8.05},50:{lat:50.94,lng:6.96},51:{lat:50.95,lng:7.17},52:{lat:50.78,lng:6.08},53:{lat:50.73,lng:7.10},54:{lat:49.75,lng:6.64},55:{lat:49.99,lng:8.27},56:{lat:50.35,lng:7.60},57:{lat:50.98,lng:8.02},58:{lat:51.37,lng:7.46},59:{lat:51.52,lng:7.92},60:{lat:50.11,lng:8.68},61:{lat:50.22,lng:8.62},63:{lat:50.09,lng:8.96},64:{lat:49.87,lng:8.65},65:{lat:50.08,lng:8.24},66:{lat:49.23,lng:7.00},67:{lat:49.44,lng:8.17},68:{lat:49.49,lng:8.47},69:{lat:49.41,lng:8.71},70:{lat:48.78,lng:9.18},71:{lat:48.80,lng:9.12},72:{lat:48.40,lng:9.00},73:{lat:48.70,lng:9.65},74:{lat:49.12,lng:9.22},75:{lat:48.87,lng:8.70},76:{lat:49.00,lng:8.40},77:{lat:48.48,lng:7.95},78:{lat:47.99,lng:8.52},79:{lat:47.99,lng:7.85},80:{lat:48.14,lng:11.58},81:{lat:48.10,lng:11.62},82:{lat:47.99,lng:11.37},83:{lat:47.86,lng:12.10},84:{lat:48.20,lng:12.30},85:{lat:48.26,lng:11.66},86:{lat:48.36,lng:10.90},87:{lat:47.72,lng:10.32},88:{lat:47.88,lng:9.62},89:{lat:48.41,lng:10.00},90:{lat:49.45,lng:11.08},91:{lat:49.30,lng:10.87},92:{lat:49.68,lng:12.15},93:{lat:49.02,lng:12.10},94:{lat:48.57,lng:13.43},95:{lat:50.00,lng:11.58},96:{lat:49.90,lng:10.90},97:{lat:49.80,lng:9.93},98:{lat:50.68,lng:10.93},99:{lat:51.02,lng:10.98}};
-
-function getCoords(mitarbeiter){
-  if(!mitarbeiter.plz) return null;
-  const p2=parseInt(mitarbeiter.plz.substring(0,2));
-  const base=PLZ2[p2];
-  if(!base) return null;
-  // Deterministic jitter based on ID
-  const seed=(mitarbeiter.id%1000)/1000;
-  const seed2=((mitarbeiter.id*7)%1000)/1000;
-  return {lat:base.lat+(seed-0.5)*0.3, lng:base.lng+(seed2-0.5)*0.4};
-}
-
-function initMap(){
-  map = new google.maps.Map(document.getElementById('map'),{
-    center:{lat:51.5,lng:10.0},zoom:6,
-    mapTypeId:'roadmap',
-    styles:[{elementType:'geometry',stylers:[{color:'#0c1222'}]},{elementType:'labels.text.fill',stylers:[{color:'#5c6b8a'}]},{elementType:'labels.text.stroke',stylers:[{color:'#0c1222'}]},{featureType:'road',elementType:'geometry',stylers:[{color:'#1c2640'}]},{featureType:'road',elementType:'geometry.stroke',stylers:[{color:'#263354'}]},{featureType:'water',elementType:'geometry',stylers:[{color:'#151d30'}]},{featureType:'administrative.country',elementType:'geometry.stroke',stylers:[{color:'#263354'}]},{featureType:'administrative.province',elementType:'geometry.stroke',stylers:[{color:'#1c2640'}]},{featureType:'poi',stylers:[{visibility:'off'}]},{featureType:'transit',stylers:[{visibility:'off'}]}]
-  });
-  
-  // Heatmap layer for infas360
-  heatmap = new google.maps.visualization.HeatmapLayer({map:null,radius:15,opacity:0.7});
-  
-  renderAll();
-  document.getElementById('loader').style.display='none';
-  mapLoaded=true;
-}
-
-function renderAll(){
-  clearLayer('vb'); clearLayer('sc'); clearLayer('qu'); clearLayer('gap');
-  
-  // VB markers
-  const showVB = document.getElementById('l-vb').checked;
-  DATA.vb.forEach(m=>{
-    const c=getCoords(m); if(!c) return;
-    const mk=new google.maps.Marker({
-      position:c,map:showVB?map:null,
-      icon:{path:google.maps.SymbolPath.CIRCLE,scale:8,fillColor:'#FDE154',fillOpacity:0.9,strokeColor:'#0c1222',strokeWeight:1.5},
-      title:m.name,zIndex:10
-    });
-    mk.addListener('click',()=>showDetail('vb',m,c));
-    markers.vb.push(mk);
-    
-    // Draw radius circle
-    const circle=new google.maps.Circle({
-      center:c,radius:80000,map:showVB?map:null,
-      fillColor:'#FDE154',fillOpacity:0.03,
-      strokeColor:'#FDE154',strokeOpacity:0.15,strokeWeight:1
-    });
-    markers.vb.push(circle);
-  });
-  
-  // Scout markers
-  const showSC = document.getElementById('l-sc').checked;
-  DATA.sc.forEach(m=>{
-    const c=getCoords(m); if(!c) return;
-    const mk=new google.maps.Marker({
-      position:c,map:showSC?map:null,
-      icon:{path:google.maps.SymbolPath.CIRCLE,scale:6,fillColor:'#22c55e',fillOpacity:0.9,strokeColor:'#0c1222',strokeWeight:1.5},
-      title:m.name,zIndex:8
-    });
-    mk.addListener('click',()=>showDetail('sc',m,c));
-    markers.sc.push(mk);
-  });
-  
-  // Qualifizierungen
-  const showQU = document.getElementById('l-qu').checked;
-  const statusColors={qualified:'#22c55e',unsuitable:'#ef4444',revisit:'#f59e0b',open:'#60a5fa'};
-  DATA.qu.forEach(q=>{
-    const mk=new google.maps.Marker({
-      position:{lat:q.lat,lng:q.lng},map:showQU?map:null,
-      icon:{path:google.maps.SymbolPath.CIRCLE,scale:4,fillColor:statusColors[q.status]||'#60a5fa',fillOpacity:0.8,strokeColor:'#0c1222',strokeWeight:1},
-      zIndex:5
-    });
-    markers.qu.push(mk);
-  });
-  
-  // Gap detection & markers
-  detectGaps();
-  
-  // Alerts
-  buildAlerts();
-}
-
-function detectGaps(){
-  const showGAP = document.getElementById('l-gap').checked;
-  const gaps=[];
-  DATA.vb.forEach(m=>{
-    const vc=getCoords(m); if(!vc) return;
-    const nearbyScouts=DATA.sc.filter(s=>{
-      const sc=getCoords(s); if(!sc) return false;
-      return dist(vc,sc)<48; // 60% of 80km radius
-    });
-    if(nearbyScouts.length===0) gaps.push({vb:m,c:vc});
-  });
-  
-  gaps.forEach(g=>{
-    const circle=new google.maps.Circle({
-      center:g.c,radius:50000,map:showGAP?map:null,
-      fillColor:'#ef4444',fillOpacity:0.08,
-      strokeColor:'#ef4444',strokeOpacity:0.5,strokeWeight:1.5
-    });
-    // Bounce animation via custom overlay would be complex - use simple marker
-    const mk=new google.maps.Marker({
-      position:g.c,map:showGAP?map:null,
-      icon:{path:google.maps.SymbolPath.CIRCLE,scale:12,fillColor:'transparent',fillOpacity:0,strokeColor:'#ef4444',strokeOpacity:0.8,strokeWeight:2},
-      title:'Lücke: '+g.vb.name,zIndex:3
-    });
-    mk.addListener('click',()=>showGapDetail(g));
-    markers.gap.push(circle,mk);
-  });
-  
-  document.getElementById('lc-gap').textContent=gaps.length;
-  window._gaps=gaps;
-}
-
-function buildAlerts(){
-  const el=document.getElementById('alerts');
-  const gaps=window._gaps||[];
-  el.innerHTML='';
-  gaps.slice(0,3).forEach(g=>{
-    const a=document.createElement('div');
-    a.className='alert';
-    a.textContent=`⚠ ${g.vb.name} (${g.vb.ort||g.vb.plz||'?'}) — kein Scouter im Umfeld`;
-    a.onclick=()=>{map.setCenter(g.c);map.setZoom(10);showGapDetail(g);};
-    el.appendChild(a);
-  });
-}
-
-function showDetail(type, data, coords){
-  const el=document.getElementById('detail');
-  const co=document.getElementById('detail-content');
-  el.style.display='block';
-  
-  if(type==='vb'){
-    const nearQu=DATA.qu.filter(q=>dist(coords,{lat:q.lat,lng:q.lng})<80);
-    const qualified=nearQu.filter(q=>q.status==='qualified').length;
-    co.innerHTML=`
-      <h3>👤 ${data.name}</h3>
-      <div class="kpi-row">
-        <div class="kpi"><div class="val">${nearQu.length}</div><div class="lbl">Qualif. im Gebiet</div></div>
-        <div class="kpi"><div class="val">${qualified}</div><div class="lbl">Davon qualifiziert</div></div>
-      </div>
-      <div class="info-row"><span class="key">Funktion</span><span>${data.funktion||'—'}</span></div>
-      <div class="info-row"><span class="key">Standort</span><span>${data.ort||data.plz||'—'}</span></div>
-      <div class="info-row"><span class="key">Aktionsradius</span><span>80 km</span></div>
-      <div class="info-row"><span class="key">Scouter im Radius</span><span>${DATA.sc.filter(s=>{const c=getCoords(s);return c&&dist(coords,c)<80}).length}</span></div>
-    `;
-  } else if(type==='sc'){
-    const nearQu=DATA.qu.filter(q=>dist(coords,{lat:q.lat,lng:q.lng})<30);
-    const conv=nearQu.length?Math.round(nearQu.filter(q=>q.status==='qualified').length/nearQu.length*100):0;
-    co.innerHTML=`
-      <h3>🔍 ${data.name}</h3>
-      <div class="kpi-row">
-        <div class="kpi"><div class="val">${nearQu.length}</div><div class="lbl">Besuche</div></div>
-        <div class="kpi"><div class="val">${conv}%</div><div class="lbl">Conversion</div></div>
-      </div>
-      <div class="info-row"><span class="key">Funktion</span><span>${data.funktion||'—'}</span></div>
-      <div class="info-row"><span class="key">Standort</span><span>${data.ort||data.plz||'—'}</span></div>
-    `;
-  }
-}
-
-const LEAD_SOURCES=[
-  {name:'Fenerum',preis:29.9,conv:0.18,score:85},
-  {name:'Verivox',preis:24.5,conv:0.14,score:72},
-  {name:'Check24',preis:19.9,conv:0.12,score:65},
-  {name:'SolarMarkt',preis:149,conv:1.0,score:90,isTermin:true},
-  {name:'Enpal Leads',preis:34.9,conv:0.20,score:88},
-  {name:'Solardachbörse',preis:27.5,conv:0.17,score:80},
-];
-
-function showGapDetail(g){
-  const el=document.getElementById('detail');
-  const co=document.getElementById('detail-content');
-  el.style.display='block';
-  map.setCenter(g.c); map.setZoom(10);
-  
-  const best=LEAD_SOURCES.sort((a,b)=>a.preis/a.conv-b.preis/b.conv)[0];
-  const costPerTermin=Math.round(best.preis/best.conv);
-  const monthly30=costPerTermin*30;
-  const scoutCost=3200;
-  const breakeven=Math.ceil((3200+2500)/(monthly30-scoutCost));
-  
-  co.innerHTML=`
+function showGapDetail(vb) {
+  const costPerTermin = Math.round(29.9/0.18);
+  const monthly30 = costPerTermin * 30;
+  const be = Math.ceil((3200+2500)/(monthly30-3200));
+  document.getElementById('detail-body').innerHTML = `
     <h3>⚠ Abdeckungslücke</h3>
-    <div class="info-row"><span class="key">Vertriebler</span><span>${g.vb.name}</span></div>
-    <div class="info-row"><span class="key">Region</span><span>${g.vb.ort||g.vb.plz||'—'}</span></div>
-    <div class="info-row"><span class="key">Scouter im 48km Radius</span><span style="color:#ef4444">0</span></div>
-    <div style="margin:12px 0;padding:10px;background:#1a1225;border:1px solid #ef444440;border-radius:8px;font-size:12px">
-      <div style="color:#ef4444;font-weight:600;margin-bottom:6px">Empfehlung: Online-Leads kaufen</div>
-      <div class="info-row"><span class="key">Beste Quelle</span><span>${best.name}</span></div>
-      <div class="info-row"><span class="key">Kosten/Termin</span><span>€${costPerTermin}</span></div>
-      <div class="info-row"><span class="key">30 Termine/Mo</span><span>€${monthly30.toLocaleString('de')}</span></div>
+    <div class="d-row"><span class="d-key">Vertriebler</span><span>${vb.name}</span></div>
+    <div class="d-row"><span class="d-key">Region</span><span>${vb.ort}</span></div>
+    <div class="d-row"><span class="d-key">Scouter in 48km</span><span style="color:#ef4444">0</span></div>
+    <div class="gap-box">
+      <div class="gh">📦 Option 1: Online-Leads kaufen</div>
+      <div class="d-row"><span class="d-key">Quelle</span><span>Fenerum</span></div>
+      <div class="d-row"><span class="d-key">€/Termin (eff.)</span><span>€${costPerTermin}</span></div>
+      <div class="d-row"><span class="d-key">30 Termine/Mo</span><span>€${monthly30.toLocaleString('de')}</span></div>
     </div>
-    <div style="padding:10px;background:#1a1a12;border:1px solid #fde15440;border-radius:8px;font-size:12px">
-      <div style="color:#FDE154;font-weight:600;margin-bottom:6px">vs. Scouter einstellen</div>
-      <div class="info-row"><span class="key">Fixkosten/Mo</span><span>€3.200</span></div>
-      <div class="info-row"><span class="key">Onboarding</span><span>€2.500</span></div>
-      <div class="info-row"><span class="key">Break-even</span><span>${breakeven>0?breakeven+' Monate':'Sofort günstiger'}</span></div>
+    <div class="rec-box">
+      <div class="rh">🙋 Option 2: Scouter einstellen</div>
+      <div class="d-row"><span class="d-key">Fixkosten/Mo</span><span>€3.200</span></div>
+      <div class="d-row"><span class="d-key">Onboarding</span><span>€2.500</span></div>
+      <div class="d-row"><span class="d-key">Break-even</span><span>${be} Monate</span></div>
     </div>
   `;
+  document.getElementById('detail').style.display = 'block';
+  map.setView([vb.lat, vb.lng], 10);
 }
 
-function closeDetail(){document.getElementById('detail').style.display='none'}
-
-function toggleLayer(type){
-  const show=document.getElementById('l-'+type).checked;
-  if(type==='inf'){
-    if(show){
-      const pts=DATA.inf.map(a=>new google.maps.LatLng(a.lat,a.lng));
-      heatmap.setData(pts);
-      heatmap.setMap(map);
-    } else {
-      heatmap.setMap(null);
-    }
-    return;
-  }
-  markers[type].forEach(m=>m.setMap(show?map:null));
+// ─── TOGGLE LAYERS ───────────────────────────────────────────────────────────
+function toggleLayer(type) {
+  const show = document.getElementById('l-'+type).checked;
+  if(show) layers[type].addTo(map); else map.removeLayer(layers[type]);
 }
 
-function switchTab(tab){
-  currentTab=tab;
-  document.querySelectorAll('.tab').forEach((t,i)=>{
-    t.classList.toggle('active',['overview','gaps','roi','heatmap'][i]===tab);
-  });
-  
-  // ROI panel
-  document.getElementById('roi-panel').style.display=tab==='roi'?'block':'none';
-  
-  if(tab==='heatmap'){
-    // Force heatmap on
-    document.getElementById('l-inf').checked=true;
-    toggleLayer('inf');
-    document.getElementById('l-qu').checked=true;
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['overview','gaps','roi','heatmap'][i]===tab));
+  document.getElementById('roi').style.display = tab==='roi' ? 'block' : 'none';
+
+  if(tab==='gaps') {
+    if(gaps.length>0) map.setView([gaps[0].lat, gaps[0].lng], 9);
+    document.getElementById('l-gap').checked=true; toggleLayer('gap');
   }
-  if(tab==='gaps'){
-    document.getElementById('l-gap').checked=true;
-    toggleLayer('gap');
-    // Zoom to show gaps
-    if(window._gaps&&window._gaps.length>0){
-      map.setCenter(window._gaps[0].c);map.setZoom(8);
-    }
-    buildAlerts();
+  if(tab==='heatmap') {
+    document.getElementById('l-inf').checked=true; toggleLayer('inf');
+    document.getElementById('l-qu').checked=true; toggleLayer('qu');
+  }
+  if(tab==='overview') {
+    map.setView([51.5,7.5],8);
   }
 }
 
-function updateROI(){
-  const termine=parseInt(document.getElementById('r-termine').value);
-  const monate=parseInt(document.getElementById('r-monate').value);
-  document.getElementById('rv-termine').textContent=termine;
-  document.getElementById('rv-monate').textContent=monate;
-  
-  const [,preis,conv]=document.getElementById('r-quelle').value.split(':').map((v,i)=>i>0?parseFloat(v):v);
-  const leadsProMonat=Math.ceil(termine/conv);
-  const leadCostMonat=Math.round(leadsProMonat*preis);
-  const leadTotal=leadCostMonat*monate;
-  const scoutTotal=3200*monate+2500;
-  const diff=scoutTotal-leadTotal;
-  const winner=leadTotal<scoutTotal?'leads':'scout';
-  const breakeven=diff>0?Math.ceil((3200+2500)/(leadCostMonat-3200)):null;
-  
+// ─── ROI RECHNER ─────────────────────────────────────────────────────────────
+function calcROI() {
+  const t = parseInt(document.getElementById('r-t').value);
+  const m = parseInt(document.getElementById('r-m').value);
+  document.getElementById('rv-t').textContent = t;
+  document.getElementById('rv-m').textContent = m;
+  const [preis,conv] = document.getElementById('r-q').value.split(':').map(Number);
+  const leadsProMo = Math.ceil(t/conv);
+  const leadMo = Math.round(leadsProMo*preis);
+  const leadGes = leadMo*m;
+  const scoutGes = 3200*m+2500;
+  const diff = Math.abs(scoutGes-leadGes);
+  const winner = leadGes < scoutGes ? 'lead' : 'scout';
+  const be = (leadMo>3200) ? Math.ceil(5700/(leadMo-3200)) : null;
+
   document.getElementById('roi-result').innerHTML=`
-    <div class="item"><div class="val" style="color:#f97316">€${leadCostMonat.toLocaleString('de')}</div><div class="lbl">Leads/Monat</div></div>
-    <div class="item"><div class="val" style="color:#f97316">€${leadTotal.toLocaleString('de')}</div><div class="lbl">Leads ${monate}Mo gesamt</div></div>
-    <div class="item"><div class="val" style="color:#FDE154">€3.200</div><div class="lbl">Scout/Monat</div></div>
-    <div class="item"><div class="val" style="color:#FDE154">€${scoutTotal.toLocaleString('de')}</div><div class="lbl">Scout ${monate}Mo gesamt</div></div>
-    <div class="winner ${winner}">
-      ${winner==='leads'?'📦 Leads günstiger um €'+Math.abs(diff).toLocaleString('de'):'🙋 Scout günstiger um €'+Math.abs(diff).toLocaleString('de')}
-      ${breakeven&&breakeven>0&&breakeven<=24?' | Scout lohnt sich nach '+breakeven+' Monaten':''}
+    <div class="roi-item"><div class="rv" style="color:#f97316">€${leadMo.toLocaleString('de')}</div><div class="rl">Leads/Monat</div></div>
+    <div class="roi-item"><div class="rv" style="color:#f97316">€${leadGes.toLocaleString('de')}</div><div class="rl">Leads ${m} Mo.</div></div>
+    <div class="roi-item"><div class="rv" style="color:#FDE154">€3.200</div><div class="rl">Scout Fix/Mo.</div></div>
+    <div class="roi-item"><div class="rv" style="color:#FDE154">€${scoutGes.toLocaleString('de')}</div><div class="rl">Scout ${m} Mo.</div></div>
+    <div class="roi-winner ${winner==='lead'?'w-lead':'w-scout'}">
+      ${winner==='lead'?'📦 Leads günstiger':'🙋 Scout günstiger'} um €${diff.toLocaleString('de')}
+      ${be&&be>0&&be<=24?' · Scout lohnt sich nach '+be+' Monaten':''}
     </div>
   `;
 }
+calcROI();
 
-window.initMap = async function(){
-  await loadData();
-  initMap();
-  updateROI();
-};
+// Leaflet tooltip dark style
+const style = document.createElement('style');
+style.textContent='.dark-tip{background:#151d30!important;border:1px solid #263354!important;color:#e1e7ef!important;font-size:11px!important;}.dark-tip.leaflet-tooltip-top::before{border-top-color:#263354!important}';
+document.head.appendChild(style);
 </script>
-<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB6GngBnHzfITUnkOHsFKgO9SwmKbRvGA8&libraries=visualization&callback=initMap"></script>
 </body>
 </html>
