@@ -6,6 +6,8 @@
 <title>bee-doo · Strategische Karte NRW</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <style>
@@ -110,6 +112,29 @@ input[type=range] { width:100%; accent-color:#FDE154; }
 .gl-item .gi-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:middle; }
 .gl-empty { padding:16px 12px; text-align:center; font-size:12px; color:#5c6b8a; }
 
+
+/* Draw mode */
+#draw-btn { padding:5px 12px; border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid #263354; background:#151d30; color:#e1e7ef; transition:.15s; }
+#draw-btn:hover, #draw-btn.active { background:#FDE154; color:#0c1222; border-color:#FDE154; }
+#draw-panel { position:absolute; top:58px; left:50%; transform:translateX(-50%); z-index:2000; background:#0f1320ee; border:1px solid #FDE154; border-radius:10px; padding:16px; width:360px; display:none; backdrop-filter:blur(4px); }
+#draw-panel h3 { font-size:14px; font-weight:700; color:#FDE154; margin-bottom:12px; }
+.dp-field { margin-bottom:10px; }
+.dp-field label { display:block; font-size:11px; color:#5c6b8a; margin-bottom:4px; }
+.dp-field input, .dp-field select { width:100%; background:#151d30; border:1px solid #263354; color:#e1e7ef; border-radius:7px; padding:6px 10px; font-size:13px; }
+.dp-field select option { background:#151d30; }
+.dp-actions { display:flex; gap:8px; margin-top:12px; }
+.dp-btn { flex:1; padding:8px; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer; border:none; }
+.dp-btn.primary { background:#FDE154; color:#0c1222; }
+.dp-btn.primary:hover { background:#fce535; }
+.dp-btn.secondary { background:#1c2640; color:#e1e7ef; }
+.dp-btn.danger { background:#ef444420; color:#ef4444; border:1px solid #ef444440; }
+.dp-hint { font-size:11px; color:#5c6b8a; padding:8px; background:#151d30; border-radius:6px; margin-bottom:10px; line-height:1.5; }
+.dp-status { font-size:12px; padding:6px 10px; border-radius:6px; margin-bottom:8px; display:none; }
+.dp-status.ok { background:rgba(34,197,94,.15); color:#22c55e; }
+.dp-status.err { background:rgba(239,68,68,.15); color:#ef4444; }
+/* Gebiet polygons on map */
+.gebiet-label { background:transparent; border:none; font-size:10px; font-weight:600; color:#fff; text-shadow:0 0 3px #000; white-space:nowrap; }
+
 /* Legend */
 #legend { position:absolute; bottom:50px; left:10px; z-index:1000; background:#0f1320ee; border:1px solid #1c2640; border-radius:8px; padding:10px 12px; font-size:11px; }
 .leg-row { display:flex; align-items:center; gap:7px; padding:2px 0; color:#5c6b8a; }
@@ -130,6 +155,7 @@ input[type=range] { width:100%; accent-color:#FDE154; }
   </div>
   <button onclick="toggleDrawMode()" id="btn-draw" style="margin-left:8px;background:#1c2640;border:1px solid #263354;color:#e1e7ef;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px">✏️ Gebiet zeichnen</button>
   <button onclick="toggleGebiete()" style="background:#1c2640;border:1px solid #263354;color:#5c6b8a;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">📋 Gebiete</button>
+  <button id="draw-btn" onclick="toggleDrawMode()" title="Gebiet zeichnen">✏ Gebiet zeichnen</button>
   <div class="stats">
     <div class="stat">VB: <b id="n-vb">—</b></div>
     <div class="stat">Scouter: <b id="n-sc">—</b></div>
@@ -173,6 +199,32 @@ input[type=range] { width:100%; accent-color:#FDE154; }
     <option value="27.5:0.17">Solardachbörse (€27,50/Lead · 17% Conv.)</option>
   </select>
   <div class="roi-grid" id="roi-result"></div>
+</div>
+
+
+<div id="draw-panel">
+  <h3>✏ Gebiet zeichnen & zuordnen</h3>
+  <div class="dp-status" id="dp-status"></div>
+  <div class="dp-hint" id="dp-hint">Klicke auf der Karte um das Gebiet zu zeichnen. Doppelklick zum Abschließen.</div>
+  <div class="dp-field">
+    <label>Gebietsname *</label>
+    <input type="text" id="dp-name" placeholder="z.B. Bielefeld-Mitte" />
+  </div>
+  <div class="dp-field">
+    <label>Scouter zuordnen</label>
+    <select id="dp-scouter">
+      <option value="">— noch nicht zugeordnet —</option>
+    </select>
+  </div>
+  <div class="dp-field">
+    <label>Notiz (optional)</label>
+    <input type="text" id="dp-notiz" placeholder="Priorität, Besonderheiten..." />
+  </div>
+  <div class="dp-actions">
+    <button class="dp-btn primary" onclick="saveGebiet()" id="dp-save" disabled>💾 Speichern</button>
+    <button class="dp-btn secondary" onclick="redrawGebiet()">↺ Neu zeichnen</button>
+    <button class="dp-btn danger" onclick="toggleDrawMode()">✕ Abbrechen</button>
+  </div>
 </div>
 
 <div id="alerts"></div>
@@ -464,6 +516,227 @@ function calcROI() {
   `;
 }
 calcROI();
+
+
+// ─── DRAW MODE ────────────────────────────────────────────────────────────────
+const SB_URL = window.BEEDOO_SB || 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_SVC = window.BEEDOO_SVC || '';
+
+let drawControl, currentPolygon = null, drawnItems;
+
+// Load + render existing gebiete on startup
+async function loadGebiete() {
+  const res = await fetch(SB_URL+'/rest/v1/gebiete?select=*&active=eq.true', {
+    headers:{'apikey':SB_SVC,'Authorization':'Bearer '+SB_SVC}
+  });
+  const gebiete = await res.json();
+  
+  if(!window._gebieteLayer) {
+    window._gebieteLayer = L.layerGroup().addTo(map);
+  } else {
+    window._gebieteLayer.clearLayers();
+  }
+  
+  gebiete.forEach(g => {
+    if(!g.polygon) return;
+    try {
+      const poly = typeof g.polygon === 'string' ? JSON.parse(g.polygon) : g.polygon;
+      // GeoJSON polygon coords are [lng,lat] → convert to [lat,lng] for Leaflet
+      const coords = poly.coordinates[0].map(c => [c[1], c[0]]);
+      const scout = SCOUTER.find(s => s.id === g.scouter_id);
+      const color = g.farbe || (scout ? '#22c55e' : '#60a5fa');
+      
+      const leafletPoly = L.polygon(coords, {
+        color: color, fillColor: color,
+        fillOpacity: 0.12, weight: 2, opacity: 0.7,
+        dashArray: g.scouter_id ? null : '6,4'
+      }).addTo(window._gebieteLayer);
+      
+      leafletPoly.bindTooltip(
+        g.name + (scout ? '<br>🔍 '+scout.name : '<br><i>nicht zugeordnet</i>'),
+        {className:'dark-tip', sticky:true}
+      );
+      
+      // Label in center
+      const center = leafletPoly.getBounds().getCenter();
+      L.marker(center, {
+        icon: L.divIcon({html:`<div class="gebiet-label">${g.name}</div>`,className:'',iconAnchor:[0,0]}),
+        interactive:false, zIndexOffset:-300
+      }).addTo(window._gebieteLayer);
+      
+      // Click to open edit panel
+      leafletPoly.on('click', () => editGebiet(g));
+    } catch(e) { console.warn('Gebiet parse error:', g.name, e); }
+  });
+}
+
+function editGebiet(g) {
+  const scout = SCOUTER.find(s => s.id === g.scouter_id);
+  document.getElementById('detail-body').innerHTML = `
+    <h3>📍 ${g.name}</h3>
+    <div class="d-row"><span class="d-key">Scouter</span><span style="color:${g.scouter_id?'#22c55e':'#f59e0b'}">${scout ? scout.name : 'nicht zugeordnet'}</span></div>
+    <div class="d-row"><span class="d-key">PLZ</span><span>${g.plz||'—'}</span></div>
+    <div class="d-row"><span class="d-key">Ort</span><span>${g.ort||'—'}</span></div>
+    ${g.notizen ? `<div class="d-row"><span class="d-key">Notiz</span><span>${g.notizen}</span></div>` : ''}
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button class="dp-btn primary" onclick="openEditMode('${g.id}','${(g.name||'').replace("'","\'")}','${g.scouter_id||''}','${(g.notizen||'').replace("'","\'")}'); document.getElementById('detail').style.display='none'" style="font-size:12px;padding:6px">✏ Bearbeiten</button>
+      <button class="dp-btn danger" onclick="deleteGebiet('${g.id}')" style="font-size:12px;padding:6px">🗑 Löschen</button>
+    </div>
+  `;
+  document.getElementById('detail').style.display='block';
+}
+
+function openEditMode(id, name, scouterId, notiz) {
+  document.getElementById('dp-name').value = name;
+  document.getElementById('dp-scouter').value = scouterId;
+  document.getElementById('dp-notiz').value = notiz;
+  document.getElementById('dp-save').dataset.editId = id;
+  document.getElementById('dp-save').disabled = false;
+  document.getElementById('dp-hint').textContent = 'Klicke "Speichern" um Scouter/Name zu ändern, oder "Neu zeichnen" für neues Polygon.';
+  showDrawPanel(true);
+}
+
+async function deleteGebiet(id) {
+  if(!confirm('Gebiet wirklich löschen?')) return;
+  await fetch(SB_URL+'/rest/v1/gebiete?id=eq.'+id, {
+    method:'PATCH',
+    headers:{'apikey':SB_SVC,'Authorization':'Bearer '+SB_SVC,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body: JSON.stringify({active:false})
+  });
+  document.getElementById('detail').style.display='none';
+  loadGebiete();
+}
+
+function populateScouterDropdown() {
+  const sel = document.getElementById('dp-scouter');
+  sel.innerHTML = '<option value="">— noch nicht zugeordnet —</option>';
+  SCOUTER.sort((a,b)=>a.name.localeCompare(b.name)).forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name + (s.ort ? ' ('+s.ort+')' : '');
+    sel.appendChild(opt);
+  });
+}
+
+function showDrawPanel(show) {
+  document.getElementById('draw-panel').style.display = show ? 'block' : 'none';
+  document.getElementById('draw-btn').classList.toggle('active', show);
+}
+
+function toggleDrawMode() {
+  const panel = document.getElementById('draw-panel');
+  const isOpen = panel.style.display === 'block';
+  if(isOpen) {
+    stopDrawing();
+    showDrawPanel(false);
+    document.getElementById('dp-save').dataset.editId = '';
+  } else {
+    populateScouterDropdown();
+    document.getElementById('dp-name').value = '';
+    document.getElementById('dp-notiz').value = '';
+    document.getElementById('dp-status').style.display = 'none';
+    document.getElementById('dp-save').disabled = true;
+    document.getElementById('dp-save').dataset.editId = '';
+    document.getElementById('dp-hint').textContent = 'Klicke auf der Karte um das Gebiet zu zeichnen. Doppelklick zum Abschließen.';
+    showDrawPanel(true);
+    startDrawing();
+  }
+}
+
+function startDrawing() {
+  if(!drawnItems) {
+    drawnItems = new L.FeatureGroup().addTo(map);
+    drawControl = new L.Control.Draw({
+      draw:{ polygon:{shapeOptions:{color:'#FDE154',fillOpacity:0.15}, allowIntersection:false}, polyline:false, rectangle:false, circle:false, marker:false, circlemarker:false },
+      edit:{ featureGroup:drawnItems, remove:false }
+    });
+  }
+  map.addControl(drawControl);
+  currentPolygon = null;
+  
+  map.on('draw:created', function(e) {
+    drawnItems.clearLayers();
+    currentPolygon = e.layer;
+    drawnItems.addLayer(currentPolygon);
+    document.getElementById('dp-save').disabled = false;
+    document.getElementById('dp-hint').textContent = '✓ Polygon gezeichnet. Name eingeben und speichern.';
+  });
+}
+
+function stopDrawing() {
+  if(drawControl) map.removeControl(drawControl);
+  if(drawnItems) drawnItems.clearLayers();
+  currentPolygon = null;
+  map.off('draw:created');
+}
+
+function redrawGebiet() {
+  if(drawnItems) drawnItems.clearLayers();
+  currentPolygon = null;
+  document.getElementById('dp-save').disabled = !document.getElementById('dp-save').dataset.editId;
+  document.getElementById('dp-hint').textContent = 'Klicke auf der Karte um das Gebiet neu zu zeichnen.';
+}
+
+async function saveGebiet() {
+  const name = document.getElementById('dp-name').value.trim();
+  const scouterId = document.getElementById('dp-scouter').value;
+  const notiz = document.getElementById('dp-notiz').value.trim();
+  const editId = document.getElementById('dp-save').dataset.editId;
+  
+  if(!name) { dpStatus('err', 'Bitte Gebietsname eingeben.'); return; }
+  
+  let polygon = null;
+  if(currentPolygon) {
+    const latlngs = currentPolygon.getLatLngs()[0];
+    const coords = latlngs.map(p => [p.lng, p.lat]);
+    coords.push(coords[0]); // close ring
+    polygon = JSON.stringify({type:'Polygon', coordinates:[coords]});
+  }
+  
+  const payload = {
+    name, notiz,
+    scouter_id: scouterId || null,
+    active: true,
+    updated_at: new Date().toISOString()
+  };
+  if(polygon) payload.polygon = polygon;
+  
+  let res;
+  if(editId) {
+    res = await fetch(SB_URL+'/rest/v1/gebiete?id=eq.'+editId, {
+      method:'PATCH',
+      headers:{'apikey':SB_SVC,'Authorization':'Bearer '+SB_SVC,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify(payload)
+    });
+  } else {
+    if(!polygon) { dpStatus('err','Bitte erst ein Gebiet zeichnen.'); return; }
+    res = await fetch(SB_URL+'/rest/v1/gebiete', {
+      method:'POST',
+      headers:{'apikey':SB_SVC,'Authorization':'Bearer '+SB_SVC,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify(payload)
+    });
+  }
+  
+  if(res.ok) {
+    dpStatus('ok', editId ? '✓ Gebiet aktualisiert!' : '✓ Gebiet gespeichert!');
+    stopDrawing(); 
+    await loadGebiete();
+    setTimeout(() => { showDrawPanel(false); }, 1200);
+  } else {
+    const err = await res.text();
+    dpStatus('err', 'Fehler: '+err.substring(0,60));
+  }
+}
+
+function dpStatus(type, msg) {
+  const el = document.getElementById('dp-status');
+  el.className = 'dp-status '+type;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// Load gebiete on startup
+loadGebiete();
 
 // Leaflet tooltip dark style
 const style = document.createElement('style');
