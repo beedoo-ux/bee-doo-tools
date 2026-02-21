@@ -1364,27 +1364,99 @@ async function showIsochrone(vb) {
 // ═══════════════════════════════════════════════════════════════════
 // FEATURE 3: POSTGIS SERVER-SIDE COUNT (mit JS fallback)
 // ═══════════════════════════════════════════════════════════════════
+// Convert lat/lng polygon to UTM32 bounding box for REST query
+function polygonToUTM32Bbox(latlngPts) {
+  // WGS84 → UTM32N (approximate, good enough for Germany)
+  function toUTM32(lat, lng) {
+    const a=6378137, f=1/298.257223563, k0=0.9996;
+    const e2=2*f-f*f;
+    const phi=lat*Math.PI/180, lam=lng*Math.PI/180, lam0=9*Math.PI/180;
+    const N=a/Math.sqrt(1-e2*Math.sin(phi)**2);
+    const T=Math.tan(phi)**2, C=e2/(1-e2)*Math.cos(phi)**2;
+    const A=Math.cos(phi)*(lam-lam0);
+    const M=a*((1-e2/4-3*e2*e2/64)*phi-(3*e2/8+3*e2*e2/32)*Math.sin(2*phi)+(15*e2*e2/256)*Math.sin(4*phi));
+    const east=32000000+500000+k0*N*(A+(1-T+C)*A**3/6);
+    const north=k0*(M+N*Math.tan(phi)*(A**2/2+(5-T+9*C+4*C*C)*A**4/24));
+    return {east: Math.round(east), north: Math.round(north)};
+  }
+  const utms = latlngPts.map(p => toUTM32(p[0], p[1]));
+  return {
+    minEast: Math.min(...utms.map(u=>u.east)),
+    maxEast: Math.max(...utms.map(u=>u.east)),
+    minNorth: Math.min(...utms.map(u=>u.north)),
+    maxNorth: Math.max(...utms.map(u=>u.north))
+  };
+}
+
 async function countInfasServerSide(polygon_geojson) {
   try {
-    const r = await fetch(SB_URL + '/rest/v1/rpc/count_infas_in_polygon', {
-      method: 'POST',
+    const bbox = polygonToUTM32Bbox(drawPoints);
+    
+    // 1. Fast bbox count via REST Content-Range header (no custom function needed!)
+    const countUrl = SB_URL + '/rest/v1/infas_adressen?select=id' +
+      '&utm32east=gte.' + bbox.minEast + '&utm32east=lte.' + bbox.maxEast +
+      '&utm32north=gte.' + bbox.minNorth + '&utm32north=lte.' + bbox.maxNorth;
+    
+    const countReq = await fetch(countUrl, {
       headers: {
-        'apikey': SB_SVC,
-        'Authorization': 'Bearer ' + SB_SVC,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({geojson_polygon: JSON.stringify(polygon_geojson)})
+        'apikey': SB_SVC, 'Authorization': 'Bearer ' + SB_SVC,
+        'Prefer': 'count=exact', 'Range': '0-0'
+      }
     });
-    if (!r.ok) throw new Error('RPC ' + r.status);
-    const count = await r.json();
-    return {count, source: 'postgis', total: 23454753};
+    
+    const contentRange = countReq.headers.get('content-range') || '';
+    const bboxCount = parseInt(contentRange.split('/')[1]) || 0;
+    
+    // 2. Fetch sample points from bbox for precise PiP correction factor
+    const sampleUrl = SB_URL + '/rest/v1/infas_adressen?select=utm32east,utm32north' +
+      '&utm32east=gte.' + bbox.minEast + '&utm32east=lte.' + bbox.maxEast +
+      '&utm32north=gte.' + bbox.minNorth + '&utm32north=lte.' + bbox.maxNorth +
+      '&limit=500';
+    
+    const sampleReq = await fetch(sampleUrl, {
+      headers: {'apikey': SB_SVC, 'Authorization': 'Bearer ' + SB_SVC}
+    });
+    const sample = await sampleReq.json();
+    
+    // Convert sample UTM back to lat/lng and do PiP
+    function utm32ToLatLng(east, north) {
+      const e=east>1000000?east-32000000:east, a=6378137,f=1/298.257223563,k0=0.9996;
+      const e2=2*f-f*f,e4=e2*e2;
+      const x=e-500000,y=north,M=y/k0;
+      const mu=M/(a*(1-e2/4-3*e4/64));
+      const phi1=mu+(3*e2/2-27*e4/32)*Math.sin(2*mu)+(21*e4/16)*Math.sin(4*mu);
+      const ep2=e2/(1-e2),N1=a/Math.sqrt(1-e2*Math.sin(phi1)**2);
+      const T1=Math.tan(phi1)**2,R1=a*(1-e2)/Math.pow(1-e2*Math.sin(phi1)**2,1.5);
+      const D=x/(N1*k0);
+      const lat=phi1-(N1*Math.tan(phi1)/R1)*(D*D/2-(5+3*T1)*D*D*D*D/24);
+      const lng=9*Math.PI/180+(D-(1+2*T1)*D*D*D/6)/Math.cos(phi1);
+      return [lat*180/Math.PI, lng*180/Math.PI];
+    }
+    
+    let inPoly = 0, total = sample.length;
+    for (const pt of sample) {
+      if (!pt.utm32east || !pt.utm32north) continue;
+      const [lat, lng] = utm32ToLatLng(parseFloat(pt.utm32east), parseFloat(pt.utm32north));
+      if (pointInPolygon([lat, lng], drawPoints)) inPoly++;
+    }
+    
+    // Scale bbox count by PiP ratio from sample
+    const pipRatio = total > 0 ? inPoly / total : 1;
+    const estimated = Math.round(bboxCount * pipRatio);
+    
+    return {
+      count: estimated,
+      bboxCount,
+      pipRatio: Math.round(pipRatio * 100),
+      source: 'rest+pip',
+      total: 23454753
+    };
+    
   } catch(e) {
-    // Fallback: client-side with loaded sample
+    console.warn('Server count failed:', e);
     const pts = window.INFAS_NRW || [];
     const count = pts.filter(p => pointInPolygon(p, drawPoints)).length;
-    const sampleRate = 15331 / 23454753;
-    const estimated = Math.round(count / sampleRate);
-    return {count, estimated, source: 'sample', total: pts.length};
+    return {count, source: 'sample', total: pts.length};
   }
 }
 
@@ -1406,15 +1478,17 @@ async function updateDrawCounterPostGIS() {
   
   const area = polygonAreaKm2(drawPoints);
   
-  if (result.source === 'postgis') {
-    el.textContent = result.count.toLocaleString('de');
-    document.getElementById('dc-label') && (document.getElementById('dc-label').textContent = 'Adressen im Gebiet (alle 23,4 Mio.)');
-    document.getElementById('dc-hint').textContent = `✅ PostGIS · ${drawPoints.length} Punkte · Enter = fertig`;
-  } else {
-    const est = result.estimated;
-    el.textContent = '~' + (est || result.count).toLocaleString('de');
-    document.getElementById('dc-hint').textContent = `📊 Schätzung (${result.total.toLocaleString('de')} Sample) · Enter = fertig`;
+  el.textContent = result.count.toLocaleString('de');
+  const lbl = document.getElementById('dc-label');
+  if (lbl) {
+    if (result.source === 'rest+pip') {
+      lbl.textContent = `Adressen im Gebiet (~${result.pipRatio}% des Bboxes)`;
+    } else {
+      lbl.textContent = 'Adressen im Gebiet (Sample)';
+    }
   }
+  const src = result.source === 'rest+pip' ? `✅ aus ${result.bboxCount?.toLocaleString('de')} BBox-Adressen` : `📊 Sample ${result.total?.toLocaleString('de')}`;
+  document.getElementById('dc-hint').textContent = `${src} · ${drawPoints.length} Pkte · Enter = fertig`;
   
   document.getElementById('dc-km2').textContent = area.toFixed(1);
   document.getElementById('dc-density').textContent = area > 0 ? Math.round((result.count || 0) / area).toLocaleString('de') : '—';
