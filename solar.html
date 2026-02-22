@@ -274,17 +274,29 @@ function drawPanels(cfg) {
     const seg = sp.roofSegmentStats?.[p.segmentIndex];
     const az = (seg?.azimuthDegrees || 180) * Math.PI / 180;
     const isL = p.orientation === 'LANDSCAPE';
-    const hw = (isL ? PH : PW) / 2;
-    const hh = (isL ? PW : PH) / 2;
+    // LANDSCAPE: long axis (PH=1.762m) along ridge, PORTRAIT: long axis along slope
+    const hw = (isL ? PH : PW) / 2; // half-length along ridge
+    const hh = (isL ? PW : PH) / 2; // half-length along slope
     const clat = p.center.latitude, clng = p.center.longitude;
     const mPerDegLat = Math.PI * R / 180;
     const mPerDegLng = mPerDegLat * Math.cos(clat * Math.PI / 180);
 
-    const corners = [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([x,y]) => {
-      const rx = x * Math.cos(az) - y * Math.sin(az);
-      const ry = x * Math.sin(az) + y * Math.cos(az);
-      return { lat: clat + ry / mPerDegLat, lng: clng + rx / mPerDegLng };
-    });
+    // Geographic unit vectors (east=lng, north=lat)
+    // Slope direction = azimuth (compass clockwise from north)
+    // slope: (sin(az), cos(az)) → (east, north)
+    // ridge: perpendicular to slope = (cos(az), -sin(az)) → (east, north)
+    const sE = Math.sin(az), sN = Math.cos(az);   // slope unit vector
+    const rE = Math.cos(az), rN = -Math.sin(az);  // ridge unit vector
+
+    const corners = [
+      [ hw*rE + hh*sE,  hw*rN + hh*sN],
+      [-hw*rE + hh*sE, -hw*rN + hh*sN],
+      [-hw*rE - hh*sE, -hw*rN - hh*sN],
+      [ hw*rE - hh*sE,  hw*rN - hh*sN],
+    ].map(([dE, dN]) => ({
+      lat: clat + dN / mPerDegLat,
+      lng: clng + dE / mPerDegLng
+    }));
 
     const poly = new google.maps.Polygon({
       paths: corners,
