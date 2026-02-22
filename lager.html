@@ -210,6 +210,7 @@ function App(){
 
   const TABS=[
     {id:"auftraege",    label:"Aufträge",   icon:"📋"},
+    {id:"prognose",     label:"Prognose",   icon:"📈"},
     {id:"bestand",      label:"Bestand",    icon:"📦"},
     {id:"bestellen",    label:"Bestellen",  icon:"🛒"},
     {id:"wareneingang", label:"Eingang",    icon:"📥"},
@@ -248,6 +249,7 @@ function App(){
       </div>
 
       <div style={{padding:"12px 16px"}}>
+        {tab==="prognose"     && <PrognoseTab art={art} showToast={showToast}/>}
         {tab==="auftraege"    && <AuftraegeTab auftraege={auftraege} setAuftraege={setAuftraege} art={art} setArt={setArt} pakete={pakete} setModal={setModal} showToast={showToast}/>}
         {tab==="bestand"      && <BestandTab art={art} setArt={setArt} kritisch={kritisch} setModal={setModal}/>}
         {tab==="bestellen"    && <BestellenTab art={art} setArt={setArt} kritisch={kritisch} bestellungen={bestellungen} setBestellungen={setBestellungen} liefConfig={liefConfig} ccIntern={ccIntern} showToast={showToast}/>}
@@ -1163,6 +1165,285 @@ function LieferantenTab({liefConfig,setLiefConfig,ccIntern,setCcIntern,showToast
   );
 }
 
+
+
+// ── PROGNOSE TAB ───────────────────────────────────────────────────────────────
+const SB_URL_P="https://hqzpemfaljxcysyqssng.supabase.co";
+const SB_KEY_P=window.BEEDOO_SVC||"";
+
+// Materialberechnung aus kWp (basierend auf pv_pakete Katalog)
+function calcMaterial(kwp){
+  // Aiko 470W Module (0.47 kWp pro Modul)
+  const module=Math.round(kwp/0.47);
+  // WR nach kWp Stufen (Fox Smart/Pro)
+  const wr=kwp<=10.34?"Fox Smart 12":kwp<=14.1?"Fox Smart 12":kwp<=18.8?"Fox Smart 15":kwp<=22.56?"Fox Pro 20":"Fox Pro 25";
+  // Akku: 6.4 kWh bis 10.34 kWp, 9.84 kWh darüber
+  const akku_kwh=kwp<=10.34?6.4:9.84;
+  // UK: ~2.5m Profil + 1.25 Haken + 2 Klemmen pro Modul (SL RACK Faustregel)
+  const uk_profil=Math.round(module*2.5);
+  const uk_haken=Math.round(module*1.25);
+  const uk_klemme=Math.round(module*2);
+  return {module,wr,akku_kwh,uk_profil,uk_haken,uk_klemme};
+}
+
+function PrognoseTab({art,showToast}){
+  const [auftraege,setAuftraege]=useState([]);
+  const [pakete,setPakete]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [szenario,setSzenario]=useState("base");
+  const [woche,setWoche]=useState(0); // 0=alle 4 Wochen, 1-4=einzelne Woche
+  const [stornoRate,setStornoRate]=useState(15); // % Stornorisiko
+
+  useEffect(()=>{
+    async function load(){
+      setLoading(true);
+      try{
+        const headers={"apikey":SB_KEY_P,"Authorization":"Bearer "+SB_KEY_P};
+        const [auftrRes,paketRes]=await Promise.all([
+          fetch(`${SB_URL_P}/rest/v1/pay_auftraege?storniert=eq.false&select=auftrag_nr,erstellt_am,montage_datum,kwp,speichererweiterung,zahlungsstatus&limit=500`,{headers}),
+          fetch(`${SB_URL_P}/rest/v1/pv_pakete?aktiv=eq.true&select=kwp,platten,akku_kwh,wechselrichter&limit=100`,{headers}),
+        ]);
+        const [auftrData,paketData]=await Promise.all([auftrRes.json(),paketRes.json()]);
+        setAuftraege(Array.isArray(auftrData)?auftrData:[]);
+        setPakete(Array.isArray(paketData)?paketData:[]);
+      }catch(e){console.error(e);}
+      setLoading(false);
+    }
+    load();
+  },[]);
+
+  const heute=new Date("2026-02-22");
+
+  // Pipeline-Logik:
+  // 1. Aufträge ohne Montage-Datum + erstellt_am < 14 Tage → noch in Widerrufsfrist
+  // 2. Aufträge ohne Montage-Datum + erstellt_am >= 14 Tage → werden terminiert, dann 4 Wochen Fenster
+  // 3. Aufträge mit Montage-Datum → konkret geplant
+
+  const pipeline=useMemo(()=>{
+    const result=[];
+    auftraege.forEach(a=>{
+      const erstellt=a.erstellt_am?new Date(a.erstellt_am):null;
+      const montage=a.montage_datum?new Date(a.montage_datum):null;
+      const tageSeit=erstellt?Math.floor((heute-erstellt)/(1000*60*60*24)):0;
+      const widerrufVorbei=tageSeit>=14;
+      const kwp=parseFloat(a.kwp)||11.1; // Fallback auf Durchschnitt
+
+      let wocheNr=null; // 1-4 = in welcher der nächsten 4 Wochen gebaut
+
+      if(montage){
+        const tage=Math.floor((montage-heute)/(1000*60*60*24));
+        if(tage>=0&&tage<=28) wocheNr=Math.min(4,Math.ceil((tage+1)/7));
+      } else if(widerrufVorbei){
+        // Wird terminiert → gleichmäßig über die nächsten 4 Wochen verteilen
+        // Älteste Aufträge zuerst (Woche 1), neuere später
+        const idx=result.filter(r=>!r.montage&&r.widerrufVorbei).length;
+        wocheNr=(idx%4)+1;
+      }
+
+      result.push({...a,kwp,tageSeit,widerrufVorbei,montageKonkret:!!montage,wocheNr});
+    });
+    return result;
+  },[auftraege]);
+
+  // Szenarien-Faktoren
+  const szFaktoren={pessimistisch:0.70,base:1.0,optimistisch:1.25};
+  const factor=szFaktoren[szenario];
+  const stornoFactor=1-(stornoRate/100);
+
+  // Materialberechnung pro Woche
+  const wochenDaten=useMemo(()=>{
+    const wochen=[1,2,3,4].map(w=>{
+      const auftr=pipeline.filter(a=>a.wocheNr===w);
+      const anzahl=Math.round(auftr.length*factor*stornoFactor);
+      const kwpGesamt=auftr.reduce((s,a)=>s+a.kwp,0)*factor*stornoFactor;
+      const avgKwp=auftr.length>0?kwpGesamt/Math.max(anzahl,1):11.1;
+
+      // Material summieren
+      let mat={module:0,wr_smart12:0,wr_smart15:0,wr_pro20:0,wr_pro25:0,akku_64:0,akku_984:0,uk_profil:0,uk_haken:0,uk_klemme:0,zs3p:0};
+      const n=Math.max(0,Math.round(auftr.length*factor*stornoFactor));
+      for(let i=0;i<n;i++){
+        const kwp=auftr[i%Math.max(auftr.length,1)]?.kwp||11.1;
+        const m=calcMaterial(kwp);
+        mat.module+=m.module;
+        if(m.wr.includes("Smart 12"))mat.wr_smart12++;
+        else if(m.wr.includes("Smart 15"))mat.wr_smart15++;
+        else if(m.wr.includes("Pro 20"))mat.wr_pro20++;
+        else mat.wr_pro25++;
+        if(m.akku_kwh<=6.4)mat.akku_64++;else mat.akku_984++;
+        mat.uk_profil+=m.uk_profil;
+        mat.uk_haken+=m.uk_haken;
+        mat.uk_klemme+=m.uk_klemme;
+        mat.zs3p++; // immer 3-phasig
+      }
+      return {woche:w,auftraege:auftr,anzahl,kwpGesamt:Math.round(kwpGesamt),avgKwp:Math.round(avgKwp*10)/10,mat};
+    });
+    return wochen;
+  },[pipeline,factor,stornoFactor]);
+
+  // 4-Wochen Gesamt
+  const gesamt=useMemo(()=>{
+    const g={module:0,wr_smart12:0,wr_smart15:0,wr_pro20:0,wr_pro25:0,akku_64:0,akku_984:0,uk_profil:0,uk_haken:0,uk_klemme:0,zs3p:0,anzahl:0,kwp:0};
+    wochenDaten.forEach(w=>{
+      g.anzahl+=w.anzahl;g.kwp+=w.kwpGesamt;
+      Object.keys(w.mat).forEach(k=>g[k]=(g[k]||0)+w.mat[k]);
+    });
+    return g;
+  },[wochenDaten]);
+
+  // Lager-Abgleich
+  function getStock(artId){return art.find(a=>a.id===artId)?.bestand||0;}
+  function getAmpel(bedarf,bestand){
+    if(bestand>=bedarf)return OK;
+    if(bestand>=bedarf*0.5)return WARN;
+    return ERR;
+  }
+
+  // Datum-Labels für Wochen
+  function wocheLabel(w){
+    const von=new Date(heute);von.setDate(heute.getDate()+(w-1)*7);
+    const bis=new Date(heute);bis.setDate(heute.getDate()+w*7-1);
+    return `${von.getDate()}.${von.getMonth()+1} – ${bis.getDate()}.${bis.getMonth()+1}`;
+  }
+
+  const anzInWiderruf=pipeline.filter(a=>!a.widerrufVorbei&&!a.montageKonkret).length;
+  const anzTerminiert=pipeline.filter(a=>a.widerrufVorbei&&!a.montageKonkret).length;
+  const anzKonkret=pipeline.filter(a=>a.montageKonkret).length;
+
+  const anzeigeDaten=woche===0?null:wochenDaten.find(w=>w.woche===woche);
+  const matAnzeige=woche===0?gesamt:anzeigeDaten?.mat;
+  const anzAnzeige=woche===0?gesamt.anzahl:(anzeigeDaten?.anzahl||0);
+
+  if(loading) return <div style={{textAlign:"center",padding:"60px 20px",color:TX2}}><div style={{fontSize:28,marginBottom:8}}>⏳</div>Lade Auftragsdaten...</div>;
+
+  return (
+    <div>
+      {/* PIPELINE ÜBERSICHT */}
+      <div style={{...CARD,marginBottom:14}}>
+        <div style={{fontSize:10,color:TX2,fontWeight:700,letterSpacing:"0.5px",marginBottom:10}}>PIPELINE STATUS</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+          {[
+            {n:anzInWiderruf,label:"In Widerrufsfrist",color:TX2,icon:"⏳"},
+            {n:anzTerminiert,label:"Zu terminieren",color:WARN,icon:"📅"},
+            {n:anzKonkret,label:"Konkret geplant",color:OK,icon:"✓"},
+          ].map(({n,label,color,icon})=>(
+            <div key={label} style={{textAlign:"center",background:C2,borderRadius:8,padding:"10px 6px"}}>
+              <div style={{fontSize:22,fontWeight:800,color}}>{n}</div>
+              <div style={{fontSize:9,color:TX2,marginTop:2,lineHeight:1.3}}>{icon} {label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* SZENARIO WAHL */}
+      <div style={{...CARD,marginBottom:14}}>
+        <div style={{fontSize:10,color:TX2,fontWeight:700,letterSpacing:"0.5px",marginBottom:10}}>SZENARIO & PARAMETER</div>
+        <div style={{display:"flex",gap:6,marginBottom:12}}>
+          {[
+            {id:"pessimistisch",label:"Pessimistisch",sub:"–30%",color:ERR},
+            {id:"base",label:"Basis",sub:"Realistisch",color:OK},
+            {id:"optimistisch",label:"Optimistisch",sub:"+25%",color:BLUE},
+          ].map(s=>(
+            <button key={s.id} onClick={()=>setSzenario(s.id)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1px solid ${szenario===s.id?s.color:BR}`,background:szenario===s.id?`${s.color}15`:"transparent",color:szenario===s.id?s.color:TX2,fontSize:10,fontWeight:700,cursor:"pointer",textAlign:"center"}}>
+              <div style={{fontSize:12}}>{s.label}</div>
+              <div style={{fontSize:9,opacity:0.7}}>{s.sub}</div>
+            </button>
+          ))}
+        </div>
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+            <span style={{fontSize:11,color:TX2}}>Storno-Risiko</span>
+            <span style={{fontSize:11,fontWeight:700,color:stornoRate>20?ERR:stornoRate>10?WARN:OK}}>{stornoRate}%</span>
+          </div>
+          <input type="range" min="0" max="40" value={stornoRate} onChange={e=>setStornoRate(+e.target.value)} style={{width:"100%",accentColor:Y}}/>
+        </div>
+      </div>
+
+      {/* WOCHEN TABS */}
+      <div style={{display:"flex",gap:4,marginBottom:14}}>
+        <button onClick={()=>setWoche(0)} style={{flex:1,padding:"7px 4px",borderRadius:8,border:`1px solid ${woche===0?Y:BR}`,background:woche===0?`${Y}15`:"transparent",color:woche===0?Y:TX2,fontSize:9,fontWeight:700,cursor:"pointer",textAlign:"center"}}>
+          <div>Gesamt</div><div style={{fontSize:8,opacity:0.7}}>4 Wochen</div>
+        </button>
+        {wochenDaten.map(w=>(
+          <button key={w.woche} onClick={()=>setWoche(w.woche)} style={{flex:1,padding:"7px 4px",borderRadius:8,border:`1px solid ${woche===w.woche?PURPLE:BR}`,background:woche===w.woche?`${PURPLE}15`:"transparent",color:woche===w.woche?PURPLE:TX2,fontSize:9,fontWeight:700,cursor:"pointer",textAlign:"center"}}>
+            <div>KW{Math.ceil((new Date(heute).setDate(heute.getDate()+(w.woche-1)*7),new Date(heute.getTime()+(w.woche-1)*7*86400000).getDate())/7)+8}</div>
+            <div style={{fontSize:8,opacity:0.7}}>{wocheLabel(w.woche)}</div>
+            <div style={{fontSize:10,fontWeight:800,color:w.anzahl>0?TX:TX2}}>{w.anzahl}x</div>
+          </button>
+        ))}
+      </div>
+
+      {/* ZUSAMMENFASSUNG */}
+      <div style={{...CARD,marginBottom:14,background:`${PURPLE}08`,borderColor:`${PURPLE}40`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+          <div style={{fontWeight:800,fontSize:14}}>{woche===0?"4-Wochen Gesamt":`Woche ${woche} · ${wocheLabel(woche)}`}</div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:20,fontWeight:800,color:PURPLE}}>{anzAnzeige}</div>
+            <div style={{fontSize:9,color:TX2}}>Montagen</div>
+          </div>
+        </div>
+        <div style={{fontSize:11,color:TX2}}>
+          {woche===0?`Ø ${Math.round(gesamt.kwp/Math.max(gesamt.anzahl,1)*10)/10} kWp · ${gesamt.kwp} kWp Gesamt`:`${anzeigeDaten?.kwpGesamt||0} kWp · Ø ${anzeigeDaten?.avgKwp||0} kWp`}
+        </div>
+      </div>
+
+      {/* MATERIAL-BEDARFS-LISTE MIT LAGER-AMPEL */}
+      {matAnzeige&&(
+        <div>
+          <div style={{fontSize:10,color:TX2,fontWeight:700,letterSpacing:"0.5px",marginBottom:8}}>MATERIALBEDARF vs. LAGERBESTAND</div>
+
+          {[
+            {label:"PV-Module (Aiko)",      bedarf:matAnzeige.module,     lager:getStock("MOD-405")+getStock("MOD-430"), einheit:"Stk",  lief:"Tritec"},
+            {label:"Fox Smart 12 WR",       bedarf:matAnzeige.wr_smart12, lager:getStock("WR-50")+getStock("WR-80")+getStock("WR-100"), einheit:"Stk", lief:"Fox"},
+            {label:"Fox Smart 15 WR",       bedarf:matAnzeige.wr_smart15, lager:getStock("WR-100"),  einheit:"Stk", lief:"Fox"},
+            {label:"Fox Pro 20/25 WR",      bedarf:matAnzeige.wr_pro20+matAnzeige.wr_pro25,lager:0, einheit:"Stk", lief:"Fox"},
+            {label:"Batterie 6.4 kWh",      bedarf:matAnzeige.akku_64,   lager:getStock("BAT-M"),   einheit:"Stk",lief:"Fox"},
+            {label:"Batterie 9.84 kWh",     bedarf:matAnzeige.akku_984,  lager:getStock("BAT-S1")+getStock("BAT-S2"),einheit:"Stk",lief:"Fox"},
+            {label:"UK Profil (SL RACK)",   bedarf:matAnzeige.uk_profil, lager:getStock("UK-PRO"),  einheit:"m",   lief:"SL Rack"},
+            {label:"UK Dachhaken",          bedarf:matAnzeige.uk_haken,  lager:getStock("UK-HAK"),  einheit:"Stk", lief:"SL Rack"},
+            {label:"UK Klemmen",            bedarf:matAnzeige.uk_klemme, lager:getStock("UK-KLE"),  einheit:"Stk", lief:"SL Rack"},
+            {label:"Zählerschrank 3P",      bedarf:matAnzeige.zs3p,      lager:getStock("ZS-3P"),   einheit:"Stk", lief:"Cordes"},
+          ].filter(r=>r.bedarf>0).map(r=>{
+            const ampel=getAmpel(r.bedarf,r.lager);
+            const pct=Math.min(100,Math.round(r.lager/Math.max(r.bedarf,1)*100));
+            const lc=LIEFERANTEN_DEFAULT[r.lief];
+            return (
+              <div key={r.label} style={{...CARD,marginBottom:8,borderLeft:`4px solid ${ampel}`,borderRadius:"0 10px 10px 0",paddingLeft:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div>
+                    <div style={{fontWeight:600,fontSize:12}}>{r.label}</div>
+                    <div style={{fontSize:10,color:TX2}}>
+                      <span style={{color:lc?.farbe}}>{r.lief}</span>
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:14,fontWeight:800,color:ampel}}>{r.lager}<span style={{fontSize:10,color:TX2,fontWeight:400}}>/{r.bedarf} {r.einheit}</span></div>
+                    <div style={{fontSize:10,color:ampel}}>{ampel===OK?"✓ Ausreichend":ampel===WARN?"⚠ Knapp":"✕ Fehlt"}</div>
+                  </div>
+                </div>
+                <div style={{background:BR,borderRadius:4,height:4}}>
+                  <div style={{width:`${pct}%`,height:"100%",background:ampel,borderRadius:4,transition:"width 0.4s"}}/>
+                </div>
+                {ampel!==OK&&(
+                  <div style={{fontSize:10,color:ampel,marginTop:6}}>
+                    {ampel===ERR?`✕ Fehlen ${r.bedarf-r.lager} ${r.einheit} – Sofort bei ${r.lief} bestellen`:`⚠ Nur ${Math.round(pct)}% vorhanden – Nachbestellen empfohlen`}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* SZENARIO ERKLÄRUNG */}
+      <div style={{background:C2,borderRadius:10,padding:"10px 14px",marginTop:6}}>
+        <div style={{fontSize:10,color:TX2,lineHeight:1.6}}>
+          <span style={{fontWeight:700,color:TX}}>Basis-Annahmen: </span>
+          Aufträge nach 14 Tagen Widerruf gleichmäßig über 4 Wochen. Aktuell {anzInWiderruf} in Widerrufsfrist + {anzTerminiert} zu terminieren. Storno-Rate: {stornoRate}%. Module: Aiko 470W. UK: 2.5m Profil + 1.25 Haken + 2 Klemmen pro Modul.
+        </div>
+      </div>
+    </div>
+  );
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 
