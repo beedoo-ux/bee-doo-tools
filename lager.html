@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>bee-doo · LAGER</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0c1222; color: #e1e7ef; font-family: 'DM Sans', system-ui, sans-serif; }
+  button, select, input, textarea { font-family: inherit; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #263354; border-radius: 2px; }
+  .back-btn { position: fixed; top: 10px; left: 10px; z-index: 9999; background: #151d30; border: 1px solid #263354; color: #5c6b8a; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-family: 'DM Sans', sans-serif; cursor: pointer; text-decoration: none; transition: all .15s; }
+  .back-btn:hover { border-color: #FDE154; color: #FDE154; }
+</style>
+</head>
+<body>
+<a href="index.html" class="back-btn">← Launcher</a>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+// ── DESIGN TOKENS (bee-doo) ──────────────────────────────────────────────────
+const Y = "#FDE154";
+const BG = "#0c1222";
+const C1 = "#151d30";
+const C2 = "#1c2640";
+const BR = "#263354";
+const TX = "#e1e7ef";
+const TX2 = "#5c6b8a";
+const OK = "#34d399";
+const WARN = "#f59e0b";
+const ERR = "#f87171";
+const PURPLE = "#E879F9";
+
+// ── DEMO DATA ────────────────────────────────────────────────────────────────
+const LIEFERANTEN = [
+  { id: "L1", name: "Hanwha Q-Cells", kategorie: "Module", kontakt: "vertrieb@q-cells.com", telefon: "+49 34954 20", zahlungsziel: 30 },
+  { id: "L2", name: "SMA Solar", kategorie: "Wechselrichter", kontakt: "sales@sma.de", telefon: "+49 561 9522 0", zahlungsziel: 14 },
+  { id: "L3", name: "BYD Battery", kategorie: "Speicher", kontakt: "storage@byd.com", telefon: "+49 69 2475 9380", zahlungsziel: 21 },
+  { id: "L4", name: "Renusol", kategorie: "Montagesysteme", kontakt: "info@renusol.com", telefon: "+49 221 599 512", zahlungsziel: 30 },
+  { id: "L5", name: "Phoenix Contact", kategorie: "Elektro", kontakt: "solar@phoenixcontact.com", telefon: "+49 5235 3-00", zahlungsziel: 30 },
+];
+
+const KATEGORIEN = ["Alle", "PV-Module", "Wechselrichter", "Batteriespeicher", "Montagesystem", "Kabel & Elektro", "Werkzeug"];
+
+const DEMO_ARTIKEL = [
+  { id: "A001", name: "Q.PEAK DUO ML-G10+ 405W", kat: "PV-Module", bestand: 84, min: 40, einheit: "Stk", preis: 89.50, lieferant: "L1", lagerort: "Halle A-01", serienNr: true, letzteBestellung: "2026-02-10", bestellMenge: 100 },
+  { id: "A002", name: "Q.PEAK DUO ML-G10+ 430W", kat: "PV-Module", bestand: 22, min: 30, einheit: "Stk", preis: 94.20, lieferant: "L1", lagerort: "Halle A-02", serienNr: true, letzteBestellung: "2026-01-28", bestellMenge: 80 },
+  { id: "A003", name: "SMA SunnyBoy 5.0", kat: "Wechselrichter", bestand: 8, min: 5, einheit: "Stk", preis: 1240.00, lieferant: "L2", lagerort: "Regal B-01", serienNr: true, letzteBestellung: "2026-02-05", bestellMenge: 10 },
+  { id: "A004", name: "SMA SunnyBoy 8.0", kat: "Wechselrichter", bestand: 3, min: 5, einheit: "Stk", preis: 1480.00, lieferant: "L2", lagerort: "Regal B-02", serienNr: true, letzteBestellung: "2026-01-15", bestellMenge: 8 },
+  { id: "A005", name: "BYD Battery-Box Premium HVS 10.2", kat: "Batteriespeicher", bestand: 6, min: 4, einheit: "Stk", preis: 4200.00, lieferant: "L3", lagerort: "Halle C-01", serienNr: true, letzteBestellung: "2026-02-01", bestellMenge: 5 },
+  { id: "A006", name: "Renusol Console+ Klemme", kat: "Montagesystem", bestand: 520, min: 200, einheit: "Stk", preis: 3.80, lieferant: "L4", lagerort: "Regal D-05", serienNr: false, letzteBestellung: "2026-02-12", bestellMenge: 500 },
+  { id: "A007", name: "DC-Kabel 6mm² rot", kat: "Kabel & Elektro", bestand: 280, min: 100, einheit: "m", preis: 1.20, lieferant: "L5", lagerort: "Regal E-01", serienNr: false, letzteBestellung: "2026-01-20", bestellMenge: 500 },
+  { id: "A008", name: "DC-Kabel 6mm² schwarz", kat: "Kabel & Elektro", bestand: 45, min: 100, einheit: "m", preis: 1.20, lieferant: "L5", lagerort: "Regal E-02", serienNr: false, letzteBestellung: "2026-01-20", bestellMenge: 500 },
+  { id: "A009", name: "MC4-Steckverbinder Set", kat: "Kabel & Elektro", bestand: 180, min: 100, einheit: "Paar", preis: 2.40, lieferant: "L5", lagerort: "Regal E-03", serienNr: false, letzteBestellung: "2026-02-08", bestellMenge: 200 },
+  { id: "A010", name: "Renusol Schiene 4400mm", kat: "Montagesystem", bestand: 62, min: 30, einheit: "Stk", preis: 24.90, lieferant: "L4", lagerort: "Halle D-01", serienNr: false, letzteBestellung: "2026-02-03", bestellMenge: 50 },
+];
+
+const DEMO_AUFTRAEGE = [
+  { id: "AU-2026-0089", kunde: "Müller, Hans", adresse: "Detmolder Str. 45, Bielefeld", montage: "2026-03-01", status: "geplant", material: [{ id: "A001", menge: 12, serNr: [] }, { id: "A003", menge: 1, serNr: [] }, { id: "A005", menge: 1, serNr: [] }] },
+  { id: "AU-2026-0088", kunde: "Schmidt, Petra", adresse: "Herforder Str. 12, Bielefeld", montage: "2026-02-25", status: "reserviert", material: [{ id: "A002", menge: 16, serNr: ["SN-430-001", "SN-430-002"] }, { id: "A004", menge: 1, serNr: [] }] },
+  { id: "AU-2026-0087", kunde: "Weber, Klaus", adresse: "Gütersloher Str. 8, Gütersloh", montage: "2026-02-24", status: "ausgegeben", material: [{ id: "A001", menge: 20, serNr: [] }, { id: "A003", menge: 2, serNr: ["SN-SB5-441", "SN-SB5-442"] }] },
+];
+
+const DEMO_BESTELLUNGEN = [
+  { id: "B-2026-015", artikel: "A004", lieferant: "L2", menge: 8, preis: 1480, datum: "2026-02-15", status: "bestellt", lieferdatum: "2026-03-01" },
+  { id: "B-2026-014", artikel: "A008", lieferant: "L5", menge: 500, preis: 1.20, datum: "2026-02-12", status: "in_transit", lieferdatum: "2026-02-23" },
+  { id: "B-2026-013", artikel: "A002", lieferant: "L1", menge: 40, preis: 94.20, datum: "2026-02-08", status: "geliefert", lieferdatum: "2026-02-18" },
+];
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function Status({ bestand, min }) {
+  if (bestand === 0) return <span style={badge(ERR)}>Kein Bestand</span>;
+  if (bestand < min) return <span style={badge(WARN)}>Nachbestellen</span>;
+  return <span style={badge(OK)}>OK</span>;
+}
+
+function badge(color) {
+  return { background: `${color}18`, color, border: `1px solid ${color}40`, borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, letterSpacing: "0.5px" };
+}
+
+function BestandBar({ bestand, min }) {
+  const max = Math.max(min * 2, bestand);
+  const pct = Math.min((bestand / max) * 100, 100);
+  const color = bestand === 0 ? ERR : bestand < min ? WARN : OK;
+  return (
+    <div style={{ background: BR, borderRadius: 4, height: 4, width: "100%" }}>
+      <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.6s ease" }} />
+    </div>
+  );
+}
+
+const INPUT = { background: C2, border: `1px solid ${BR}`, borderRadius: 8, color: TX, padding: "8px 12px", fontSize: 13, width: "100%", boxSizing: "border-box", outline: "none" };
+const CARD = { background: C1, border: `1px solid ${BR}`, borderRadius: 12, padding: "16px" };
+
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+function LagerApp() {
+  const [tab, setTab] = useState("bestand");
+  const [artikel, setArtikel] = useState(DEMO_ARTIKEL);
+  const [auftraege] = useState(DEMO_AUFTRAEGE);
+  const [bestellungen, setBestellungen] = useState(DEMO_BESTELLUNGEN);
+  const [lieferanten] = useState(LIEFERANTEN);
+  const [search, setSearch] = useState("");
+  const [kat, setKat] = useState("Alle");
+  const [modal, setModal] = useState(null); // { type, data }
+  const [toast, setToast] = useState(null);
+
+  function showToast(msg, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  function nachbestellen(a) {
+    const newB = {
+      id: `B-2026-0${bestellungen.length + 16}`,
+      artikel: a.id, lieferant: a.lieferant,
+      menge: a.bestellMenge, preis: a.preis,
+      datum: new Date().toISOString().split("T")[0],
+      status: "bestellt", lieferdatum: "",
+    };
+    setBestellungen(prev => [newB, ...prev]);
+    showToast(`Bestellung für ${a.name} aufgegeben`);
+  }
+
+  const kritisch = artikel.filter(a => a.bestand < a.min);
+  const gesamtwert = artikel.reduce((s, a) => s + a.bestand * a.preis, 0);
+
+  return (
+    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", background: BG, minHeight: "100vh", color: TX, maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
+      {/* HEADER */}
+      <div style={{ background: C1, borderBottom: `1px solid ${BR}`, padding: "14px 16px", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: `${PURPLE}20`, border: `1px solid ${PURPLE}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>📦</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: "0.5px", color: TX }}>bee-doo LAGER</div>
+              <div style={{ fontSize: 10, color: TX2 }}>{artikel.length} Artikel · {kritisch.length > 0 && <span style={{ color: WARN }}>{kritisch.length} kritisch</span>}{kritisch.length === 0 && <span style={{ color: OK }}>Alles OK</span>}</div>
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 11, color: TX2 }}>Lagerwert</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: Y }}>€{gesamtwert.toLocaleString("de-DE", { maximumFractionDigits: 0 })}</div>
+          </div>
+        </div>
+
+        {/* TABS */}
+        <div style={{ display: "flex", gap: 4, marginTop: 12, background: C2, borderRadius: 10, padding: 3 }}>
+          {[
+            { id: "bestand", label: "Bestand", icon: "📦" },
+            { id: "auftraege", label: "Aufträge", icon: "🔧" },
+            { id: "bestellen", label: "Bestellen", icon: "🛒" },
+            { id: "lieferanten", label: "Lieferanten", icon: "🤝" },
+          ].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              flex: 1, padding: "6px 4px", borderRadius: 8, border: "none", cursor: "pointer",
+              background: tab === t.id ? C1 : "transparent",
+              color: tab === t.id ? TX : TX2,
+              fontSize: 9, fontWeight: 700, letterSpacing: "0.3px",
+              boxShadow: tab === t.id ? `0 0 0 1px ${BR}` : "none",
+              transition: "all 0.15s",
+            }}>
+              <div style={{ fontSize: 12, marginBottom: 1 }}>{t.icon}</div>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* CONTENT */}
+      <div style={{ padding: "12px 16px" }}>
+        {tab === "bestand" && <BestandTab artikel={artikel} setArtikel={setArtikel} search={search} setSearch={setSearch} kat={kat} setKat={setKat} kritisch={kritisch} nachbestellen={nachbestellen} setModal={setModal} showToast={showToast} />}
+        {tab === "auftraege" && <AuftraegeTab auftraege={auftraege} artikel={artikel} setArtikel={setArtikel} showToast={showToast} setModal={setModal} />}
+        {tab === "bestellen" && <BestellenTab bestellungen={bestellungen} setBestellungen={setBestellungen} artikel={artikel} setArtikel={setArtikel} lieferanten={lieferanten} showToast={showToast} kritisch={kritisch} nachbestellen={nachbestellen} />}
+        {tab === "lieferanten" && <LieferantenTab lieferanten={lieferanten} artikel={artikel} />}
+      </div>
+
+      {/* MODAL */}
+      {modal && <Modal modal={modal} setModal={setModal} artikel={artikel} setArtikel={setArtikel} lieferanten={lieferanten} showToast={showToast} />}
+
+      {/* TOAST */}
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)",
+          background: toast.ok ? `${OK}20` : `${ERR}20`,
+          border: `1px solid ${toast.ok ? OK : ERR}40`,
+          color: toast.ok ? OK : ERR, borderRadius: 10, padding: "10px 18px",
+          fontSize: 13, fontWeight: 600, zIndex: 100, whiteSpace: "nowrap",
+          boxShadow: "0 4px 20px #00000060",
+        }}>
+          {toast.ok ? "✓" : "!"} {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── BESTAND TAB ───────────────────────────────────────────────────────────────
+function BestandTab({ artikel, setArtikel, search, setSearch, kat, setKat, kritisch, nachbestellen, setModal, showToast }) {
+  const filtered = useMemo(() => artikel.filter(a =>
+    (kat === "Alle" || a.kat === kat) &&
+    (a.name.toLowerCase().includes(search.toLowerCase()) || a.id.includes(search))
+  ), [artikel, kat, search]);
+
+  return (
+    <div>
+      {/* KRITISCH BANNER */}
+      {kritisch.length > 0 && (
+        <div style={{ background: `${WARN}12`, border: `1px solid ${WARN}30`, borderRadius: 10, padding: "10px 14px", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ color: WARN, fontWeight: 700, fontSize: 12 }}>⚠️ {kritisch.length} Artikel unter Mindestbestand</div>
+            <div style={{ color: TX2, fontSize: 11, marginTop: 2 }}>{kritisch.map(a => a.name.split(" ")[0]).join(", ")}</div>
+          </div>
+          <button onClick={() => { /* filter to kritisch */ }} style={{ background: `${WARN}20`, border: `1px solid ${WARN}40`, color: WARN, borderRadius: 8, padding: "5px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Anzeigen</button>
+        </div>
+      )}
+
+      {/* SEARCH */}
+      <input style={INPUT} placeholder="🔍  Artikel suchen..." value={search} onChange={e => setSearch(e.target.value)} />
+
+      {/* KAT FILTER */}
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginTop: 8, marginBottom: 12 }}>
+        {KATEGORIEN.map(k => (
+          <button key={k} onClick={() => setKat(k)} style={{
+            padding: "5px 10px", borderRadius: 20, border: `1px solid ${kat === k ? Y : BR}`,
+            background: kat === k ? `${Y}15` : "transparent",
+            color: kat === k ? Y : TX2, fontSize: 10, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+          }}>{k}</button>
+        ))}
+      </div>
+
+      {/* ARTIKEL LIST */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {filtered.map(a => (
+          <div key={a.id} onClick={() => setModal({ type: "artikel", data: a })} style={{ ...CARD, cursor: "pointer" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+              <div style={{ flex: 1, marginRight: 8 }}>
+                <div style={{ fontSize: 12, color: TX2, marginBottom: 2 }}>{a.id} · {a.kat}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: TX, lineHeight: 1.3 }}>{a.name}</div>
+                <div style={{ fontSize: 11, color: TX2, marginTop: 2 }}>📍 {a.lagerort}</div>
+              </div>
+              <Status bestand={a.bestand} min={a.min} />
+            </div>
+
+            <BestandBar bestand={a.bestand} min={a.min} />
+
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, alignItems: "center" }}>
+              <div>
+                <span style={{ fontWeight: 800, fontSize: 16, color: a.bestand < a.min ? WARN : TX }}>{a.bestand}</span>
+                <span style={{ color: TX2, fontSize: 11 }}> / {a.min} Min · {a.einheit}</span>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <span style={{ color: TX2, fontSize: 11 }}>€{a.preis.toFixed(2)}/{a.einheit}</span>
+                {a.bestand < a.min && (
+                  <button onClick={e => { e.stopPropagation(); nachbestellen(a); }} style={{ background: `${Y}20`, border: `1px solid ${Y}40`, color: Y, borderRadius: 6, padding: "3px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>+ Bestellen</button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ADD BUTTON */}
+      <button onClick={() => setModal({ type: "neuerArtikel" })} style={{
+        width: "100%", marginTop: 12, padding: "12px", borderRadius: 10, border: `1px dashed ${BR}`,
+        background: "transparent", color: TX2, fontSize: 12, fontWeight: 600, cursor: "pointer",
+      }}>+ Neuer Artikel</button>
+    </div>
+  );
+}
+
+// ── AUFTRÄGE TAB ──────────────────────────────────────────────────────────────
+function AuftraegeTab({ auftraege, artikel, setArtikel, showToast, setModal }) {
+  const statusColor = { geplant: TX2, reserviert: Y, ausgegeben: OK };
+  const statusLabel = { geplant: "Geplant", reserviert: "Reserviert", ausgegeben: "Ausgegeben" };
+
+  function getArtikel(id) { return artikel.find(a => a.id === id); }
+
+  function ausgeben(auftrag) {
+    // Buche Material ab
+    setArtikel(prev => prev.map(a => {
+      const mat = auftrag.material.find(m => m.id === a.id);
+      if (mat) return { ...a, bestand: a.bestand - mat.menge };
+      return a;
+    }));
+    showToast(`Material für ${auftrag.id} ausgegeben`);
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: TX2, marginBottom: 12 }}>Material-Zuweisung zu Montage-Aufträgen</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {auftraege.map(au => (
+          <div key={au.id} style={CARD}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 10, color: TX2, marginBottom: 2 }}>{au.id}</div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{au.kunde}</div>
+                <div style={{ fontSize: 11, color: TX2 }}>📍 {au.adresse}</div>
+                <div style={{ fontSize: 11, color: TX2 }}>🗓 Montage: {new Date(au.montage).toLocaleDateString("de-DE")}</div>
+              </div>
+              <span style={badge(statusColor[au.status] || TX2)}>{statusLabel[au.status]}</span>
+            </div>
+
+            <div style={{ borderTop: `1px solid ${BR}`, paddingTop: 10 }}>
+              <div style={{ fontSize: 10, color: TX2, marginBottom: 6, fontWeight: 600, letterSpacing: "0.5px" }}>MATERIAL</div>
+              {au.material.map(m => {
+                const art = getArtikel(m.id);
+                if (!art) return null;
+                const verfügbar = art.bestand >= m.menge;
+                return (
+                  <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: TX }}>{art.name}</div>
+                      <div style={{ fontSize: 10, color: TX2 }}>Lager: {art.bestand} {art.einheit} · Bedarf: {m.menge}</div>
+                      {m.serNr.length > 0 && <div style={{ fontSize: 10, color: PURPLE }}>SN: {m.serNr.join(", ")}</div>}
+                    </div>
+                    <span style={badge(verfügbar ? OK : ERR)}>{verfügbar ? "✓" : "Fehlt"}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {au.status === "reserviert" && (
+              <button onClick={() => ausgeben(au)} style={{
+                width: "100%", marginTop: 10, padding: "9px", borderRadius: 8, border: "none",
+                background: Y, color: "#0c1222", fontWeight: 700, fontSize: 12, cursor: "pointer",
+              }}>📤 Material ausgeben</button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── BESTELLEN TAB ─────────────────────────────────────────────────────────────
+function BestellenTab({ bestellungen, setBestellungen, artikel, setArtikel, lieferanten, showToast, kritisch, nachbestellen }) {
+  const statusColor = { bestellt: Y, in_transit: PURPLE, geliefert: OK, storniert: ERR };
+  const statusLabel = { bestellt: "Bestellt", in_transit: "Unterwegs", geliefert: "Geliefert", storniert: "Storniert" };
+
+  function getArtikel(id) { return artikel.find(a => a.id === id); }
+  function getLieferant(id) { return lieferanten.find(l => l.id === id); }
+
+  function empfangen(b) {
+    setBestellungen(prev => prev.map(x => x.id === b.id ? { ...x, status: "geliefert" } : x));
+    const art = getArtikel(b.artikel);
+    if (art) {
+      setArtikel(prev => prev.map(a => a.id === b.artikel ? { ...a, bestand: a.bestand + b.menge } : a));
+    }
+    showToast(`Lieferung ${b.id} als empfangen markiert`);
+  }
+
+  return (
+    <div>
+      {/* NACHBESTELLUNG VORSCHLÄGE */}
+      {kritisch.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 10, color: WARN, fontWeight: 700, letterSpacing: "0.5px", marginBottom: 8 }}>⚠️ NACHBESTELL-VORSCHLÄGE</div>
+          {kritisch.map(a => (
+            <div key={a.id} style={{ ...CARD, marginBottom: 8, background: `${WARN}08`, borderColor: `${WARN}30` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: TX }}>{a.name}</div>
+                  <div style={{ fontSize: 11, color: TX2 }}>Bestand: {a.bestand} · Min: {a.min} · Bestell-Menge: {a.bestellMenge}</div>
+                  <div style={{ fontSize: 11, color: TX2 }}>Wert: €{(a.bestellMenge * a.preis).toLocaleString("de-DE", { maximumFractionDigits: 0 })}</div>
+                </div>
+                <button onClick={() => nachbestellen(a)} style={{ background: Y, border: "none", color: "#0c1222", borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Bestellen</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* BESTELLUNGEN */}
+      <div style={{ fontSize: 10, color: TX2, fontWeight: 700, letterSpacing: "0.5px", marginBottom: 8 }}>AKTIVE BESTELLUNGEN</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {bestellungen.map(b => {
+          const art = getArtikel(b.artikel);
+          const lief = getLieferant(b.lieferant);
+          return (
+            <div key={b.id} style={CARD}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: TX2 }}>{b.id}</div>
+                <span style={badge(statusColor[b.status] || TX2)}>{statusLabel[b.status]}</span>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{art?.name || b.artikel}</div>
+              <div style={{ fontSize: 11, color: TX2 }}>🏢 {lief?.name || b.lieferant}</div>
+              <div style={{ fontSize: 11, color: TX2 }}>📦 {b.menge} {art?.einheit} · €{(b.menge * b.preis).toLocaleString("de-DE", { maximumFractionDigits: 0 })}</div>
+              <div style={{ fontSize: 11, color: TX2 }}>🗓 Bestellt: {new Date(b.datum).toLocaleDateString("de-DE")} {b.lieferdatum && `· ETA: ${new Date(b.lieferdatum).toLocaleDateString("de-DE")}`}</div>
+              {b.status === "in_transit" && (
+                <button onClick={() => empfangen(b)} style={{ marginTop: 10, width: "100%", padding: "8px", borderRadius: 8, border: "none", background: OK, color: "#0c1222", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>✓ Lieferung empfangen</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── LIEFERANTEN TAB ───────────────────────────────────────────────────────────
+function LieferantenTab({ lieferanten, artikel }) {
+  function getArtikelCount(lId) { return artikel.filter(a => a.lieferant === lId).length; }
+  function getLagerwert(lId) { return artikel.filter(a => a.lieferant === lId).reduce((s, a) => s + a.bestand * a.preis, 0); }
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: TX2, marginBottom: 12 }}>Lieferanten & Preiskonditionen</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {lieferanten.map(l => (
+          <div key={l.id} style={CARD}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 14, color: TX }}>{l.name}</div>
+                <div style={{ fontSize: 11, color: TX2, marginTop: 2 }}>🏷 {l.kategorie} · Zahlungsziel: {l.zahlungsziel}d</div>
+              </div>
+              <span style={badge(PURPLE)}>{getArtikelCount(l.id)} Artikel</span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ background: C2, borderRadius: 8, padding: "8px 10px" }}>
+                <div style={{ fontSize: 10, color: TX2 }}>Lagerwert</div>
+                <div style={{ fontWeight: 700, color: Y, fontSize: 13 }}>€{getLagerwert(l.id).toLocaleString("de-DE", { maximumFractionDigits: 0 })}</div>
+              </div>
+              <div style={{ background: C2, borderRadius: 8, padding: "8px 10px" }}>
+                <div style={{ fontSize: 10, color: TX2 }}>Zahlungsziel</div>
+                <div style={{ fontWeight: 700, color: TX, fontSize: 13 }}>{l.zahlungsziel} Tage</div>
+              </div>
+            </div>
+
+            <div style={{ borderTop: `1px solid ${BR}`, marginTop: 10, paddingTop: 10, display: "flex", gap: 8 }}>
+              <a href={`mailto:${l.kontakt}`} style={{ flex: 1, padding: "7px", borderRadius: 8, background: C2, border: `1px solid ${BR}`, color: TX2, fontSize: 11, textAlign: "center", textDecoration: "none" }}>✉️ {l.kontakt}</a>
+              <a href={`tel:${l.telefon}`} style={{ padding: "7px 12px", borderRadius: 8, background: `${Y}15`, border: `1px solid ${Y}30`, color: Y, fontSize: 11, textDecoration: "none" }}>📞</a>
+            </div>
+
+            {/* Artikel von diesem Lieferanten */}
+            <div style={{ marginTop: 10 }}>
+              {artikel.filter(a => a.lieferant === l.id).map(a => (
+                <div key={a.id} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: `1px solid ${BR}` }}>
+                  <span style={{ fontSize: 11, color: TX2 }}>{a.name.substring(0, 28)}{a.name.length > 28 ? "…" : ""}</span>
+                  <span style={{ fontSize: 11, color: TX }}>€{a.preis}/{a.einheit}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+function Modal({ modal, setModal, artikel, setArtikel, lieferanten, showToast }) {
+  const [form, setForm] = useState(modal.data || { name: "", kat: "PV-Module", bestand: 0, min: 10, einheit: "Stk", preis: 0, lieferant: "L1", lagerort: "", serienNr: false, bestellMenge: 10 });
+
+  function save() {
+    if (modal.type === "neuerArtikel") {
+      const newA = { ...form, id: `A${String(artikel.length + 1).padStart(3, "0")}`, letzteBestellung: "-" };
+      setArtikel(prev => [...prev, newA]);
+      showToast(`${form.name} angelegt`);
+    } else if (modal.type === "artikel") {
+      setArtikel(prev => prev.map(a => a.id === form.id ? form : a));
+      showToast("Artikel aktualisiert");
+    }
+    setModal(null);
+  }
+
+  const isNew = modal.type === "neuerArtikel";
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#00000090", zIndex: 200, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: C1, borderRadius: "16px 16px 0 0", width: "100%", maxHeight: "85vh", overflowY: "auto", padding: 20, border: `1px solid ${BR}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 15 }}>{isNew ? "Neuer Artikel" : form.name}</div>
+          <button onClick={() => setModal(null)} style={{ background: "none", border: "none", color: TX2, fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 11, color: TX2, display: "block", marginBottom: 4 }}>Bezeichnung</label>
+            <input style={INPUT} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, color: TX2, display: "block", marginBottom: 4 }}>Kategorie</label>
+              <select style={{ ...INPUT, appearance: "auto" }} value={form.kat} onChange={e => setForm({ ...form, kat: e.target.value })}>
+                {KATEGORIEN.filter(k => k !== "Alle").map(k => <option key={k}>{k}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: TX2, display: "block", marginBottom: 4 }}>Einheit</label>
+              <select style={{ ...INPUT, appearance: "auto" }} value={form.einheit} onChange={e => setForm({ ...form, einheit: e.target.value })}>
+                {["Stk", "m", "Paar", "Rolle", "Box"].map(u => <option key={u}>{u}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, color: TX2, display: "block", marginBottom: 4 }}>Bestand</label>
+              <input style={INPUT} type="number" value={form.bestand} onChange={e => setForm({ ...form, bestand: +e.target.value })} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: TX2, display: "block", marginBottom: 4 }}>Minimum</label>
+              <input style={INPUT} type="number" value={form.min} onChange={e => setForm({ ...form, min: +e.target.value })} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: TX2, display: "block", marginBottom: 4 }}>Preis €</label>
+              <input style={INPUT} type="number" step="0.01" value={form.preis} onChange={e => setForm({ ...form, preis: +e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: TX2, display: "block", marginBottom: 4 }}>Lieferant</label>
+            <select style={{ ...INPUT, appearance: "auto" }} value={form.lieferant} onChange={e => setForm({ ...form, lieferant: e.target.value })}>
+              {lieferanten.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: TX2, display: "block", marginBottom: 4 }}>Lagerort</label>
+            <input style={INPUT} value={form.lagerort} onChange={e => setForm({ ...form, lagerort: e.target.value })} placeholder="z.B. Halle A-01" />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, color: TX2, display: "block", marginBottom: 4 }}>Bestell-Menge</label>
+              <input style={INPUT} type="number" value={form.bestellMenge} onChange={e => setForm({ ...form, bestellMenge: +e.target.value })} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 20 }}>
+              <input type="checkbox" id="sn" checked={form.serienNr} onChange={e => setForm({ ...form, serienNr: e.target.checked })} />
+              <label htmlFor="sn" style={{ fontSize: 12, color: TX, cursor: "pointer" }}>Seriennummern</label>
+            </div>
+          </div>
+
+          {!isNew && (
+            <div style={{ background: C2, borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ fontSize: 10, color: TX2, marginBottom: 6 }}>BESTANDSWERT</div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: Y }}>€{(form.bestand * form.preis).toLocaleString("de-DE", { maximumFractionDigits: 0 })}</div>
+              <div style={{ fontSize: 11, color: TX2 }}>{form.bestand} {form.einheit} × €{form.preis}</div>
+            </div>
+          )}
+
+          <button onClick={save} style={{ width: "100%", padding: "12px", borderRadius: 10, border: "none", background: Y, color: "#0c1222", fontWeight: 700, fontSize: 14, cursor: "pointer", marginTop: 4 }}>
+            {isNew ? "✓ Artikel anlegen" : "✓ Speichern"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<LagerApp />);
+</script>
+</body>
+</html>
