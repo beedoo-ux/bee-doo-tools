@@ -6,20 +6,22 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Generate config.js
         run: |
-          echo "window.BEEDOO_SVC='${{ secrets.SUPABASE_SERVICE_KEY }}';" > config.js
-          echo "window.BEEDOO_SB='https://hqzpemfaljxcysyqssng.supabase.co';" >> config.js
-          echo "window.BEEDOO_GKEY='${{ secrets.GOOGLE_API_KEY }}';" >> config.js
-      
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: ./
-          vercel-args: '--prod'
+          printf "window.BEEDOO_SVC='%s';\nwindow.BEEDOO_SB='https://hqzpemfaljxcysyqssng.supabase.co';\nwindow.BEEDOO_GKEY='%s';\n" \
+            "${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            "${{ secrets.GOOGLE_API_KEY }}" > config.js
+          echo "config.js generated, size: $(wc -c < config.js) bytes"
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Deploy to Vercel (prod)
+        run: vercel --token "$VERCEL_TOKEN" --prod --yes
