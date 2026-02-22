@@ -274,11 +274,9 @@ function renderAll() {
   const sp = solarData.solarPotential;
   const cfg = configs[currentIdx];
 
-  // Show results
+  // Show results FIRST, then render map
   document.getElementById('results').classList.add('visible');
   document.getElementById('printBtn').style.display = 'inline-block';
-  // Leaflet needs size recalc after container becomes visible
-  setTimeout(() => { if (leafletMap) leafletMap.invalidateSize(); }, 100);
 
   // Address banner
   document.getElementById('addrMain').textContent = mapCenter.formatted.split(',').slice(0,3).join(',');
@@ -294,8 +292,9 @@ function renderAll() {
   document.getElementById('maxLabel').textContent = 'Max: ' + sp.maxArrayPanelsCount + ' Module';
 
   updateKpis(cfg);
-  renderMap(cfg);
   renderTable(sp);
+  // Init map only after container is visible in DOM
+  setTimeout(() => renderMap(cfg), 200);
 }
 
 function updateKpis(cfg) {
@@ -322,16 +321,18 @@ function renderMap(cfg) {
   const sp = solarData.solarPotential;
   const { lat, lng } = mapCenter;
 
-  // Init Leaflet map once
-  if (!leafletMap) {
-    leafletMap = L.map('leafletMap', { zoomControl: true, attributionControl: false });
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 21
-    }).addTo(leafletMap);
-    panelLayerGroup = L.layerGroup().addTo(leafletMap);
+  // Destroy and recreate map each time to avoid stale container issues
+  if (leafletMap) {
+    leafletMap.remove();
+    leafletMap = null;
+    panelLayerGroup = null;
   }
+  leafletMap = L.map('leafletMap', { zoomControl: true, attributionControl: false });
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 21, minZoom: 15
+  }).addTo(leafletMap);
+  panelLayerGroup = L.layerGroup().addTo(leafletMap);
   leafletMap.setView([lat, lng], ZOOM);
-  panelLayerGroup.clearLayers();
 
   // Draw panels as Leaflet polygons
   const allPanels = (sp.solarPanels || []).slice(0, cfg?.panelsCount || 0);
