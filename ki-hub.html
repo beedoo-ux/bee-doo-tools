@@ -1,0 +1,1956 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>bee-doo · KI-Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0b0d14;
+    --surface: #12141f;
+    --card: #181b28;
+    --border: #252838;
+    --border-hover: #353a52;
+    --yellow: #FDE154;
+    --yellow-dim: rgba(253,225,84,.12);
+    --yellow-glow: rgba(253,225,84,.06);
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --muted2: #94a3b8;
+    --green: #34d399;
+    --blue: #60a5fa;
+    --red: #f87171;
+    --orange: #fb923c;
+    --purple: #a78bfa;
+    --sidebar-w: 260px;
+  }
+
+  html, body { height: 100%; }
+  body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; overflow: hidden; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .sidebar-logo {
+    padding: 24px 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-logo .wordmark { font-size: 22px; font-weight: 800; }
+  .sidebar-logo .wordmark span { color: var(--yellow); }
+  .sidebar-logo .sub { font-size: 11px; color: var(--muted); margin-top: 2px; letter-spacing: .04em; text-transform: uppercase; }
+
+  .sidebar-section { padding: 16px 12px 4px; }
+  .sidebar-section-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 0 8px; margin-bottom: 4px; }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--muted2);
+    transition: all .15s ease;
+    border: 1px solid transparent;
+    text-decoration: none;
+  }
+  .nav-item:hover { background: var(--yellow-glow); color: var(--text); border-color: var(--border); }
+  .nav-item.active { background: var(--yellow-dim); color: var(--yellow); border-color: rgba(253,225,84,.2); }
+  .nav-item .icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+  .nav-item .badge { margin-left: auto; background: var(--yellow); color: #000; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 4px; }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── MAIN ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .topbar-title { font-size: 18px; font-weight: 800; }
+  .topbar-desc { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+  .api-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--green); }
+  .api-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px;
+  }
+
+  /* ── PANELS ── */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── OVERVIEW GRID ── */
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+  .module-card {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    cursor: pointer;
+    transition: all .2s ease;
+  }
+  .module-card:hover { border-color: var(--yellow); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(253,225,84,.06); }
+  .module-card .mc-icon { font-size: 32px; margin-bottom: 14px; }
+  .module-card .mc-title { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
+  .module-card .mc-desc { font-size: 12.5px; color: var(--muted2); line-height: 1.6; }
+  .module-card .mc-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 14px; padding: 3px 8px; border-radius: 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+
+  /* ── FORM ELEMENTS ── */
+  .form-section { max-width: 800px; }
+  .form-grid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+  .form-grid.cols-1 { grid-template-columns: 1fr; }
+  .form-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.span-2 { grid-column: span 2; }
+  .form-group.span-3 { grid-column: span 3; }
+  label { font-size: 12px; font-weight: 600; color: var(--muted2); text-transform: uppercase; letter-spacing: .04em; }
+  input, select, textarea {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 10px 14px;
+    transition: border-color .15s;
+    outline: none;
+    width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--yellow); }
+  textarea { resize: vertical; min-height: 100px; }
+  select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+  input[type="range"] { padding: 0; height: 6px; accent-color: var(--yellow); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 22px; border-radius: 8px; font-family: inherit;
+    font-size: 14px; font-weight: 700; cursor: pointer; border: none;
+    transition: all .15s ease;
+  }
+  .btn-primary { background: var(--yellow); color: #000; }
+  .btn-primary:hover { background: #ffe87a; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+  .btn-secondary { background: var(--card); border: 1.5px solid var(--border); color: var(--text); }
+  .btn-secondary:hover { border-color: var(--border-hover); }
+  .btn-danger { background: rgba(248,113,113,.15); border: 1.5px solid rgba(248,113,113,.3); color: var(--red); }
+
+  /* ── RESULT BOX ── */
+  .result-box {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 24px;
+    display: none;
+  }
+  .result-box.visible { display: block; }
+  .result-box.loading { opacity: .6; }
+  .result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .result-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--yellow); }
+  .result-content { font-size: 14px; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+
+  /* ── SCORE BADGE ── */
+  .score-display { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+  .score-circle {
+    width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 28px; font-weight: 900; flex-shrink: 0;
+    border: 3px solid;
+  }
+  .score-A { background: rgba(52,211,153,.12); border-color: var(--green); color: var(--green); }
+  .score-B { background: rgba(253,225,84,.12); border-color: var(--yellow); color: var(--yellow); }
+  .score-C { background: rgba(251,146,60,.12); border-color: var(--orange); color: var(--orange); }
+  .score-D { background: rgba(248,113,113,.12); border-color: var(--red); color: var(--red); }
+
+  /* ── CHAT ── */
+  .chat-container { display: flex; flex-direction: column; height: calc(100vh - 220px); max-width: 800px; }
+  .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 4px 0 16px; }
+  .msg { display: flex; gap: 12px; align-items: flex-start; }
+  .msg-avatar { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .msg.user .msg-avatar { background: var(--yellow-dim); order: 2; }
+  .msg.user { flex-direction: row-reverse; }
+  .msg-body { max-width: 75%; }
+  .msg-bubble {
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+  }
+  .msg.ai .msg-bubble { background: var(--card); border: 1px solid var(--border); border-radius: 4px 12px 12px 12px; }
+  .msg.user .msg-bubble { background: var(--yellow-dim); border: 1px solid rgba(253,225,84,.2); border-radius: 12px 4px 12px 12px; text-align: right; }
+  .msg-time { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .msg.user .msg-time { text-align: right; }
+
+  .chat-input-row { display: flex; gap: 10px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .chat-input-row textarea { min-height: 48px; max-height: 120px; resize: none; flex: 1; }
+  .chat-send { width: 48px; height: 48px; padding: 0; flex-shrink: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+
+  /* ── PHOTO UPLOAD ── */
+  .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 12px; }
+  .photo-thumb { position: relative; border-radius: 10px; overflow: hidden; border: 2px solid var(--border); aspect-ratio: 4/3; }
+  .photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-thumb .remove { position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,.7); border: none; color: #fff; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+  .photo-thumb .photo-status { position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 8px; font-size: 10px; font-weight: 700; text-align: center; }
+  .status-ok { background: rgba(52,211,153,.85); color: #000; }
+  .status-warn { background: rgba(251,146,60,.85); color: #000; }
+  .status-bad { background: rgba(248,113,113,.85); color: #fff; }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .upload-zone:hover { border-color: var(--yellow); background: var(--yellow-glow); }
+  .upload-zone .uz-icon { font-size: 36px; margin-bottom: 10px; }
+  .upload-zone .uz-text { font-size: 14px; color: var(--muted2); }
+
+  /* ── RISK METER ── */
+  .risk-bar-wrap { margin: 12px 0; }
+  .risk-bar-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
+  .risk-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .risk-bar-fill { height: 100%; border-radius: 4px; transition: width .6s ease; }
+  .risk-low { background: var(--green); }
+  .risk-mid { background: var(--yellow); }
+  .risk-high { background: var(--orange); }
+  .risk-critical { background: var(--red); }
+
+  /* ── CHECKLIST ── */
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .checklist li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .checklist li .ci { font-size: 15px; }
+
+  /* ── UTILITIES ── */
+  .section-head { margin-bottom: 24px; }
+  .section-head h1 { font-size: 22px; font-weight: 800; }
+  .section-head p { font-size: 13.5px; color: var(--muted2); margin-top: 5px; line-height: 1.6; }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 700; }
+  .tag-green { background: rgba(52,211,153,.12); color: var(--green); }
+  .tag-yellow { background: var(--yellow-dim); color: var(--yellow); }
+  .tag-red { background: rgba(248,113,113,.12); color: var(--red); }
+  .tag-blue { background: rgba(96,165,250,.12); color: var(--blue); }
+  .tag-orange { background: rgba(251,146,60,.12); color: var(--orange); }
+  .tag-purple { background: rgba(167,139,250,.12); color: var(--purple); }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(0,0,0,.3); border-top-color: #000; border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .alert { padding: 12px 16px; border-radius: 8px; font-size: 13px; border: 1px solid; }
+  .alert-info { background: rgba(96,165,250,.08); border-color: rgba(96,165,250,.2); color: var(--blue); }
+  .alert-success { background: rgba(52,211,153,.08); border-color: rgba(52,211,153,.2); color: var(--green); }
+  .alert-warn { background: rgba(251,146,60,.08); border-color: rgba(251,146,60,.2); color: var(--orange); }
+
+  /* ── PROGRESS STEPS ── */
+  .steps { display: flex; gap: 0; margin-bottom: 28px; }
+  .step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; }
+  .step::before { content:''; position: absolute; top: 15px; left: 50%; width: 100%; height: 2px; background: var(--border); z-index: 0; }
+  .step:last-child::before { display: none; }
+  .step-num { width: 30px; height: 30px; border-radius: 50%; background: var(--card); border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; z-index: 1; position: relative; }
+  .step.done .step-num { background: var(--green); border-color: var(--green); color: #000; }
+  .step.active .step-num { background: var(--yellow); border-color: var(--yellow); color: #000; }
+  .step-label { font-size: 10px; font-weight: 600; color: var(--muted); text-align: center; }
+  .step.active .step-label { color: var(--yellow); }
+  .step.done .step-label { color: var(--green); }
+
+  /* ── SMALL INFO CARDS ── */
+  .info-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .info-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .info-card .ic-value { font-size: 28px; font-weight: 900; line-height: 1; }
+  .info-card .ic-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── COPY BTN ── */
+  .copy-btn { font-size: 11px; font-weight: 600; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; cursor: pointer; font-family: inherit; transition: all .15s; }
+  .copy-btn:hover { color: var(--text); border-color: var(--border-hover); }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+
+  @media (max-width: 768px) {
+    .sidebar { position: fixed; z-index: 100; transform: translateX(-100%); transition: transform .25s; }
+    .sidebar.open { transform: translateX(0); }
+    .form-grid { grid-template-columns: 1fr !important; }
+    .form-group.span-2, .form-group.span-3 { grid-column: span 1; }
+    .two-col { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="wordmark">bee<span>·</span>doo KI</div>
+    <div class="sub">Intelligenz Hub · Alpha</div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Übersicht</div>
+    <div class="nav-item active" onclick="showPanel('overview')">
+      <span class="icon">⚡</span> Alle Module
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Lead & Vertrieb</div>
+    <div class="nav-item" onclick="showPanel('lead-scorer')">
+      <span class="icon">🎯</span> Lead-Scorer
+    </div>
+    <div class="nav-item" onclick="showPanel('churn')">
+      <span class="icon">🚨</span> Churn-Predictor
+    </div>
+    <div class="nav-item" onclick="showPanel('angebot')">
+      <span class="icon">📄</span> Angebots-KI
+    </div>
+    <div class="nav-item" onclick="showPanel('meeting')">
+      <span class="icon">🎙️</span> Meeting-Summarizer
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Planung & Montage</div>
+    <div class="nav-item" onclick="showPanel('planer')">
+      <span class="icon">✅</span> Planungs-Checker
+    </div>
+    <div class="nav-item" onclick="showPanel('foto')">
+      <span class="icon">📸</span> Foto-Analyse
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Kundenbindung</div>
+    <div class="nav-item" onclick="showPanel('empfehlung')">
+      <span class="icon">🌟</span> Empfehlungs-Timing
+    </div>
+    <div class="nav-item" onclick="showPanel('kundenservice')">
+      <span class="icon">💬</span> Kundenservice-Bot
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    bee-doo GmbH · KI-Hub Alpha<br>
+    Powered by Claude Sonnet
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="topbar-title">⚡ KI-Module Übersicht</div>
+      <div class="topbar-desc" id="topbar-desc">Alle 8 KI-Assistenten auf einen Blick</div>
+    </div>
+    <div class="topbar-right">
+      <div class="api-status"><div class="api-dot"></div> Claude API aktiv</div>
+      <a href="index.html" style="text-decoration:none;">
+        <button class="btn btn-secondary" style="padding:8px 14px;font-size:12px;">← Launcher</button>
+      </a>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ════════════════════════════════════════
+         OVERVIEW
+    ════════════════════════════════════════ -->
+    <div class="panel active" id="panel-overview">
+      <div class="section-head">
+        <h1>bee-doo KI-Hub</h1>
+        <p>8 KI-Module für den gesamten Lead-to-Installation Flow. Klick auf ein Modul zum Starten.</p>
+      </div>
+      <div class="module-grid">
+
+        <div class="module-card" onclick="showPanel('lead-scorer')">
+          <div class="mc-icon">🎯</div>
+          <div class="mc-title">Lead-Scorer</div>
+          <div class="mc-desc">Automatische A/B/C/D Qualifizierung vor dem Termin. Dachtyp, Verbrauch, Haushalt → KI-Score mit Begründung und Empfehlung.</div>
+          <span class="mc-tag tag-yellow">Vertrieb</span>
+        </div>
+
+        <div class="module-card" onclick="showPanel('churn')">
+          <div class="mc-icon">🚨</div>
+          <div class="mc-title">Churn-Predictor</div>
+          <div class="mc-desc">Erkennt absprungbereite Leads im Funnel. Analysiert Reaktionszeiten & Verhalten → Rescue-Alert mit Gesprächsleitfaden.</div>
+          <span class="mc-tag tag-red">Retention</span>
+        </div>
+
+        <div class="module-card" onclick="showPanel('angebot')">
+          <div class="mc-icon">📄</div>
+          <div class="mc-title">Angebots-Generator</div>
+          <div class="mc-desc">Kundendaten rein, Angebotstext raus. KI optimiert Systemgröße, formuliert überzeugend, keine Tippfehler.</div>
+          <span class="mc-tag tag-yellow">Vertrieb</span>
+        </div>
+
+        <div class="module-card" onclick="showPanel('meeting')">
+          <div class="mc-icon">🎙️</div>
+          <div class="mc-title">Meeting-Summarizer</div>
+          <div class="mc-desc">Gesprächsnotizen oder Transkript rein → strukturierte Zusammenfassung, nächste Schritte und CRM-Notiz.</div>
+          <span class="mc-tag tag-blue">Effizienz</span>
+        </div>
+
+        <div class="module-card" onclick="showPanel('planer')">
+          <div class="mc-icon">✅</div>
+          <div class="mc-title">Planungs-Checker</div>
+          <div class="mc-desc">KI prüft Vollständigkeit der Projektunterlagen vor Montagestart. Erkennt typische Fehler und fehlende Dokumente.</div>
+          <span class="mc-tag tag-orange">Planung</span>
+        </div>
+
+        <div class="module-card" onclick="showPanel('foto')">
+          <div class="mc-icon">📸</div>
+          <div class="mc-title">Montage-Foto-Analyse</div>
+          <div class="mc-desc">Fotos hochladen → KI prüft ob Pflichtfotos vollständig, Installation korrekt. Halbautomatischer Bauengel-Bericht.</div>
+          <span class="mc-tag tag-orange">Montage</span>
+        </div>
+
+        <div class="module-card" onclick="showPanel('empfehlung')">
+          <div class="mc-icon">🌟</div>
+          <div class="mc-title">Empfehlungs-Timing</div>
+          <div class="mc-desc">KI analysiert Kundensignale und empfiehlt exakt den richtigen Moment für die Empfehlungsanfrage + passende Nachricht.</div>
+          <span class="mc-tag tag-green">Wachstum</span>
+        </div>
+
+        <div class="module-card" onclick="showPanel('kundenservice')">
+          <div class="mc-icon">💬</div>
+          <div class="mc-title">Kundenservice-Bot</div>
+          <div class="mc-desc">KI-Chatbot für typische Kundenfragen nach Montage: Förderungen, Produktion, Netzanmeldung. 24/7 ohne Eskalation.</div>
+          <span class="mc-tag tag-green">Service</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         1. LEAD SCORER
+    ════════════════════════════════════════ -->
+    <div class="panel" id="panel-lead-scorer">
+      <div class="section-head">
+        <h1>🎯 Lead-Scorer</h1>
+        <p>Qualifiziere Leads automatisch bevor der Scout losfährt. Spare Leerfahrten und fokussiere auf A-Leads.</p>
+      </div>
+
+      <div class="form-section">
+        <div class="form-grid cols-3">
+          <div class="form-group">
+            <label>Straße & Nr.</label>
+            <input id="ls-strasse" type="text" placeholder="Musterstraße 12" />
+          </div>
+          <div class="form-group">
+            <label>PLZ / Ort</label>
+            <input id="ls-ort" type="text" placeholder="33602 Bielefeld" />
+          </div>
+          <div class="form-group">
+            <label>Dachtyp</label>
+            <select id="ls-dach">
+              <option>Satteldach</option>
+              <option>Flachdach</option>
+              <option>Walmdach</option>
+              <option>Pultdach</option>
+              <option>Mansardendach</option>
+              <option>Zeltdach</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Dachausrichtung</label>
+            <select id="ls-ausrichtung">
+              <option>Süd</option>
+              <option>Süd-West</option>
+              <option>Süd-Ost</option>
+              <option>West</option>
+              <option>Ost</option>
+              <option>Nord-Süd (beide Seiten)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Dachneigung (°)</label>
+            <input id="ls-neigung" type="number" placeholder="30" min="0" max="90" value="30" />
+          </div>
+          <div class="form-group">
+            <label>Hausgröße</label>
+            <select id="ls-haus">
+              <option>Einfamilienhaus</option>
+              <option>Doppelhaushälfte</option>
+              <option>Reihenhaus</option>
+              <option>Mehrfamilienhaus (2-4 WE)</option>
+              <option>Mehrfamilienhaus (5+)</option>
+              <option>Gewerbe</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Personen im HH</label>
+            <input id="ls-personen" type="number" placeholder="3" min="1" max="15" value="3" />
+          </div>
+          <div class="form-group">
+            <label>Jahresstromverbr. (kWh)</label>
+            <input id="ls-kwh" type="number" placeholder="4500" />
+          </div>
+          <div class="form-group">
+            <label>Wallbox / E-Auto?</label>
+            <select id="ls-ev">
+              <option>Nein</option>
+              <option>Ja, 1 Fahrzeug</option>
+              <option>Ja, 2+ Fahrzeuge</option>
+              <option>Geplant</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Wärmepumpe?</label>
+            <select id="ls-wp">
+              <option>Nein</option>
+              <option>Ja, vorhanden</option>
+              <option>Ja, geplant</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Dacheigentümer</label>
+            <select id="ls-eigen">
+              <option>Eigentümer</option>
+              <option>Mieter (Eigentümer bekannt)</option>
+              <option>Unbekannt</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Lead-Quelle</label>
+            <select id="ls-quelle">
+              <option>Scout (Haustür)</option>
+              <option>Empfehlung</option>
+              <option>Online / Website</option>
+              <option>Messe / Event</option>
+              <option>Kaltakquise</option>
+            </select>
+          </div>
+          <div class="form-group span-3">
+            <label>Zusätzliche Infos (optional)</label>
+            <textarea id="ls-zusatz" placeholder="z.B. Eigentümer sehr interessiert, Nachbar hat bereits PV, Dach 2019 saniert..." style="min-height:70px"></textarea>
+          </div>
+        </div>
+        <hr class="divider" />
+        <button class="btn btn-primary" id="ls-btn" onclick="runLeadScorer()">
+          <span>🎯 Lead analysieren</span>
+        </button>
+
+        <div class="result-box" id="ls-result">
+          <div class="result-header">
+            <span class="result-label">KI-Analyse</span>
+            <button class="copy-btn" onclick="copyResult('ls-result-content')">Kopieren</button>
+          </div>
+          <div id="ls-score-display" class="score-display" style="display:none"></div>
+          <div class="result-content" id="ls-result-content">Analysiere...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         2. CHURN PREDICTOR
+    ════════════════════════════════════════ -->
+    <div class="panel" id="panel-churn">
+      <div class="section-head">
+        <h1>🚨 Churn-Predictor</h1>
+        <p>Erkenne absprungbereite Leads bevor sie verloren gehen. Erhalte einen Rescue-Alert mit konkretem Gesprächsleitfaden.</p>
+      </div>
+
+      <div class="form-section">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Lead-Name</label>
+            <input id="ch-name" type="text" placeholder="Max Mustermann" />
+          </div>
+          <div class="form-group">
+            <label>Aktueller Funnel-Status</label>
+            <select id="ch-status">
+              <option>Angebot verschickt</option>
+              <option>Termin vereinbart (noch nicht stattgefunden)</option>
+              <option>Nach Termin: kein Feedback</option>
+              <option>Nachfass 1 ohne Rückmeldung</option>
+              <option>Nachfass 2 ohne Rückmeldung</option>
+              <option>Interessent sagt "noch nicht sicher"</option>
+              <option>Preis-Einwand</option>
+              <option>Wettbewerb kontaktiert</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Tage seit letztem Kontakt</label>
+            <input id="ch-tage" type="number" placeholder="12" min="0" />
+          </div>
+          <div class="form-group">
+            <label>Angebotswert (€)</label>
+            <input id="ch-wert" type="number" placeholder="18000" />
+          </div>
+          <div class="form-group">
+            <label>Ursprüngliches Interesse</label>
+            <select id="ch-interesse">
+              <option>Sehr hoch (wollte sofort abschließen)</option>
+              <option>Hoch (viele Fragen, sehr engagiert)</option>
+              <option>Mittel (normal interessiert)</option>
+              <option>Gering (musste überzeugt werden)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Letzte Reaktion</label>
+            <select id="ch-reaktion">
+              <option>Keine Antwort (ignoriert)</option>
+              <option>Kurze Absage ohne Grund</option>
+              <option>"Müssen noch nachdenken"</option>
+              <option>"Wir melden uns"</option>
+              <option>Preisverhandlung</option>
+              <option>Vergleichsangebot eingeholt</option>
+            </select>
+          </div>
+          <div class="form-group span-2">
+            <label>Gesprächsnotizen / Kontext</label>
+            <textarea id="ch-notizen" placeholder="Was wurde im letzten Gespräch besprochen? Welche Einwände gab es? Was weiß man über den Kunden?" style="min-height:90px"></textarea>
+          </div>
+        </div>
+        <hr class="divider" />
+        <button class="btn btn-primary" id="ch-btn" onclick="runChurn()">
+          <span>🚨 Churn-Risiko analysieren</span>
+        </button>
+
+        <div class="result-box" id="ch-result">
+          <div class="result-header">
+            <span class="result-label">Churn-Analyse & Rescue-Plan</span>
+            <button class="copy-btn" onclick="copyResult('ch-result-content')">Kopieren</button>
+          </div>
+          <div id="ch-risk-meter" style="display:none">
+            <div class="risk-bar-wrap">
+              <div class="risk-bar-label">
+                <span id="ch-risk-label" style="font-size:14px;font-weight:700"></span>
+                <span id="ch-risk-pct" style="font-size:13px;color:var(--muted)"></span>
+              </div>
+              <div class="risk-bar"><div id="ch-risk-fill" class="risk-bar-fill" style="width:0%"></div></div>
+            </div>
+          </div>
+          <div class="result-content" id="ch-result-content">Analysiere...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         3. ANGEBOTS-GENERATOR
+    ════════════════════════════════════════ -->
+    <div class="panel" id="panel-angebot">
+      <div class="section-head">
+        <h1>📄 Angebots-Generator</h1>
+        <p>Professionellen, überzeugenden Angebotstext auf Knopfdruck. Maßgeschneidert auf den Kunden.</p>
+      </div>
+
+      <div class="form-section">
+        <div class="form-grid cols-3">
+          <div class="form-group">
+            <label>Kundenname</label>
+            <input id="ag-name" type="text" placeholder="Familie Müller" />
+          </div>
+          <div class="form-group">
+            <label>Anrede</label>
+            <select id="ag-anrede">
+              <option>Sehr geehrte Familie</option>
+              <option>Sehr geehrter Herr</option>
+              <option>Sehr geehrte Frau</option>
+              <option>Hallo</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Berater / Ersteller</label>
+            <input id="ag-berater" type="text" placeholder="Thomas Bergmann" />
+          </div>
+          <div class="form-group">
+            <label>Anlage (kWp)</label>
+            <input id="ag-kwp" type="number" placeholder="10.8" step="0.1" />
+          </div>
+          <div class="form-group">
+            <label>Batteriespeicher (kWh)</label>
+            <input id="ag-kwh" type="number" placeholder="10" step="0.5" />
+          </div>
+          <div class="form-group">
+            <label>Wallbox</label>
+            <select id="ag-wb">
+              <option>Keine</option>
+              <option>11 kW</option>
+              <option>22 kW</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Modultyp</label>
+            <input id="ag-modul" type="text" placeholder="z.B. Suntech 430W Mono" />
+          </div>
+          <div class="form-group">
+            <label>Wechselrichter</label>
+            <input id="ag-wr" type="text" placeholder="z.B. Fronius Symo" />
+          </div>
+          <div class="form-group">
+            <label>Gesamtpreis (€ brutto)</label>
+            <input id="ag-preis" type="number" placeholder="25900" />
+          </div>
+          <div class="form-group">
+            <label>Jahresverbrauch Kunde (kWh)</label>
+            <input id="ag-verb" type="number" placeholder="5200" />
+          </div>
+          <div class="form-group">
+            <label>Erwart. Eigenverbrauch (%)</label>
+            <input id="ag-eigen" type="number" placeholder="70" max="100" />
+          </div>
+          <div class="form-group">
+            <label>Amortisation (Jahre)</label>
+            <input id="ag-amor" type="number" placeholder="11" />
+          </div>
+          <div class="form-group span-3">
+            <label>Besondere Kundenwünsche / USPs für diesen Kunden</label>
+            <textarea id="ag-notiz" placeholder="z.B. Sehr umweltbewusst, 2 E-Autos geplant, älteres Dach wurde 2023 saniert, Nachbar hat bee-doo..." style="min-height:70px"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Angebots-Ton</label>
+            <select id="ag-ton">
+              <option>Professionell & seriös</option>
+              <option>Herzlich & persönlich</option>
+              <option>Kompakt & direkt</option>
+              <option>Technisch detailliert</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Angebotsformat</label>
+            <select id="ag-format">
+              <option>Vollständiges Anschreiben</option>
+              <option>Kurze Executive Summary</option>
+              <option>WhatsApp-Nachricht</option>
+              <option>E-Mail Betreff + Text</option>
+            </select>
+          </div>
+        </div>
+        <hr class="divider" />
+        <button class="btn btn-primary" id="ag-btn" onclick="runAngebot()">
+          <span>📄 Angebotstext generieren</span>
+        </button>
+
+        <div class="result-box" id="ag-result">
+          <div class="result-header">
+            <span class="result-label">Generierter Angebotstext</span>
+            <button class="copy-btn" onclick="copyResult('ag-result-content')">Kopieren</button>
+          </div>
+          <div class="result-content" id="ag-result-content">Generiere...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         4. MEETING SUMMARIZER
+    ════════════════════════════════════════ -->
+    <div class="panel" id="panel-meeting">
+      <div class="section-head">
+        <h1>🎙️ Meeting-Summarizer</h1>
+        <p>Gesprächsnotizen rein → strukturierte Zusammenfassung, Einwände, nächste Schritte und CRM-Notiz raus. Spart 15 min pro Termin.</p>
+      </div>
+
+      <div class="form-section">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Kundenname</label>
+            <input id="ms-name" type="text" placeholder="Manfred Schneider" />
+          </div>
+          <div class="form-group">
+            <label>Datum des Gesprächs</label>
+            <input id="ms-datum" type="date" />
+          </div>
+          <div class="form-group">
+            <label>Gesprächstyp</label>
+            <select id="ms-typ">
+              <option>Ersttermin beim Kunden</option>
+              <option>Angebotspräsentation</option>
+              <option>Nachfassgespräch</option>
+              <option>Einwand-Handling</option>
+              <option>Abschluss-Gespräch</option>
+              <option>Team-/Planungsmeeting</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Berater / Protokollant</label>
+            <input id="ms-berater" type="text" placeholder="Sarah Köhler" />
+          </div>
+          <div class="form-group span-2">
+            <label>Gesprächsnotizen / Transkript</label>
+            <textarea id="ms-transkript" placeholder="Notizen oder Transkript hier einfügen. Kann unstrukturiert sein – KI bringt Ordnung rein. Stichworte, ganze Sätze, gemischt – alles OK." style="min-height:200px"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Output-Format</label>
+            <select id="ms-format">
+              <option>Vollständige Zusammenfassung + CRM-Notiz</option>
+              <option>Kompakte Stichpunkte</option>
+              <option>Follow-up E-Mail an Kunden</option>
+              <option>Übergabe-Briefing für Kollegen</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Priorität nächster Schritt</label>
+            <select id="ms-next">
+              <option>Angebot nachschicken</option>
+              <option>Technische Klärung</option>
+              <option>Finanzierungsinfo senden</option>
+              <option>Rückruf vereinbaren</option>
+              <option>Vertrag zusenden</option>
+            </select>
+          </div>
+        </div>
+        <hr class="divider" />
+        <button class="btn btn-primary" id="ms-btn" onclick="runMeeting()">
+          <span>🎙️ Gespräch zusammenfassen</span>
+        </button>
+
+        <div class="result-box" id="ms-result">
+          <div class="result-header">
+            <span class="result-label">Gesprächszusammenfassung</span>
+            <button class="copy-btn" onclick="copyResult('ms-result-content')">Kopieren</button>
+          </div>
+          <div class="result-content" id="ms-result-content">Analysiere...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         5. PLANUNGS-CHECKER
+    ════════════════════════════════════════ -->
+    <div class="panel" id="panel-planer">
+      <div class="section-head">
+        <h1>✅ Planungs-Checker</h1>
+        <p>Vor Montagestart prüft die KI alle Projektunterlagen auf Vollständigkeit und typische Fehler. Keine Rückläufer mehr.</p>
+      </div>
+
+      <div class="form-section">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Projektnummer / Kunde</label>
+            <input id="pc-projekt" type="text" placeholder="BD-2024-1847 / Familie Weber" />
+          </div>
+          <div class="form-group">
+            <label>Montagetyp</label>
+            <select id="pc-typ">
+              <option>Standard PV + Speicher (Schrägdach)</option>
+              <option>Standard PV + Speicher (Flachdach)</option>
+              <option>PV + Speicher + Wallbox</option>
+              <option>PV + Speicher + Wallbox + Wärmepumpe</option>
+              <option>Nur PV (kein Speicher)</option>
+              <option>Gewerbe-Anlage</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Anlagengröße (kWp)</label>
+            <input id="pc-kwp" type="number" placeholder="12.5" step="0.1" />
+          </div>
+          <div class="form-group">
+            <label>Netzbetreiber</label>
+            <input id="pc-netzbetreiber" type="text" placeholder="z.B. Stadtwerke Bielefeld" />
+          </div>
+        </div>
+
+        <hr class="divider" style="margin: 20px 0" />
+        <div style="font-size:12px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:14px;">Vorhandene Unterlagen (bitte ankreuzen)</div>
+
+        <div id="checklist-items" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        </div>
+
+        <hr class="divider" />
+        <div class="form-group" style="max-width:100%;margin-bottom:16px;">
+          <label>Technische Details / Besonderheiten</label>
+          <textarea id="pc-details" placeholder="Dachbeschaffenheit, Besonderheiten, bekannte Probleme, Abweichungen vom Standard..." style="min-height:80px"></textarea>
+        </div>
+
+        <button class="btn btn-primary" id="pc-btn" onclick="runPlaner()">
+          <span>✅ Projekt prüfen</span>
+        </button>
+
+        <div class="result-box" id="pc-result">
+          <div class="result-header">
+            <span class="result-label">Planungs-Check Ergebnis</span>
+            <button class="copy-btn" onclick="copyResult('pc-result-content')">Kopieren</button>
+          </div>
+          <div class="result-content" id="pc-result-content">Prüfe Unterlagen...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         6. FOTO-ANALYSE
+    ════════════════════════════════════════ -->
+    <div class="panel" id="panel-foto">
+      <div class="section-head">
+        <h1>📸 Montage-Foto-Analyse</h1>
+        <p>Fotos von der Baustelle hochladen → KI prüft Vollständigkeit, erkennt sichtbare Mängel und erstellt den Bauengel-Bericht halbautomatisch.</p>
+      </div>
+
+      <div class="form-section">
+        <div class="form-grid" style="margin-bottom:20px;">
+          <div class="form-group">
+            <label>Projektname / Kunde</label>
+            <input id="fo-projekt" type="text" placeholder="Familie Koch, Detmolder Str. 45" />
+          </div>
+          <div class="form-group">
+            <label>Montagephase</label>
+            <select id="fo-phase">
+              <option>Komplett (alle Phasen)</option>
+              <option>Phase 1: Voranmeldung</option>
+              <option>Phase 2: DC-Montage</option>
+              <option>Phase 3: AC-Montage</option>
+              <option>Phase 4: Inbetriebnahme & Übergabe</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="upload-zone" id="fo-drop" onclick="document.getElementById('fo-input').click()">
+          <div class="uz-icon">📸</div>
+          <div class="uz-text">Fotos hier ablegen oder <strong style="color:var(--yellow)">klicken zum Hochladen</strong></div>
+          <div class="uz-text" style="font-size:11px;margin-top:6px;color:var(--muted)">JPG, PNG, HEIC · Mehrere gleichzeitig möglich</div>
+        </div>
+        <input type="file" id="fo-input" accept="image/*" multiple style="display:none" onchange="handlePhotos(this)" />
+
+        <div class="photo-grid" id="fo-grid"></div>
+
+        <div id="fo-count" style="margin-top:12px;font-size:12px;color:var(--muted);display:none"></div>
+
+        <hr class="divider" />
+        <div class="form-group" style="margin-bottom:16px;">
+          <label>Anmerkungen des Monteurs</label>
+          <textarea id="fo-notiz" placeholder="Was ist besonders aufgefallen? Abweichungen, Kundenkommentare, Nachbarleads?" style="min-height:70px"></textarea>
+        </div>
+
+        <button class="btn btn-primary" id="fo-btn" onclick="runFoto()" disabled>
+          <span>📸 Fotos analysieren</span>
+        </button>
+
+        <div class="result-box" id="fo-result">
+          <div class="result-header">
+            <span class="result-label">KI Foto-Analyse</span>
+            <button class="copy-btn" onclick="copyResult('fo-result-content')">Kopieren</button>
+          </div>
+          <div class="result-content" id="fo-result-content">Analysiere Fotos...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         7. EMPFEHLUNGS-TIMING
+    ════════════════════════════════════════ -->
+    <div class="panel" id="panel-empfehlung">
+      <div class="section-head">
+        <h1>🌟 Empfehlungs-Timing</h1>
+        <p>Nicht nach Schema F um Empfehlungen bitten. KI analysiert die Kundensituation und empfiehlt den optimalen Moment + die perfekte Botschaft.</p>
+      </div>
+
+      <div class="form-section">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Kundenname</label>
+            <input id="em-name" type="text" placeholder="Familie Hartmann" />
+          </div>
+          <div class="form-group">
+            <label>Montage abgeschlossen am</label>
+            <input id="em-datum" type="date" />
+          </div>
+          <div class="form-group">
+            <label>Gesamtproduktion bisher</label>
+            <select id="em-prod">
+              <option>Über Erwartung</option>
+              <option>Wie geplant</option>
+              <option>Leicht unter Plan</option>
+              <option>Deutlich unter Plan</option>
+              <option>Noch keine Daten</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Kundenstimmung (letzte Interaktion)</label>
+            <select id="em-stimmung">
+              <option>Sehr begeistert / hat sich selbst bedankt</option>
+              <option>Zufrieden, keine Probleme</option>
+              <option>Neutral, kein Feedback</option>
+              <option>Hatte kleinere Beschwerden (gelöst)</option>
+              <option>Unzufrieden / offene Probleme</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Bisherige Bewertung abgegeben?</label>
+            <select id="em-bewertung">
+              <option>Nein</option>
+              <option>Ja, Google (5★)</option>
+              <option>Ja, Google (4★)</option>
+              <option>Ja, Google (3★ oder weniger)</option>
+              <option>Ja, Trustpilot</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Sozialer Typ</label>
+            <select id="em-typ">
+              <option>Sehr sozial / vieles im Freundeskreis geteilt</option>
+              <option>Normal vernetzt</option>
+              <option>Eher introvertiert / teilt wenig</option>
+              <option>Unbekannt</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Nachbarschaft / Umfeld</label>
+            <select id="em-nachbar">
+              <option>Viel Potential (viele Häuser ohne PV)</option>
+              <option>Gemischt</option>
+              <option>Viele haben bereits PV</option>
+              <option>Unbekannt</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Letzter Kontakt war</label>
+            <select id="em-kontakt">
+              <option>Montage-Übergabe (heute/diese Woche)</option>
+              <option>Vor 1-2 Wochen</option>
+              <option>Vor 1 Monat</option>
+              <option>Vor 2-3 Monaten</option>
+              <option>Vor 6+ Monaten</option>
+            </select>
+          </div>
+          <div class="form-group span-2">
+            <label>Besondere Umstände / Kontext</label>
+            <textarea id="em-kontext" placeholder="z.B. Hat im Gespräch erwähnt er erzählt gern von der Anlage. Sohn wohnt nebenan und interessiert sich. Grillfest bei ihm geplant..." style="min-height:70px"></textarea>
+          </div>
+        </div>
+        <hr class="divider" />
+        <button class="btn btn-primary" id="em-btn" onclick="runEmpfehlung()">
+          <span>🌟 Optimalen Zeitpunkt & Nachricht generieren</span>
+        </button>
+
+        <div class="result-box" id="em-result">
+          <div class="result-header">
+            <span class="result-label">Empfehlungs-Strategie</span>
+            <button class="copy-btn" onclick="copyResult('em-result-content')">Kopieren</button>
+          </div>
+          <div class="result-content" id="em-result-content">Analysiere...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         8. KUNDENSERVICE-BOT
+    ════════════════════════════════════════ -->
+    <div class="panel" id="panel-kundenservice">
+      <div class="section-head">
+        <h1>💬 Kundenservice-Bot</h1>
+        <p>KI beantwortet typische Kundenfragen nach der Montage: Förderungen, Produktion, Netzanmeldung, Zähler. Passe den Bot auf eine konkrete Anlage an.</p>
+      </div>
+
+      <div style="max-width:800px;">
+        <div class="form-grid" style="margin-bottom:20px;">
+          <div class="form-group">
+            <label>Kundenname (optional)</label>
+            <input id="ks-name" type="text" placeholder="Familie Becker" />
+          </div>
+          <div class="form-group">
+            <label>Anlagengröße (kWp)</label>
+            <input id="ks-kwp" type="text" placeholder="9.6" />
+          </div>
+          <div class="form-group">
+            <label>Speicher (kWh)</label>
+            <input id="ks-kwh" type="text" placeholder="10" />
+          </div>
+          <div class="form-group">
+            <label>Installationsdatum</label>
+            <input id="ks-datum" type="date" />
+          </div>
+          <div class="form-group span-2">
+            <label>Anlage / Kontext (Netzbetreiber, PLZ etc.)</label>
+            <input id="ks-kontext" type="text" placeholder="Netzbetreiber: Stadtwerke Bielefeld, PLZ: 33611, Einspeisevergütung 8.2ct/kWh" />
+          </div>
+        </div>
+        <button class="btn btn-secondary" onclick="initChat()" style="margin-bottom:20px;font-size:13px;padding:8px 16px;">⚙️ Bot konfigurieren</button>
+
+        <div class="chat-container">
+          <div class="chat-messages" id="ks-messages">
+            <div class="msg ai">
+              <div class="msg-avatar">🤖</div>
+              <div class="msg-body">
+                <div class="msg-bubble">Hallo! Ich bin der bee-doo Kundenservice-Assistent. Wie kann ich Ihnen helfen? Sie können mich zu Ihrer Solaranlage, Förderungen, Einspeisevergütung, Zählerstand oder technischen Fragen befragen.</div>
+                <div class="msg-time">Bereit</div>
+              </div>
+            </div>
+          </div>
+          <div class="chat-input-row">
+            <textarea id="ks-input" placeholder="Frage eingeben... (Enter = senden, Shift+Enter = neue Zeile)" onkeydown="handleChatKey(event)" rows="2"></textarea>
+            <button class="btn btn-primary chat-send" onclick="sendChat()">➤</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+// ════════════════════════════════════════
+// CONFIG & STATE
+// ════════════════════════════════════════
+const API_URL = 'https://api.anthropic.com/v1/messages';
+const MODEL = 'claude-sonnet-4-20250514';
+
+let chatHistory = [];
+let chatSystemPrompt = '';
+let uploadedPhotos = []; // base64 images
+
+// ════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════
+const panelTitles = {
+  'overview': ['⚡ KI-Module Übersicht', 'Alle 8 KI-Assistenten auf einen Blick'],
+  'lead-scorer': ['🎯 Lead-Scorer', 'Automatische A/B/C/D Qualifizierung vor dem Termin'],
+  'churn': ['🚨 Churn-Predictor', 'Erkenne absprungbereite Leads und rette den Deal'],
+  'angebot': ['📄 Angebots-Generator', 'Professioneller Angebotstext auf Knopfdruck'],
+  'meeting': ['🎙️ Meeting-Summarizer', 'Gesprächsnotizen → strukturierte Zusammenfassung'],
+  'planer': ['✅ Planungs-Checker', 'Vollständigkeitsprüfung vor Montagestart'],
+  'foto': ['📸 Foto-Analyse', 'KI-Qualitätskontrolle für Montage-Dokumentation'],
+  'empfehlung': ['🌟 Empfehlungs-Timing', 'Den perfekten Moment für Empfehlungsanfragen finden'],
+  'kundenservice': ['💬 Kundenservice-Bot', 'KI-Assistent für Kundenfragen nach der Montage'],
+};
+
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  document.getElementById('panel-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'" + name + "'")) {
+      n.classList.add('active');
+    }
+  });
+
+  const [title, desc] = panelTitles[name] || ['bee-doo KI', ''];
+  document.getElementById('topbar-title').textContent = title;
+  document.getElementById('topbar-desc').textContent = desc;
+}
+
+// ════════════════════════════════════════
+// CLAUDE API CALL
+// ════════════════════════════════════════
+async function callClaude(systemPrompt, userMessage, imageBase64Array = []) {
+  const content = [];
+
+  if (imageBase64Array.length > 0) {
+    for (const img of imageBase64Array) {
+      content.push({
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/jpeg', data: img }
+      });
+    }
+  }
+
+  content.push({ type: 'text', text: userMessage });
+
+  const body = {
+    model: MODEL,
+    max_tokens: 2000,
+    system: systemPrompt,
+    messages: [{ role: 'user', content }]
+  };
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error?.message || 'API Fehler');
+  }
+
+  const data = await res.json();
+  return data.content[0].text;
+}
+
+async function callClaudeChat(systemPrompt, messages) {
+  const body = {
+    model: MODEL,
+    max_tokens: 1500,
+    system: systemPrompt,
+    messages
+  };
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error?.message || 'API Fehler');
+  }
+
+  const data = await res.json();
+  return data.content[0].text;
+}
+
+// ════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════
+function setLoading(btnId, resultId, loading) {
+  const btn = document.getElementById(btnId);
+  const res = document.getElementById(resultId);
+  if (loading) {
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner"></div> Analysiere...';
+    res.classList.add('visible', 'loading');
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = btn.getAttribute('data-label') || btn.innerHTML;
+    res.classList.remove('loading');
+  }
+}
+
+function showResult(resultId, contentId, text) {
+  document.getElementById(resultId).classList.add('visible');
+  document.getElementById(contentId).textContent = text;
+}
+
+function copyResult(id) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector(`[onclick="copyResult('${id}')"]`);
+    if (btn) { btn.textContent = 'Kopiert ✓'; setTimeout(() => btn.textContent = 'Kopieren', 2000); }
+  });
+}
+
+// ════════════════════════════════════════
+// 1. LEAD SCORER
+// ════════════════════════════════════════
+async function runLeadScorer() {
+  const data = {
+    strasse: document.getElementById('ls-strasse').value || 'Unbekannt',
+    ort: document.getElementById('ls-ort').value || 'Unbekannt',
+    dach: document.getElementById('ls-dach').value,
+    ausrichtung: document.getElementById('ls-ausrichtung').value,
+    neigung: document.getElementById('ls-neigung').value,
+    haus: document.getElementById('ls-haus').value,
+    personen: document.getElementById('ls-personen').value,
+    kwh: document.getElementById('ls-kwh').value || 'unbekannt',
+    ev: document.getElementById('ls-ev').value,
+    wp: document.getElementById('ls-wp').value,
+    eigen: document.getElementById('ls-eigen').value,
+    quelle: document.getElementById('ls-quelle').value,
+    zusatz: document.getElementById('ls-zusatz').value,
+  };
+
+  document.getElementById('ls-btn').setAttribute('data-label', '🎯 Lead analysieren');
+  setLoading('ls-btn', 'ls-result', true);
+
+  const system = `Du bist der Lead-Qualifizierungs-Assistent von bee-doo GmbH, einem Solarenergie-Unternehmen in Bielefeld. 
+Deine Aufgabe: Leads für Photovoltaik-Anlagen (PV + Speicher) qualifizieren und mit A/B/C/D bewerten.
+
+Bewertungsmatrix:
+- A-Lead: Sehr hohes Potenzial. Eigentümer, gutes Dach (Süd/SW/SO, 25-45°), hoher Verbrauch, E-Auto/WP vorhanden oder geplant, Empfehlung. Sofort persönlichen Termin.
+- B-Lead: Gutes Potenzial. Eigentümer, akzeptables Dach, normaler Verbrauch. Termin zeitnah sinnvoll.
+- C-Lead: Mittleres Potenzial. Einschränkungen bei Dach ODER Verbrauch ODER Eigentümerstatus. Termin nur wenn Kapazität.
+- D-Lead: Schlechtes Potenzial. Mehrere Einschränkungen. Kein Termin empfohlen.
+
+Antworte IMMER in folgendem Format:
+
+LEAD-SCORE: [A/B/C/D]
+POTENZIAL: [hoch/mittel/gering/sehr gering]
+GESCHÄTZTE ANLAGENGRÖSSE: [X-Y kWp]
+EMPFEHLUNG: [1-2 Sätze: was tun?]
+
+STÄRKEN:
+• [Stärke 1]
+• [Stärke 2]
+• ...
+
+RISIKEN / SCHWACHSTELLEN:
+• [Risiko 1]
+• ...
+
+SCOUT-BRIEFING:
+[3-4 Sätze: Was soll der Scout beim Termin besonders beachten? Welche Fragen stellen? Was ist das Hauptargument für diesen Kunden?]
+
+NÄCHSTER SCHRITT:
+[Konkrete Handlungsempfehlung mit Zeitrahmen]`;
+
+  const prompt = `Bitte qualifiziere folgenden Lead:
+
+Adresse: ${data.strasse}, ${data.ort}
+Dachtyp: ${data.dach}
+Ausrichtung: ${data.ausrichtung}
+Neigung: ${data.neigung}°
+Haustyp: ${data.haus}
+Personen im HH: ${data.personen}
+Jahresstromverbrauch: ${data.kwh} kWh
+E-Auto/Wallbox: ${data.ev}
+Wärmepumpe: ${data.wp}
+Eigentümerstatus: ${data.eigen}
+Lead-Quelle: ${data.quelle}
+Zusatzinfo: ${data.zusatz || 'keine'}`;
+
+  try {
+    const result = await callClaude(system, prompt);
+
+    // Extract score
+    const scoreMatch = result.match(/LEAD-SCORE:\s*([ABCD])/i);
+    const score = scoreMatch ? scoreMatch[1].toUpperCase() : null;
+
+    const scoreDisplay = document.getElementById('ls-score-display');
+    if (score) {
+      scoreDisplay.style.display = 'flex';
+      scoreDisplay.innerHTML = `
+        <div class="score-circle score-${score}">${score}</div>
+        <div>
+          <div style="font-size:18px;font-weight:800">${score}-Lead</div>
+          <div style="font-size:13px;color:var(--muted2);margin-top:4px">
+            ${score==='A'?'Priorität – sofort anrufen!':score==='B'?'Gutes Potential – Termin zeitnah':score==='C'?'Mittleres Potential – wenn Kapazität':'Geringes Potential – kein Termin'}
+          </div>
+        </div>`;
+    }
+
+    showResult('ls-result', 'ls-result-content', result);
+  } catch (e) {
+    showResult('ls-result', 'ls-result-content', '❌ Fehler: ' + e.message);
+  } finally {
+    setLoading('ls-btn', 'ls-result', false);
+    document.getElementById('ls-btn').innerHTML = '🎯 Lead analysieren';
+  }
+}
+
+// ════════════════════════════════════════
+// 2. CHURN PREDICTOR
+// ════════════════════════════════════════
+async function runChurn() {
+  const data = {
+    name: document.getElementById('ch-name').value || 'Unbekannter Lead',
+    status: document.getElementById('ch-status').value,
+    tage: document.getElementById('ch-tage').value || '?',
+    wert: document.getElementById('ch-wert').value || 'unbekannt',
+    interesse: document.getElementById('ch-interesse').value,
+    reaktion: document.getElementById('ch-reaktion').value,
+    notizen: document.getElementById('ch-notizen').value || 'keine',
+  };
+
+  document.getElementById('ch-btn').setAttribute('data-label', '🚨 Churn-Risiko analysieren');
+  setLoading('ch-btn', 'ch-result', true);
+
+  const system = `Du bist der Churn-Predictor von bee-doo GmbH. Du analysierst Leads im Vertriebsfunnel und erkennst Absprungrisiken für PV-Anlagen.
+
+Antworte IMMER in diesem Format:
+
+CHURN-RISIKO: [KRITISCH / HOCH / MITTEL / NIEDRIG]
+WAHRSCHEINLICHKEIT VERLUST: [XX%]
+
+ANALYSE:
+[3-4 Sätze Lageeinschätzung]
+
+HAUPTURSACHE DES RISIKOS:
+[Die 1-2 kritischen Faktoren]
+
+RESCUE-STRATEGIE:
+[Konkrete Schritte: Was jetzt tun? Welcher Kanal? Welches Argument?]
+
+GESPRÄCHSLEITFADEN:
+[Konkrete Formulierungen die der Berater im nächsten Kontakt verwenden soll. Spezifisch auf den Einwand zugeschnitten.]
+
+TIMING:
+[Wann genau soll der nächste Kontaktversuch stattfinden?]`;
+
+  const prompt = `Analysiere folgenden Lead:
+
+Name: ${data.name}
+Funnel-Status: ${data.status}
+Tage seit letztem Kontakt: ${data.tage}
+Angebotswert: ${data.wert}€
+Ursprüngliches Interesse: ${data.interesse}
+Letzte Reaktion: ${data.reaktion}
+Notizen: ${data.notizen}`;
+
+  try {
+    const result = await callClaude(system, prompt);
+
+    // Extract risk
+    const riskMatch = result.match(/WAHRSCHEINLICHKEIT VERLUST:\s*(\d+)%/i);
+    const pct = riskMatch ? parseInt(riskMatch[1]) : null;
+    const riskLvl = result.match(/CHURN-RISIKO:\s*(\S+)/i)?.[1]?.toUpperCase();
+
+    const meter = document.getElementById('ch-risk-meter');
+    if (pct !== null) {
+      meter.style.display = 'block';
+      const fill = document.getElementById('ch-risk-fill');
+      const label = document.getElementById('ch-risk-label');
+      const pctEl = document.getElementById('ch-risk-pct');
+      fill.style.width = pct + '%';
+      fill.className = 'risk-bar-fill ' + (pct >= 75 ? 'risk-critical' : pct >= 50 ? 'risk-high' : pct >= 30 ? 'risk-mid' : 'risk-low');
+      label.textContent = '🚨 Churn-Risiko: ' + (riskLvl || 'unbekannt');
+      label.style.color = pct >= 75 ? 'var(--red)' : pct >= 50 ? 'var(--orange)' : pct >= 30 ? 'var(--yellow)' : 'var(--green)';
+      pctEl.textContent = pct + '% Verlust-Wahrscheinlichkeit';
+    }
+
+    showResult('ch-result', 'ch-result-content', result);
+  } catch (e) {
+    showResult('ch-result', 'ch-result-content', '❌ Fehler: ' + e.message);
+  } finally {
+    setLoading('ch-btn', 'ch-result', false);
+    document.getElementById('ch-btn').innerHTML = '🚨 Churn-Risiko analysieren';
+  }
+}
+
+// ════════════════════════════════════════
+// 3. ANGEBOTS-GENERATOR
+// ════════════════════════════════════════
+async function runAngebot() {
+  const data = {
+    name: document.getElementById('ag-name').value || 'Familie Mustermann',
+    anrede: document.getElementById('ag-anrede').value,
+    berater: document.getElementById('ag-berater').value || 'Ihr bee-doo Berater',
+    kwp: document.getElementById('ag-kwp').value || 'X',
+    kwh: document.getElementById('ag-kwh').value || 'X',
+    wb: document.getElementById('ag-wb').value,
+    modul: document.getElementById('ag-modul').value || 'Hochleistungs-Solarmodule',
+    wr: document.getElementById('ag-wr').value || 'Markenwechselrichter',
+    preis: document.getElementById('ag-preis').value || 'XX.XXX',
+    verb: document.getElementById('ag-verb').value || 'Ihren',
+    eigen: document.getElementById('ag-eigen').value || '70',
+    amor: document.getElementById('ag-amor').value || '10-12',
+    notiz: document.getElementById('ag-notiz').value || '',
+    ton: document.getElementById('ag-ton').value,
+    format: document.getElementById('ag-format').value,
+  };
+
+  document.getElementById('ag-btn').setAttribute('data-label', '📄 Angebotstext generieren');
+  setLoading('ag-btn', 'ag-result', true);
+
+  const system = `Du bist der beste Vertriebstexter von bee-doo GmbH, einem führenden Solarenergie-Unternehmen in Bielefeld. 
+Du schreibst überzeugende, professionelle Angebotstexte für Photovoltaik-Anlagen. 
+bee-doo steht für Qualität, lokale Präsenz, Top-Service und faire Preise.
+Ton: ${data.ton}
+Format: ${data.format}
+Schreibe auf Deutsch. Vermeide technisches Kauderwelsch. Fokussiere auf den Nutzen für den Kunden.
+Verwende spezifische Zahlen. Mache den Kunden emotional und rational überzeugt. Füge keine Platzhalter ein.`;
+
+  const wallboxText = data.wb !== 'Keine' ? `Wallbox ${data.wb} inklusive, ` : '';
+
+  const prompt = `Erstelle einen überzeugenden Angebotstext mit folgenden Daten:
+
+Kunde: ${data.anrede} ${data.name}
+Berater: ${data.berater}
+Anlage: ${data.kwp} kWp PV-Anlage + ${data.kwh} kWh Batteriespeicher, ${wallboxText}Module: ${data.modul}, Wechselrichter: ${data.wr}
+Gesamtpreis: ${data.preis}€ (inkl. MwSt., inkl. Installation)
+Jahresverbrauch Kunde: ${data.verb} kWh
+Eigenverbrauchsquote: ca. ${data.eigen}%
+Amortisation: ca. ${data.amor} Jahre
+Kundenspezifische Infos: ${data.notiz || 'keine'}`;
+
+  try {
+    const result = await callClaude(system, prompt);
+    showResult('ag-result', 'ag-result-content', result);
+  } catch (e) {
+    showResult('ag-result', 'ag-result-content', '❌ Fehler: ' + e.message);
+  } finally {
+    setLoading('ag-btn', 'ag-result', false);
+    document.getElementById('ag-btn').innerHTML = '📄 Angebotstext generieren';
+  }
+}
+
+// ════════════════════════════════════════
+// 4. MEETING SUMMARIZER
+// ════════════════════════════════════════
+async function runMeeting() {
+  const data = {
+    name: document.getElementById('ms-name').value || 'Unbekannter Kunde',
+    datum: document.getElementById('ms-datum').value || 'unbekannt',
+    typ: document.getElementById('ms-typ').value,
+    berater: document.getElementById('ms-berater').value || 'Unbekannt',
+    transkript: document.getElementById('ms-transkript').value,
+    format: document.getElementById('ms-format').value,
+    next: document.getElementById('ms-next').value,
+  };
+
+  if (!data.transkript.trim()) {
+    alert('Bitte Gesprächsnotizen eingeben!'); return;
+  }
+
+  document.getElementById('ms-btn').setAttribute('data-label', '🎙️ Gespräch zusammenfassen');
+  setLoading('ms-btn', 'ms-result', true);
+
+  const system = `Du bist der Meeting-Assistent von bee-doo GmbH. Du strukturierst Gesprächsnotizen aus Vertriebsgesprächen für Solaranlagen.
+Ausgabeformat: ${data.format}
+Sei präzise, vollständig und handlungsorientiert. Antworte auf Deutsch.`;
+
+  const prompt = `Bitte strukturiere folgendes Verkaufsgespräch:
+
+Kunde: ${data.name}
+Datum: ${data.datum}
+Gesprächstyp: ${data.typ}
+Berater: ${data.berater}
+Priorisierter nächster Schritt: ${data.next}
+
+NOTIZEN / TRANSKRIPT:
+${data.transkript}
+
+Erstelle eine professionelle Zusammenfassung mit:
+1. Gesprächszusammenfassung (3-5 Sätze)
+2. Kernaussagen des Kunden
+3. Offene Fragen / Einwände
+4. Besprochene Anlage / Zahlen
+5. Nächste konkrete Schritte mit Verantwortung und Datum
+6. CRM-Notiz (kompakt, copy-paste fertig)`;
+
+  try {
+    const result = await callClaude(system, prompt);
+    showResult('ms-result', 'ms-result-content', result);
+  } catch (e) {
+    showResult('ms-result', 'ms-result-content', '❌ Fehler: ' + e.message);
+  } finally {
+    setLoading('ms-btn', 'ms-result', false);
+    document.getElementById('ms-btn').innerHTML = '🎙️ Gespräch zusammenfassen';
+  }
+}
+
+// ════════════════════════════════════════
+// 5. PLANUNGS-CHECKER
+// ════════════════════════════════════════
+const checklistDocs = [
+  'Lageplan / Dachskizze',
+  'Fotos Dach (alle Seiten)',
+  'Fotos Zählerschrank',
+  'Fotos Keller / Technikraum',
+  'Netzanmeldung (fertig)',
+  'Einspeisevertrag unterschrieben',
+  'Kaufvertrag / Auftragsbestätigung',
+  'SEPA-Lastschrift',
+  'Finanzierungsbestätigung',
+  'Statik-Freigabe',
+  'Denkmalschutz-Genehmigung (falls nötig)',
+  'Wechselrichter-Konfiguration',
+  'Modulplan / Stringplan',
+  'Speicher-Konfiguration',
+  'Wallbox-Plan',
+  'Montageplan DC',
+  'Installationsplan AC',
+  'Werkzeugcheck Monteur',
+  'Kabelmengen berechnet',
+  'Sicherheitsunterweisung erstellt',
+];
+
+function initChecklist() {
+  const container = document.getElementById('checklist-items');
+  container.innerHTML = '';
+  checklistDocs.forEach((doc, i) => {
+    const id = 'chk-' + i;
+    container.innerHTML += `
+      <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:13px;color:var(--muted2);">
+        <input type="checkbox" id="${id}" style="width:auto;accent-color:var(--yellow);width:14px;height:14px;" />
+        ${doc}
+      </label>`;
+  });
+}
+
+async function runPlaner() {
+  const projekt = document.getElementById('pc-projekt').value || 'Unbekannt';
+  const typ = document.getElementById('pc-typ').value;
+  const kwp = document.getElementById('pc-kwp').value || 'unbekannt';
+  const netz = document.getElementById('pc-netzbetreiber').value || 'unbekannt';
+  const details = document.getElementById('pc-details').value;
+
+  const checked = [];
+  const missing = [];
+  checklistDocs.forEach((doc, i) => {
+    if (document.getElementById('chk-' + i)?.checked) checked.push(doc);
+    else missing.push(doc);
+  });
+
+  document.getElementById('pc-btn').setAttribute('data-label', '✅ Projekt prüfen');
+  setLoading('pc-btn', 'pc-result', true);
+
+  const system = `Du bist der Planungs-Qualitätsprüfer von bee-doo GmbH. Du prüfst PV-Projekte vor Montagestart auf Vollständigkeit und typische Fehler.
+Sei präzise, priorisiere kritische Fehlpunkte. Antworte auf Deutsch.`;
+
+  const prompt = `Bitte prüfe folgendes PV-Projekt vor dem Montagestart:
+
+Projekt: ${projekt}
+Anlagentyp: ${typ}
+Größe: ${kwp} kWp
+Netzbetreiber: ${netz}
+Technische Besonderheiten: ${details || 'keine'}
+
+VORHANDENE UNTERLAGEN (${checked.length}/${checklistDocs.length}):
+${checked.map(d => '✅ ' + d).join('\n') || 'Keine angekreuzt'}
+
+FEHLENDE UNTERLAGEN (${missing.length}):
+${missing.map(d => '❌ ' + d).join('\n')}
+
+Bitte erstelle:
+1. GESAMTBEWERTUNG: [Bereit / Bedingt bereit / NICHT bereit]
+2. KRITISCHE BLOCKADEN (muss vor Montage geklärt sein)
+3. WICHTIGE HINWEISE (sollte geklärt werden)
+4. MINDER-WICHTIG (kann parallel geregelt werden)
+5. SPEZIFISCHE RISIKEN für diesen Anlagentyp (${typ})
+6. EMPFEHLUNG: Konkreter nächster Schritt`;
+
+  try {
+    const result = await callClaude(system, prompt);
+    showResult('pc-result', 'pc-result-content', result);
+  } catch (e) {
+    showResult('pc-result', 'pc-result-content', '❌ Fehler: ' + e.message);
+  } finally {
+    setLoading('pc-btn', 'pc-result', false);
+    document.getElementById('pc-btn').innerHTML = '✅ Projekt prüfen';
+  }
+}
+
+// ════════════════════════════════════════
+// 6. FOTO-ANALYSE
+// ════════════════════════════════════════
+function handlePhotos(input) {
+  const files = Array.from(input.files);
+  if (files.length === 0) return;
+
+  const grid = document.getElementById('fo-grid');
+  let loaded = 0;
+
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const base64full = e.target.result;
+      const base64 = base64full.split(',')[1];
+      uploadedPhotos.push(base64);
+
+      const idx = uploadedPhotos.length - 1;
+      const thumb = document.createElement('div');
+      thumb.className = 'photo-thumb';
+      thumb.id = 'thumb-' + idx;
+      thumb.innerHTML = `
+        <img src="${base64full}" />
+        <button class="remove" onclick="removePhoto(${idx})">✕</button>
+        <div class="photo-status" style="background:var(--surface);color:var(--muted)">Wartet...</div>`;
+      grid.appendChild(thumb);
+
+      loaded++;
+      updatePhotoCount();
+      if (loaded === files.length) {
+        document.getElementById('fo-btn').disabled = false;
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+
+  input.value = '';
+}
+
+function removePhoto(idx) {
+  uploadedPhotos[idx] = null;
+  const thumb = document.getElementById('thumb-' + idx);
+  if (thumb) thumb.remove();
+  updatePhotoCount();
+  const hasPhotos = uploadedPhotos.some(p => p !== null);
+  document.getElementById('fo-btn').disabled = !hasPhotos;
+}
+
+function updatePhotoCount() {
+  const count = uploadedPhotos.filter(p => p !== null).length;
+  const el = document.getElementById('fo-count');
+  el.style.display = count > 0 ? 'block' : 'none';
+  el.textContent = `${count} Foto${count !== 1 ? 's' : ''} hochgeladen`;
+}
+
+async function runFoto() {
+  const photos = uploadedPhotos.filter(p => p !== null);
+  if (photos.length === 0) { alert('Keine Fotos vorhanden!'); return; }
+
+  const projekt = document.getElementById('fo-projekt').value || 'Unbekannt';
+  const phase = document.getElementById('fo-phase').value;
+  const notiz = document.getElementById('fo-notiz').value;
+
+  document.getElementById('fo-btn').setAttribute('data-label', '📸 Fotos analysieren');
+  setLoading('fo-btn', 'fo-result', true);
+
+  const system = `Du bist der Qualitätsprüfer von bee-doo GmbH für Photovoltaik-Montage-Dokumentationen. 
+Du analysierst Fotos von Baustellen und prüfst:
+1. Vollständigkeit der Fotodokumentation
+2. Sichtbare Qualität der Installation
+3. Mängel oder Auffälligkeiten
+4. Fehlende Pflichtfotos
+Antworte auf Deutsch. Sei konkret und spezifisch.`;
+
+  const prompt = `Analysiere diese ${photos.length} Montage-Fotos für Projekt: ${projekt}
+Montagephase: ${phase}
+Monteur-Anmerkungen: ${notiz || 'keine'}
+
+Bitte erstelle:
+1. GESAMTBEURTEILUNG: [Bestanden / Bedingt bestanden / Nicht bestanden]
+2. VORHANDENE FOTOS (was ist auf den Bildern zu sehen?)
+3. QUALITÄTSBEWERTUNG (Sauberkeit, Ordnung, sichtbare Mängel)
+4. FEHLENDE PFLICHTFOTOS für Phase "${phase}"
+5. AUFFÄLLIGKEITEN / MÄNGEL
+6. FREIGABE-EMPFEHLUNG
+7. BAUENGEL-NOTIZ (kompakte Zusammenfassung für den Bericht)`;
+
+  try {
+    const result = await callClaude(system, prompt, photos.slice(0, 5)); // max 5 images
+    showResult('fo-result', 'fo-result-content', result);
+  } catch (e) {
+    showResult('fo-result', 'fo-result-content', '❌ Fehler: ' + e.message + '\n\nHinweis: Bei zu großen Fotos kann ein Timeout auftreten.');
+  } finally {
+    setLoading('fo-btn', 'fo-result', false);
+    document.getElementById('fo-btn').innerHTML = '📸 Fotos analysieren';
+    document.getElementById('fo-btn').disabled = false;
+  }
+}
+
+// Drag & Drop
+const dropZone = document.getElementById('fo-drop');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--yellow)'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = 'var(--border)'; });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.style.borderColor = 'var(--border)';
+  const dt = e.dataTransfer;
+  if (dt.files.length > 0) {
+    const fakeInput = { files: dt.files };
+    handlePhotos(fakeInput);
+  }
+});
+
+// ════════════════════════════════════════
+// 7. EMPFEHLUNGS-TIMING
+// ════════════════════════════════════════
+async function runEmpfehlung() {
+  const data = {
+    name: document.getElementById('em-name').value || 'Unbekannter Kunde',
+    datum: document.getElementById('em-datum').value || 'unbekannt',
+    prod: document.getElementById('em-prod').value,
+    stimmung: document.getElementById('em-stimmung').value,
+    bewertung: document.getElementById('em-bewertung').value,
+    typ: document.getElementById('em-typ').value,
+    nachbar: document.getElementById('em-nachbar').value,
+    kontakt: document.getElementById('em-kontakt').value,
+    kontext: document.getElementById('em-kontext').value,
+  };
+
+  document.getElementById('em-btn').setAttribute('data-label', '🌟 Optimalen Zeitpunkt & Nachricht generieren');
+  setLoading('em-btn', 'em-result', true);
+
+  const system = `Du bist der Empfehlungsmanager von bee-doo GmbH. Du analysierst Kundensituationen und erstellst maßgeschneiderte Empfehlungsstrategien.
+Ziel: Maximale Empfehlungsquote durch richtiges Timing und die richtige Ansprache.
+Antworte auf Deutsch. Sei spezifisch und liefere fertige Texte die sofort verwendbar sind.`;
+
+  const prompt = `Analysiere diese Kundensituation und erstelle eine Empfehlungsstrategie:
+
+Kunde: ${data.name}
+Montage abgeschlossen: ${data.datum}
+Produktion bisher: ${data.prod}
+Kundenstimmung: ${data.stimmung}
+Bisherige Bewertung: ${data.bewertung}
+Sozialer Typ: ${data.typ}
+Nachbarschaftspotenzial: ${data.nachbar}
+Letzter Kontakt: ${data.kontakt}
+Kontext: ${data.kontext || 'kein'}
+
+Erstelle bitte:
+1. EMPFEHLUNGS-SCORE (1-10): Wie wahrscheinlich wird er empfehlen?
+2. OPTIMALER ZEITPUNKT: Genau wann und warum?
+3. BESTER KANAL: WhatsApp / Anruf / E-Mail / persönlich
+4. FERTIGE WHATSAPP-NACHRICHT (copy-paste fertig, authentisch, nicht werblich)
+5. FERTIGE TELEFON-GESPRÄCHSERÖFFNUNG
+6. EMPFEHLUNGS-ANREIZ: Was passt zu diesem Kunden?
+7. NACHBAR-STRATEGIE: Wie kann er helfen direkte Nachbarleads zu generieren?`;
+
+  try {
+    const result = await callClaude(system, prompt);
+    showResult('em-result', 'em-result-content', result);
+  } catch (e) {
+    showResult('em-result', 'em-result-content', '❌ Fehler: ' + e.message);
+  } finally {
+    setLoading('em-btn', 'em-result', false);
+    document.getElementById('em-btn').innerHTML = '🌟 Optimalen Zeitpunkt & Nachricht generieren';
+  }
+}
+
+// ════════════════════════════════════════
+// 8. KUNDENSERVICE-BOT
+// ════════════════════════════════════════
+function initChat() {
+  const name = document.getElementById('ks-name').value;
+  const kwp = document.getElementById('ks-kwp').value;
+  const kwh = document.getElementById('ks-kwh').value;
+  const datum = document.getElementById('ks-datum').value;
+  const kontext = document.getElementById('ks-kontext').value;
+
+  chatHistory = [];
+  chatSystemPrompt = `Du bist der freundliche Kundenservice-Assistent von bee-doo GmbH, einem Solarunternehmen aus Bielefeld.
+Du hilfst Kunden nach der Montage ihrer PV-Anlage mit allen Fragen.
+
+${name ? `Kundename: ${name}` : ''}
+${kwp ? `Anlagengröße: ${kwp} kWp` : ''}
+${kwh ? `Batteriespeicher: ${kwh} kWh` : ''}
+${datum ? `Installationsdatum: ${datum}` : ''}
+${kontext ? `Weitere Infos: ${kontext}` : ''}
+
+Typische Themen:
+- Einspeisevergütung & Förderungen (KfW, EEG, BAFA)
+- Netzanmeldung & Inbetriebnahme
+- Produktion & Auswertung der App
+- Zählerwechsel & Netzbetreiber
+- Technische Störungen (erste Diagnose)
+- Wartung & Reinigung
+- Garantie & Gewährleistung
+
+Verhalte dich freundlich, kompetent und serviceorientiert. Bei komplexen technischen Problemen empfehle den technischen Support (support@bee-doo.de / 0521-XXXXXX).
+Antworte IMMER auf Deutsch. Halte Antworten präzise (max 150 Wörter wenn möglich).`;
+
+  const messages = document.getElementById('ks-messages');
+  messages.innerHTML = `
+    <div class="msg ai">
+      <div class="msg-avatar">🤖</div>
+      <div class="msg-body">
+        <div class="msg-bubble">Hallo${name ? ' ' + name.split(' ')[0] : ''}! Ich bin Ihr persönlicher bee-doo Assistent. Ich kenne Ihre Anlage${kwp ? ' (' + kwp + ' kWp' + (kwh ? ', ' + kwh + ' kWh Speicher' : '') + ')' : ''} und helfe Ihnen gerne weiter. Was möchten Sie wissen?</div>
+        <div class="msg-time">Konfiguriert ✓</div>
+      </div>
+    </div>`;
+
+  alert('✅ Bot konfiguriert! Sie können jetzt chatten.');
+}
+
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+}
+
+function now() {
+  return new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function sendChat() {
+  const input = document.getElementById('ks-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+
+  const messages = document.getElementById('ks-messages');
+
+  // Add user message
+  messages.innerHTML += `
+    <div class="msg user">
+      <div class="msg-avatar" style="background:var(--yellow-dim);">👤</div>
+      <div class="msg-body">
+        <div class="msg-bubble">${escHtml(text)}</div>
+        <div class="msg-time">${now()}</div>
+      </div>
+    </div>`;
+
+  // Add typing indicator
+  const typingId = 'typing-' + Date.now();
+  messages.innerHTML += `
+    <div class="msg ai" id="${typingId}">
+      <div class="msg-avatar">🤖</div>
+      <div class="msg-body">
+        <div class="msg-bubble" style="color:var(--muted)">Schreibt...</div>
+      </div>
+    </div>`;
+
+  messages.scrollTop = messages.scrollHeight;
+
+  chatHistory.push({ role: 'user', content: text });
+
+  try {
+    if (!chatSystemPrompt) {
+      chatSystemPrompt = `Du bist der freundliche Kundenservice-Assistent von bee-doo GmbH, einem Solarunternehmen aus Bielefeld. 
+Hilf Kunden nach der PV-Montage mit allen Fragen. Antworte auf Deutsch, freundlich und kompetent.`;
+    }
+
+    const reply = await callClaudeChat(chatSystemPrompt, chatHistory);
+    chatHistory.push({ role: 'assistant', content: reply });
+
+    document.getElementById(typingId).outerHTML = `
+      <div class="msg ai">
+        <div class="msg-avatar">🤖</div>
+        <div class="msg-body">
+          <div class="msg-bubble">${escHtml(reply)}</div>
+          <div class="msg-time">${now()}</div>
+        </div>
+      </div>`;
+  } catch (e) {
+    document.getElementById(typingId).outerHTML = `
+      <div class="msg ai">
+        <div class="msg-avatar">🤖</div>
+        <div class="msg-body">
+          <div class="msg-bubble" style="color:var(--red)">❌ Fehler: ${escHtml(e.message)}</div>
+          <div class="msg-time">${now()}</div>
+        </div>
+      </div>`;
+  }
+
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function escHtml(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+}
+
+// ════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  initChecklist();
+
+  // Set today for date inputs
+  const today = new Date().toISOString().split('T')[0];
+  document.querySelectorAll('input[type="date"]').forEach(el => {
+    if (!el.value) el.value = today;
+  });
+
+  // Store button labels
+  document.querySelectorAll('.btn-primary[id$="-btn"]').forEach(btn => {
+    btn.setAttribute('data-label', btn.innerHTML);
+  });
+});
+</script>
+</body>
+</html>
