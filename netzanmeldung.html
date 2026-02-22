@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo · Netzanmeldung</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0C0D0F; color: #F1F2F4; font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #141618; }
+  ::-webkit-scrollbar-thumb { background: #2A2D31; border-radius: 3px; }
+  input, select, textarea {
+    outline: none; background: #141618; border: 1px solid #2A2D31;
+    border-radius: 8px; color: #F1F2F4; font-family: inherit;
+    padding: 10px 14px; font-size: 14px; width: 100%; transition: border-color 0.15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: #F9D71C; }
+  textarea { resize: vertical; line-height: 1.6; }
+  button { cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  table { border-collapse: collapse; width: 100%; }
+  .fade-in { animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const SUPA_URL = "https://hqzpemfaljxcysyqssng.supabase.co";
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczOTQ1MzYyOCwiZXhwIjoyMDU1MDI5NjI4fQ.LSlMAp-LxNGMj4r8wNPTSgKFMIexZg-Y4p1YLRKqLdc";
+
+const H = { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" };
+
+const db = {
+  async get(t, q = "") {
+    const r = await fetch(`${SUPA_URL}/rest/v1/${t}${q}`, { headers: H });
+    return r.json();
+  },
+  async post(t, body) {
+    const r = await fetch(`${SUPA_URL}/rest/v1/${t}`, {
+      method: "POST", headers: { ...H, Prefer: "return=representation" }, body: JSON.stringify(body)
+    });
+    return r.json();
+  },
+  async patch(t, id, body) {
+    const r = await fetch(`${SUPA_URL}/rest/v1/${t}?id=eq.${id}`, {
+      method: "PATCH", headers: { ...H, Prefer: "return=representation" }, body: JSON.stringify(body)
+    });
+    return r.json();
+  },
+  async del(t, id) {
+    await fetch(`${SUPA_URL}/rest/v1/${t}?id=eq.${id}`, { method: "DELETE", headers: H });
+  }
+};
+
+// ─── STATUS ───────────────────────────────────────────────────────────────────
+const STATUS = {
+  erfasst:                  { label: "Erfasst",                  color: "#9CA3AF", bg: "#1f2937", icon: "📋" },
+  unterlagen_angefordert:   { label: "Unterlagen angefordert",   color: "#F59E0B", bg: "#451a03", icon: "📄" },
+  eingereicht:              { label: "Eingereicht",              color: "#3B82F6", bg: "#1e3a5f", icon: "📤" },
+  in_pruefung:              { label: "In Prüfung",               color: "#A78BFA", bg: "#2e1065", icon: "🔍" },
+  genehmigt:                { label: "Genehmigt",                color: "#10B981", bg: "#064e3b", icon: "✅" },
+  abgelehnt:                { label: "Abgelehnt",                color: "#EF4444", bg: "#450a0a", icon: "❌" },
+  inbetrieb:                { label: "In Betrieb",               color: "#F9D71C", bg: "#1a1400", icon: "⚡" },
+};
+const FLOW = ["erfasst","unterlagen_angefordert","eingereicht","in_pruefung","genehmigt","inbetrieb"];
+
+// ─── PLZ → NETZBETREIBER ──────────────────────────────────────────────────────
+const NB_MAP = {
+  "336": "Stadtwerke Bielefeld Netz", "337": "Stadtwerke Bielefeld Netz",
+  "338": "Stadtwerke Bielefeld Netz", "334": "Westfalen Weser Netz",
+  "326": "Westfalen Weser Netz", "327": "Westfalen Weser Netz",
+  "328": "Westfalen Weser Netz", "329": "Westfalen Weser Netz",
+  "330": "Westfalen Weser Netz", "484": "Stadtwerke Gütersloh",
+  "487": "Stadtwerke Paderborn", "333": "Stadtwerke Bielefeld Netz",
+  "322": "Enervie", "581": "Westfalen Weser Netz",
+};
+function nb(plz) {
+  if (!plz || plz.length < 3) return "";
+  return NB_MAP[plz.substring(0,3)] || NB_MAP[plz.substring(0,2)] || "";
+}
+
+// ─── UNTERLAGEN ───────────────────────────────────────────────────────────────
+const UL_TEMPLATE = [
+  { id: "lageplan",          name: "Lageplan / Übersichtsplan" },
+  { id: "einlinie",          name: "Einlinienschaltplan PV-Anlage" },
+  { id: "wechselrichter",    name: "Datenblatt Wechselrichter" },
+  { id: "module",            name: "Datenblatt PV-Module" },
+  { id: "konformitaet",      name: "Konformitätserklärung / VDE" },
+  { id: "vollmacht",         name: "Vollmacht Netzanmeldung" },
+  { id: "eigentuemer",       name: "Eigentümerzustimmung" },
+  { id: "zaehlerfotos",      name: "Fotos Zählerkasten / Zählernummer" },
+  { id: "mastr",             name: "MaStR-Registrierung bestätigt" },
+].map(u => ({ ...u, erhalten: false, datum: null }));
+
+// ─── DESIGN ───────────────────────────────────────────────────────────────────
+const C = {
+  bg: "#0C0D0F", surface: "#141618", card: "#1C1E21",
+  border: "#2A2D31", text: "#F1F2F4", sec: "#9CA3AF", dim: "#6B7280",
+  yellow: "#F9D71C", yellowBg: "rgba(249,215,28,0.07)",
+  green: "#10B981", red: "#EF4444", mono: "'JetBrains Mono', monospace",
+};
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const fmt = (d) => d ? new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "–";
+const daysSince = (d) => d ? Math.floor((Date.now() - new Date(d)) / 86400000) : null;
+const extractPLZ = (addr) => { const m = (addr||"").match(/(\d{5})/); return m ? m[1] : ""; };
+
+// ─── COMPONENTS ───────────────────────────────────────────────────────────────
+function StatusBadge({ status, lg }) {
+  const s = STATUS[status] || STATUS.erfasst;
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      padding: lg ? "7px 14px" : "3px 9px",
+      borderRadius: 6, fontSize: lg ? 13 : 11, fontWeight: 600,
+      background: s.bg, color: s.color, border: `1px solid ${s.color}25`,
+      whiteSpace: "nowrap",
+    }}>{s.icon} {s.label}</span>
+  );
+}
+
+function Label({ children }) {
+  return <div style={{ fontSize: 11, color: C.sec, fontWeight: 600, letterSpacing: 0.9, textTransform: "uppercase", marginBottom: 5 }}>{children}</div>;
+}
+
+function SectionHead({ icon, title }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+      <span style={{ fontSize: 14 }}>{icon}</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color: C.sec, letterSpacing: 1, textTransform: "uppercase" }}>{title}</span>
+    </div>
+  );
+}
+
+function Card({ children, style = {}, onClick }) {
+  const [h, setH] = useState(false);
+  return (
+    <div onClick={onClick} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      className="fade-in"
+      style={{
+        background: C.card, border: `1px solid ${h && onClick ? "#3D4147" : C.border}`,
+        borderRadius: 12, padding: 20, transition: "all 0.15s",
+        cursor: onClick ? "pointer" : "default",
+        transform: h && onClick ? "translateY(-1px)" : "none",
+        ...style
+      }}>
+      {children}
+    </div>
+  );
+}
+
+function Btn({ children, primary, danger, full, disabled, onClick, small }) {
+  const [h, setH] = useState(false);
+  const base = {
+    padding: small ? "7px 14px" : "10px 20px", borderRadius: 8,
+    fontSize: small ? 12 : 13, fontWeight: 700, border: "none",
+    width: full ? "100%" : "auto", opacity: disabled ? 0.5 : 1,
+    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+  };
+  const styles = primary
+    ? { ...base, background: h ? "#ffe733" : C.yellow, color: "#0C0D0F" }
+    : danger
+    ? { ...base, background: h ? "#450a0a" : "transparent", color: C.red, border: `1px solid ${C.red}35` }
+    : { ...base, background: h ? "#23262B" : C.card, color: C.sec, border: `1px solid ${C.border}` };
+  return (
+    <button style={styles} disabled={disabled} onClick={onClick}
+      onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}>
+      {children}
+    </button>
+  );
+}
+
+function Checklist({ items, onChange }) {
+  const done = items.filter(i => i.erhalten).length;
+  const pct = items.length ? (done / items.length) * 100 : 0;
+  const toggle = (id) => {
+    onChange(items.map(i => i.id === id
+      ? { ...i, erhalten: !i.erhalten, datum: !i.erhalten ? new Date().toISOString().split("T")[0] : null }
+      : i
+    ));
+  };
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, alignItems: "center" }}>
+        <span style={{ fontSize: 12, color: C.sec }}>{done}/{items.length} Unterlagen</span>
+        <div style={{ height: 5, width: 100, background: C.border, borderRadius: 3 }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: pct === 100 ? C.green : C.yellow, borderRadius: 3, transition: "width 0.3s" }} />
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {items.map(item => (
+          <div key={item.id} onClick={() => toggle(item.id)} style={{
+            display: "flex", alignItems: "center", gap: 10, padding: "9px 12px",
+            borderRadius: 8, cursor: "pointer",
+            background: item.erhalten ? "rgba(16,185,129,0.06)" : "transparent",
+            border: `1px solid ${item.erhalten ? C.green + "30" : C.border}`,
+          }}>
+            <div style={{
+              width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+              border: `2px solid ${item.erhalten ? C.green : C.border}`,
+              background: item.erhalten ? C.green : "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              {item.erhalten && <span style={{ color: "#000", fontSize: 10, fontWeight: 900 }}>✓</span>}
+            </div>
+            <span style={{ flex: 1, fontSize: 13, color: item.erhalten ? C.text : C.sec }}>{item.name}</span>
+            {item.erhalten && item.datum && <span style={{ fontSize: 11, color: C.dim, fontFamily: C.mono }}>{item.datum}</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Timeline({ history = [], current }) {
+  const entries = history.length > 0 ? history : [{ status: current, datum: new Date().toISOString(), notiz: "Erstellt" }];
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {entries.map((e, i) => {
+        const s = STATUS[e.status] || STATUS.erfasst;
+        const isLast = i === entries.length - 1;
+        return (
+          <div key={i} style={{ display: "flex", gap: 12, position: "relative" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 28 }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+                background: s.bg, border: `2px solid ${s.color}`,
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
+              }}>{s.icon}</div>
+              {!isLast && <div style={{ width: 2, flex: 1, background: C.border, margin: "2px 0", minHeight: 16 }} />}
+            </div>
+            <div style={{ paddingBottom: isLast ? 0 : 14, paddingTop: 3 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: s.color }}>{s.label}</div>
+              <div style={{ fontSize: 11, color: C.dim, marginTop: 2, fontFamily: C.mono }}>
+                {e.datum ? new Date(e.datum).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "–"}
+                {e.notiz && ` · ${e.notiz}`}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── PIPELINE VIEW ────────────────────────────────────────────────────────────
+function PipelineView({ list, onSelect, onNew }) {
+  const grouped = Object.keys(STATUS).reduce((acc, s) => { acc[s] = list.filter(a => a.status === s); return acc; }, {});
+  const active = list.filter(a => !["inbetrieb","abgelehnt"].includes(a.status)).length;
+  const done = grouped.inbetrieb?.length || 0;
+
+  return (
+    <div>
+      {/* KPIs */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        {[
+          { v: list.length, l: "Gesamt", c: C.sec },
+          { v: active, l: "In Bearbeitung", c: C.yellow },
+          { v: grouped.in_pruefung?.length || 0, l: "Beim Netzbetreiber", c: "#A78BFA" },
+          { v: done, l: "In Betrieb", c: C.green },
+        ].map(k => (
+          <div key={k.l} style={{ flex: "1 1 130px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px" }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: k.c, fontFamily: C.mono }}>{k.v}</div>
+            <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{k.l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Status Bar */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 20, overflowX: "auto", paddingBottom: 4, alignItems: "center" }}>
+        {FLOW.map((s, i) => {
+          const info = STATUS[s]; const cnt = grouped[s]?.length || 0;
+          return (
+            <React.Fragment key={s}>
+              <div style={{
+                padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap",
+                background: cnt > 0 ? info.bg : C.surface,
+                color: cnt > 0 ? info.color : C.dim,
+                border: `1px solid ${cnt > 0 ? info.color + "40" : C.border}`,
+              }}>
+                {info.icon} {info.label}{cnt > 0 && <span style={{ marginLeft: 6, background: info.color + "25", padding: "0 5px", borderRadius: 8 }}>{cnt}</span>}
+              </div>
+              {i < FLOW.length - 1 && <span style={{ color: C.border, fontSize: 16, flexShrink: 0 }}>›</span>}
+            </React.Fragment>
+          );
+        })}
+      </div>
+
+      {/* Table */}
+      {list.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "70px 0", color: C.dim }}>
+          <div style={{ fontSize: 44, marginBottom: 14 }}>⚡</div>
+          <div style={{ fontSize: 16, marginBottom: 6, color: C.sec }}>Noch keine Netzanmeldungen</div>
+          <div style={{ fontSize: 13, marginBottom: 20 }}>Alle Aufträge nach Montage hier eintragen</div>
+          <Btn primary onClick={onNew}>+ Erste Anmeldung erstellen</Btn>
+        </div>
+      ) : (
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+          <table>
+            <thead>
+              <tr style={{ background: C.surface }}>
+                {["Auftrag","Kunde / Adresse","Netzbetreiber","kWp","Anmeldung","Genehmigung","Status",""].map(h => (
+                  <th key={h} style={{
+                    padding: "10px 16px", textAlign: "left", fontSize: 10,
+                    color: C.dim, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase",
+                    borderBottom: `1px solid ${C.border}`,
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((a, i) => (
+                <tr key={a.id} onClick={() => onSelect(a)} className="fade-in"
+                  style={{ cursor: "pointer", borderBottom: i < list.length - 1 ? `1px solid ${C.border}` : "none" }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.surface}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                >
+                  <td style={{ padding: "12px 16px", fontSize: 13, color: C.yellow, fontWeight: 700, fontFamily: C.mono }}>{a.auftrag_nr||"–"}</td>
+                  <td style={{ padding: "12px 16px" }}>
+                    <div style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{a.kunde_name}</div>
+                    <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{a.plz} {a.ort}</div>
+                  </td>
+                  <td style={{ padding: "12px 16px", fontSize: 12, color: C.sec }}>{a.netzbetreiber||<span style={{color:C.dim}}>–</span>}</td>
+                  <td style={{ padding: "12px 16px", fontSize: 13, color: C.text, fontFamily: C.mono }}>{a.kwp ? `${a.kwp}` : "–"}</td>
+                  <td style={{ padding: "12px 16px", fontSize: 12, color: C.sec, fontFamily: C.mono }}>{fmt(a.anmeldung_datum)}</td>
+                  <td style={{ padding: "12px 16px", fontSize: 12, fontFamily: C.mono }}>
+                    {a.genehmigung_datum
+                      ? <span style={{ color: C.green }}>{fmt(a.genehmigung_datum)}</span>
+                      : <span style={{ color: C.dim }}>ausstehend</span>}
+                  </td>
+                  <td style={{ padding: "12px 16px" }}><StatusBadge status={a.status} /></td>
+                  <td style={{ padding: "12px 16px", color: C.dim, textAlign: "right" }}>›</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── NEW FORM ─────────────────────────────────────────────────────────────────
+function NewForm({ auftraege, onSave, onCancel }) {
+  const [step, setStep] = useState(1);
+  const [search, setSearch] = useState("");
+  const [auftrag, setAuftrag] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    zaehler_nr: "", netzbetreiber: "", malo_id: "", mastr_nr: "",
+    anmeldung_datum: new Date().toISOString().split("T")[0],
+    verantwortlich: "", notizen: "",
+    unterlagen: UL_TEMPLATE.map(u => ({...u})),
+  });
+  const u = (k, v) => setForm(f => ({...f, [k]: v}));
+
+  const filtered = search
+    ? auftraege.filter(a => a.kunde_name?.toLowerCase().includes(search.toLowerCase()) || a.auftrag_nr?.includes(search))
+    : auftraege.slice(0, 20);
+
+  const selectAuftrag = (a) => {
+    setAuftrag(a);
+    const plz = extractPLZ(a.kunde_adresse);
+    u("netzbetreiber", nb(plz));
+    setStep(2);
+  };
+
+  const save = async () => {
+    if (!auftrag) return;
+    setSaving(true);
+    const plz = extractPLZ(auftrag.kunde_adresse);
+    const addrParts = (auftrag.kunde_adresse || "").split(/\d{5}/);
+    const ort = addrParts[1]?.trim() || "";
+    const payload = {
+      auftrag_id: auftrag.id, auftrag_nr: auftrag.auftrag_nr,
+      kunde_name: auftrag.kunde_name, kunde_adresse: auftrag.kunde_adresse,
+      plz, ort, kwp: auftrag.kwp,
+      status: "erfasst",
+      status_history: [{ status: "erfasst", datum: new Date().toISOString(), notiz: "Anmeldung angelegt" }],
+      ...form,
+      unterlagen_vollstaendig: form.unterlagen.every(u => u.erhalten),
+    };
+    const res = await db.post("netzanmeldungen", payload);
+    setSaving(false);
+    if (Array.isArray(res) && res[0]) onSave(res[0]);
+    else alert("Fehler beim Speichern. Tabellen-Migration ausgeführt?");
+  };
+
+  return (
+    <div className="fade-in">
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+        <Btn onClick={onCancel}>← Zurück</Btn>
+        <h2 style={{ fontSize: 20, fontWeight: 700 }}>Neue Netzanmeldung</h2>
+      </div>
+
+      {/* Steps */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24 }}>
+        {[{n:1,l:"Auftrag wählen"},{n:2,l:"Details erfassen"}].map((s,i) => (
+          <React.Fragment key={s.n}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: "50%",
+                background: step >= s.n ? C.yellow : C.surface,
+                color: step >= s.n ? "#000" : C.dim,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 12, fontWeight: 700, border: `2px solid ${step >= s.n ? C.yellow : C.border}`,
+              }}>{s.n}</div>
+              <span style={{ fontSize: 13, color: step >= s.n ? C.text : C.dim }}>{s.l}</span>
+            </div>
+            {i < 1 && <span style={{ color: C.border, margin: "0 4px" }}>›</span>}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {step === 1 && (
+        <Card>
+          <Label>Auftrag suchen</Label>
+          <input autoFocus placeholder="Name oder Auftragsnummer..." value={search}
+            onChange={e => setSearch(e.target.value)} style={{ marginBottom: 14, fontSize: 15 }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 400, overflowY: "auto" }}>
+            {filtered.map(a => (
+              <div key={a.id} onClick={() => selectAuftrag(a)}
+                style={{ padding: "12px 16px", borderRadius: 10, cursor: "pointer", border: `1px solid ${C.border}`, background: C.surface, display: "flex", justifyContent: "space-between" }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = C.yellow; e.currentTarget.style.background = C.yellowBg; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.surface; }}
+              >
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.yellow, fontFamily: C.mono }}>{a.auftrag_nr}</div>
+                  <div style={{ fontSize: 14, color: C.text, marginTop: 2 }}>{a.kunde_name}</div>
+                  <div style={{ fontSize: 12, color: C.sec, marginTop: 1 }}>{a.kunde_adresse}</div>
+                </div>
+                <div style={{ fontSize: 13, color: C.sec, fontFamily: C.mono, alignSelf: "center" }}>{a.kwp} kWp</div>
+              </div>
+            ))}
+            {filtered.length === 0 && <div style={{ textAlign: "center", padding: 30, color: C.dim }}>Keine Aufträge gefunden</div>}
+          </div>
+        </Card>
+      )}
+
+      {step === 2 && auftrag && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Auftrag Info */}
+          <Card style={{ background: C.yellowBg, borderColor: C.yellow + "35" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 10, color: C.yellow, fontWeight: 700, letterSpacing: 1 }}>AUSGEWÄHLTER AUFTRAG</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginTop: 4 }}>{auftrag.kunde_name}</div>
+                <div style={{ fontSize: 13, color: C.sec }}>{auftrag.kunde_adresse} · {auftrag.kwp} kWp</div>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.yellow, fontFamily: C.mono }}>{auftrag.auftrag_nr}</div>
+            </div>
+          </Card>
+
+          {/* Netztechnik */}
+          <Card>
+            <SectionHead icon="⚡" title="Netztechnische Daten" />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+              {[
+                { l: "Netzbetreiber", k: "netzbetreiber", p: "z.B. Stadtwerke Bielefeld Netz", full: true },
+                { l: "Zählernummer", k: "zaehler_nr", p: "z.B. 1ESL12345678" },
+                { l: "MaLo-ID (11-stellig)", k: "malo_id", p: "52836..." },
+                { l: "MaStR-Nummer", k: "mastr_nr", p: "SEE900000..." },
+                { l: "Anmeldedatum", k: "anmeldung_datum", t: "date" },
+                { l: "Verantwortlich", k: "verantwortlich", p: "Sachbearbeiter/in" },
+              ].map(f => (
+                <div key={f.k} style={{ flex: f.full ? "1 1 100%" : "1 1 calc(50% - 6px)", minWidth: 160 }}>
+                  <Label>{f.l}</Label>
+                  <input type={f.t || "text"} value={form[f.k] || ""} placeholder={f.p}
+                    onChange={e => u(f.k, e.target.value)} />
+                  {f.k === "netzbetreiber" && form.netzbetreiber && nb(extractPLZ(auftrag.kunde_adresse)) === form.netzbetreiber &&
+                    <div style={{ fontSize: 11, color: C.green, marginTop: 4 }}>✓ Automatisch per PLZ erkannt</div>}
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Unterlagen */}
+          <Card>
+            <SectionHead icon="📄" title="Unterlagen-Checkliste" />
+            <Checklist items={form.unterlagen} onChange={v => u("unterlagen", v)} />
+          </Card>
+
+          {/* Notizen */}
+          <Card>
+            <SectionHead icon="💬" title="Notizen" />
+            <textarea value={form.notizen} onChange={e => u("notizen", e.target.value)}
+              placeholder="Besonderheiten, Ansprechpartner beim Netzbetreiber..." rows={3} />
+          </Card>
+
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <Btn onClick={() => setStep(1)}>← Zurück</Btn>
+            <Btn primary disabled={saving} onClick={save}>
+              {saving ? "⏳ Speichern..." : "✓ Netzanmeldung erstellen"}
+            </Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DETAIL VIEW ──────────────────────────────────────────────────────────────
+function DetailView({ a: initial, onBack, onUpdate }) {
+  const [a, setA] = useState(initial);
+  const [editing, setEditing] = useState(false);
+  const [ef, setEF] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState("");
+  const [showNext, setShowNext] = useState(false);
+  const e = (k, v) => setEF(f => ({...f, [k]: v}));
+
+  const curIdx = FLOW.indexOf(a.status);
+  const nextS = FLOW[curIdx + 1];
+  const s = STATUS[a.status] || STATUS.erfasst;
+
+  const pushStatus = async (newS) => {
+    setSaving(true);
+    const hist = [...(a.status_history || []), { status: newS, datum: new Date().toISOString(), notiz: note || STATUS[newS].label }];
+    const patch = {
+      status: newS, status_history: hist,
+      ...(newS === "genehmigt" && !a.genehmigung_datum ? { genehmigung_datum: new Date().toISOString().split("T")[0] } : {}),
+      ...(newS === "inbetrieb" && !a.inbetriebnahme_datum ? { inbetriebnahme_datum: new Date().toISOString().split("T")[0] } : {}),
+    };
+    await db.patch("netzanmeldungen", a.id, patch);
+    const upd = { ...a, ...patch };
+    setA(upd); onUpdate(upd); setNote(""); setShowNext(false); setSaving(false);
+  };
+
+  const saveEdits = async () => {
+    setSaving(true);
+    const patch = { ...ef, unterlagen_vollstaendig: ef.unterlagen?.every(u => u.erhalten) || false };
+    await db.patch("netzanmeldungen", a.id, patch);
+    const upd = { ...a, ...patch };
+    setA(upd); onUpdate(upd); setEditing(false); setSaving(false);
+  };
+
+  const startEdit = () => {
+    setEF({
+      zaehler_nr: a.zaehler_nr || "", netzbetreiber: a.netzbetreiber || "",
+      malo_id: a.malo_id || "", mastr_nr: a.mastr_nr || "",
+      anmeldung_datum: a.anmeldung_datum || "", genehmigung_datum: a.genehmigung_datum || "",
+      inbetriebnahme_datum: a.inbetriebnahme_datum || "",
+      einspeisevergütung_beantragt: a.einspeisevergütung_beantragt || false,
+      einspeisevergütung_datum: a.einspeisevergütung_datum || "",
+      verantwortlich: a.verantwortlich || "", notizen: a.notizen || "",
+      unterlagen: a.unterlagen?.length > 0 ? a.unterlagen : UL_TEMPLATE.map(u => ({...u})),
+    });
+    setEditing(true);
+  };
+
+  const updateChecklist = async (updated) => {
+    const patch = { unterlagen: updated, unterlagen_vollstaendig: updated.every(u => u.erhalten) };
+    await db.patch("netzanmeldungen", a.id, patch);
+    const upd = { ...a, ...patch };
+    setA(upd); onUpdate(upd);
+  };
+
+  return (
+    <div className="fade-in">
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Btn onClick={onBack}>← Zurück</Btn>
+          <div>
+            <div style={{ fontSize: 12, color: C.yellow, fontFamily: C.mono, marginBottom: 2 }}>{a.auftrag_nr}</div>
+            <h2 style={{ fontSize: 22, fontWeight: 700 }}>{a.kunde_name}</h2>
+            <div style={{ fontSize: 13, color: C.sec, marginTop: 2 }}>{a.kunde_adresse}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <StatusBadge status={a.status} lg />
+          {!editing && <Btn onClick={startEdit}>✏️ Bearbeiten</Btn>}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+        {/* LEFT */}
+        <div style={{ flex: "1 1 380px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Kerndaten */}
+          <Card>
+            <SectionHead icon="📊" title="Kerndaten" />
+            {editing ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                {[
+                  { l: "Netzbetreiber", k: "netzbetreiber", full: true },
+                  { l: "Zählernummer", k: "zaehler_nr" }, { l: "MaLo-ID", k: "malo_id" },
+                  { l: "MaStR-Nummer", k: "mastr_nr" }, { l: "Verantwortlich", k: "verantwortlich" },
+                  { l: "Anmeldedatum", k: "anmeldung_datum", t: "date" },
+                  { l: "Genehmigung", k: "genehmigung_datum", t: "date" },
+                  { l: "Inbetriebnahme", k: "inbetriebnahme_datum", t: "date" },
+                ].map(f => (
+                  <div key={f.k} style={{ flex: f.full ? "1 1 100%" : "1 1 calc(50% - 6px)", minWidth: 140 }}>
+                    <Label>{f.l}</Label>
+                    <input type={f.t || "text"} value={ef[f.k] || ""} onChange={ev => e(f.k, ev.target.value)} />
+                  </div>
+                ))}
+                <div style={{ flex: "1 1 100%", display: "flex", alignItems: "center", gap: 10 }}>
+                  <input type="checkbox" id="eev" checked={ef.einspeisevergütung_beantragt||false}
+                    onChange={ev => e("einspeisevergütung_beantragt", ev.target.checked)} style={{ width: 16, height: 16 }} />
+                  <label htmlFor="eev" style={{ fontSize: 13, cursor: "pointer" }}>Einspeisevergütung beantragt</label>
+                  {ef.einspeisevergütung_beantragt && (
+                    <input type="date" value={ef.einspeisevergütung_datum||""} onChange={ev => e("einspeisevergütung_datum", ev.target.value)}
+                      style={{ width: 160, flex: "none" }} />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px" }}>
+                {[
+                  { l: "kWp", v: a.kwp ? `${a.kwp} kWp` : "–", mono: true },
+                  { l: "Netzbetreiber", v: a.netzbetreiber },
+                  { l: "Zählernummer", v: a.zaehler_nr, mono: true },
+                  { l: "MaLo-ID", v: a.malo_id, mono: true },
+                  { l: "MaStR-Nummer", v: a.mastr_nr, mono: true },
+                  { l: "Verantwortlich", v: a.verantwortlich },
+                ].map(r => (
+                  <div key={r.l}>
+                    <div style={{ fontSize: 11, color: C.dim, marginBottom: 2 }}>{r.l}</div>
+                    <div style={{ fontSize: 13, color: r.v ? C.text : C.dim, fontFamily: r.mono && r.v ? C.mono : "inherit" }}>{r.v || "–"}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Zeitplan */}
+          <Card>
+            <SectionHead icon="📅" title="Zeitplan" />
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {[
+                { l: "Anmeldung eingereicht", d: a.anmeldung_datum, c: C.sec },
+                { l: "Genehmigung erhalten", d: a.genehmigung_datum, c: C.green },
+                { l: "Inbetriebnahme", d: a.inbetriebnahme_datum, c: C.yellow },
+                ...(a.einspeisevergütung_beantragt ? [{ l: "Einspeisevergütung", d: a.einspeisevergütung_datum, c: "#A78BFA" }] : []),
+              ].map(r => (
+                <div key={r.l} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 13, color: C.sec }}>{r.l}</span>
+                  <div style={{ textAlign: "right" }}>
+                    <span style={{ fontSize: 13, fontFamily: C.mono, color: r.d ? r.c : C.dim }}>
+                      {r.d ? fmt(r.d) : "ausstehend"}
+                    </span>
+                    {r.d && daysSince(r.d) !== null && (
+                      <span style={{ fontSize: 11, color: C.dim, marginLeft: 6 }}>({daysSince(r.d)}d)</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {a.anmeldung_datum && !a.genehmigung_datum && (
+                <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: 8, background: STATUS.in_pruefung.bg, border: `1px solid ${STATUS.in_pruefung.color}30` }}>
+                  <span style={{ fontSize: 12, color: STATUS.in_pruefung.color }}>
+                    ⏱ Wartet seit {daysSince(a.anmeldung_datum)} Tagen auf Genehmigung
+                  </span>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Notizen */}
+          <Card>
+            <SectionHead icon="💬" title="Notizen" />
+            {editing
+              ? <textarea value={ef.notizen||""} onChange={ev => e("notizen", ev.target.value)} rows={4} />
+              : <p style={{ fontSize: 13, color: a.notizen ? C.text : C.dim, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{a.notizen || "Keine Notizen"}</p>
+            }
+          </Card>
+
+          {editing && (
+            <div style={{ display: "flex", gap: 10 }}>
+              <Btn onClick={() => setEditing(false)}>Abbrechen</Btn>
+              <Btn primary full disabled={saving} onClick={saveEdits}>
+                {saving ? "⏳ Speichern..." : "✓ Änderungen speichern"}
+              </Btn>
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT */}
+        <div style={{ flex: "1 1 300px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Status-Action */}
+          <Card>
+            <SectionHead icon="🔄" title="Status ändern" />
+            {nextS && a.status !== "abgelehnt" && (
+              <div>
+                <button onClick={() => setShowNext(!showNext)} style={{
+                  width: "100%", padding: "12px 16px", borderRadius: 10,
+                  background: STATUS[nextS].bg, color: STATUS[nextS].color,
+                  border: `1.5px solid ${STATUS[nextS].color}45`,
+                  fontSize: 14, fontWeight: 700, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                }}>
+                  <span>{STATUS[nextS].icon} Weiter: {STATUS[nextS].label}</span>
+                  <span style={{ fontSize: 18 }}>{showNext ? "∧" : "›"}</span>
+                </button>
+                {showNext && (
+                  <div style={{ marginTop: 10 }}>
+                    <Label>Notiz (optional)</Label>
+                    <input value={note} onChange={e => setNote(e.target.value)}
+                      placeholder="z.B. Unterlagen vollständig, eingereicht per Portal..."
+                      style={{ marginBottom: 10 }} />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <Btn onClick={() => setShowNext(false)}>Abbrechen</Btn>
+                      <Btn primary full disabled={saving} onClick={() => pushStatus(nextS)}>
+                        {saving ? "..." : `✓ Auf „${STATUS[nextS].label}" setzen`}
+                      </Btn>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {a.status === "inbetrieb" && (
+              <div style={{ textAlign: "center", padding: 20 }}>
+                <div style={{ fontSize: 40 }}>⚡</div>
+                <div style={{ color: C.yellow, fontWeight: 700, marginTop: 8 }}>Anlage in Betrieb!</div>
+              </div>
+            )}
+            {a.status !== "inbetrieb" && a.status !== "abgelehnt" && (
+              <Btn danger full onClick={() => pushStatus("abgelehnt")} style={{ marginTop: 10 }}>
+                ✗ Als abgelehnt markieren
+              </Btn>
+            )}
+            {a.status === "abgelehnt" && (
+              <Btn full onClick={() => pushStatus("erfasst")} style={{ marginTop: 0 }}>
+                ↺ Neu einreichen
+              </Btn>
+            )}
+          </Card>
+
+          {/* Timeline */}
+          <Card>
+            <SectionHead icon="📜" title="Verlauf" />
+            <Timeline history={a.status_history || []} current={a.status} />
+          </Card>
+
+          {/* Unterlagen */}
+          <Card>
+            <SectionHead icon="📄" title="Unterlagen" />
+            <Checklist
+              items={editing ? ef.unterlagen || [] : (a.unterlagen?.length > 0 ? a.unterlagen : UL_TEMPLATE.map(u=>({...u})))}
+              onChange={editing ? (v => e("unterlagen", v)) : updateChecklist}
+            />
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ROOT APP ─────────────────────────────────────────────────────────────────
+function App() {
+  const [list, setList] = useState([]);
+  const [auftraege, setAuftraege] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState("list"); // list | new | detail
+  const [selected, setSelected] = useState(null);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [nm, at] = await Promise.all([
+        db.get("netzanmeldungen", "?order=erstellt_am.desc"),
+        db.get("pay_auftraege", "?select=id,auftrag_nr,kunde_name,kunde_adresse,kwp&order=auftrag_nr.asc"),
+      ]);
+      if (nm?.code === "PGRST205" || nm?.message?.includes("netzanmeldungen")) {
+        setError("⚠️ Tabelle 'netzanmeldungen' fehlt. Bitte die SQL-Migration im Supabase SQL Editor ausführen.");
+        setList([]); setAuftraege(Array.isArray(at) ? at : []);
+      } else {
+        setList(Array.isArray(nm) ? nm : []);
+        setAuftraege(Array.isArray(at) ? at : []);
+      }
+    } catch(err) { setError("Verbindungsfehler: " + err.message); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const displayed = filterStatus === "all" ? list : list.filter(a => a.status === filterStatus);
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg }}>
+      {/* NAVBAR */}
+      <div style={{ borderBottom: `1px solid ${C.border}`, background: C.surface, position: "sticky", top: 0, zIndex: 100 }}>
+        <div style={{ maxWidth: 1300, margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 54 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <span style={{ fontSize: 18, fontWeight: 900, color: C.yellow, fontFamily: C.mono }}>bee-doo.</span>
+            <div style={{ width: 1, height: 18, background: C.border }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: C.sec }}>Netzanmeldung</span>
+            {!loading && list.length > 0 && (
+              <span style={{ fontSize: 11, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "2px 8px", color: C.sec, fontFamily: C.mono }}>
+                {list.length}
+              </span>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {view !== "list" && <Btn small onClick={() => setView("list")}>← Übersicht</Btn>}
+            <Btn small onClick={load}>↻</Btn>
+            {view === "list" && <Btn primary small onClick={() => setView("new")}>+ Neue Anmeldung</Btn>}
+          </div>
+        </div>
+      </div>
+
+      {/* CONTENT */}
+      <div style={{ maxWidth: 1300, margin: "0 auto", padding: "24px 24px 80px" }}>
+
+        {error && (
+          <div style={{ background: "#450a0a", border: `1px solid ${C.red}35`, borderRadius: 10, padding: "14px 18px", marginBottom: 20, color: C.red, fontSize: 13, lineHeight: 1.6 }}>
+            {error}
+            <div style={{ marginTop: 6, fontSize: 12, color: "#9CA3AF" }}>
+              SQL-Datei: beedoo-ux/bee-doo-tools/migrations/netzanmeldung-migration.sql
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "100px 0", color: C.dim }}>
+            <div style={{ fontSize: 40, marginBottom: 14 }}>⚡</div>
+            <div style={{ fontFamily: C.mono }}>Lade Daten...</div>
+          </div>
+        ) : view === "new" ? (
+          <NewForm auftraege={auftraege}
+            onSave={(nm) => { setList(prev => [nm, ...prev]); setSelected(nm); setView("detail"); }}
+            onCancel={() => setView("list")} />
+        ) : view === "detail" && selected ? (
+          <DetailView a={selected} onBack={() => setView("list")}
+            onUpdate={(upd) => { setList(prev => prev.map(a => a.id === upd.id ? upd : a)); setSelected(upd); }} />
+        ) : (
+          <div>
+            {/* Filter pills */}
+            {list.length > 0 && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
+                <button onClick={() => setFilterStatus("all")} style={{
+                  padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+                  border: `1px solid ${filterStatus === "all" ? C.yellow : C.border}`,
+                  background: filterStatus === "all" ? C.yellowBg : C.surface,
+                  color: filterStatus === "all" ? C.yellow : C.sec,
+                }}>Alle ({list.length})</button>
+                {Object.entries(STATUS).map(([k, info]) => {
+                  const cnt = list.filter(a => a.status === k).length;
+                  if (!cnt) return null;
+                  return (
+                    <button key={k} onClick={() => setFilterStatus(k)} style={{
+                      padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+                      border: `1px solid ${filterStatus === k ? info.color : C.border}`,
+                      background: filterStatus === k ? info.bg : C.surface,
+                      color: filterStatus === k ? info.color : C.sec,
+                    }}>{info.icon} {info.label} ({cnt})</button>
+                  );
+                })}
+              </div>
+            )}
+            <PipelineView list={displayed} onSelect={a => { setSelected(a); setView("detail"); }} onNew={() => setView("new")} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
