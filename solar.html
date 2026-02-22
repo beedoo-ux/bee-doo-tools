@@ -109,6 +109,10 @@
       <div id="gmap"></div>
       <div class="map-badge"><span style="color:#3B82F6">■</span> <span id="panelCountBadge">0</span> Module</div>
     </div>
+    <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;">
+      <button id="deleteModeBtn" onclick="toggleDeleteMode()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;font-family:inherit;">🗑 Module löschen</button>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 16px;font-size:12px;color:var(--muted);">💡 Module verschieben: lang drücken + ziehen</div>
+    </div>
 
     <div class="kpi-grid">
       <div class="kpi-card">
@@ -160,7 +164,7 @@ const GKEY = 'AIzaSyD1ZYkqURi5upHcIk_uUeZErgf5kZB9Jd8';
 const WATT = 475, PW = 1.134, PH = 1.762;
 const DIRS = ['N','NO','O','SO','S','SW','W','NW'];
 let solarData = null, mapCenter = null, configs = [], currentIdx = 0;
-let gmap = null, panelPolygons = [];
+let gmap = null, panelPolygons = [], deleteMode = false;
 
 function log(msg) {
   const el = document.getElementById('debugLog');
@@ -270,23 +274,19 @@ function drawPanels(cfg) {
   const allPanels = (sp.solarPanels || []).slice(0, cfg?.panelsCount || 0);
   const R = 6378137;
 
-  allPanels.forEach(p => {
+  allPanels.forEach((p, idx) => {
     const seg = sp.roofSegmentStats?.[p.segmentIndex];
     const az = (seg?.azimuthDegrees || 180) * Math.PI / 180;
     const isL = p.orientation === 'LANDSCAPE';
-    // LANDSCAPE: long axis (PH=1.762m) along ridge, PORTRAIT: long axis along slope
-    const hw = (isL ? PH : PW) / 2; // half-length along ridge
-    const hh = (isL ? PW : PH) / 2; // half-length along slope
+    const GAP = 0.04; // 4cm gap each side
+    const hw = (isL ? PH : PW) / 2 - GAP;
+    const hh = (isL ? PW : PH) / 2 - GAP;
     const clat = p.center.latitude, clng = p.center.longitude;
     const mPerDegLat = Math.PI * R / 180;
     const mPerDegLng = mPerDegLat * Math.cos(clat * Math.PI / 180);
 
-    // Geographic unit vectors (east=lng, north=lat)
-    // Slope direction = azimuth (compass clockwise from north)
-    // slope: (sin(az), cos(az)) → (east, north)
-    // ridge: perpendicular to slope = (cos(az), -sin(az)) → (east, north)
-    const sE = Math.sin(az), sN = Math.cos(az);   // slope unit vector
-    const rE = Math.cos(az), rN = -Math.sin(az);  // ridge unit vector
+    const sE = Math.sin(az), sN = Math.cos(az);
+    const rE = Math.cos(az), rN = -Math.sin(az);
 
     const corners = [
       [ hw*rE + hh*sE,  hw*rN + hh*sN],
@@ -302,11 +302,30 @@ function drawPanels(cfg) {
       paths: corners,
       strokeColor: '#93C5FD',
       strokeOpacity: 0.9,
-      strokeWeight: 0.8,
+      strokeWeight: 1,
       fillColor: '#3B82F6',
-      fillOpacity: 0.5,
-      map: gmap
+      fillOpacity: 0.55,
+      map: gmap,
+      draggable: true,
+      zIndex: idx
     });
+
+    // Click to delete / highlight
+    poly.addListener('click', () => {
+      if (deleteMode) {
+        poly.setMap(null);
+        panelPolygons = panelPolygons.filter(x => x !== poly);
+        updatePanelCount();
+      } else {
+        const current = poly.get('fillColor');
+        poly.setOptions({ fillColor: current === '#EF4444' ? '#3B82F6' : '#EF4444', fillOpacity: 0.75 });
+      }
+    });
+
+    // Visual feedback on hover
+    poly.addListener('mouseover', () => { if (!deleteMode) poly.setOptions({ fillOpacity: 0.8, strokeWeight: 1.5 }); });
+    poly.addListener('mouseout', () => { if (!deleteMode) poly.setOptions({ fillOpacity: 0.55, strokeWeight: 1 }); });
+
     panelPolygons.push(poly);
   });
 }
@@ -327,6 +346,31 @@ function onSlider(val) {
   currentIdx = parseInt(val);
   updateKpis(configs[currentIdx]);
   drawPanels(configs[currentIdx]);
+}
+
+function updatePanelCount() {
+  const count = panelPolygons.length;
+  document.getElementById('panelCountBadge').textContent = count;
+  const kwp = (count * WATT / 1000).toFixed(2);
+  document.getElementById('sliderValue').textContent = count + ' Module · ' + kwp + ' kWp';
+  document.getElementById('kwp').textContent = kwp;
+  document.getElementById('kwpSub').textContent = count + ' × AIKO Neostar 475W';
+}
+
+function toggleDeleteMode() {
+  deleteMode = !deleteMode;
+  const btn = document.getElementById('deleteModeBtn');
+  if (deleteMode) {
+    btn.style.background = '#EF4444';
+    btn.style.color = '#fff';
+    btn.textContent = '🗑 Löschen aktiv – Modul antippen';
+    gmap.setOptions({ draggable: false });
+  } else {
+    btn.style.background = 'var(--card)';
+    btn.style.color = 'var(--text)';
+    btn.textContent = '🗑 Module löschen';
+    gmap.setOptions({ draggable: true });
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
