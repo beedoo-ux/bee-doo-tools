@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#080C14" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>bee-doo SHIELD</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #080C14; overflow-x: hidden; -webkit-text-size-adjust: 100%; }
+  #root { min-height: 100vh; min-height: 100dvh; overflow-x: hidden; }
+  @media (max-width: 768px) {
+    input, select, textarea { font-size: 16px !important; }
+    button { min-height: 40px; }
+  }
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    body { padding-bottom: env(safe-area-inset-bottom); }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="config.js"></script>
+<script>
+var _ShieldExport = (() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+  var bee_doo_shield_input_exports = {};
+  __export(bee_doo_shield_input_exports, {
+    default: () => GuardApp
+  });
+  const { useState, useEffect, useRef } = React;
+  const C = {
+    bg: "#080C14",
+    bg2: "#0D1521",
+    card: "#111B2B",
+    card2: "#162032",
+    border: "#1E3048",
+    border2: "#243A56",
+    text: "#E2EAF4",
+    muted: "#6B8DB5",
+    dim: "#3A5577",
+    // Status
+    open: "#3B82F6",
+    progress: "#F59E0B",
+    review: "#A78BFA",
+    closed: "#22C55E",
+    escalate: "#EF4444",
+    // Priority
+    critical: "#EF4444",
+    high: "#F97316",
+    medium: "#F59E0B",
+    low: "#6B7280",
+    // Types
+    technical: "#3B82F6",
+    material: "#8B5CF6",
+    complaint: "#EC4899",
+    foxess: "#F59E0B",
+    rework: "#10B981",
+    // Accent
+    accent: "#1D4ED8",
+    accentL: "#3B82F6"
+  };
+  const now = () => /* @__PURE__ */ new Date();
+  const daysAgo = (n) => {
+    const d = /* @__PURE__ */ new Date();
+    d.setDate(d.getDate() - n);
+    return d;
+  };
+  const hoursAgo = (n) => {
+    const d = /* @__PURE__ */ new Date();
+    d.setHours(d.getHours() - n);
+    return d;
+  };
+  const addHours = (date, h) => {
+    const d = new Date(date);
+    d.setHours(d.getHours() + h);
+    return d;
+  };
+  const fmt = (d) => d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" });
+  const fmtTime = (d) => d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  const fmtFull = (d) => `${fmt(d)} ${fmtTime(d)}`;
+  const diffH = (a, b) => Math.floor((b - a) / 36e5);
+  const SLA_H = { critical: 4, high: 24, medium: 48, low: 96 };
+  const slaStatus = (ticket) => {
+    if (ticket.status === "closed") return { pct: 100, color: C.closed, label: "Erledigt" };
+    const slah = SLA_H[ticket.priority];
+    const deadline = addHours(new Date(ticket.createdAt), slah);
+    const elapsed = diffH(new Date(ticket.createdAt), now());
+    const pct = Math.min(100, elapsed / slah * 100);
+    if (now() > deadline) return { pct: 100, color: C.critical, label: "\xDCBERF\xC4LLIG", overdue: true };
+    const rem = diffH(now(), deadline);
+    if (rem < 2) return { pct, color: C.critical, label: `${rem}h verbleibend`, urgent: true };
+    if (rem < 8) return { pct, color: C.high, label: `${rem}h verbleibend` };
+    return { pct, color: C.medium, label: `${rem}h verbleibend` };
+  };
+  const AGENTS = [
+    { id: "a1", name: "Stefan Buri\xE1les", role: "Bauleiter DC" },
+    { id: "a2", name: "Andreas Richter", role: "Bauleiter AC" },
+    { id: "a3", name: "Team Sch\xE4fer", role: "Monteur" },
+    { id: "a4", name: "Karina M.", role: "B\xFCro / EVU" },
+    { id: "a5", name: "Jenny K.", role: "B\xFCro / Kundenservice" },
+    { id: "a6", name: "Olaf Schader", role: "Gesch\xE4ftsf\xFChrer" }
+  ];
+  const INIT_TICKETS = [
+    {
+      id: "TKT-001",
+      title: "Wechselrichter FoxEss H3 meldet E07 Fehler",
+      type: "foxess",
+      priority: "critical",
+      status: "progress",
+      source: "board",
+      assignee: "a1",
+      customer: "Familie M\xFCller",
+      customerAddr: "Hauptstr. 12, 33602 Bielefeld",
+      createdAt: hoursAgo(3).toISOString(),
+      updatedAt: hoursAgo(1).toISOString(),
+      description: "Kunde ruft an, Anlage seit gestern Nacht offline. Display zeigt E07 Isolationsfehler. PV-Anlage 9,8kWp installiert durch Team Sch\xE4fer am 15.01.",
+      history: [
+        { ts: hoursAgo(3).toISOString(), user: "Jenny K.", action: "Ticket erstellt", note: "Eingang via Call Center" },
+        { ts: hoursAgo(2).toISOString(), user: "Stefan B.", action: "Zugewiesen", note: "FoxEss Ticket gestellt, warte auf R\xFCckmeldung" }
+      ],
+      photos: ["dach_foto.jpg"],
+      tags: ["FoxEss", "E07", "Isolationsfehler"],
+      invoiceRef: "AU-2024-0892"
+    },
+    {
+      id: "TKT-002",
+      title: "Falsche Dachziegel geliefert \u2013 Montage kann nicht starten",
+      type: "material",
+      priority: "high",
+      status: "open",
+      source: "board",
+      assignee: "a2",
+      customer: "Klaus Bergmann",
+      customerAddr: "Waldweg 7, 33604 Bielefeld",
+      createdAt: hoursAgo(18).toISOString(),
+      updatedAt: hoursAgo(5).toISOString(),
+      description: "Lieferung enthielt Frankfurter Pfanne statt Hohlfalzziegel. Monteur konnte Baustelle nicht starten. Neues Material muss bestellt werden. Kundentermin war heute.",
+      history: [
+        { ts: hoursAgo(18).toISOString(), user: "Team Sch\xE4fer", action: "Ticket erstellt", note: "Direkt auf der Baustelle gemeldet" }
+      ],
+      photos: [],
+      tags: ["Fehllieferung", "Material", "Dachziegel"],
+      invoiceRef: "AU-2024-0934"
+    },
+    {
+      id: "TKT-003",
+      title: "Kunde unzufrieden \u2013 kein Feedback seit 3 Wochen",
+      type: "complaint",
+      priority: "high",
+      status: "escalate",
+      source: "call",
+      assignee: "a6",
+      customer: "Renate Schulz",
+      customerAddr: "Gartenstr. 44, 33605 Bielefeld",
+      createdAt: daysAgo(5).toISOString(),
+      updatedAt: daysAgo(1).toISOString(),
+      description: "Kundin beschwert sich, dass nach Ersttermin keine R\xFCckmeldung mehr kam. Hat 5x angerufen. Droht mit Google-Bewertung und R\xFCcktritt vom Vertrag.",
+      history: [
+        { ts: daysAgo(5).toISOString(), user: "Karina M.", action: "Ticket erstellt", note: "Beschwerde via Telefon" },
+        { ts: daysAgo(3).toISOString(), user: "Jenny K.", action: "Eskaliert", note: "Keine Reaktion vom zust\xE4ndigen Vertriebler \u2013 zu GF eskaliert" }
+      ],
+      photos: [],
+      tags: ["Beschwerde", "Eskalation", "Kommunikation"],
+      invoiceRef: "AU-2024-0881"
+    },
+    {
+      id: "TKT-004",
+      title: "Nacharbeit AC \u2013 Kabel nicht sauber verlegt",
+      type: "rework",
+      priority: "medium",
+      status: "review",
+      source: "board",
+      assignee: "a2",
+      customer: "Peter Hartmann",
+      customerAddr: "Kirchplatz 3, 33611 Bielefeld",
+      createdAt: daysAgo(2).toISOString(),
+      updatedAt: hoursAgo(6).toISOString(),
+      description: "Bei Live-Abnahme festgestellt: AC-Kabelverlegung im Keller nicht fachgerecht. Kabel h\xE4ngen lose, keine Kabelkan\xE4le. Nacharbeit erforderlich vor Fertigmeldung.",
+      history: [
+        { ts: daysAgo(2).toISOString(), user: "Andreas Richter", action: "Ticket erstellt", note: "Bei Abnahme festgestellt" },
+        { ts: daysAgo(1).toISOString(), user: "Andreas Richter", action: "Status: In Review", note: "Nacharbeit terminiert f\xFCr \xFCbermorgen" }
+      ],
+      photos: ["kabel_fotos.jpg"],
+      tags: ["Nacharbeit", "AC", "Kabelverlegung"],
+      invoiceRef: "AU-2024-0910"
+    },
+    {
+      id: "TKT-005",
+      title: "Technischer Mangel \u2013 Speicher l\xE4dt nicht auf 100%",
+      type: "technical",
+      priority: "medium",
+      status: "closed",
+      source: "direct",
+      assignee: "a1",
+      customer: "Ingrid Weber",
+      customerAddr: "Lindenstr. 22, 33613 Bielefeld",
+      createdAt: daysAgo(10).toISOString(),
+      updatedAt: daysAgo(1).toISOString(),
+      description: "BYD-Speicher wird laut App nur zu 87% geladen. Verdacht: Zelldrift. Vor-Ort-Check durch Stefan durchgef\xFChrt, Firmware-Update eingespielt.",
+      history: [
+        { ts: daysAgo(10).toISOString(), user: "Jenny K.", action: "Ticket erstellt", note: "" },
+        { ts: daysAgo(7).toISOString(), user: "Stefan B.", action: "Vor-Ort-Termin", note: "Firmware v1.4.2 eingespielt" },
+        { ts: daysAgo(1).toISOString(), user: "Stefan B.", action: "Geschlossen", note: "Kunde best\xE4tigt 100% Ladung. Problem behoben." }
+      ],
+      photos: ["speicher_check.jpg"],
+      tags: ["BYD", "Speicher", "Firmware"],
+      invoiceRef: "AU-2024-0855",
+      resolution: "Firmware-Update v1.4.2 hat das Problem behoben. Speicher l\xE4dt wieder korrekt."
+    }
+  ];
+  const STATUS = {
+    open: { label: "OFFEN", color: C.open, icon: "\u25C9" },
+    progress: { label: "IN BEARBEITUNG", color: C.progress, icon: "\u25CE" },
+    review: { label: "IN PR\xDCFUNG", color: C.review, icon: "\u25C8" },
+    escalate: { label: "ESKALIERT", color: C.escalate, icon: "\u25B2" },
+    closed: { label: "GESCHLOSSEN", color: C.closed, icon: "\u2713" }
+  };
+  const PRIORITY = {
+    critical: { label: "KRITISCH", color: C.critical, dot: "\u25CF" },
+    high: { label: "HOCH", color: C.high, dot: "\u25CF" },
+    medium: { label: "MITTEL", color: C.medium, dot: "\u25CF" },
+    low: { label: "NIEDRIG", color: C.low, dot: "\u25CF" }
+  };
+  const TYPES = {
+    technical: { label: "Technischer Mangel", color: C.technical, icon: "\u26A1" },
+    material: { label: "Material / Fehllieferung", color: C.material, icon: "\u{1F4E6}" },
+    complaint: { label: "Kundenbeschwerde", color: C.complaint, icon: "\u{1F4AC}" },
+    foxess: { label: "FoxEss / Wechselrichter", color: C.foxess, icon: "\u{1F50C}" },
+    rework: { label: "Nacharbeit", color: C.rework, icon: "\u{1F527}" }
+  };
+  const SOURCES = {
+    board: { label: "Montage Board", icon: "\u2B1B" },
+    call: { label: "Call Center", icon: "\u{1F4DE}" },
+    direct: { label: "Direkteingabe", icon: "\u270F\uFE0F" },
+    form: { label: "Kundenformular", icon: "\u{1F310}" }
+  };
+  function GuardApp() {
+    const [tickets, setTickets] = useState(INIT_TICKETS);
+    const [view, setView] = useState("dashboard");
+    const [selected, setSelected] = useState(null);
+    const [filterStatus, setFilterStatus] = useState("all");
+    const [filterPriority, setFilterPriority] = useState("all");
+    const [filterType, setFilterType] = useState("all");
+    const [search, setSearch] = useState("");
+    const [showNewModal, setShowNewModal] = useState(false);
+    const [tick, setTick] = useState(0);
+    useEffect(() => {
+      const iv = setInterval(() => setTick((t) => t + 1), 6e4);
+      return () => clearInterval(iv);
+    }, []);
+    const filtered = tickets.filter((t) => {
+      if (filterStatus !== "all" && t.status !== filterStatus) return false;
+      if (filterPriority !== "all" && t.priority !== filterPriority) return false;
+      if (filterType !== "all" && t.type !== filterType) return false;
+      if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && !t.customer.toLowerCase().includes(search.toLowerCase()) && !t.id.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    });
+    const kpi = {
+      total: tickets.length,
+      open: tickets.filter((t) => t.status === "open").length,
+      progress: tickets.filter((t) => t.status === "progress").length,
+      escalated: tickets.filter((t) => t.status === "escalate").length,
+      closed: tickets.filter((t) => t.status === "closed").length,
+      overdue: tickets.filter((t) => {
+        if (t.status === "closed") return false;
+        const s = slaStatus(t);
+        return s.overdue;
+      }).length,
+      critical: tickets.filter((t) => t.priority === "critical" && t.status !== "closed").length
+    };
+    const updateTicket = (id, changes) => {
+      setTickets((prev) => prev.map((t) => t.id === id ? { ...t, ...changes, updatedAt: now().toISOString() } : t));
+      if (selected?.id === id) setSelected((prev) => ({ ...prev, ...changes }));
+    };
+    const addHistoryEntry = (ticketId, action, note, user = "Patrick S.") => {
+      setTickets((prev) => prev.map((t) => t.id === ticketId ? {
+        ...t,
+        history: [...t.history, { ts: now().toISOString(), user, action, note }],
+        updatedAt: now().toISOString()
+      } : t));
+    };
+    const createTicket = (data) => {
+      const id = `TKT-${String(tickets.length + 1).padStart(3, "0")}`;
+      const t = {
+        id,
+        ...data,
+        status: "open",
+        createdAt: now().toISOString(),
+        updatedAt: now().toISOString(),
+        history: [{ ts: now().toISOString(), user: "Patrick S.", action: "Ticket erstellt", note: data.description }],
+        photos: [],
+        tags: []
+      };
+      setTickets((prev) => [t, ...prev]);
+      setShowNewModal(false);
+    };
+    return /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'DM Sans', 'Segoe UI', sans-serif", background: C.bg, minHeight: "100vh", color: C.text } }, /* @__PURE__ */ React.createElement("style", null, `
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: ${C.bg}; }
+        ::-webkit-scrollbar-thumb { background: ${C.border2}; border-radius: 2px; }
+        input, select, textarea { outline: none; }
+        button { cursor: pointer; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        @keyframes slideIn { from{transform:translateX(-8px);opacity:0} to{transform:translateX(0);opacity:1} }
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+        @keyframes flash { 0%,100%{opacity:1} 50%{opacity:0.3} }
+      `), /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", left: 0, top: 0, bottom: 0, width: 220, background: C.bg2, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", zIndex: 100 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "20px 16px 16px", borderBottom: `1px solid ${C.border}` } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 28, height: 28, background: "linear-gradient(135deg,#1D4ED8,#3B82F6)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700 } }, "S"), /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 15, letterSpacing: "0.05em" } }, "bee-doo ", /* @__PURE__ */ React.createElement("span", { style: { color: C.accentL } }, "SHIELD"))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: C.muted, letterSpacing: "0.1em" } }, "TICKET \xB7 REKLAMATION \xB7 QS")), /* @__PURE__ */ React.createElement("nav", { style: { flex: 1, padding: "12px 8px", display: "flex", flexDirection: "column", gap: 2 } }, [
+      { id: "dashboard", icon: "\u2B21", label: "Dashboard" },
+      { id: "list", icon: "\u2261", label: "Alle Tickets" }
+    ].map((n) => /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: n.id,
+        onClick: () => setView(n.id),
+        style: { display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 7, border: "none", background: view === n.id ? C.card2 : "transparent", color: view === n.id ? C.text : C.muted, fontSize: 13, fontWeight: view === n.id ? 600 : 400, transition: "all .15s" }
+      },
+      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16 } }, n.icon),
+      " ",
+      n.label,
+      n.id === "list" && kpi.open > 0 && /* @__PURE__ */ React.createElement("span", { style: { marginLeft: "auto", background: C.open, color: "#fff", borderRadius: 10, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, kpi.open)
+    ))), /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 8px", borderTop: `1px solid ${C.border}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: C.dim, letterSpacing: "0.12em", marginBottom: 8, padding: "0 4px" } }, "FILTER"), [
+      { id: "escalate", label: "Eskaliert", color: C.escalate },
+      { id: "critical", label: "Kritisch", color: C.critical, isPriority: true }
+    ].map((f) => {
+      const cnt = f.isPriority ? tickets.filter((t) => t.priority === f.id && t.status !== "closed").length : tickets.filter((t) => t.status === f.id).length;
+      if (!cnt) return null;
+      return /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          key: f.id,
+          onClick: () => {
+            setView("list");
+            if (f.isPriority) setFilterPriority(f.id);
+            else setFilterStatus(f.id);
+          },
+          style: { display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 12px", borderRadius: 7, border: "none", background: "transparent", color: C.muted, fontSize: 12, transition: "all .15s" }
+        },
+        /* @__PURE__ */ React.createElement("span", { style: { width: 6, height: 6, borderRadius: "50%", background: f.color, animation: cnt > 0 ? "pulse 2s infinite" : "none" } }),
+        f.label,
+        /* @__PURE__ */ React.createElement("span", { style: { marginLeft: "auto", color: f.color, fontWeight: 700, fontFamily: "'DM Mono',monospace", fontSize: 11 } }, cnt)
+      );
+    })), /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 8px 16px" } }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => setShowNewModal(true),
+        style: { width: "100%", padding: "10px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#1D4ED8,#2563EB)", color: "#fff", fontSize: 13, fontWeight: 600, letterSpacing: "0.02em" }
+      },
+      "+ Neues Ticket"
+    ))), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: 220, padding: "24px 28px", minHeight: "100vh" } }, view === "dashboard" && /* @__PURE__ */ React.createElement(Dashboard, { kpi, tickets, setView, setSelected, setFilterStatus }), view === "list" && /* @__PURE__ */ React.createElement(
+      TicketList,
+      {
+        tickets: filtered,
+        all: tickets,
+        filterStatus,
+        setFilterStatus,
+        filterPriority,
+        setFilterPriority,
+        filterType,
+        setFilterType,
+        search,
+        setSearch,
+        onSelect: (t) => {
+          setSelected(t);
+          setView("detail");
+        }
+      }
+    ), view === "detail" && selected && /* @__PURE__ */ React.createElement(
+      TicketDetail,
+      {
+        ticket: tickets.find((t) => t.id === selected.id) || selected,
+        onBack: () => setView("list"),
+        onUpdate: updateTicket,
+        onAddHistory: addHistoryEntry,
+        agents: AGENTS
+      }
+    )), showNewModal && /* @__PURE__ */ React.createElement(NewTicketModal, { onClose: () => setShowNewModal(false), onCreate: createTicket, agents: AGENTS }));
+  }
+  function Dashboard({ kpi, tickets, setView, setSelected, setFilterStatus }) {
+    const recent = [...tickets].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 5);
+    const overdueTickets = tickets.filter((t) => {
+      if (t.status === "closed") return false;
+      return slaStatus(t).overdue;
+    });
+    const byType = Object.keys(TYPES).map((k) => ({ key: k, count: tickets.filter((t) => t.type === k && t.status !== "closed").length })).filter((x) => x.count > 0);
+    return /* @__PURE__ */ React.createElement("div", { style: { animation: "fadeIn .3s" } }, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 24 } }, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" } }, "Dashboard"), /* @__PURE__ */ React.createElement("div", { style: { color: C.muted, fontSize: 13, marginTop: 2 } }, fmt(now()), " \xB7 ", fmtTime(now()), " Uhr")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 24 } }, [
+      { label: "Gesamt", val: kpi.total, color: C.muted, click: "all" },
+      { label: "Offen", val: kpi.open, color: C.open, click: "open" },
+      { label: "In Bearb.", val: kpi.progress, color: C.progress, click: "progress" },
+      { label: "Eskaliert", val: kpi.escalated, color: C.escalate, click: "escalate" },
+      { label: "Geschlossen", val: kpi.closed, color: C.closed, click: "closed" }
+    ].map((k) => /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        key: k.label,
+        onClick: () => {
+          setView("list");
+          setFilterStatus(k.click === "all" ? "all" : k.click);
+        },
+        style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px", cursor: "pointer", transition: "all .15s", position: "relative", overflow: "hidden" }
+      },
+      /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 0, left: 0, right: 0, height: 2, background: k.color, opacity: 0.7 } }),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: k.color } }, k.val),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2, letterSpacing: "0.06em" } }, k.label.toUpperCase())
+    ))), overdueTickets.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(239,68,68,0.08)", border: `1px solid rgba(239,68,68,0.3)`, borderRadius: 10, padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 12, animation: "flash 3s infinite" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18 } }, "\u26A0\uFE0F"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { color: C.critical, fontWeight: 600, fontSize: 13 } }, overdueTickets.length, " Ticket", overdueTickets.length > 1 ? "s" : "", " \xDCBERF\xC4LLIG"), /* @__PURE__ */ React.createElement("div", { style: { color: C.muted, fontSize: 12 } }, overdueTickets.map((t) => t.id).join(" \xB7 "))), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => {
+          setView("list");
+          setFilterStatus("all");
+        },
+        style: { marginLeft: "auto", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: C.critical, borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600 }
+      },
+      "Ansehen \u2192"
+    )), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 600, fontSize: 14, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" } }, "Zuletzt aktualisiert", /* @__PURE__ */ React.createElement("button", { onClick: () => setView("list"), style: { background: "none", border: "none", color: C.muted, fontSize: 12 } }, "Alle \u2192")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, recent.map((t) => {
+      const sla = slaStatus(t);
+      return /* @__PURE__ */ React.createElement(
+        "div",
+        {
+          key: t.id,
+          onClick: () => {
+            setSelected(t);
+            setView("detail");
+          },
+          style: { padding: "10px 12px", background: C.card2, borderRadius: 8, cursor: "pointer", border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10, transition: "all .15s" }
+        },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16 } }, TYPES[t.type]?.icon),
+        /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, t.title), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 1 } }, t.id, " \xB7 ", t.customer)),
+        /* @__PURE__ */ React.createElement("div", { style: { flexShrink: 0, textAlign: "right" } }, /* @__PURE__ */ React.createElement(StatusBadge, { status: t.status, small: true }), t.status !== "closed" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: sla.color, marginTop: 2, fontWeight: 600 } }, sla.label))
+      );
+    }))), /* @__PURE__ */ React.createElement("div", { style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 600, fontSize: 14, marginBottom: 14 } }, "Offene Tickets nach Typ"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, byType.map(({ key, count }) => {
+      const max = Math.max(...byType.map((x) => x.count));
+      const pct = count / max * 100;
+      return /* @__PURE__ */ React.createElement("div", { key }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: C.text } }, TYPES[key].icon, " ", TYPES[key].label), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: TYPES[key].color, fontFamily: "'DM Mono',monospace" } }, count)), /* @__PURE__ */ React.createElement("div", { style: { height: 4, background: C.border, borderRadius: 2, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { height: "100%", width: `${pct}%`, background: TYPES[key].color, borderRadius: 2, transition: "width .5s" } })));
+    })), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.border}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 600, fontSize: 14, marginBottom: 12 } }, "SLA-Reaktionszeiten"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, Object.entries(SLA_H).map(([p, h]) => /* @__PURE__ */ React.createElement("div", { key: p, style: { background: C.bg2, borderRadius: 7, padding: "8px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: PRIORITY[p]?.color, fontWeight: 600 } }, PRIORITY[p]?.label), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: C.muted, fontFamily: "'DM Mono',monospace" } }, h, "h"))))))));
+  }
+  function TicketList({ tickets, all, filterStatus, setFilterStatus, filterPriority, setFilterPriority, filterType, setFilterType, search, setSearch, onSelect }) {
+    return /* @__PURE__ */ React.createElement("div", { style: { animation: "fadeIn .3s" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" } }, "Tickets"), /* @__PURE__ */ React.createElement("div", { style: { color: C.muted, fontSize: 13, marginTop: 2 } }, tickets.length, " von ", all.length, " angezeigt"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        value: search,
+        onChange: (e) => setSearch(e.target.value),
+        placeholder: "Suche ID, Kunde, Titel\u2026",
+        style: { flex: 1, minWidth: 200, padding: "9px 14px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13 }
+      }
+    ), /* @__PURE__ */ React.createElement(FilterSelect, { value: filterStatus, onChange: setFilterStatus, options: [{ v: "all", l: "Alle Status" }, ...Object.entries(STATUS).map(([k, v]) => ({ v: k, l: v.label }))] }), /* @__PURE__ */ React.createElement(FilterSelect, { value: filterPriority, onChange: setFilterPriority, options: [{ v: "all", l: "Alle Priorit\xE4ten" }, ...Object.entries(PRIORITY).map(([k, v]) => ({ v: k, l: v.label }))] }), /* @__PURE__ */ React.createElement(FilterSelect, { value: filterType, onChange: setFilterType, options: [{ v: "all", l: "Alle Typen" }, ...Object.entries(TYPES).map(([k, v]) => ({ v: k, l: v.label }))] }), (filterStatus !== "all" || filterPriority !== "all" || filterType !== "all" || search) && /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => {
+          setFilterStatus("all");
+          setFilterPriority("all");
+          setFilterType("all");
+          setSearch("");
+        },
+        style: { padding: "9px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, color: C.critical, fontSize: 12, fontWeight: 600 }
+      },
+      "\u2715 Reset"
+    )), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "90px 1fr 110px 90px 130px 110px 70px", gap: 12, padding: "8px 16px", color: C.dim, fontSize: 10, letterSpacing: "0.1em", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", null, "ID"), /* @__PURE__ */ React.createElement("span", null, "TICKET"), /* @__PURE__ */ React.createElement("span", null, "TYP"), /* @__PURE__ */ React.createElement("span", null, "PRIO"), /* @__PURE__ */ React.createElement("span", null, "STATUS"), /* @__PURE__ */ React.createElement("span", null, "ZUST\xC4NDIG"), /* @__PURE__ */ React.createElement("span", null, "SLA")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, tickets.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: "40px", color: C.muted, fontSize: 14 } }, "Keine Tickets gefunden"), tickets.map((t) => /* @__PURE__ */ React.createElement(TicketRow, { key: t.id, ticket: t, onClick: () => onSelect(t) }))));
+  }
+  function TicketRow({ ticket: t, onClick }) {
+    const sla = slaStatus(t);
+    const agent = AGENTS.find((a) => a.id === t.assignee);
+    return /* @__PURE__ */ React.createElement("div", { onClick, style: { display: "grid", gridTemplateColumns: "90px 1fr 110px 90px 130px 110px 70px", gap: 12, padding: "11px 16px", background: C.card, border: `1px solid ${t.status === "escalate" ? "rgba(239,68,68,0.3)" : C.border}`, borderRadius: 9, cursor: "pointer", alignItems: "center", transition: "all .15s", animation: "slideIn .2s" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontFamily: "'DM Mono',monospace", color: C.accentL, fontWeight: 500 } }, t.id), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, t.title), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 1 } }, t.customer, " \xB7 ", SOURCES[t.source]?.label)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: TYPES[t.type]?.color, fontWeight: 600 } }, TYPES[t.type]?.icon, " ", TYPES[t.type]?.label.split(" ")[0]), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: PRIORITY[t.priority]?.color, fontWeight: 700, letterSpacing: "0.05em" } }, PRIORITY[t.priority]?.dot, " ", PRIORITY[t.priority]?.label)), /* @__PURE__ */ React.createElement(StatusBadge, { status: t.status, small: true }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted } }, agent?.name?.split(" ")[0] || "\u2013"), /* @__PURE__ */ React.createElement("div", null, t.status !== "closed" ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { height: 3, background: C.border, borderRadius: 1, overflow: "hidden", marginBottom: 3 } }, /* @__PURE__ */ React.createElement("div", { style: { height: "100%", width: `${sla.pct}%`, background: sla.color, transition: "width 1s" } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: sla.color, fontWeight: 600, whiteSpace: "nowrap" } }, sla.label.replace(" verbleibend", ""))) : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: C.closed } }, "\u2713 OK")));
+  }
+  function TicketDetail({ ticket: t, onBack, onUpdate, onAddHistory, agents }) {
+    const [note, setNote] = useState("");
+    const [newStatus, setNewStatus] = useState(t.status);
+    const [editAssignee, setEditAssignee] = useState(false);
+    const sla = slaStatus(t);
+    const handleStatusChange = (s) => {
+      setNewStatus(s);
+      onUpdate(t.id, { status: s });
+      onAddHistory(t.id, `Status \u2192 ${STATUS[s].label}`, "", "Patrick S.");
+    };
+    const handleNoteSubmit = () => {
+      if (!note.trim()) return;
+      onAddHistory(t.id, "Notiz hinzugef\xFCgt", note);
+      setNote("");
+    };
+    const agent = agents.find((a) => a.id === t.assignee);
+    return /* @__PURE__ */ React.createElement("div", { style: { animation: "fadeIn .2s" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 } }, /* @__PURE__ */ React.createElement("button", { onClick: onBack, style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 14px", color: C.muted, fontSize: 12, fontWeight: 500 } }, "\u2190 Zur\xFCck"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontFamily: "'DM Mono',monospace", color: C.accentL } }, t.id), /* @__PURE__ */ React.createElement(PriorityBadge, { priority: t.priority }), /* @__PURE__ */ React.createElement(StatusBadge, { status: t.status, small: true })), /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 18, fontWeight: 700, marginTop: 4, letterSpacing: "-0.01em" } }, t.title))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 300px", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14 } }, /* @__PURE__ */ React.createElement(Section, { title: "Beschreibung" }, /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, lineHeight: 1.7, color: C.text } }, t.description)), t.status !== "closed" && /* @__PURE__ */ React.createElement(Section, { title: "SLA-Status" }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: C.muted } }, "SLA-Limit: ", SLA_H[t.priority], "h"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: sla.color, fontWeight: 700 } }, sla.label)), /* @__PURE__ */ React.createElement("div", { style: { height: 6, background: C.border, borderRadius: 3, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { height: "100%", width: `${sla.pct}%`, background: sla.color, borderRadius: 3, transition: "width 1s" } })))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 } }, /* @__PURE__ */ React.createElement(InfoItem, { label: "Erstellt", val: fmtFull(new Date(t.createdAt)) }), /* @__PURE__ */ React.createElement(InfoItem, { label: "Deadline", val: fmtFull(addHours(new Date(t.createdAt), SLA_H[t.priority])) }))), /* @__PURE__ */ React.createElement(Section, { title: "Status \xE4ndern" }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, Object.entries(STATUS).map(([k, v]) => /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: k,
+        onClick: () => handleStatusChange(k),
+        style: { padding: "7px 14px", borderRadius: 7, border: `1px solid ${t.status === k ? v.color : C.border}`, background: t.status === k ? `${v.color}20` : "transparent", color: t.status === k ? v.color : C.muted, fontSize: 12, fontWeight: t.status === k ? 700 : 400, transition: "all .15s" }
+      },
+      v.icon,
+      " ",
+      v.label
+    ))), t.status === "closed" && t.resolution && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, padding: "10px 14px", background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.closed, fontWeight: 700, marginBottom: 4 } }, "L\xD6SUNG"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: C.text } }, t.resolution))), /* @__PURE__ */ React.createElement(Section, { title: "Aktivit\xE4tsverlauf" }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 0 } }, [...t.history].reverse().map((h, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", gap: 12, padding: "10px 0", borderBottom: i < t.history.length - 1 ? `1px solid ${C.border}` : "none" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 28, height: 28, background: C.card2, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, flexShrink: 0 } }, h.user[0]), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600 } }, h.user), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: C.muted } }, fmtFull(new Date(h.ts)))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.accentL, marginTop: 1 } }, h.action), h.note && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 2, lineHeight: 1.5 } }, h.note))))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14, display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement(
+      "textarea",
+      {
+        value: note,
+        onChange: (e) => setNote(e.target.value),
+        placeholder: "Notiz hinzuf\xFCgen\u2026",
+        rows: 2,
+        style: { flex: 1, padding: "9px 12px", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13, resize: "none" }
+      }
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: handleNoteSubmit,
+        style: { padding: "9px 16px", background: C.accent, border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 600, alignSelf: "flex-end" }
+      },
+      "Senden"
+    )))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, /* @__PURE__ */ React.createElement(Section, { title: "Details" }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement(InfoItem, { label: "Typ", val: /* @__PURE__ */ React.createElement("span", { style: { color: TYPES[t.type]?.color } }, TYPES[t.type]?.icon, " ", TYPES[t.type]?.label) }), /* @__PURE__ */ React.createElement(InfoItem, { label: "Quelle", val: SOURCES[t.source]?.label }), /* @__PURE__ */ React.createElement(InfoItem, { label: "Auftrag", val: /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.accentL } }, t.invoiceRef) }))), /* @__PURE__ */ React.createElement(Section, { title: "Kunde" }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, marginBottom: 4 } }, t.customer), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.6 } }, t.customerAddr)), /* @__PURE__ */ React.createElement(Section, { title: "Zust\xE4ndig" }, agent ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 32, height: 32, background: `${C.accentL}20`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: C.accentL } }, agent.name[0]), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, agent.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted } }, agent.role))) : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: C.muted } }, "Nicht zugewiesen")), t.tags?.length > 0 && /* @__PURE__ */ React.createElement(Section, { title: "Tags" }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, t.tags.map((tag) => /* @__PURE__ */ React.createElement("span", { key: tag, style: { padding: "3px 10px", background: C.card2, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 11, color: C.muted } }, tag)))), /* @__PURE__ */ React.createElement(Section, { title: `Fotos (${t.photos?.length || 0})` }, t.photos?.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, t.photos.map((p) => /* @__PURE__ */ React.createElement("div", { key: p, style: { padding: "6px 10px", background: C.card2, border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 11, color: C.accentL } }, "\u{1F4F7} ", p))) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.dim, textAlign: "center", padding: "10px 0" } }, "Keine Fotos angeh\xE4ngt"), /* @__PURE__ */ React.createElement("button", { style: { marginTop: 8, width: "100%", padding: "7px", background: "transparent", border: `1px dashed ${C.border2}`, borderRadius: 7, color: C.muted, fontSize: 12 } }, "+ Foto hinzuf\xFCgen")))));
+  }
+  function NewTicketModal({ onClose, onCreate, agents }) {
+    const [form, setForm] = useState({ title: "", type: "technical", priority: "medium", source: "direct", assignee: "", customer: "", customerAddr: "", description: "", invoiceRef: "" });
+    const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+    return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e3 } }, /* @__PURE__ */ React.createElement("div", { style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 28, width: 560, maxHeight: "90vh", overflow: "auto", animation: "slideIn .2s" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } }, /* @__PURE__ */ React.createElement("h2", { style: { fontSize: 16, fontWeight: 700 } }, "Neues Ticket erstellen"), /* @__PURE__ */ React.createElement("button", { onClick: onClose, style: { background: "none", border: "none", color: C.muted, fontSize: 18 } }, "\u2715")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14 } }, /* @__PURE__ */ React.createElement(FormField, { label: "Titel *" }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        value: form.title,
+        onChange: (e) => set("title", e.target.value),
+        placeholder: "Kurze Beschreibung des Problems",
+        style: { width: "100%", padding: "9px 12px", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13 }
+      }
+    )), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, /* @__PURE__ */ React.createElement(FormField, { label: "Typ" }, /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        value: form.type,
+        onChange: (e) => set("type", e.target.value),
+        style: { width: "100%", padding: "9px 12px", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13 }
+      },
+      Object.entries(TYPES).map(([k, v]) => /* @__PURE__ */ React.createElement("option", { key: k, value: k }, v.icon, " ", v.label))
+    )), /* @__PURE__ */ React.createElement(FormField, { label: "Priorit\xE4t" }, /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        value: form.priority,
+        onChange: (e) => set("priority", e.target.value),
+        style: { width: "100%", padding: "9px 12px", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13 }
+      },
+      Object.entries(PRIORITY).map(([k, v]) => /* @__PURE__ */ React.createElement("option", { key: k, value: k }, v.label))
+    ))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, /* @__PURE__ */ React.createElement(FormField, { label: "Quelle" }, /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        value: form.source,
+        onChange: (e) => set("source", e.target.value),
+        style: { width: "100%", padding: "9px 12px", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13 }
+      },
+      Object.entries(SOURCES).map(([k, v]) => /* @__PURE__ */ React.createElement("option", { key: k, value: k }, v.label))
+    )), /* @__PURE__ */ React.createElement(FormField, { label: "Zust\xE4ndig" }, /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        value: form.assignee,
+        onChange: (e) => set("assignee", e.target.value),
+        style: { width: "100%", padding: "9px 12px", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13 }
+      },
+      /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2013 Nicht zugewiesen \u2013"),
+      agents.map((a) => /* @__PURE__ */ React.createElement("option", { key: a.id, value: a.id }, a.name, " (", a.role, ")"))
+    ))), /* @__PURE__ */ React.createElement(FormField, { label: "Kundenname" }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        value: form.customer,
+        onChange: (e) => set("customer", e.target.value),
+        placeholder: "z.B. Familie M\xFCller",
+        style: { width: "100%", padding: "9px 12px", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13 }
+      }
+    )), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 } }, /* @__PURE__ */ React.createElement(FormField, { label: "Adresse" }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        value: form.customerAddr,
+        onChange: (e) => set("customerAddr", e.target.value),
+        placeholder: "Stra\xDFe, PLZ Ort",
+        style: { width: "100%", padding: "9px 12px", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13 }
+      }
+    )), /* @__PURE__ */ React.createElement(FormField, { label: "Auftragsnr." }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        value: form.invoiceRef,
+        onChange: (e) => set("invoiceRef", e.target.value),
+        placeholder: "AU-2024-\u2026",
+        style: { width: "100%", padding: "9px 12px", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13 }
+      }
+    ))), /* @__PURE__ */ React.createElement(FormField, { label: "Beschreibung" }, /* @__PURE__ */ React.createElement(
+      "textarea",
+      {
+        value: form.description,
+        onChange: (e) => set("description", e.target.value),
+        rows: 4,
+        placeholder: "Detaillierte Beschreibung des Problems\u2026",
+        style: { width: "100%", padding: "9px 12px", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13, resize: "vertical" }
+      }
+    )), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: onClose, style: { padding: "9px 20px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontSize: 13 } }, "Abbrechen"), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => {
+          if (form.title) onCreate(form);
+        },
+        disabled: !form.title,
+        style: { padding: "9px 24px", background: form.title ? "linear-gradient(135deg,#1D4ED8,#2563EB)" : C.border, border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 600, opacity: form.title ? 1 : 0.5 }
+      },
+      "Ticket erstellen"
+    )))));
+  }
+  function StatusBadge({ status, small }) {
+    const s = STATUS[status] || STATUS.open;
+    return /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, padding: small ? "3px 9px" : "5px 12px", borderRadius: 20, background: `${s.color}18`, border: `1px solid ${s.color}40`, color: s.color, fontSize: small ? 10 : 12, fontWeight: 600, letterSpacing: "0.05em", whiteSpace: "nowrap" } }, s.icon, " ", s.label);
+  }
+  function PriorityBadge({ priority }) {
+    const p = PRIORITY[priority] || PRIORITY.medium;
+    return /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 9px", borderRadius: 20, background: `${p.color}15`, border: `1px solid ${p.color}30`, color: p.color, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em" } }, p.dot, " ", p.label);
+  }
+  function Section({ title, children }) {
+    return /* @__PURE__ */ React.createElement("div", { style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: C.dim, letterSpacing: "0.12em", fontWeight: 600, marginBottom: 12 } }, title.toUpperCase()), children);
+  }
+  function InfoItem({ label, val }) {
+    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: C.muted } }, label), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: C.text, fontWeight: 500, textAlign: "right" } }, val));
+  }
+  function FilterSelect({ value, onChange, options }) {
+    return /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        value,
+        onChange: (e) => onChange(e.target.value),
+        style: { padding: "9px 12px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, color: value === "all" ? C.muted : C.text, fontSize: 13 }
+      },
+      options.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.v, value: o.v }, o.l))
+    );
+  }
+  function FormField({ label, children }) {
+    return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 6, letterSpacing: "0.06em" } }, label), children);
+  }
+  return __toCommonJS(bee_doo_shield_input_exports);
+})();
+const App = _ShieldExport.default;
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>
