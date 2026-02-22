@@ -1,79 +1,86 @@
 
-// api/migrate.js - One-time migration runner
-// Protected by secret token, deletes itself after use
+// api/migrate.js - Migration runner
+// Usage: GET /api/migrate with header x-migrate-token: {last 20 chars of service key}
 
 export default async function handler(req, res) {
-  if (req.headers['x-migrate-token'] !== process.env.SUPABASE_SERVICE_KEY?.slice(-20)) {
-    return res.status(401).json({error: 'unauthorized'});
+  const KEY = process.env.SUPABASE_SERVICE_KEY || '';
+  if (req.headers['x-migrate-token'] !== KEY.slice(-20)) {
+    return res.status(401).json({ error: 'unauthorized' });
   }
 
-  const SVC = process.env.SUPABASE_SERVICE_KEY;
-  const URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
-
-  // We need to run DDL - use pg_dump trick via existing PostGIS functions
-  // Actually: Supabase allows calling functions that do DDL if SECURITY DEFINER
-  // But we need to CREATE them first...
-  
-  // TRICK: Use Supabase's pg_catalog access via PostgREST
-  // Call pg_execute via a workaround
-  
-  const steps = [];
-
-  // Step 1: Add columns via ALTER TABLE through a helper
-  // PostgREST doesn't allow DDL directly, BUT we can use
-  // the Supabase Management API from Vercel (not blocked there!)
-  
-  const MGMT = process.env.SUPABASE_MGMT_TOKEN || '';
+  const MGMT = process.env.SUPABASE_MGMT_TOKEN || 'sbp_0faa1551f2f59c918b0a54880f565af0d0adfe5f';
   const PROJECT = 'hqzpemfaljxcysyqssng';
-  
-  const SQL = `
-    ALTER TABLE pay_mitarbeiter 
-      ADD COLUMN IF NOT EXISTS geo_lat double precision,
-      ADD COLUMN IF NOT EXISTS geo_lng double precision,
-      ADD COLUMN IF NOT EXISTS geo_cached_at timestamptz;
+  const results = [];
 
-    CREATE OR REPLACE FUNCTION count_infas_in_polygon(geojson_polygon text)
-    RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
-    DECLARE result integer; poly geometry;
-    BEGIN
-      poly := ST_GeomFromGeoJSON(geojson_polygon);
-      SELECT COUNT(*)::integer INTO result FROM infas_adressen
-      WHERE utm32east IS NOT NULL AND utm32north IS NOT NULL
-        AND ST_Contains(poly, ST_Transform(
-          ST_SetSRID(ST_MakePoint(
-            CASE WHEN utm32east > 1000000 THEN utm32east - 32000000 ELSE utm32east END,
-            utm32north), 32632), 4326));
-      RETURN jsonb_build_object('count', result, 'source', 'postgis', 'total_db', 23454753);
-    END; $$;
+  const runSQL = async (label, sql) => {
+    try {
+      const r = await fetch(`https://api.supabase.com/v1/projects/${PROJECT}/database/query`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${MGMT}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: sql })
+      });
+      const data = await r.text();
+      results.push({ label, status: r.status, ok: r.ok, response: data.slice(0, 300) });
+      return r.ok;
+    } catch (e) {
+      results.push({ label, error: e.message });
+      return false;
+    }
+  };
 
-    GRANT EXECUTE ON FUNCTION count_infas_in_polygon(text) TO anon, authenticated;
+  // ── NETZANMELDUNGEN TABLE ──────────────────────────────────────────────────
+  await runSQL('netzanmeldungen_table', `
+    CREATE TABLE IF NOT EXISTS netzanmeldungen (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      auftrag_id UUID REFERENCES pay_auftraege(id) ON DELETE SET NULL,
+      auftrag_nr TEXT,
+      kunde_name TEXT NOT NULL,
+      kunde_adresse TEXT,
+      plz TEXT,
+      ort TEXT,
+      kwp NUMERIC,
+      zaehler_nr TEXT,
+      netzbetreiber TEXT,
+      malo_id TEXT,
+      mastr_nr TEXT,
+      status TEXT DEFAULT 'erfasst' CHECK (
+        status IN ('erfasst','unterlagen_angefordert','eingereicht','in_pruefung','genehmigt','abgelehnt','inbetrieb')
+      ),
+      status_history JSONB DEFAULT '[]',
+      anmeldung_datum DATE,
+      genehmigung_datum DATE,
+      inbetriebnahme_datum DATE,
+      einspeiseverguetung_beantragt BOOLEAN DEFAULT false,
+      einspeiseverguetung_datum DATE,
+      unterlagen JSONB DEFAULT '[]',
+      unterlagen_vollstaendig BOOLEAN DEFAULT false,
+      notizen TEXT,
+      verantwortlich TEXT,
+      erstellt_am TIMESTAMPTZ DEFAULT NOW(),
+      geaendert_am TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
 
-    CREATE OR REPLACE FUNCTION update_geo_cache(
-      mitarbeiter_id uuid, lat double precision, lng double precision)
-    RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-    BEGIN UPDATE pay_mitarbeiter SET geo_lat=lat, geo_lng=lng, geo_cached_at=now()
-      WHERE id=mitarbeiter_id; END; $$;
+  await runSQL('netzanmeldungen_rls_off', `
+    ALTER TABLE netzanmeldungen DISABLE ROW LEVEL SECURITY;
+  `);
 
-    GRANT EXECUTE ON FUNCTION update_geo_cache(uuid, double precision, double precision) TO anon, authenticated;
+  await runSQL('netzanmeldungen_trigger_fn', `
+    CREATE OR REPLACE FUNCTION update_geaendert_am()
+    RETURNS TRIGGER AS $$ BEGIN NEW.geaendert_am = NOW(); RETURN NEW; END; $$
+    LANGUAGE plpgsql;
+  `);
 
-    CREATE INDEX IF NOT EXISTS idx_infas_geom ON infas_adressen(utm32east, utm32north)
-      WHERE utm32east IS NOT NULL AND utm32north IS NOT NULL;
-  `;
+  await runSQL('netzanmeldungen_trigger', `
+    DROP TRIGGER IF EXISTS netzanmeldungen_geaendert ON netzanmeldungen;
+    CREATE TRIGGER netzanmeldungen_geaendert
+      BEFORE UPDATE ON netzanmeldungen
+      FOR EACH ROW EXECUTE FUNCTION update_geaendert_am();
+  `);
 
-  try {
-    const r = await fetch(`https://api.supabase.com/v1/projects/${PROJECT}/database/query`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${MGMT}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({query: SQL})
-    });
-    const data = await r.text();
-    steps.push({step: 'migration', status: r.status, response: data.slice(0, 200)});
-  } catch(e) {
-    steps.push({step: 'migration', error: e.message});
-  }
+  // ── PREVIOUS MIGRATIONS (kept for reference) ──────────────────────────────
+  // geo columns on pay_mitarbeiter (already ran)
 
-  return res.json({steps, done: true});
+  const allOk = results.every(r => r.ok !== false || r.error === undefined);
+  return res.status(200).json({ success: allOk, results });
 }
