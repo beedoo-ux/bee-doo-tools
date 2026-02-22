@@ -1,108 +1,208 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>bee-doo · LAGER</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0c1222; color: #e1e7ef; font-family: 'DM Sans', system-ui, sans-serif; }
-  button, select, input, textarea { font-family: inherit; }
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #263354; border-radius: 2px; }
-  .back-btn { position: fixed; top: 10px; left: 10px; z-index: 9999; background: #151d30; border: 1px solid #263354; color: #5c6b8a; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-family: 'DM Sans', sans-serif; cursor: pointer; text-decoration: none; transition: all .15s; }
-  .back-btn:hover { border-color: #FDE154; color: #FDE154; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0c1222;color:#e1e7ef;font-family:'DM Sans',system-ui,sans-serif}
+button,select,input,textarea{font-family:inherit}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#263354;border-radius:2px}
+.back-btn{position:fixed;top:10px;left:10px;z-index:9999;background:#151d30;border:1px solid #263354;color:#5c6b8a;padding:6px 14px;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;text-decoration:none;transition:all .15s}
+.back-btn:hover{border-color:#FDE154;color:#FDE154}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.slide-up{animation:slideUp 0.2s ease both}
 </style>
 </head>
 <body>
 <a href="index.html" class="back-btn">← Launcher</a>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useMemo } = React;
+const { useState, useMemo, useEffect, useRef } = React;
 
-const Y="#FDE154",BG="#0c1222",C1="#151d30",C2="#1c2640",BR="#263354",TX="#e1e7ef",TX2="#5c6b8a";
+// ── TOKENS ────────────────────────────────────────────────────────────────────
+const Y="#FDE154",BG="#0c1222",C1="#151d30",C2="#1c2640",BR="#263354";
+const TX="#e1e7ef",TX2="#5c6b8a";
 const OK="#34d399",WARN="#f59e0b",ERR="#f87171",PURPLE="#E879F9",BLUE="#60A5FA";
 const FARBEN=[BLUE,OK,PURPLE,WARN,"#F472B6","#2DD4BF",Y,ERR];
-const KATEGORIEN=["Alle","Wechselrichter","Batterie","Zubehör","Zählerschrank","PV-Module","Kabel"];
 const CARD={background:C1,border:`1px solid ${BR}`,borderRadius:12,padding:"16px"};
 const INPUT={background:C2,border:`1px solid ${BR}`,borderRadius:8,color:TX,padding:"8px 12px",fontSize:13,width:"100%",boxSizing:"border-box",outline:"none"};
+const KAT_LISTE=["Alle","Wechselrichter","Batterie","Zubehör","Zählerschrank","Wallbox","Unterkonstruktion","PV-Module","Kabel"];
 
-const INIT_ARTIKEL=[
-  {id:"WR-50", name:"Wechselrichter 5.0 kW",  kat:"Wechselrichter", bestand:8,  min:5,  einheit:"Stk",preis:1240,serienNr:true},
-  {id:"WR-80", name:"Wechselrichter 8.0 kW",  kat:"Wechselrichter", bestand:3,  min:5,  einheit:"Stk",preis:1480,serienNr:true},
-  {id:"WR-100",name:"Wechselrichter 10.0 kW", kat:"Wechselrichter", bestand:5,  min:3,  einheit:"Stk",preis:1680,serienNr:true},
-  {id:"BAT-M", name:"Batterie Master",         kat:"Batterie",       bestand:10, min:5,  einheit:"Stk",preis:2100,serienNr:true},
-  {id:"BAT-S", name:"Batterie Slave",          kat:"Batterie",       bestand:18, min:10, einheit:"Stk",preis:1800,serienNr:true},
-  {id:"EPS",   name:"EPS Box",                 kat:"Zubehör",        bestand:12, min:5,  einheit:"Stk",preis:320, serienNr:true},
-  {id:"ZS-1P", name:"Zählerschrank 1-phasig", kat:"Zählerschrank",  bestand:6,  min:3,  einheit:"Stk",preis:480, serienNr:false},
-  {id:"ZS-3P", name:"Zählerschrank 3-phasig", kat:"Zählerschrank",  bestand:9,  min:4,  einheit:"Stk",preis:640, serienNr:false},
-  {id:"MOD-405",name:"PV-Modul 405W",          kat:"PV-Module",      bestand:84, min:40, einheit:"Stk",preis:89,  serienNr:false},
-  {id:"MOD-430",name:"PV-Modul 430W",          kat:"PV-Module",      bestand:22, min:30, einheit:"Stk",preis:94,  serienNr:false},
-  {id:"KAB-DC",name:"DC-Kabel 6mm²",           kat:"Kabel",          bestand:325,min:100,einheit:"m",  preis:1.20,serienNr:false},
-  {id:"MC4",   name:"MC4-Steckverbinder",      kat:"Kabel",          bestand:180,min:100,einheit:"Paar",preis:2.40,serienNr:false},
+// ── ARTIKEL-STAMM ─────────────────────────────────────────────────────────────
+const INIT_ART=[
+  {id:"WR-50", name:"Wechselrichter 5.0 kW",  kat:"Wechselrichter",  bestand:8,  min:5,  einheit:"Stk",preis:1240,sn:true},
+  {id:"WR-80", name:"Wechselrichter 8.0 kW",  kat:"Wechselrichter",  bestand:3,  min:5,  einheit:"Stk",preis:1480,sn:true},
+  {id:"WR-100",name:"Wechselrichter 10.0 kW", kat:"Wechselrichter",  bestand:5,  min:3,  einheit:"Stk",preis:1680,sn:true},
+  {id:"BAT-M", name:"Batterie Master",         kat:"Batterie",        bestand:10, min:5,  einheit:"Stk",preis:2100,sn:true},
+  {id:"BAT-S1",name:"Batterie Slave 1",        kat:"Batterie",        bestand:18, min:10, einheit:"Stk",preis:1800,sn:true},
+  {id:"BAT-S2",name:"Batterie Slave 2",        kat:"Batterie",        bestand:7,  min:10, einheit:"Stk",preis:1800,sn:true},
+  {id:"EPS",   name:"EPS Box",                 kat:"Zubehör",         bestand:12, min:5,  einheit:"Stk",preis:320, sn:true},
+  {id:"ZS-1P", name:"Zählerschrank 1-phasig", kat:"Zählerschrank",   bestand:6,  min:3,  einheit:"Stk",preis:480, sn:false},
+  {id:"ZS-3P", name:"Zählerschrank 3-phasig", kat:"Zählerschrank",   bestand:9,  min:4,  einheit:"Stk",preis:640, sn:false},
+  {id:"WB-11", name:"Wallbox 11 kW",           kat:"Wallbox",         bestand:4,  min:3,  einheit:"Stk",preis:890, sn:true},
+  {id:"WB-22", name:"Wallbox 22 kW",           kat:"Wallbox",         bestand:2,  min:3,  einheit:"Stk",preis:1190,sn:true},
+  {id:"UK-PRO",name:"UK Profil 40mm",          kat:"Unterkonstruktion",bestand:320,min:100,einheit:"m",  preis:4.80,sn:false},
+  {id:"UK-HAK",name:"UK Dachhaken",            kat:"Unterkonstruktion",bestand:440,min:200,einheit:"Stk",preis:3.20,sn:false},
+  {id:"UK-KLE",name:"UK Klemme Mitte",         kat:"Unterkonstruktion",bestand:280,min:150,einheit:"Stk",preis:2.10,sn:false},
+  {id:"MOD-405",name:"PV-Modul 405W",          kat:"PV-Module",       bestand:84, min:40, einheit:"Stk",preis:89,  sn:false},
+  {id:"MOD-430",name:"PV-Modul 430W",          kat:"PV-Module",       bestand:22, min:30, einheit:"Stk",preis:94,  sn:false},
+  {id:"KAB-DC",name:"DC-Kabel 6mm²",           kat:"Kabel",           bestand:325,min:100,einheit:"m",  preis:1.20,sn:false},
+  {id:"MC4",   name:"MC4-Steckverbinder",      kat:"Kabel",           bestand:180,min:100,einheit:"Paar",preis:2.40,sn:false},
 ];
 
+// ── PAKETE-VORLAGEN ───────────────────────────────────────────────────────────
 const INIT_PAKETE=[
-  {id:"PKT-001",name:"Starter 5kW + 10kWh",   farbe:BLUE,  beschreibung:"Einstiegspaket für kleinere Dachflächen",
-   komponenten:[{artikelId:"WR-50",menge:1},{artikelId:"BAT-M",menge:1},{artikelId:"BAT-S",menge:1},{artikelId:"EPS",menge:1},{artikelId:"ZS-3P",menge:1}]},
-  {id:"PKT-002",name:"Standard 8kW + 15kWh",  farbe:OK,    beschreibung:"Meistverkauftes Paket für Einfamilienhäuser",
-   komponenten:[{artikelId:"WR-80",menge:1},{artikelId:"BAT-M",menge:1},{artikelId:"BAT-S",menge:2},{artikelId:"EPS",menge:1},{artikelId:"ZS-3P",menge:1}]},
-  {id:"PKT-003",name:"Premium 10kW + 20kWh",  farbe:PURPLE,beschreibung:"Für große Dachflächen und hohen Verbrauch",
-   komponenten:[{artikelId:"WR-100",menge:1},{artikelId:"BAT-M",menge:1},{artikelId:"BAT-S",menge:3},{artikelId:"EPS",menge:1},{artikelId:"ZS-3P",menge:1}]},
+  {id:"PKT-001",name:"Starter 5kW + 10kWh",farbe:BLUE,beschreibung:"Einstiegspaket",
+   komp:[{aId:"WR-50",m:1},{aId:"BAT-M",m:1},{aId:"BAT-S1",m:1},{aId:"EPS",m:1},{aId:"ZS-3P",m:1}]},
+  {id:"PKT-002",name:"Standard 8kW + 15kWh",farbe:OK,beschreibung:"Meistverkauft",
+   komp:[{aId:"WR-80",m:1},{aId:"BAT-M",m:1},{aId:"BAT-S1",m:2},{aId:"EPS",m:1},{aId:"ZS-3P",m:1}]},
+  {id:"PKT-003",name:"Premium 10kW + 20kWh",farbe:PURPLE,beschreibung:"Große Anlagen",
+   komp:[{aId:"WR-100",m:1},{aId:"BAT-M",m:1},{aId:"BAT-S1",m:2},{aId:"BAT-S2",m:1},{aId:"EPS",m:1},{aId:"ZS-3P",m:1}]},
 ];
 
-function getVerfuegbarkeit(paket, artikel) {
-  let moeglich = Infinity;
-  const details = paket.komponenten.map(k => {
-    const art = artikel.find(a => a.id === k.artikelId);
-    if (!art) return {...k, art:null, moeglich:0};
-    const m = Math.floor(art.bestand / k.menge);
-    if (m < moeglich) moeglich = m;
-    return {...k, art, moeglich:m};
-  });
-  return {moeglich: moeglich===Infinity?0:moeglich, details};
-}
+// ── AUFTRÄGE MIT STÜCKLISTE ───────────────────────────────────────────────────
+// quelle: "field" = vom Berater gewählt | "planung" = von Planung ergänzt
+const INIT_AUFTRAEGE=[
+  {
+    id:"AU-2026-0092",
+    kunde:"Fischer, Maria",adresse:"Detmolder Str. 88, Bielefeld",
+    montageDatum:"2026-02-28",berater:"T. Hoffmann",system:"Standard 8kW",
+    status:"offen",
+    stueckliste:[
+      {aId:"WR-80",  m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"BAT-M",  m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"BAT-S1", m:2, quelle:"field",   sn:"",      komm:false},
+      {aId:"EPS",    m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"ZS-3P",  m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"MOD-430",m:20,quelle:"field",   sn:"",      komm:false},
+      {aId:"UK-PRO", m:48,quelle:"planung", sn:"",      komm:false},
+      {aId:"UK-HAK", m:24,quelle:"planung", sn:"",      komm:false},
+      {aId:"UK-KLE", m:40,quelle:"planung", sn:"",      komm:false},
+      {aId:"KAB-DC", m:60,quelle:"planung", sn:"",      komm:false},
+      {aId:"MC4",    m:20,quelle:"planung", sn:"",      komm:false},
+    ]
+  },
+  {
+    id:"AU-2026-0091",
+    kunde:"Braun, Stefan",adresse:"Herforder Str. 12, Herford",
+    montageDatum:"2026-03-03",berater:"S. Wagner",system:"Premium 10kW + Wallbox",
+    status:"offen",
+    stueckliste:[
+      {aId:"WR-100", m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"BAT-M",  m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"BAT-S1", m:2, quelle:"field",   sn:"",      komm:false},
+      {aId:"BAT-S2", m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"EPS",    m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"ZS-3P",  m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"WB-22",  m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"MOD-430",m:24,quelle:"field",   sn:"",      komm:false},
+      {aId:"UK-PRO", m:58,quelle:"planung", sn:"",      komm:false},
+      {aId:"UK-HAK", m:29,quelle:"planung", sn:"",      komm:false},
+      {aId:"UK-KLE", m:48,quelle:"planung", sn:"",      komm:false},
+      {aId:"KAB-DC", m:72,quelle:"planung", sn:"",      komm:false},
+      {aId:"MC4",    m:24,quelle:"planung", sn:"",      komm:false},
+    ]
+  },
+  {
+    id:"AU-2026-0090",
+    kunde:"Müller, Hans",adresse:"Gütersloher Str. 5, Gütersloh",
+    montageDatum:"2026-03-07",berater:"M. Klein",system:"Starter 5kW",
+    status:"offen",
+    stueckliste:[
+      {aId:"WR-50",  m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"BAT-M",  m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"BAT-S1", m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"EPS",    m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"ZS-3P",  m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"WB-11",  m:1, quelle:"field",   sn:"",      komm:false},
+      {aId:"MOD-405",m:14,quelle:"field",   sn:"",      komm:false},
+      {aId:"UK-PRO", m:34,quelle:"planung", sn:"",      komm:false},
+      {aId:"UK-HAK", m:17,quelle:"planung", sn:"",      komm:false},
+      {aId:"UK-KLE", m:28,quelle:"planung", sn:"",      komm:false},
+      {aId:"KAB-DC", m:42,quelle:"planung", sn:"",      komm:false},
+      {aId:"MC4",    m:14,quelle:"planung", sn:"",      komm:false},
+    ]
+  },
+];
 
-function Badge({color, label}) {
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function Badge({color,label}){
   return <span style={{background:`${color}18`,color,border:`1px solid ${color}40`,borderRadius:6,padding:"2px 8px",fontSize:10,fontWeight:700,letterSpacing:"0.5px",display:"inline-block"}}>{label}</span>;
 }
-
-function Bar({bestand,min}) {
-  const max=Math.max(min*2,bestand);
-  const pct=Math.min((bestand/max)*100,100);
-  const color=bestand===0?ERR:bestand<min?WARN:OK;
-  return <div style={{background:BR,borderRadius:4,height:4,width:"100%"}}><div style={{width:`${pct}%`,height:"100%",background:color,borderRadius:4}}/></div>;
+function Bar({v,max,color}){
+  return <div style={{background:BR,borderRadius:4,height:4,width:"100%"}}><div style={{width:`${Math.min((v/Math.max(max,1))*100,100)}%`,height:"100%",background:color||OK,borderRadius:4,transition:"width 0.4s ease"}}/></div>;
 }
 
-// ── MAIN ──────────────────────────────────────────────────────────────────────
-function App() {
-  const [tab,setTab]=useState("pakete");
-  const [artikel,setArtikel]=useState(INIT_ARTIKEL);
+function getArt(id,art){return art.find(a=>a.id===id);}
+
+function getStuecklistenStatus(sl,art){
+  let total=sl.length,fehlen=0,teilverfuegbar=0;
+  const fehlTeile=[];
+  sl.forEach(s=>{
+    const a=getArt(s.aId,art);
+    if(!a||a.bestand<s.m){fehlen++;fehlTeile.push(a?.name||s.aId);}
+    else if(a.bestand<s.m*2) teilverfuegbar++;
+  });
+  if(fehlen>0) return {color:ERR,label:"Fehlteile",icon:"✕",fehlen,fehlTeile};
+  if(teilverfuegbar>0) return {color:WARN,label:"Knapp",icon:"⚠",fehlen:0,fehlTeile:[]};
+  return {color:OK,label:"Verfügbar",icon:"✓",fehlen:0,fehlTeile:[]};
+}
+
+function getKommStatus(sl){
+  const total=sl.length;
+  const done=sl.filter(s=>s.komm).length;
+  if(done===0) return {pct:0,color:TX2,label:"Offen"};
+  if(done===total) return {pct:100,color:OK,label:"Komplett"};
+  return {pct:Math.round(done/total*100),color:WARN,label:`${done}/${total}`};
+}
+
+// ── QR CODE COMPONENT ─────────────────────────────────────────────────────────
+function QRCode({value,size=120}){
+  const ref=useRef(null);
+  useEffect(()=>{
+    if(!ref.current) return;
+    ref.current.innerHTML="";
+    try{
+      new window.QRCode(ref.current,{text:value,width:size,height:size,colorDark:"#e1e7ef",colorLight:"#151d30",correctLevel:window.QRCode.CorrectLevel.M});
+    }catch(e){}
+  },[value,size]);
+  return <div ref={ref} style={{display:"inline-block"}}/>;
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+function App(){
+  const [tab,setTab]=useState("auftraege");
+  const [art,setArt]=useState(INIT_ART);
   const [pakete,setPakete]=useState(INIT_PAKETE);
+  const [auftraege,setAuftraege]=useState(INIT_AUFTRAEGE);
   const [modal,setModal]=useState(null);
   const [toast,setToast]=useState(null);
 
-  function showToast(msg,ok=true){setToast({msg,ok});setTimeout(()=>setToast(null),3000);}
+  function showToast(msg,ok=true){setToast({msg,ok});setTimeout(()=>setToast(null),3200);}
 
-  const kritisch=artikel.filter(a=>a.bestand<a.min);
-  const gesamtwert=artikel.reduce((s,a)=>s+a.bestand*a.preis,0);
-  const paketeVerfuegbar=pakete.reduce((s,p)=>s+getVerfuegbarkeit(p,artikel).moeglich,0);
+  const kritisch=art.filter(a=>a.bestand<a.min);
+  const gesamtwert=art.reduce((s,a)=>s+a.bestand*a.preis,0);
+  const offeneAu=auftraege.filter(a=>a.status!=="ausgegeben").length;
 
   const TABS=[
-    {id:"pakete",   label:"Pakete",   icon:"📋"},
-    {id:"bestand",  label:"Bestand",  icon:"📦"},
-    {id:"ausgabe",  label:"Ausgabe",  icon:"📤"},
-    {id:"bestellen",label:"Bestellen",icon:"🛒"},
+    {id:"auftraege",  label:"Aufträge", icon:"📋"},
+    {id:"bestand",    label:"Bestand",  icon:"📦"},
+    {id:"pakete",     label:"Pakete",   icon:"🗂"},
+    {id:"bestellen",  label:"Bestellen",icon:"🛒"},
   ];
 
   return (
     <div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:BG,minHeight:"100vh",color:TX,maxWidth:480,margin:"0 auto",paddingBottom:80}}>
+
+      {/* HEADER */}
       <div style={{background:C1,borderBottom:`1px solid ${BR}`,padding:"48px 16px 0",position:"sticky",top:0,zIndex:50}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -110,7 +210,7 @@ function App() {
             <div>
               <div style={{fontWeight:800,fontSize:16}}>bee-doo LAGER</div>
               <div style={{fontSize:10,color:TX2}}>
-                {paketeVerfuegbar} Pakete · {artikel.length} Artikel
+                {offeneAu} offene Aufträge
                 {kritisch.length>0&&<span style={{color:WARN}}> · {kritisch.length} kritisch</span>}
               </div>
             </div>
@@ -131,342 +231,457 @@ function App() {
       </div>
 
       <div style={{padding:"12px 16px"}}>
-        {tab==="pakete"    && <PaketeTab    pakete={pakete} setPakete={setPakete} artikel={artikel} setModal={setModal} showToast={showToast}/>}
-        {tab==="bestand"   && <BestandTab   artikel={artikel} setArtikel={setArtikel} kritisch={kritisch} setModal={setModal} showToast={showToast}/>}
-        {tab==="ausgabe"   && <AusgabeTab   pakete={pakete} artikel={artikel} setArtikel={setArtikel} showToast={showToast}/>}
-        {tab==="bestellen" && <BestellenTab artikel={artikel} setArtikel={setArtikel} kritisch={kritisch} showToast={showToast}/>}
+        {tab==="auftraege" && <AuftraegeTab auftraege={auftraege} setAuftraege={setAuftraege} art={art} setArt={setArt} pakete={pakete} setModal={setModal} showToast={showToast}/>}
+        {tab==="bestand"   && <BestandTab art={art} setArt={setArt} kritisch={kritisch} setModal={setModal}/>}
+        {tab==="pakete"    && <PaketeTab pakete={pakete} setPakete={setPakete} art={art} setModal={setModal} showToast={showToast}/>}
+        {tab==="bestellen" && <BestellenTab art={art} setArt={setArt} kritisch={kritisch} showToast={showToast}/>}
       </div>
 
-      {modal?.type==="paketBuilder" && (
-        <PaketBuilderModal
-          paket={modal.data} artikel={artikel}
-          onSave={p=>{
-            if(modal.data) setPakete(prev=>prev.map(x=>x.id===p.id?p:x));
-            else setPakete(prev=>[...prev,{...p,id:`PKT-${String(prev.length+1).padStart(3,"0")}`}]);
-            setModal(null);
-            showToast(modal.data?"Paket aktualisiert":"Paket angelegt");
-          }}
-          onDelete={id=>{setPakete(prev=>prev.filter(p=>p.id!==id));setModal(null);showToast("Paket gelöscht");}}
-          onClose={()=>setModal(null)}
-        />
-      )}
-      {modal?.type==="artikel" && (
-        <ArtikelModal art={modal.data}
-          onSave={a=>{
-            if(modal.data) setArtikel(prev=>prev.map(x=>x.id===a.id?a:x));
-            else setArtikel(prev=>[...prev,{...a,id:a.id||`ART-${Date.now()}`}]);
-            setModal(null);
-            showToast(modal.data?"Artikel gespeichert":"Artikel angelegt");
-          }}
-          onClose={()=>setModal(null)}
-        />
-      )}
+      {/* MODALS */}
+      {modal?.type==="kommissionierung" && <KommissionierModal auftrag={modal.data} art={art} setArt={setArt} auftraege={auftraege} setAuftraege={setAuftraege} showToast={showToast} onClose={()=>setModal(null)}/>}
+      {modal?.type==="neuerAuftrag"     && <NeuerAuftragModal art={art} pakete={pakete} onSave={a=>{setAuftraege(p=>[a,...p]);setModal(null);showToast("Auftrag angelegt");}} onClose={()=>setModal(null)}/>}
+      {modal?.type==="editAuftrag"      && <EditStuecklisteModal auftrag={modal.data} art={art} onSave={a=>{setAuftraege(p=>p.map(x=>x.id===a.id?a:x));setModal(null);showToast("Stückliste gespeichert");}} onClose={()=>setModal(null)}/>}
+      {modal?.type==="paketBuilder"     && <PaketBuilderModal paket={modal.data} art={art} onSave={p=>{if(modal.data)setPakete(pr=>pr.map(x=>x.id===p.id?p:x));else setPakete(pr=>[...pr,{...p,id:`PKT-${String(pr.length+1).padStart(3,"0")}`}]);setModal(null);showToast("Paket gespeichert");}} onDelete={id=>{setPakete(p=>p.filter(x=>x.id!==id));setModal(null);showToast("Paket gelöscht");}} onClose={()=>setModal(null)}/>}
+      {modal?.type==="artikel"          && <ArtikelModal art2={modal.data} onSave={a=>{if(modal.data)setArt(p=>p.map(x=>x.id===a.id?a:x));else setArt(p=>[...p,a]);setModal(null);showToast("Artikel gespeichert");}} onClose={()=>setModal(null)}/>}
 
-      {toast&&(
-        <div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:toast.ok?`${OK}20`:`${ERR}20`,border:`1px solid ${toast.ok?OK:ERR}50`,color:toast.ok?OK:ERR,borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,zIndex:300,whiteSpace:"nowrap",boxShadow:"0 4px 20px #00000060"}}>
-          {toast.ok?"✓":"!"} {toast.msg}
-        </div>
-      )}
+      {toast&&<div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:toast.ok?`${OK}20`:`${ERR}20`,border:`1px solid ${toast.ok?OK:ERR}50`,color:toast.ok?OK:ERR,borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,zIndex:999,whiteSpace:"nowrap",boxShadow:"0 4px 20px #00000060"}}>{toast.ok?"✓":"!"} {toast.msg}</div>}
     </div>
   );
 }
 
-// ── PAKETE TAB ────────────────────────────────────────────────────────────────
-function PaketeTab({pakete,setPakete,artikel,setModal,showToast}) {
+// ── AUFTRÄGE TAB ──────────────────────────────────────────────────────────────
+function AuftraegeTab({auftraege,setAuftraege,art,pakete,setModal,showToast}){
+  const [filter,setFilter]=useState("offen");
+
+  // Sortierung nach Montagedatum
+  const sorted=useMemo(()=>[...auftraege]
+    .filter(a=>filter==="alle"||a.status!=="ausgegeben")
+    .sort((a,b)=>new Date(a.montageDatum)-new Date(b.montageDatum))
+  ,[auftraege,filter]);
+
+  const heute=new Date();
+
   return (
     <div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
-        {[
-          {label:"Pakettypen",value:pakete.length,color:PURPLE},
-          {label:"Komplett verfügbar",value:pakete.reduce((s,p)=>s+getVerfuegbarkeit(p,artikel).moeglich,0),color:OK},
-          {label:"Engpässe",value:pakete.filter(p=>getVerfuegbarkeit(p,artikel).moeglich===0).length,color:ERR},
-        ].map((s,i)=>(
-          <div key={i} style={{...CARD,padding:"10px 12px"}}>
-            <div style={{fontSize:20,fontWeight:800,color:s.color}}>{s.value}</div>
-            <div style={{fontSize:9,color:TX2,marginTop:2,lineHeight:1.3}}>{s.label}</div>
-          </div>
+      {/* FILTER */}
+      <div style={{display:"flex",gap:6,marginBottom:14}}>
+        {["offen","alle"].map(f=>(
+          <button key={f} onClick={()=>setFilter(f)} style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${filter===f?Y:BR}`,background:filter===f?`${Y}15`:"transparent",color:filter===f?Y:TX2,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+            {f==="offen"?"Offene Aufträge":"Alle"}
+          </button>
         ))}
       </div>
 
+      {/* AUFTRAGS-KARTEN */}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {pakete.map(p=>{
-          const {moeglich,details}=getVerfuegbarkeit(p,artikel);
-          const engpass=details.find(d=>d.moeglich===moeglich&&moeglich<3);
-          const pktPreis=p.komponenten.reduce((s,k)=>{const a=artikel.find(x=>x.id===k.artikelId);return s+(a?.preis||0)*k.menge;},0);
+        {sorted.map(au=>{
+          const st=getStuecklistenStatus(au.stueckliste,art);
+          const ks=getKommStatus(au.stueckliste);
+          const md=new Date(au.montageDatum);
+          const tage=Math.round((md-heute)/(1000*60*60*24));
+          const dringend=tage<=3&&tage>=0;
+          const vergangen=tage<0;
+
           return (
-            <div key={p.id} style={{...CARD,borderColor:moeglich>0?`${p.farbe}50`:BR}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                <div style={{flex:1}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:p.farbe}}/>
-                    <span style={{fontSize:10,color:TX2}}>{p.id}</span>
-                    <span style={{fontSize:10,color:TX2}}>· €{pktPreis.toLocaleString("de-DE",{maximumFractionDigits:0})}/Stk</span>
+            <div key={au.id} className="slide-up" style={{...CARD,borderColor:dringend?`${WARN}60`:vergangen?`${ERR}40`:BR,position:"relative",overflow:"hidden"}}>
+              {/* Farbstreifen links */}
+              <div style={{position:"absolute",left:0,top:0,bottom:0,width:4,background:st.color,borderRadius:"12px 0 0 12px"}}/>
+              <div style={{paddingLeft:8}}>
+
+                {/* HEADER */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                  <div>
+                    <div style={{fontSize:10,color:TX2,marginBottom:2}}>{au.id} · {au.berater}</div>
+                    <div style={{fontWeight:800,fontSize:14,color:TX}}>{au.kunde}</div>
+                    <div style={{fontSize:11,color:TX2}}>📍 {au.adresse}</div>
                   </div>
-                  <div style={{fontWeight:800,fontSize:15,color:TX}}>{p.name}</div>
-                  <div style={{fontSize:11,color:TX2,marginTop:2}}>{p.beschreibung}</div>
-                </div>
-                <div style={{textAlign:"center",marginLeft:12,flexShrink:0}}>
-                  <div style={{fontSize:32,fontWeight:800,color:moeglich===0?ERR:moeglich<3?WARN:OK,lineHeight:1}}>{moeglich}</div>
-                  <div style={{fontSize:9,color:TX2}}>verfügbar</div>
-                </div>
-              </div>
-
-              <div style={{borderTop:`1px solid ${BR}`,paddingTop:10,display:"flex",flexDirection:"column",gap:6}}>
-                {details.map((d,i)=>{
-                  if(!d.art) return null;
-                  const c=d.moeglich===0?ERR:d.moeglich<3?WARN:OK;
-                  return (
-                    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <div style={{width:6,height:6,borderRadius:"50%",background:c,flexShrink:0}}/>
-                        <span style={{fontSize:12,color:TX}}>{d.menge}× {d.art.name}</span>
-                      </div>
-                      <span style={{fontSize:11,color:c!==OK?c:TX2}}>{d.art.bestand} im Lager</span>
+                  <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}>
+                    <div style={{fontSize:11,fontWeight:700,color:dringend?WARN:vergangen?ERR:TX}}>
+                      {vergangen?"Überfällig":dringend?`in ${tage}T`:`in ${tage}T`}
                     </div>
-                  );
-                })}
+                    <div style={{fontSize:10,color:TX2}}>{md.toLocaleDateString("de-DE")}</div>
+                  </div>
+                </div>
+
+                {/* SYSTEM + STATUS */}
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                  <span style={{background:`${PURPLE}15`,color:PURPLE,border:`1px solid ${PURPLE}30`,borderRadius:6,padding:"2px 8px",fontSize:10,fontWeight:600}}>⚡ {au.system}</span>
+                  <Badge color={st.color} label={st.label}/>
+                  {au.status==="ausgegeben"&&<Badge color={OK} label="Ausgegeben"/>}
+                </div>
+
+                {/* FEHLTEILE */}
+                {st.fehlen>0&&(
+                  <div style={{background:`${ERR}10`,border:`1px solid ${ERR}30`,borderRadius:8,padding:"6px 10px",marginBottom:10,fontSize:11,color:ERR}}>
+                    ✕ Fehlend: {st.fehlTeile.slice(0,3).join(", ")}{st.fehlTeile.length>3&&` +${st.fehlTeile.length-3}`}
+                  </div>
+                )}
+
+                {/* KOMMISSIONIER-FORTSCHRITT */}
+                <div style={{marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:10,color:TX2}}>Kommissionierung</span>
+                    <span style={{fontSize:10,fontWeight:700,color:ks.color}}>{ks.label}</span>
+                  </div>
+                  <Bar v={ks.pct} max={100} color={ks.color}/>
+                </div>
+
+                {/* AKTIONEN */}
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>setModal({type:"kommissionierung",data:au})} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:ks.pct===100?`${OK}20`:Y,color:ks.pct===100?OK:BG,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                    {ks.pct===100?"✓ Ausgeben":"📦 Kommissionieren"}
+                  </button>
+                  <button onClick={()=>setModal({type:"editAuftrag",data:au})} style={{padding:"9px 12px",borderRadius:8,border:`1px solid ${BR}`,background:"transparent",color:TX2,fontSize:12,cursor:"pointer"}}>✏️</button>
+                  <button onClick={()=>setModal({type:"kommissionierung",data:{...au,_qrOnly:true}})} style={{padding:"9px 12px",borderRadius:8,border:`1px solid ${BR}`,background:"transparent",color:TX2,fontSize:12,cursor:"pointer"}}>QR</button>
+                </div>
               </div>
-
-              {moeglich===0&&<div style={{marginTop:8,background:`${ERR}10`,border:`1px solid ${ERR}30`,borderRadius:8,padding:"6px 10px",fontSize:11,color:ERR}}>✕ Paket aktuell nicht komplettierbar</div>}
-              {engpass&&moeglich>0&&<div style={{marginTop:8,background:`${WARN}10`,border:`1px solid ${WARN}30`,borderRadius:8,padding:"6px 10px",fontSize:11,color:WARN}}>⚠️ Engpass: {engpass.art?.name}</div>}
-
-              <button onClick={()=>setModal({type:"paketBuilder",data:p})} style={{width:"100%",marginTop:10,padding:"8px",borderRadius:8,border:`1px solid ${BR}`,background:"transparent",color:TX2,fontSize:11,fontWeight:600,cursor:"pointer"}}>✏️ Bearbeiten</button>
             </div>
           );
         })}
       </div>
 
-      <button onClick={()=>setModal({type:"paketBuilder",data:null})} style={{width:"100%",marginTop:12,padding:"13px",borderRadius:10,border:`1px dashed ${PURPLE}60`,background:`${PURPLE}08`,color:PURPLE,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-        + Neues Paket erstellen
+      {/* NEUER AUFTRAG */}
+      <button onClick={()=>setModal({type:"neuerAuftrag"})} style={{width:"100%",marginTop:14,padding:"13px",borderRadius:10,border:`1px dashed ${BR}`,background:"transparent",color:TX2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+        + Neuen Auftrag / Stückliste anlegen
       </button>
     </div>
   );
 }
 
-// ── PAKET BUILDER MODAL ───────────────────────────────────────────────────────
-function PaketBuilderModal({paket,artikel,onSave,onDelete,onClose}) {
-  const [name,setName]=useState(paket?.name||"");
-  const [beschr,setBeschr]=useState(paket?.beschreibung||"");
-  const [farbe,setFarbe]=useState(paket?.farbe||BLUE);
-  const [komp,setKomp]=useState(paket?.komponenten||[]);
-  const [addId,setAddId]=useState(artikel[0]?.id||"");
+// ── KOMMISSIONIER MODAL ───────────────────────────────────────────────────────
+function KommissionierModal({auftrag,art,setArt,auftraege,setAuftraege,showToast,onClose}){
+  const [sl,setSl]=useState(auftrag.stueckliste.map(s=>({...s})));
+  const [qrMode,setQrMode]=useState(auftrag._qrOnly||false);
+  const [scan,setScan]=useState("");
+  const ks=getKommStatus(sl);
+  const fertig=ks.pct===100;
 
-  function add(){
-    if(komp.find(k=>k.artikelId===addId)) setKomp(p=>p.map(k=>k.artikelId===addId?{...k,menge:k.menge+1}:k));
-    else setKomp(p=>[...p,{artikelId:addId,menge:1}]);
+  function toggleKomm(idx){
+    setSl(prev=>prev.map((s,i)=>i===idx?{...s,komm:!s.komm}:s));
   }
-  function setM(id,m){
-    if(m<=0) setKomp(p=>p.filter(k=>k.artikelId!==id));
-    else setKomp(p=>p.map(k=>k.artikelId===id?{...k,menge:m}:k));
+  function setSN(idx,v){
+    setSl(prev=>prev.map((s,i)=>i===idx?{...s,sn:v}:s));
   }
 
-  const preview=komp.length>0?komp.reduce((min,k)=>{
-    const a=artikel.find(x=>x.id===k.artikelId);
-    return a?Math.min(min,Math.floor(a.bestand/k.menge)):0;
-  },Infinity)===Infinity?0:komp.reduce((min,k)=>{const a=artikel.find(x=>x.id===k.artikelId);return a?Math.min(min,Math.floor(a.bestand/k.menge)):0;},Infinity):0;
+  // Barcode/Artikel-ID Scan simulieren
+  function handleScan(e){
+    if(e.key==="Enter"&&scan){
+      const idx=sl.findIndex(s=>s.aId===scan.toUpperCase());
+      if(idx>=0){toggleKomm(idx);setScan("");showToast(`${getArt(sl[idx].aId,art)?.name} gescannt`);}
+      else showToast(`Artikel ${scan} nicht in Stückliste`,false);
+      setScan("");
+    }
+  }
 
-  const gesamtpreis=komp.reduce((s,k)=>{const a=artikel.find(x=>x.id===k.artikelId);return s+(a?.preis||0)*k.menge;},0);
+  function ausgeben(){
+    // Bestand abbuchen
+    setArt(prev=>prev.map(a=>{
+      const pos=sl.find(s=>s.aId===a.id);
+      return pos?{...a,bestand:a.bestand-pos.m}:a;
+    }));
+    setAuftraege(prev=>prev.map(a=>a.id===auftrag.id?{...a,status:"ausgegeben",stueckliste:sl}:a));
+    showToast(`Auftrag ${auftrag.id} ausgegeben – Bestand gebucht`);
+    onClose();
+  }
 
-  const canSave=name&&komp.length>0;
+  if(qrMode){
+    return (
+      <div style={{position:"fixed",inset:0,background:"#00000095",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+        <div style={{background:C1,borderRadius:"16px 16px 0 0",width:"100%",maxWidth:480,padding:24,border:`1px solid ${BR}`,textAlign:"center"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+            <div style={{fontWeight:800,fontSize:15}}>QR-Code · {auftrag.id}</div>
+            <button onClick={onClose} style={{background:"none",border:"none",color:TX2,fontSize:22,cursor:"pointer"}}>✕</button>
+          </div>
+          <div style={{display:"inline-flex",padding:16,background:"#151d30",borderRadius:12,border:`1px solid ${BR}`,marginBottom:16}}>
+            <QRCode value={`bee-doo|${auftrag.id}|${auftrag.kunde}|${auftrag.montageDatum}`} size={160}/>
+          </div>
+          <div style={{fontSize:13,fontWeight:700,color:TX,marginBottom:4}}>{auftrag.kunde}</div>
+          <div style={{fontSize:11,color:TX2,marginBottom:4}}>{auftrag.system}</div>
+          <div style={{fontSize:11,color:TX2}}>Montage: {new Date(auftrag.montageDatum).toLocaleDateString("de-DE")}</div>
+          <button onClick={()=>setQrMode(false)} style={{width:"100%",marginTop:20,padding:"11px",borderRadius:10,border:`1px solid ${BR}`,background:"transparent",color:TX2,fontWeight:600,fontSize:13,cursor:"pointer"}}>Zur Kommissionierung</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{position:"fixed",inset:0,background:"#00000095",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+    <div style={{position:"fixed",inset:0,background:"#00000095",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div style={{background:C1,borderRadius:"16px 16px 0 0",width:"100%",maxWidth:480,maxHeight:"92vh",overflowY:"auto",border:`1px solid ${BR}`}}>
+
+        {/* STICKY HEADER IM MODAL */}
+        <div style={{position:"sticky",top:0,background:C1,borderBottom:`1px solid ${BR}`,padding:"14px 16px",zIndex:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div>
+              <div style={{fontSize:10,color:TX2}}>{auftrag.id}</div>
+              <div style={{fontWeight:800,fontSize:14}}>{auftrag.kunde}</div>
+              <div style={{fontSize:11,color:TX2}}>⚡ {auftrag.system} · {new Date(auftrag.montageDatum).toLocaleDateString("de-DE")}</div>
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:800,color:ks.color}}>{ks.pct}%</div>
+                <div style={{fontSize:9,color:TX2}}>komplett</div>
+              </div>
+              <button onClick={()=>setQrMode(true)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${BR}`,background:"transparent",color:TX2,fontSize:11,cursor:"pointer"}}>QR</button>
+              <button onClick={onClose} style={{background:"none",border:"none",color:TX2,fontSize:22,cursor:"pointer"}}>✕</button>
+            </div>
+          </div>
+          <Bar v={ks.pct} max={100} color={ks.color}/>
+        </div>
+
+        <div style={{padding:"12px 16px"}}>
+          {/* BARCODE SCAN */}
+          <div style={{marginBottom:14}}>
+            <input style={{...INPUT,background:`${Y}08`,border:`1px solid ${Y}30`}}
+              value={scan} onChange={e=>setScan(e.target.value)} onKeyDown={handleScan}
+              placeholder="📷 Artikel-ID scannen / eingeben + Enter"/>
+          </div>
+
+          {/* STÜCKLISTE – NACH QUELLE GRUPPIERT */}
+          {["field","planung"].map(q=>{
+            const pos=sl.map((s,i)=>({...s,idx:i})).filter(s=>s.quelle===q);
+            if(pos.length===0) return null;
+            return (
+              <div key={q} style={{marginBottom:16}}>
+                <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.5px",color:q==="field"?BLUE:PURPLE,marginBottom:8}}>
+                  {q==="field"?"⚡ VOM BERATER GEWÄHLT":"🔧 VON PLANUNG ERGÄNZT"}
+                </div>
+                {pos.map(s=>{
+                  const a=getArt(s.aId,art);
+                  const verfügbar=a&&a.bestand>=s.m;
+                  return (
+                    <div key={s.idx} onClick={()=>toggleKomm(s.idx)} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,background:s.komm?`${OK}08`:C2,border:`1px solid ${s.komm?OK+"40":BR}`,borderRadius:10,padding:"10px 12px",cursor:"pointer",transition:"all 0.15s"}}>
+                      {/* CHECKBOX */}
+                      <div style={{width:22,height:22,borderRadius:6,border:`2px solid ${s.komm?OK:BR}`,background:s.komm?OK:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.15s"}}>
+                        {s.komm&&<span style={{fontSize:12,color:BG,fontWeight:800}}>✓</span>}
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <div style={{fontWeight:600,fontSize:12,color:s.komm?TX2:TX,textDecoration:s.komm?"line-through":"none"}}>{s.m}× {a?.name||s.aId}</div>
+                          {!verfügbar&&<Badge color={ERR} label="Fehlt"/>}
+                        </div>
+                        <div style={{fontSize:10,color:TX2}}>Lager: {a?.bestand||0} {a?.einheit||""}</div>
+                        {a?.sn&&s.komm&&(
+                          <input
+                            style={{...INPUT,fontSize:10,padding:"4px 8px",marginTop:4}}
+                            value={s.sn} onChange={e=>{e.stopPropagation();setSN(s.idx,e.target.value);}}
+                            onClick={e=>e.stopPropagation()}
+                            placeholder="Seriennummer..."
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+
+          {/* AUSGEBEN BUTTON */}
+          <button onClick={ausgeben} disabled={!fertig} style={{width:"100%",padding:"14px",borderRadius:10,border:"none",background:fertig?Y:BR,color:fertig?BG:TX2,fontWeight:700,fontSize:14,cursor:fertig?"pointer":"default",marginTop:8}}>
+            {fertig?"✓ Auftrag ausgeben & Bestand buchen":"Alle Positionen abhaken zum Ausgeben"}
+          </button>
+          {!fertig&&<div style={{textAlign:"center",fontSize:11,color:TX2,marginTop:8}}>{sl.filter(s=>!s.komm).length} Positionen noch offen</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── NEUER AUFTRAG MODAL ───────────────────────────────────────────────────────
+function NeuerAuftragModal({art,pakete,onSave,onClose}){
+  const [kunde,setKunde]=useState("");
+  const [adresse,setAdresse]=useState("");
+  const [datum,setDatum]=useState("");
+  const [berater,setBerater]=useState("");
+  const [system,setSystem]=useState("");
+  const [selPaket,setSelPaket]=useState("");
+  const [sl,setSl]=useState([]);
+  const [addId,setAddId]=useState(art[0]?.id||"");
+  const [addM,setAddM]=useState(1);
+  const [addQ,setAddQ]=useState("planung");
+
+  function loadPaket(pid){
+    setSelPaket(pid);
+    const p=pakete.find(x=>x.id===pid);
+    if(p){
+      setSl(p.komp.map(k=>({aId:k.aId,m:k.m,quelle:"field",sn:"",komm:false})));
+      setSystem(p.name);
+    }
+  }
+
+  function addPos(){
+    if(sl.find(s=>s.aId===addId)) setSl(p=>p.map(s=>s.aId===addId?{...s,m:s.m+addM}:s));
+    else setSl(p=>[...p,{aId:addId,m:addM,quelle:addQ,sn:"",komm:false}]);
+  }
+  function removePos(id){setSl(p=>p.filter(s=>s.aId!==id));}
+
+  const ok=kunde&&datum&&system&&sl.length>0;
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"#00000095",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
       <div style={{background:C1,borderRadius:"16px 16px 0 0",width:"100%",maxWidth:480,maxHeight:"92vh",overflowY:"auto",padding:20,border:`1px solid ${BR}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-          <div style={{fontWeight:800,fontSize:16}}>{paket?"Paket bearbeiten":"Neues Paket"}</div>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:18}}>
+          <div style={{fontWeight:800,fontSize:16}}>Neuer Auftrag</div>
           <button onClick={onClose} style={{background:"none",border:"none",color:TX2,fontSize:22,cursor:"pointer"}}>✕</button>
         </div>
 
-        <div style={{marginBottom:12}}>
-          <label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Paketname *</label>
-          <input style={INPUT} value={name} onChange={e=>setName(e.target.value)} placeholder="z.B. Standard 8kW + 15kWh"/>
-        </div>
-        <div style={{marginBottom:12}}>
-          <label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Beschreibung</label>
-          <input style={INPUT} value={beschr} onChange={e=>setBeschr(e.target.value)} placeholder="Kurzbeschreibung..."/>
+        {/* STAMMDATEN */}
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+          <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Kunde *</label><input style={INPUT} value={kunde} onChange={e=>setKunde(e.target.value)} placeholder="Name, Vorname"/></div>
+          <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Adresse</label><input style={INPUT} value={adresse} onChange={e=>setAdresse(e.target.value)} placeholder="Straße, PLZ Ort"/></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Montagedatum *</label><input style={INPUT} type="date" value={datum} onChange={e=>setDatum(e.target.value)}/></div>
+            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Berater</label><input style={INPUT} value={berater} onChange={e=>setBerater(e.target.value)} placeholder="Name"/></div>
+          </div>
+          <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>System / Beschreibung *</label><input style={INPUT} value={system} onChange={e=>setSystem(e.target.value)} placeholder="z.B. Standard 8kW + Wallbox"/></div>
         </div>
 
+        {/* PAKET ALS VORLAGE */}
         <div style={{marginBottom:16}}>
-          <label style={{fontSize:11,color:TX2,display:"block",marginBottom:6}}>Farbe</label>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {FARBEN.map(f=>(
-              <div key={f} onClick={()=>setFarbe(f)} style={{width:28,height:28,borderRadius:"50%",background:f,cursor:"pointer",border:farbe===f?`3px solid ${TX}`:"3px solid transparent",transition:"all 0.15s"}}/>
+          <label style={{fontSize:11,color:TX2,display:"block",marginBottom:6,fontWeight:700}}>VORLAGE LADEN (optional)</label>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {pakete.map(p=>(
+              <button key={p.id} onClick={()=>loadPaket(p.id)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${selPaket===p.id?p.farbe:BR}`,background:selPaket===p.id?`${p.farbe}15`:"transparent",color:selPaket===p.id?p.farbe:TX2,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                {p.name}
+              </button>
             ))}
           </div>
         </div>
 
+        {/* STÜCKLISTE */}
         <div style={{marginBottom:16}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <label style={{fontSize:11,color:TX2,fontWeight:700,letterSpacing:"0.5px"}}>KOMPONENTEN *</label>
-            {komp.length>0&&<span style={{fontSize:11,color:TX2}}>{preview} möglich · €{gesamtpreis.toLocaleString("de-DE",{maximumFractionDigits:0})}/Paket</span>}
-          </div>
-
-          {komp.map(k=>{
-            const a=artikel.find(x=>x.id===k.artikelId);
-            if(!a) return null;
-            const vm=Math.floor(a.bestand/k.menge);
+          <label style={{fontSize:11,color:TX2,fontWeight:700,letterSpacing:"0.5px",display:"block",marginBottom:8}}>STÜCKLISTE</label>
+          {sl.map(s=>{
+            const a=getArt(s.aId,art);
             return (
-              <div key={k.artikelId} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,background:C2,borderRadius:8,padding:"9px 10px"}}>
+              <div key={s.aId} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:C2,borderRadius:8,padding:"8px 10px"}}>
+                <div style={{width:6,height:6,borderRadius:"50%",flexShrink:0,background:s.quelle==="field"?BLUE:PURPLE}}/>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:12,fontWeight:600,color:TX}}>{a.name}</div>
-                  <div style={{fontSize:10,color:TX2}}>Lager: {a.bestand} {a.einheit} → {vm} Pakete möglich</div>
+                  <div style={{fontSize:12,color:TX}}>{s.m}× {a?.name||s.aId}</div>
+                  <div style={{fontSize:10,color:TX2}}>{s.quelle==="field"?"Field":"Planung"}</div>
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:5}}>
-                  <button onClick={()=>setM(k.artikelId,k.menge-1)} style={{width:28,height:28,borderRadius:6,border:`1px solid ${BR}`,background:C1,color:TX,cursor:"pointer",fontSize:16,lineHeight:1}}>−</button>
-                  <span style={{fontSize:15,fontWeight:700,minWidth:22,textAlign:"center"}}>{k.menge}</span>
-                  <button onClick={()=>setM(k.artikelId,k.menge+1)} style={{width:28,height:28,borderRadius:6,border:`1px solid ${BR}`,background:C1,color:TX,cursor:"pointer",fontSize:16,lineHeight:1}}>+</button>
-                  <button onClick={()=>setM(k.artikelId,0)} style={{width:28,height:28,borderRadius:6,border:"none",background:`${ERR}20`,color:ERR,cursor:"pointer",fontSize:13}}>✕</button>
-                </div>
+                <button onClick={()=>removePos(s.aId)} style={{background:`${ERR}15`,border:"none",color:ERR,borderRadius:6,padding:"4px 8px",fontSize:12,cursor:"pointer"}}>✕</button>
               </div>
             );
           })}
 
-          <div style={{display:"flex",gap:8,marginTop:10}}>
-            <select style={{...INPUT,flex:1,appearance:"auto"}} value={addId} onChange={e=>setAddId(e.target.value)}>
-              {artikel.map(a=><option key={a.id} value={a.id}>{a.name} ({a.bestand} {a.einheit})</option>)}
+          {/* POSITION HINZUFÜGEN */}
+          <div style={{background:C2,borderRadius:10,padding:10,marginTop:8}}>
+            <div style={{fontSize:10,color:TX2,marginBottom:8,fontWeight:600}}>POSITION HINZUFÜGEN</div>
+            <select style={{...INPUT,appearance:"auto",marginBottom:8}} value={addId} onChange={e=>setAddId(e.target.value)}>
+              {art.map(a=><option key={a.id} value={a.id}>{a.name} ({a.bestand} {a.einheit})</option>)}
             </select>
-            <button onClick={add} style={{padding:"8px 14px",borderRadius:8,border:"none",background:Y,color:BG,fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}>+ Add</button>
+            <div style={{display:"flex",gap:8}}>
+              <input style={{...INPUT,flex:"0 0 80px"}} type="number" min="1" value={addM} onChange={e=>setAddM(+e.target.value)} placeholder="Menge"/>
+              <select style={{...INPUT,appearance:"auto",flex:1}} value={addQ} onChange={e=>setAddQ(e.target.value)}>
+                <option value="field">Field (Berater)</option>
+                <option value="planung">Planung</option>
+              </select>
+              <button onClick={addPos} style={{padding:"8px 14px",borderRadius:8,border:"none",background:Y,color:BG,fontWeight:700,cursor:"pointer"}}>+</button>
+            </div>
           </div>
         </div>
 
-        <button onClick={()=>canSave&&onSave({id:paket?.id,name,beschreibung:beschr,farbe,komponenten:komp})} style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:canSave?Y:BR,color:canSave?BG:TX2,fontWeight:700,fontSize:14,cursor:canSave?"pointer":"default",marginBottom:8}}>
-          ✓ Paket speichern
+        <button onClick={()=>ok&&onSave({id:`AU-${Date.now()}`,kunde,adresse,montageDatum:datum,berater,system,status:"offen",stueckliste:sl})} style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:ok?Y:BR,color:ok?BG:TX2,fontWeight:700,fontSize:14,cursor:ok?"pointer":"default"}}>
+          ✓ Auftrag anlegen
         </button>
-        {paket&&(
-          <button onClick={()=>{if(window.confirm("Paket löschen?"))onDelete(paket.id);}} style={{width:"100%",padding:"10px",borderRadius:10,border:`1px solid ${ERR}40`,background:"transparent",color:ERR,fontWeight:600,fontSize:13,cursor:"pointer"}}>
-            🗑 Paket löschen
-          </button>
-        )}
       </div>
     </div>
   );
 }
 
-// ── AUSGABE TAB ───────────────────────────────────────────────────────────────
-function AusgabeTab({pakete,artikel,setArtikel,showToast}) {
-  const [gewPaket,setGewPaket]=useState(pakete[0]?.id||"");
-  const [auftragNr,setAuftragNr]=useState("");
-  const [monteur,setMonteur]=useState("");
-  const [serNr,setSerNr]=useState({});
-  const [log,setLog]=useState([]);
+// ── EDIT STÜCKLISTE MODAL ─────────────────────────────────────────────────────
+function EditStuecklisteModal({auftrag,art,onSave,onClose}){
+  const [sl,setSl]=useState(auftrag.stueckliste.map(s=>({...s})));
+  const [addId,setAddId]=useState(art[0]?.id||"");
+  const [addM,setAddM]=useState(1);
+  const [addQ,setAddQ]=useState("planung");
 
-  const paket=pakete.find(p=>p.id===gewPaket);
-  const {moeglich,details}=paket?getVerfuegbarkeit(paket,artikel):{moeglich:0,details:[]};
-
-  function ausgeben(){
-    if(!paket||moeglich===0||!auftragNr||!monteur) return;
-    setArtikel(prev=>prev.map(a=>{
-      const k=paket.komponenten.find(c=>c.artikelId===a.id);
-      return k?{...a,bestand:a.bestand-k.menge}:a;
-    }));
-    setLog(prev=>[{id:Date.now(),paket:paket.name,paketId:paket.id,auftrag:auftragNr,monteur,datum:new Date().toLocaleDateString("de-DE"),serNr:{...serNr}},...prev]);
-    setAuftragNr("");setMonteur("");setSerNr({});
-    showToast(`Paket "${paket.name}" ausgegeben`);
+  function addPos(){
+    if(sl.find(s=>s.aId===addId)) setSl(p=>p.map(s=>s.aId===addId?{...s,m:s.m+addM}:s));
+    else setSl(p=>[...p,{aId:addId,m:addM,quelle:addQ,sn:"",komm:false}]);
+  }
+  function setM(id,m){
+    if(m<=0) setSl(p=>p.filter(s=>s.aId!==id));
+    else setSl(p=>p.map(s=>s.aId===id?{...s,m}:s));
   }
 
-  const canSend=paket&&moeglich>0&&auftragNr&&monteur;
-
   return (
-    <div>
-      <div style={{fontSize:11,color:TX2,marginBottom:14}}>Paket wählen, Auftrag zuweisen, Seriennummern erfassen</div>
-
-      <div style={{marginBottom:12}}>
-        <label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Paket wählen</label>
-        <select style={{...INPUT,appearance:"auto"}} value={gewPaket} onChange={e=>{setGewPaket(e.target.value);setSerNr({});}}>
-          {pakete.map(p=>{const v=getVerfuegbarkeit(p,artikel).moeglich;return <option key={p.id} value={p.id}>{p.name} — {v} verfügbar</option>;})}
-        </select>
-      </div>
-
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-        <div>
-          <label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Auftragsnummer</label>
-          <input style={INPUT} value={auftragNr} onChange={e=>setAuftragNr(e.target.value)} placeholder="AU-2026-..."/>
-        </div>
-        <div>
-          <label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Monteur</label>
-          <input style={INPUT} value={monteur} onChange={e=>setMonteur(e.target.value)} placeholder="Name..."/>
-        </div>
-      </div>
-
-      {paket&&(
-        <div style={{...CARD,marginBottom:12,borderColor:moeglich>0?`${paket.farbe}50`:`${ERR}40`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={{fontWeight:700,fontSize:14}}>{paket.name}</div>
-            <div style={{textAlign:"center"}}>
-              <div style={{fontSize:26,fontWeight:800,color:moeglich===0?ERR:moeglich<3?WARN:OK,lineHeight:1}}>{moeglich}</div>
-              <div style={{fontSize:9,color:TX2}}>verfügbar</div>
-            </div>
+    <div style={{position:"fixed",inset:0,background:"#00000095",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div style={{background:C1,borderRadius:"16px 16px 0 0",width:"100%",maxWidth:480,maxHeight:"92vh",overflowY:"auto",padding:20,border:`1px solid ${BR}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+          <div>
+            <div style={{fontWeight:800,fontSize:15}}>Stückliste bearbeiten</div>
+            <div style={{fontSize:11,color:TX2}}>{auftrag.id} · {auftrag.kunde}</div>
           </div>
-          {details.map((d,i)=>{
-            if(!d.art) return null;
+          <button onClick={onClose} style={{background:"none",border:"none",color:TX2,fontSize:22,cursor:"pointer"}}>✕</button>
+        </div>
+
+        <div style={{marginBottom:16}}>
+          {["field","planung"].map(q=>{
+            const pos=sl.map((s,i)=>({...s,i})).filter(s=>s.quelle===q);
+            if(pos.length===0) return null;
             return (
-              <div key={i} style={{marginBottom:10}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:d.art.serienNr?5:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <div style={{width:6,height:6,borderRadius:"50%",background:d.art.bestand>=d.menge?OK:ERR}}/>
-                    <span style={{fontSize:12,color:TX}}>{d.menge}× {d.art.name}</span>
-                  </div>
-                  <span style={{fontSize:11,color:d.art.bestand<d.menge?ERR:TX2}}>Lager: {d.art.bestand}</span>
+              <div key={q} style={{marginBottom:12}}>
+                <div style={{fontSize:10,fontWeight:700,color:q==="field"?BLUE:PURPLE,letterSpacing:"0.5px",marginBottom:6}}>
+                  {q==="field"?"⚡ FIELD":"🔧 PLANUNG"}
                 </div>
-                {d.art.serienNr&&(
-                  <input style={{...INPUT,fontSize:11,padding:"6px 10px"}}
-                    value={serNr[d.artikelId]||""}
-                    onChange={e=>setSerNr(prev=>({...prev,[d.artikelId]:e.target.value}))}
-                    placeholder={`Seriennummer${d.menge>1?"n (kommagetrennt)":""}…`}
-                  />
-                )}
+                {pos.map(s=>{
+                  const a=getArt(s.aId,art);
+                  return (
+                    <div key={s.aId} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:C2,borderRadius:8,padding:"8px 10px"}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,color:TX}}>{a?.name||s.aId}</div>
+                        <div style={{fontSize:10,color:TX2}}>Lager: {a?.bestand} {a?.einheit}</div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        <button onClick={()=>setM(s.aId,s.m-1)} style={{width:26,height:26,borderRadius:6,border:`1px solid ${BR}`,background:C1,color:TX,cursor:"pointer",fontSize:15}}>−</button>
+                        <span style={{minWidth:24,textAlign:"center",fontWeight:700}}>{s.m}</span>
+                        <button onClick={()=>setM(s.aId,s.m+1)} style={{width:26,height:26,borderRadius:6,border:`1px solid ${BR}`,background:C1,color:TX,cursor:"pointer",fontSize:15}}>+</button>
+                        <button onClick={()=>setM(s.aId,0)} style={{width:26,height:26,borderRadius:6,border:"none",background:`${ERR}20`,color:ERR,cursor:"pointer",fontSize:12}}>✕</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
-          {moeglich===0&&<div style={{background:`${ERR}10`,border:`1px solid ${ERR}30`,borderRadius:8,padding:"8px 12px",fontSize:11,color:ERR}}>✕ Paket nicht komplettierbar – Bestand prüfen</div>}
         </div>
-      )}
 
-      <button onClick={ausgeben} disabled={!canSend} style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:canSend?Y:BR,color:canSend?BG:TX2,fontWeight:700,fontSize:14,cursor:canSend?"pointer":"default",marginBottom:20}}>
-        📤 Paket ausgeben & Bestand buchen
-      </button>
-
-      {log.length>0&&(
-        <div>
-          <div style={{fontSize:10,color:TX2,fontWeight:700,letterSpacing:"0.5px",marginBottom:8}}>AUSGABE-PROTOKOLL</div>
-          {log.map(l=>(
-            <div key={l.id} style={{...CARD,marginBottom:8}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                <div>
-                  <div style={{fontWeight:700,fontSize:13}}>{l.paket}</div>
-                  <div style={{fontSize:11,color:TX2}}>📋 {l.auftrag} · 👷 {l.monteur}</div>
-                  <div style={{fontSize:11,color:TX2}}>🗓 {l.datum}</div>
-                  {Object.entries(l.serNr).map(([id,sn])=>sn&&<div key={id} style={{fontSize:10,color:PURPLE,marginTop:2}}>SN: {sn}</div>)}
-                </div>
-                <Badge color={OK} label="Ausgegeben"/>
-              </div>
-            </div>
-          ))}
+        {/* POSITION HINZUFÜGEN */}
+        <div style={{background:C2,borderRadius:10,padding:10,marginBottom:16}}>
+          <div style={{fontSize:10,color:TX2,marginBottom:8,fontWeight:600}}>POSITION HINZUFÜGEN</div>
+          <select style={{...INPUT,appearance:"auto",marginBottom:8}} value={addId} onChange={e=>setAddId(e.target.value)}>
+            {art.map(a=><option key={a.id} value={a.id}>{a.name} ({a.bestand} {a.einheit})</option>)}
+          </select>
+          <div style={{display:"flex",gap:8}}>
+            <input style={{...INPUT,flex:"0 0 80px"}} type="number" min="1" value={addM} onChange={e=>setAddM(+e.target.value)}/>
+            <select style={{...INPUT,appearance:"auto",flex:1}} value={addQ} onChange={e=>setAddQ(e.target.value)}>
+              <option value="planung">Planung</option>
+              <option value="field">Field</option>
+            </select>
+            <button onClick={addPos} style={{padding:"8px 14px",borderRadius:8,border:"none",background:Y,color:BG,fontWeight:700,cursor:"pointer"}}>+</button>
+          </div>
         </div>
-      )}
+
+        <button onClick={()=>onSave({...auftrag,stueckliste:sl})} style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:Y,color:BG,fontWeight:700,fontSize:14,cursor:"pointer"}}>✓ Stückliste speichern</button>
+      </div>
     </div>
   );
 }
 
 // ── BESTAND TAB ───────────────────────────────────────────────────────────────
-function BestandTab({artikel,setArtikel,kritisch,setModal,showToast}) {
+function BestandTab({art,setArt,kritisch,setModal}){
   const [search,setSearch]=useState("");
   const [kat,setKat]=useState("Alle");
-  const filtered=useMemo(()=>artikel.filter(a=>(kat==="Alle"||a.kat===kat)&&(a.name.toLowerCase().includes(search.toLowerCase())||a.id.includes(search.toUpperCase()))),[artikel,kat,search]);
+  const filtered=useMemo(()=>art.filter(a=>(kat==="Alle"||a.kat===kat)&&(a.name.toLowerCase().includes(search.toLowerCase())||a.id.includes(search.toUpperCase()))),[art,kat,search]);
 
   return (
     <div>
-      {kritisch.length>0&&(
-        <div style={{background:`${WARN}12`,border:`1px solid ${WARN}30`,borderRadius:10,padding:"10px 14px",marginBottom:12}}>
-          <div style={{color:WARN,fontWeight:700,fontSize:12}}>⚠️ {kritisch.length} Artikel unter Mindestbestand</div>
-          <div style={{color:TX2,fontSize:11,marginTop:2}}>{kritisch.map(a=>a.name).join(" · ")}</div>
-        </div>
-      )}
+      {kritisch.length>0&&<div style={{background:`${WARN}12`,border:`1px solid ${WARN}30`,borderRadius:10,padding:"10px 14px",marginBottom:12}}><div style={{color:WARN,fontWeight:700,fontSize:12}}>⚠️ {kritisch.length} unter Mindestbestand</div><div style={{color:TX2,fontSize:11,marginTop:2}}>{kritisch.map(a=>a.name).join(" · ")}</div></div>}
       <input style={INPUT} placeholder="🔍  Artikel suchen..." value={search} onChange={e=>setSearch(e.target.value)}/>
       <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginTop:8,marginBottom:12}}>
-        {KATEGORIEN.map(k=>(
-          <button key={k} onClick={()=>setKat(k)} style={{padding:"5px 10px",borderRadius:20,border:`1px solid ${kat===k?Y:BR}`,background:kat===k?`${Y}15`:"transparent",color:kat===k?Y:TX2,fontSize:10,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>{k}</button>
-        ))}
+        {KAT_LISTE.map(k=><button key={k} onClick={()=>setKat(k)} style={{padding:"5px 10px",borderRadius:20,border:`1px solid ${kat===k?Y:BR}`,background:kat===k?`${Y}15`:"transparent",color:kat===k?Y:TX2,fontSize:10,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>{k}</button>)}
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {filtered.map(a=>(
@@ -478,12 +693,9 @@ function BestandTab({artikel,setArtikel,kritisch,setModal,showToast}) {
               </div>
               {a.bestand===0?<Badge color={ERR} label="Kein Bestand"/>:a.bestand<a.min?<Badge color={WARN} label="Nachbestellen"/>:<Badge color={OK} label="OK"/>}
             </div>
-            <Bar bestand={a.bestand} min={a.min}/>
+            <Bar v={a.bestand} max={Math.max(a.min*2,a.bestand)} color={a.bestand<a.min?WARN:OK}/>
             <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
-              <div>
-                <span style={{fontWeight:800,fontSize:16,color:a.bestand<a.min?WARN:TX}}>{a.bestand}</span>
-                <span style={{color:TX2,fontSize:11}}> / {a.min} Min · {a.einheit}</span>
-              </div>
+              <div><span style={{fontWeight:800,fontSize:16,color:a.bestand<a.min?WARN:TX}}>{a.bestand}</span><span style={{color:TX2,fontSize:11}}> / {a.min} Min · {a.einheit}</span></div>
               <span style={{color:TX2,fontSize:11}}>€{a.preis.toFixed(2)}/{a.einheit}</span>
             </div>
           </div>
@@ -494,46 +706,113 @@ function BestandTab({artikel,setArtikel,kritisch,setModal,showToast}) {
   );
 }
 
-// ── ARTIKEL MODAL ─────────────────────────────────────────────────────────────
-function ArtikelModal({art,onSave,onClose}) {
-  const [form,setForm]=useState(art||{id:"",name:"",kat:"Wechselrichter",bestand:0,min:5,einheit:"Stk",preis:0,serienNr:false});
-  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
-  const ok=form.id&&form.name;
-
+// ── PAKETE TAB ────────────────────────────────────────────────────────────────
+function PaketeTab({pakete,setPakete,art,setModal,showToast}){
+  function getV(p){let m=Infinity;p.komp.forEach(k=>{const a=art.find(x=>x.id===k.aId);if(a)m=Math.min(m,Math.floor(a.bestand/k.m));});return m===Infinity?0:m;}
   return (
-    <div style={{position:"fixed",inset:0,background:"#00000095",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-      <div style={{background:C1,borderRadius:"16px 16px 0 0",width:"100%",maxWidth:480,maxHeight:"85vh",overflowY:"auto",padding:20,border:`1px solid ${BR}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
-          <div style={{fontWeight:800,fontSize:15}}>{art?"Artikel bearbeiten":"Neuer Artikel"}</div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:TX2,fontSize:22,cursor:"pointer"}}>✕</button>
+    <div>
+      <div style={{fontSize:11,color:TX2,marginBottom:12}}>Paket-Vorlagen für Stücklisten-Erstellung</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {pakete.map(p=>{
+          const v=getV(p);
+          const pPreis=p.komp.reduce((s,k)=>{const a=art.find(x=>x.id===k.aId);return s+(a?.preis||0)*k.m;},0);
+          return (
+            <div key={p.id} style={{...CARD,borderColor:v>0?`${p.farbe}50`:BR}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><div style={{width:8,height:8,borderRadius:"50%",background:p.farbe}}/><span style={{fontSize:10,color:TX2}}>{p.id} · €{pPreis.toLocaleString("de-DE",{maximumFractionDigits:0})}/Stk</span></div>
+                  <div style={{fontWeight:800,fontSize:14}}>{p.name}</div>
+                  <div style={{fontSize:11,color:TX2}}>{p.beschreibung}</div>
+                </div>
+                <div style={{textAlign:"center",marginLeft:12,flexShrink:0}}>
+                  <div style={{fontSize:28,fontWeight:800,color:v===0?ERR:v<3?WARN:OK,lineHeight:1}}>{v}</div>
+                  <div style={{fontSize:9,color:TX2}}>möglich</div>
+                </div>
+              </div>
+              <div style={{borderTop:`1px solid ${BR}`,paddingTop:10}}>
+                {p.komp.map((k,i)=>{const a=art.find(x=>x.id===k.aId);const vm=a?Math.floor(a.bestand/k.m):0;return(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:5,height:5,borderRadius:"50%",background:vm===0?ERR:vm<3?WARN:OK}}/><span style={{fontSize:11,color:TX}}>{k.m}× {a?.name||k.aId}</span></div>
+                    <span style={{fontSize:11,color:TX2}}>{a?.bestand||0} Lager</span>
+                  </div>
+                );})}
+              </div>
+              <button onClick={()=>setModal({type:"paketBuilder",data:p})} style={{width:"100%",marginTop:10,padding:"8px",borderRadius:8,border:`1px solid ${BR}`,background:"transparent",color:TX2,fontSize:11,fontWeight:600,cursor:"pointer"}}>✏️ Bearbeiten</button>
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={()=>setModal({type:"paketBuilder",data:null})} style={{width:"100%",marginTop:12,padding:"13px",borderRadius:10,border:`1px dashed ${PURPLE}60`,background:`${PURPLE}08`,color:PURPLE,fontSize:13,fontWeight:700,cursor:"pointer"}}>+ Neues Paket</button>
+    </div>
+  );
+}
+
+// ── PAKET BUILDER MODAL ───────────────────────────────────────────────────────
+function PaketBuilderModal({paket,art,onSave,onDelete,onClose}){
+  const [name,setName]=useState(paket?.name||"");
+  const [beschr,setBeschr]=useState(paket?.beschreibung||"");
+  const [farbe,setFarbe]=useState(paket?.farbe||BLUE);
+  const [komp,setKomp]=useState(paket?.komp||[]);
+  const [addId,setAddId]=useState(art[0]?.id||"");
+  function add(){if(komp.find(k=>k.aId===addId))setKomp(p=>p.map(k=>k.aId===addId?{...k,m:k.m+1}:k));else setKomp(p=>[...p,{aId:addId,m:1}]);}
+  function setM(id,m){if(m<=0)setKomp(p=>p.filter(k=>k.aId!==id));else setKomp(p=>p.map(k=>k.aId===id?{...k,m}:k));}
+  const gp=komp.reduce((s,k)=>{const a=art.find(x=>x.id===k.aId);return s+(a?.preis||0)*k.m;},0);
+  const ok=name&&komp.length>0;
+  return (
+    <div style={{position:"fixed",inset:0,background:"#00000095",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div style={{background:C1,borderRadius:"16px 16px 0 0",width:"100%",maxWidth:480,maxHeight:"92vh",overflowY:"auto",padding:20,border:`1px solid ${BR}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><div style={{fontWeight:800,fontSize:15}}>{paket?"Paket bearbeiten":"Neues Paket"}</div><button onClick={onClose} style={{background:"none",border:"none",color:TX2,fontSize:22,cursor:"pointer"}}>✕</button></div>
+        <div style={{marginBottom:10}}><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Name *</label><input style={INPUT} value={name} onChange={e=>setName(e.target.value)} placeholder="z.B. Standard 8kW + 15kWh"/></div>
+        <div style={{marginBottom:10}}><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Beschreibung</label><input style={INPUT} value={beschr} onChange={e=>setBeschr(e.target.value)}/></div>
+        <div style={{marginBottom:14}}><label style={{fontSize:11,color:TX2,display:"block",marginBottom:6}}>Farbe</label><div style={{display:"flex",gap:8}}>{FARBEN.map(f=><div key={f} onClick={()=>setFarbe(f)} style={{width:28,height:28,borderRadius:"50%",background:f,cursor:"pointer",border:farbe===f?`3px solid ${TX}`:"3px solid transparent"}}/>)}</div></div>
+        <div style={{marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><label style={{fontSize:11,color:TX2,fontWeight:700}}>KOMPONENTEN *</label>{komp.length>0&&<span style={{fontSize:11,color:TX2}}>€{gp.toLocaleString("de-DE",{maximumFractionDigits:0})}/Paket</span>}</div>
+          {komp.map(k=>{const a=art.find(x=>x.id===k.aId);return(
+            <div key={k.aId} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,background:C2,borderRadius:8,padding:"9px 10px"}}>
+              <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{a?.name||k.aId}</div><div style={{fontSize:10,color:TX2}}>Lager: {a?.bestand} {a?.einheit}</div></div>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <button onClick={()=>setM(k.aId,k.m-1)} style={{width:28,height:28,borderRadius:6,border:`1px solid ${BR}`,background:C1,color:TX,cursor:"pointer",fontSize:16}}>−</button>
+                <span style={{fontSize:15,fontWeight:700,minWidth:22,textAlign:"center"}}>{k.m}</span>
+                <button onClick={()=>setM(k.aId,k.m+1)} style={{width:28,height:28,borderRadius:6,border:`1px solid ${BR}`,background:C1,color:TX,cursor:"pointer",fontSize:16}}>+</button>
+                <button onClick={()=>setM(k.aId,0)} style={{width:28,height:28,borderRadius:6,border:"none",background:`${ERR}20`,color:ERR,cursor:"pointer",fontSize:12}}>✕</button>
+              </div>
+            </div>
+          );})}
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <select style={{...INPUT,flex:1,appearance:"auto"}} value={addId} onChange={e=>setAddId(e.target.value)}>{art.map(a=><option key={a.id} value={a.id}>{a.name} ({a.bestand} {a.einheit})</option>)}</select>
+            <button onClick={add} style={{padding:"8px 14px",borderRadius:8,border:"none",background:Y,color:BG,fontWeight:700,cursor:"pointer"}}>+ Add</button>
+          </div>
         </div>
-        <div style={{display:"flex",flexDirection:"column",gap:11}}>
-          <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Artikel-ID *</label><input style={INPUT} value={form.id} onChange={e=>f("id",e.target.value)} placeholder="z.B. WR-50"/></div>
-          <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Bezeichnung *</label><input style={INPUT} value={form.name} onChange={e=>f("name",e.target.value)} placeholder="Produktname"/></div>
+        <button onClick={()=>ok&&onSave({id:paket?.id,name,beschreibung:beschr,farbe,komp})} style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:ok?Y:BR,color:ok?BG:TX2,fontWeight:700,fontSize:14,cursor:ok?"pointer":"default",marginBottom:8}}>✓ Speichern</button>
+        {paket&&<button onClick={()=>{if(window.confirm("Paket löschen?"))onDelete(paket.id);}} style={{width:"100%",padding:"10px",borderRadius:10,border:`1px solid ${ERR}40`,background:"transparent",color:ERR,fontWeight:600,fontSize:13,cursor:"pointer"}}>🗑 Löschen</button>}
+      </div>
+    </div>
+  );
+}
+
+// ── ARTIKEL MODAL ─────────────────────────────────────────────────────────────
+function ArtikelModal({art2,onSave,onClose}){
+  const [f,setF]=useState(art2||{id:"",name:"",kat:"Wechselrichter",bestand:0,min:5,einheit:"Stk",preis:0,sn:false});
+  const upd=(k,v)=>setF(p=>({...p,[k]:v}));
+  const ok=f.id&&f.name;
+  return (
+    <div style={{position:"fixed",inset:0,background:"#00000095",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div style={{background:C1,borderRadius:"16px 16px 0 0",width:"100%",maxWidth:480,maxHeight:"85vh",overflowY:"auto",padding:20,border:`1px solid ${BR}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><div style={{fontWeight:800,fontSize:15}}>{art2?"Artikel bearbeiten":"Neuer Artikel"}</div><button onClick={onClose} style={{background:"none",border:"none",color:TX2,fontSize:22,cursor:"pointer"}}>✕</button></div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Artikel-ID *</label><input style={INPUT} value={f.id} onChange={e=>upd("id",e.target.value)} placeholder="z.B. WR-80"/></div>
+          <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Bezeichnung *</label><input style={INPUT} value={f.name} onChange={e=>upd("name",e.target.value)}/></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Kategorie</label>
-              <select style={{...INPUT,appearance:"auto"}} value={form.kat} onChange={e=>f("kat",e.target.value)}>
-                {KATEGORIEN.filter(k=>k!=="Alle").map(k=><option key={k}>{k}</option>)}
-              </select>
-            </div>
-            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Einheit</label>
-              <select style={{...INPUT,appearance:"auto"}} value={form.einheit} onChange={e=>f("einheit",e.target.value)}>
-                {["Stk","m","Paar","Rolle","Box"].map(u=><option key={u}>{u}</option>)}
-              </select>
-            </div>
+            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Kategorie</label><select style={{...INPUT,appearance:"auto"}} value={f.kat} onChange={e=>upd("kat",e.target.value)}>{KAT_LISTE.filter(k=>k!=="Alle").map(k=><option key={k}>{k}</option>)}</select></div>
+            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Einheit</label><select style={{...INPUT,appearance:"auto"}} value={f.einheit} onChange={e=>upd("einheit",e.target.value)}>{["Stk","m","Paar","Rolle","Box"].map(u=><option key={u}>{u}</option>)}</select></div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Bestand</label><input style={INPUT} type="number" value={form.bestand} onChange={e=>f("bestand",+e.target.value)}/></div>
-            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Minimum</label><input style={INPUT} type="number" value={form.min} onChange={e=>f("min",+e.target.value)}/></div>
-            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Preis €</label><input style={INPUT} type="number" step="0.01" value={form.preis} onChange={e=>f("preis",+e.target.value)}/></div>
+            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Bestand</label><input style={INPUT} type="number" value={f.bestand} onChange={e=>upd("bestand",+e.target.value)}/></div>
+            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Minimum</label><input style={INPUT} type="number" value={f.min} onChange={e=>upd("min",+e.target.value)}/></div>
+            <div><label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Preis €</label><input style={INPUT} type="number" step="0.01" value={f.preis} onChange={e=>upd("preis",+e.target.value)}/></div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <input type="checkbox" id="sn3" checked={form.serienNr} onChange={e=>f("serienNr",e.target.checked)}/>
-            <label htmlFor="sn3" style={{fontSize:12,color:TX,cursor:"pointer"}}>Seriennummern erfassen</label>
-          </div>
-          <button onClick={()=>ok&&onSave(form)} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:ok?Y:BR,color:ok?BG:TX2,fontWeight:700,fontSize:14,cursor:ok?"pointer":"default",marginTop:4}}>
-            ✓ {art?"Speichern":"Anlegen"}
-          </button>
+          <div style={{display:"flex",alignItems:"center",gap:8}}><input type="checkbox" id="sn4" checked={f.sn} onChange={e=>upd("sn",e.target.checked)}/><label htmlFor="sn4" style={{fontSize:12,color:TX,cursor:"pointer"}}>Seriennummern erfassen</label></div>
+          <button onClick={()=>ok&&onSave(f)} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:ok?Y:BR,color:ok?BG:TX2,fontWeight:700,fontSize:14,cursor:ok?"pointer":"default",marginTop:4}}>✓ {art2?"Speichern":"Anlegen"}</button>
         </div>
       </div>
     </div>
@@ -541,20 +820,10 @@ function ArtikelModal({art,onSave,onClose}) {
 }
 
 // ── BESTELLEN TAB ─────────────────────────────────────────────────────────────
-function BestellenTab({artikel,setArtikel,kritisch,showToast}) {
+function BestellenTab({art,setArt,kritisch,showToast}){
   const [bestellungen,setBestellungen]=useState([]);
-
-  function bestellen(a){
-    setBestellungen(p=>[{id:Date.now(),name:a.name,artId:a.id,menge:a.min*2,datum:new Date().toLocaleDateString("de-DE"),status:"bestellt"},...p]);
-    showToast(`Bestellung für ${a.name} aufgegeben`);
-  }
-  function empfangen(id){
-    const b=bestellungen.find(x=>x.id===id);
-    setBestellungen(p=>p.map(x=>x.id===id?{...x,status:"geliefert"}:x));
-    setArtikel(p=>p.map(a=>a.id===b.artId?{...a,bestand:a.bestand+b.menge}:a));
-    showToast("Lieferung empfangen – Bestand aktualisiert");
-  }
-
+  function bestellen(a){setBestellungen(p=>[{id:Date.now(),name:a.name,artId:a.id,menge:a.min*2,datum:new Date().toLocaleDateString("de-DE"),status:"bestellt"},...p]);showToast(`Bestellung für ${a.name} aufgegeben`);}
+  function empfangen(id){const b=bestellungen.find(x=>x.id===id);setBestellungen(p=>p.map(x=>x.id===id?{...x,status:"geliefert"}:x));setArt(p=>p.map(a=>a.id===b.artId?{...a,bestand:a.bestand+b.menge}:a));showToast("Lieferung empfangen");}
   return (
     <div>
       {kritisch.length>0?(
@@ -563,37 +832,27 @@ function BestellenTab({artikel,setArtikel,kritisch,showToast}) {
           {kritisch.map(a=>(
             <div key={a.id} style={{...CARD,marginBottom:8,borderColor:`${WARN}40`,background:`${WARN}06`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div>
-                  <div style={{fontWeight:600,fontSize:12}}>{a.name}</div>
-                  <div style={{fontSize:11,color:TX2}}>Bestand: {a.bestand} · Min: {a.min} · Vorschlag: {a.min*2} {a.einheit}</div>
-                  <div style={{fontSize:11,color:TX2}}>ca. €{(a.min*2*a.preis).toLocaleString("de-DE",{maximumFractionDigits:0})}</div>
-                </div>
+                <div><div style={{fontWeight:600,fontSize:12}}>{a.name}</div><div style={{fontSize:11,color:TX2}}>Bestand: {a.bestand} · Min: {a.min} · Vorschlag: {a.min*2} {a.einheit}</div><div style={{fontSize:11,color:TX2}}>ca. €{(a.min*2*a.preis).toLocaleString("de-DE",{maximumFractionDigits:0})}</div></div>
                 <button onClick={()=>bestellen(a)} style={{background:Y,border:"none",color:BG,borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Bestellen</button>
               </div>
             </div>
           ))}
         </div>
       ):(
-        <div style={{textAlign:"center",padding:"30px 20px",color:TX2,marginBottom:16}}>
-          <div style={{fontSize:32,marginBottom:8}}>✅</div>
+        <div style={{textAlign:"center",padding:"30px 20px",color:TX2}}>
+          <div style={{fontSize:36,marginBottom:8}}>✅</div>
           <div style={{fontSize:14,fontWeight:600,color:OK}}>Alles im grünen Bereich</div>
           <div style={{fontSize:12,marginTop:4}}>Kein Artikel unter Mindestbestand</div>
         </div>
       )}
-
       {bestellungen.length>0&&(
         <div>
           <div style={{fontSize:10,color:TX2,fontWeight:700,letterSpacing:"0.5px",marginBottom:8}}>BESTELLUNGEN</div>
           {bestellungen.map(b=>(
             <div key={b.id} style={{...CARD,marginBottom:8}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                <div style={{fontWeight:700,fontSize:13}}>{b.name}</div>
-                {b.status==="bestellt"?<Badge color={Y} label="Bestellt"/>:<Badge color={OK} label="Geliefert"/>}
-              </div>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><div style={{fontWeight:700,fontSize:13}}>{b.name}</div>{b.status==="bestellt"?<Badge color={Y} label="Bestellt"/>:<Badge color={OK} label="Geliefert"/>}</div>
               <div style={{fontSize:11,color:TX2}}>📦 {b.menge} Stk · 🗓 {b.datum}</div>
-              {b.status==="bestellt"&&(
-                <button onClick={()=>empfangen(b.id)} style={{width:"100%",marginTop:10,padding:"9px",borderRadius:8,border:"none",background:OK,color:BG,fontWeight:700,fontSize:12,cursor:"pointer"}}>✓ Lieferung empfangen & Bestand buchen</button>
-              )}
+              {b.status==="bestellt"&&<button onClick={()=>empfangen(b.id)} style={{width:"100%",marginTop:10,padding:"9px",borderRadius:8,border:"none",background:OK,color:BG,fontWeight:700,fontSize:12,cursor:"pointer"}}>✓ Lieferung empfangen & Bestand buchen</button>}
             </div>
           ))}
         </div>
