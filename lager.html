@@ -37,14 +37,16 @@ const INPUT={background:C2,border:`1px solid ${BR}`,borderRadius:8,color:TX,padd
 const KAT_LISTE=["Alle","Wechselrichter","Batterie","Zubehör","Zählerschrank","Wallbox","Unterkonstruktion","PV-Module","Kabel"];
 
 // ── ARTIKEL-STAMM ─────────────────────────────────────────────────────────────
-const LIEFERANTEN={
-  "Fox":         {name:"Fox",         farbe:"#F97316", info:"Wechselrichter · Batterien · Wallbox · EPS"},
-  "SL Rack":     {name:"SL Rack",     farbe:"#60A5FA", info:"Unterkonstruktion"},
-  "Cordes":      {name:"Cordes",      farbe:"#34d399", info:"Zählerschränke"},
-  "Tritec":      {name:"Tritec",      farbe:"#FDE154", info:"PV-Module · Spediteur"},
-  "Consolinno":  {name:"Consolinno",  farbe:"#E879F9", info:"HEMS"},
-  "Elektriker":  {name:"Elektriker",  farbe:"#5c6b8a", info:"Vor Ort – kein Lagerbestand nötig"},
+const LIEFERANTEN_DEFAULT={
+  "Fox":         {name:"Fox",         farbe:"#F97316", info:"Wechselrichter · Batterien · Wallbox · EPS", email:"bestellung@fox-ess.de"},
+  "SL Rack":     {name:"SL Rack",     farbe:"#60A5FA", info:"Unterkonstruktion",                          email:"order@sl-rack.com"},
+  "Cordes":      {name:"Cordes",      farbe:"#34d399", info:"Zählerschränke",                             email:"bestellung@cordes-gmbh.de"},
+  "Tritec":      {name:"Tritec",      farbe:"#FDE154", info:"PV-Module · Spediteur",                      email:"lager@tritec-energy.de"},
+  "Consolinno":  {name:"Consolinno",  farbe:"#E879F9", info:"HEMS",                                       email:"order@consolinno.de"},
+  "Elektriker":  {name:"Elektriker",  farbe:"#5c6b8a", info:"Vor Ort – kein Lagerbestand nötig",          email:""},
 };
+const BREVO_KEY=window.BEEDOO_BREVO||"";
+const LIEFERANTEN=LIEFERANTEN_DEFAULT; // wird in App durch useState überschrieben
 
 const INIT_ART=[
   {id:"WR-50", name:"Wechselrichter 5.0 kW",  kat:"Wechselrichter",  bestand:8,  min:5,  einheit:"Stk",preis:1240,sn:true, lief:"Fox"},
@@ -193,20 +195,25 @@ function App(){
   const [art,setArt]=useState(INIT_ART);
   const [pakete,setPakete]=useState(INIT_PAKETE);
   const [auftraege,setAuftraege]=useState(INIT_AUFTRAEGE);
+  const [bestellungen,setBestellungen]=useState([]);
+  const [liefConfig,setLiefConfig]=useState(LIEFERANTEN_DEFAULT);
+  const [ccIntern,setCcIntern]=useState("lager@bee-doo.de");
   const [modal,setModal]=useState(null);
   const [toast,setToast]=useState(null);
 
   function showToast(msg,ok=true){setToast({msg,ok});setTimeout(()=>setToast(null),3200);}
 
-  const kritisch=art.filter(a=>a.bestand<a.min);
+  const kritisch=art.filter(a=>a.bestand<a.min&&a.lief!=="Elektriker");
   const gesamtwert=art.reduce((s,a)=>s+a.bestand*a.preis,0);
   const offeneAu=auftraege.filter(a=>a.status!=="ausgegeben").length;
+  const offeneBest=bestellungen.filter(b=>b.status==="bestellt").length;
 
   const TABS=[
-    {id:"auftraege",  label:"Aufträge", icon:"📋"},
-    {id:"bestand",    label:"Bestand",  icon:"📦"},
-    {id:"pakete",     label:"Pakete",   icon:"🗂"},
-    {id:"bestellen",  label:"Bestellen",icon:"🛒"},
+    {id:"auftraege",    label:"Aufträge",   icon:"📋"},
+    {id:"bestand",      label:"Bestand",    icon:"📦"},
+    {id:"bestellen",    label:"Bestellen",  icon:"🛒"},
+    {id:"wareneingang", label:"Eingang",    icon:"📥"},
+    {id:"lieferanten",  label:"Lieferanten",icon:"🏭"},
   ];
 
   return (
@@ -220,8 +227,8 @@ function App(){
             <div>
               <div style={{fontWeight:800,fontSize:16}}>bee-doo LAGER</div>
               <div style={{fontSize:10,color:TX2}}>
-                {offeneAu} offene Aufträge
-                {kritisch.length>0&&<span style={{color:WARN}}> · {kritisch.length} kritisch</span>}
+                {offeneAu} Aufträge · {offeneBest>0&&<span style={{color:WARN}}>{offeneBest} ausstehend</span>}
+                {kritisch.length>0&&<span style={{color:ERR}}> · {kritisch.length} kritisch</span>}
               </div>
             </div>
           </div>
@@ -241,10 +248,11 @@ function App(){
       </div>
 
       <div style={{padding:"12px 16px"}}>
-        {tab==="auftraege" && <AuftraegeTab auftraege={auftraege} setAuftraege={setAuftraege} art={art} setArt={setArt} pakete={pakete} setModal={setModal} showToast={showToast}/>}
-        {tab==="bestand"   && <BestandTab art={art} setArt={setArt} kritisch={kritisch} setModal={setModal}/>}
-        {tab==="pakete"    && <PaketeTab pakete={pakete} setPakete={setPakete} art={art} setModal={setModal} showToast={showToast}/>}
-        {tab==="bestellen" && <BestellenTab art={art} setArt={setArt} kritisch={kritisch} showToast={showToast}/>}
+        {tab==="auftraege"    && <AuftraegeTab auftraege={auftraege} setAuftraege={setAuftraege} art={art} setArt={setArt} pakete={pakete} setModal={setModal} showToast={showToast}/>}
+        {tab==="bestand"      && <BestandTab art={art} setArt={setArt} kritisch={kritisch} setModal={setModal}/>}
+        {tab==="bestellen"    && <BestellenTab art={art} setArt={setArt} kritisch={kritisch} bestellungen={bestellungen} setBestellungen={setBestellungen} liefConfig={liefConfig} ccIntern={ccIntern} showToast={showToast}/>}
+        {tab==="wareneingang" && <WareneingangTab art={art} setArt={setArt} bestellungen={bestellungen} setBestellungen={setBestellungen} liefConfig={liefConfig} showToast={showToast}/>}
+        {tab==="lieferanten"  && <LieferantenTab liefConfig={liefConfig} setLiefConfig={setLiefConfig} ccIntern={ccIntern} setCcIntern={setCcIntern} showToast={showToast}/>}
       </div>
 
       {/* MODALS */}
@@ -836,81 +844,103 @@ function ArtikelModal({art2,onSave,onClose}){
 }
 
 // ── BESTELLEN TAB ─────────────────────────────────────────────────────────────
-function BestellenTab({art,setArt,kritisch,showToast}){
-  const [bestellungen,setBestellungen]=useState([]);
+function BestellenTab({art,setArt,kritisch,bestellungen,setBestellungen,liefConfig,ccIntern,showToast}){
   const [collapsed,setCollapsed]=useState({});
+  const [sending,setSending]=useState({});
 
-  // Nur Artikel mit echtem Lieferanten (nicht Elektriker), die unter Mindestbestand sind
   const bestellbar=kritisch.filter(a=>a.lief&&a.lief!=="Elektriker");
-
-  // Gruppierung nach Lieferant
   const nachLief=useMemo(()=>{
     const g={};
-    bestellbar.forEach(a=>{
-      if(!g[a.lief]) g[a.lief]=[];
-      g[a.lief].push(a);
-    });
+    bestellbar.forEach(a=>{if(!g[a.lief])g[a.lief]=[];g[a.lief].push(a);});
     return g;
   },[bestellbar]);
 
-  function bestelleAlleVonLief(lief){
-    const items=nachLief[lief]||[];
-    const neu=items.map(a=>({id:`${Date.now()}-${a.id}`,name:a.name,artId:a.id,lief:a.lief,menge:a.min*2,einheit:a.einheit,preis:a.preis,datum:new Date().toLocaleDateString("de-DE"),status:"bestellt"}));
+  async function sendeBestellung(lief,items){
+    const l=liefConfig[lief];
+    if(!l?.email){showToast("Keine E-Mail für "+lief+" hinterlegt",false);return;}
+    setSending(p=>({...p,[lief]:true}));
+
+    const zeilen=items.map(a=>`• ${a.min*2}x ${a.name} (Artikel-Nr: ${a.id})`).join("\n");
+    const summe=items.reduce((s,a)=>s+a.min*2*a.preis,0);
+    const datum=new Date().toLocaleDateString("de-DE");
+    const betreff=`Bestellung bee-doo GmbH – ${datum} – ${lief}`;
+    const text=`Sehr geehrte Damen und Herren,\n\nhiermit bestellen wir folgende Artikel:\n\n${zeilen}\n\nGesamtwert ca.: €${summe.toLocaleString("de-DE",{maximumFractionDigits:0})}\n\nBitte liefern Sie an:\nbee-doo GmbH / Tritec Lager\nBielefeld\n\nMit freundlichen Grüßen\nbee-doo GmbH`;
+
+    try{
+      const res=await fetch("https://api.brevo.com/v3/smtp/email",{
+        method:"POST",
+        headers:{"accept":"application/json","api-key":BREVO_KEY,"content-type":"application/json"},
+        body:JSON.stringify({
+          sender:{name:"bee-doo Lager",email:"lager@bee-doo.de"},
+          to:[{email:l.email,name:lief}],
+          cc:[{email:ccIntern,name:"bee-doo intern"}],
+          subject:betreff,
+          textContent:text,
+        })
+      });
+      if(res.ok){
+        const neu=items.map(a=>({id:`B-${Date.now()}-${a.id}`,artId:a.id,name:a.name,lief,menge:a.min*2,einheit:a.einheit,preis:a.preis,datum,status:"bestellt",emailSent:true}));
+        setBestellungen(p=>[...neu,...p]);
+        showToast(`Bestellung an ${lief} gesendet ✉`);
+      } else {
+        showToast("E-Mail Fehler: "+res.status,false);
+      }
+    } catch(e){
+      showToast("Netzwerkfehler",false);
+    }
+    setSending(p=>({...p,[lief]:false}));
+  }
+
+  function bestelleOhneEmail(lief,items){
+    const neu=items.map(a=>({id:`B-${Date.now()}-${a.id}`,artId:a.id,name:a.name,lief,menge:a.min*2,einheit:a.einheit,preis:a.preis,datum:new Date().toLocaleDateString("de-DE"),status:"bestellt",emailSent:false}));
     setBestellungen(p=>[...neu,...p]);
-    showToast(`${items.length} Artikel bei ${lief} bestellt`);
+    showToast(`${items.length} Artikel bei ${lief} vorgemerkt`);
   }
 
-  function bestellen(a){
-    setBestellungen(p=>[{id:`${Date.now()}-${a.id}`,name:a.name,artId:a.id,lief:a.lief,menge:a.min*2,einheit:a.einheit,preis:a.preis,datum:new Date().toLocaleDateString("de-DE"),status:"bestellt"},...p]);
-    showToast(`${a.name} bestellt bei ${a.lief}`);
-  }
-
-  function empfangen(id){
-    const b=bestellungen.find(x=>x.id===id);
-    setBestellungen(p=>p.map(x=>x.id===id?{...x,status:"geliefert"}:x));
-    setArt(p=>p.map(a=>a.id===b.artId?{...a,bestand:a.bestand+b.menge}:a));
-    showToast("Lieferung empfangen – Bestand gebucht");
-  }
-
-  const offeneBestellungen=bestellungen.filter(b=>b.status==="bestellt");
-  const lief_offen=[...new Set(offeneBestellungen.map(b=>b.lief))];
+  const bereitsBestellteIds=new Set(bestellungen.filter(b=>b.status==="bestellt").map(b=>b.artId));
 
   return (
     <div>
-      {/* VORSCHLÄGE NACH LIEFERANT */}
       {Object.keys(nachLief).length>0?(
         <div style={{marginBottom:20}}>
           <div style={{fontSize:10,color:WARN,fontWeight:700,letterSpacing:"0.5px",marginBottom:10}}>⚠️ NACHBESTELL-VORSCHLÄGE</div>
           {Object.entries(nachLief).map(([lief,items])=>{
-            const l=LIEFERANTEN[lief];
+            const l=liefConfig[lief];
             const gesamtWert=items.reduce((s,a)=>s+a.min*2*a.preis,0);
             const isOpen=!collapsed[lief];
+            const hatEmail=!!l?.email;
+            const alleSchonBestellt=items.every(a=>bereitsBestellteIds.has(a.id));
             return (
               <div key={lief} style={{...CARD,marginBottom:10,borderColor:`${l?.farbe||WARN}50`}}>
-                {/* LIEFERANT HEADER */}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isOpen?10:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <div style={{width:10,height:10,borderRadius:"50%",background:l?.farbe||WARN}}/>
                     <div>
-                      <div style={{fontWeight:800,fontSize:14,color:TX}}>{lief}</div>
+                      <div style={{fontWeight:800,fontSize:14}}>{lief}</div>
                       <div style={{fontSize:10,color:TX2}}>{items.length} Artikel · ca. €{gesamtWert.toLocaleString("de-DE",{maximumFractionDigits:0})}</div>
+                      {hatEmail?<div style={{fontSize:10,color:TX2}}>✉ {l.email}</div>:<div style={{fontSize:10,color:ERR}}>⚠ Keine E-Mail hinterlegt</div>}
                     </div>
                   </div>
-                  <div style={{display:"flex",gap:6}}>
-                    <button onClick={()=>bestelleAlleVonLief(lief)} style={{background:l?.farbe||Y,border:"none",color:BG,borderRadius:8,padding:"7px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Alle bestellen</button>
+                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                    {!alleSchonBestellt&&(
+                      <button
+                        onClick={()=>hatEmail?sendeBestellung(lief,items):bestelleOhneEmail(lief,items)}
+                        disabled={sending[lief]}
+                        style={{background:hatEmail?l?.farbe||Y:"transparent",border:hatEmail?"none":`1px solid ${l?.farbe||Y}`,color:hatEmail?BG:l?.farbe||Y,borderRadius:8,padding:"7px 10px",fontSize:11,fontWeight:700,cursor:"pointer",opacity:sending[lief]?0.6:1}}
+                      >{sending[lief]?"...":hatEmail?"✉ Bestellen":"Vormerken"}</button>
+                    )}
+                    {alleSchonBestellt&&<Badge color={OK} label="Bestellt"/>}
                     <button onClick={()=>setCollapsed(p=>({...p,[lief]:!p[lief]}))} style={{background:"transparent",border:`1px solid ${BR}`,color:TX2,borderRadius:8,padding:"7px 10px",fontSize:11,cursor:"pointer"}}>{isOpen?"▲":"▼"}</button>
                   </div>
                 </div>
-
-                {/* ARTIKEL LISTE */}
                 {isOpen&&items.map(a=>(
-                  <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C2,borderRadius:8,padding:"8px 10px",marginBottom:6}}>
+                  <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C2,borderRadius:8,padding:"8px 10px",marginBottom:6,opacity:bereitsBestellteIds.has(a.id)?0.5:1}}>
                     <div>
-                      <div style={{fontWeight:600,fontSize:12,color:TX}}>{a.name}</div>
+                      <div style={{fontWeight:600,fontSize:12}}>{a.name}</div>
                       <div style={{fontSize:11,color:TX2}}>Bestand: {a.bestand} · Min: {a.min} · Vorschlag: {a.min*2} {a.einheit}</div>
                       <div style={{fontSize:11,color:TX2}}>ca. €{(a.min*2*a.preis).toLocaleString("de-DE",{maximumFractionDigits:0})}</div>
                     </div>
-                    <button onClick={()=>bestellen(a)} style={{background:"transparent",border:`1px solid ${l?.farbe||Y}60`,color:l?.farbe||Y,borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>+ Bestellen</button>
+                    {bereitsBestellteIds.has(a.id)?<Badge color={OK} label="Bestellt"/>:null}
                   </div>
                 ))}
               </div>
@@ -918,76 +948,224 @@ function BestellenTab({art,setArt,kritisch,showToast}){
           })}
         </div>
       ):(
-        <div style={{textAlign:"center",padding:"30px 20px",color:TX2,marginBottom:16}}>
+        <div style={{textAlign:"center",padding:"30px 20px",color:TX2}}>
           <div style={{fontSize:36,marginBottom:8}}>✅</div>
           <div style={{fontSize:14,fontWeight:600,color:OK}}>Alles im grünen Bereich</div>
           <div style={{fontSize:12,marginTop:4}}>Kein Artikel unter Mindestbestand</div>
         </div>
       )}
-
-      {/* ELEKTRIKER-HINWEIS wenn Kabel unter Min wären */}
       {kritisch.filter(a=>a.lief==="Elektriker").length>0&&(
-        <div style={{background:`${TX2}10`,border:`1px solid ${TX2}30`,borderRadius:10,padding:"10px 14px",marginBottom:16}}>
+        <div style={{background:`${TX2}10`,border:`1px solid ${TX2}30`,borderRadius:10,padding:"10px 14px",marginBottom:12}}>
           <div style={{fontSize:11,color:TX2,fontWeight:600}}>🔧 Kabel & Verbinder → Elektriker vor Ort</div>
-          <div style={{fontSize:11,color:TX2,marginTop:2}}>Werden nicht über das Lager bestellt</div>
-        </div>
-      )}
-
-      {/* OFFENE BESTELLUNGEN NACH LIEFERANT */}
-      {offeneBestellungen.length>0&&(
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:10,color:TX2,fontWeight:700,letterSpacing:"0.5px",marginBottom:8}}>OFFENE BESTELLUNGEN</div>
-          {lief_offen.map(lief=>{
-            const l=LIEFERANTEN[lief];
-            const items=offeneBestellungen.filter(b=>b.lief===lief);
-            const total=items.reduce((s,b)=>s+b.menge*b.preis,0);
-            return (
-              <div key={lief} style={{...CARD,marginBottom:10,borderColor:`${l?.farbe||OK}50`}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:10,height:10,borderRadius:"50%",background:l?.farbe||OK}}/>
-                    <div style={{fontWeight:800,fontSize:14}}>{lief}</div>
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <Badge color={Y} label={`${items.length} offen`}/>
-                    <div style={{fontSize:10,color:TX2,marginTop:2}}>ca. €{total.toLocaleString("de-DE",{maximumFractionDigits:0})}</div>
-                  </div>
-                </div>
-                {items.map(b=>(
-                  <div key={b.id} style={{background:C2,borderRadius:8,padding:"9px 10px",marginBottom:6}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                      <div style={{fontWeight:600,fontSize:12}}>{b.name}</div>
-                      <span style={{fontSize:11,color:TX2}}>📦 {b.menge} {b.einheit} · {b.datum}</span>
-                    </div>
-                    <button onClick={()=>empfangen(b.id)} style={{width:"100%",padding:"8px",borderRadius:7,border:"none",background:OK,color:BG,fontWeight:700,fontSize:11,cursor:"pointer"}}>✓ Lieferung empfangen & Bestand buchen</button>
-                  </div>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ABGESCHLOSSENE BESTELLUNGEN */}
-      {bestellungen.filter(b=>b.status==="geliefert").length>0&&(
-        <div>
-          <div style={{fontSize:10,color:TX2,fontWeight:700,letterSpacing:"0.5px",marginBottom:8}}>ABGESCHLOSSEN</div>
-          {bestellungen.filter(b=>b.status==="geliefert").map(b=>(
-            <div key={b.id} style={{...CARD,marginBottom:6,opacity:0.6}}>
-              <div style={{display:"flex",justifyContent:"space-between"}}>
-                <div style={{fontWeight:600,fontSize:12}}>{b.name}</div>
-                <Badge color={OK} label="Geliefert"/>
-              </div>
-              <div style={{fontSize:11,color:TX2}}>{b.lief} · {b.menge} {b.einheit} · {b.datum}</div>
-            </div>
-          ))}
         </div>
       )}
     </div>
   );
 }
 
+// ── WARENEINGANG TAB ──────────────────────────────────────────────────────────
+function WareneingangTab({art,setArt,bestellungen,setBestellungen,liefConfig,showToast}){
+  const [selected,setSelected]=useState(null); // bestellung id
+  const [eingangDatum,setEingangDatum]=useState(new Date().toISOString().split("T")[0]);
+  const [mengen,setMengen]=useState({});
+  const [filter,setFilter]=useState("offen");
+
+  const offene=bestellungen.filter(b=>b.status==="bestellt");
+  const geliefert=bestellungen.filter(b=>b.status==="geliefert");
+
+  // Gruppiert nach Lieferant
+  const offeneNachLief=useMemo(()=>{
+    const g={};
+    offene.forEach(b=>{if(!g[b.lief])g[b.lief]=[];g[b.lief].push(b);});
+    return g;
+  },[offene]);
+
+  function starteEingang(b){
+    setSelected(b.id);
+    setMengen({[b.id]:b.menge});
+  }
+
+  function buchEin(b){
+    const menge=parseInt(mengen[b.id])||b.menge;
+    setArt(prev=>prev.map(a=>a.id===b.artId?{...a,bestand:a.bestand+menge}:a));
+    setBestellungen(prev=>prev.map(x=>x.id===b.id?{...x,status:"geliefert",eingangMenge:menge,eingangDatum}:x));
+    setSelected(null);
+    showToast(`${menge}× ${b.name} eingebucht – Bestand aktualisiert`);
+  }
+
+  const l=(lief)=>liefConfig[lief];
+
+  return (
+    <div>
+      {/* SUB-FILTER */}
+      <div style={{display:"flex",gap:6,marginBottom:14}}>
+        {[["offen","Offene Bestellungen"],["geliefert","Wareneingang"]].map(([v,label])=>(
+          <button key={v} onClick={()=>setFilter(v)} style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${filter===v?Y:BR}`,background:filter===v?`${Y}15`:"transparent",color:filter===v?Y:TX2,fontSize:11,fontWeight:600,cursor:"pointer"}}>{label}</button>
+        ))}
+      </div>
+
+      {filter==="offen"&&(
+        <>
+          {offene.length===0?(
+            <div style={{textAlign:"center",padding:"40px 20px",color:TX2}}>
+              <div style={{fontSize:32,marginBottom:8}}>📭</div>
+              <div style={{fontSize:13,fontWeight:600}}>Keine offenen Bestellungen</div>
+            </div>
+          ):(
+            <>
+              <div style={{marginBottom:14}}>
+                <label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Wareneingangsdatum</label>
+                <input style={INPUT} type="date" value={eingangDatum} onChange={e=>setEingangDatum(e.target.value)}/>
+              </div>
+              {Object.entries(offeneNachLief).map(([lief,items])=>(
+                <div key={lief} style={{...CARD,marginBottom:12,borderColor:`${l(lief)?.farbe||OK}50`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:l(lief)?.farbe||OK}}/>
+                    <div>
+                      <div style={{fontWeight:800,fontSize:14}}>{lief}</div>
+                      <div style={{fontSize:10,color:TX2}}>{items.length} Positionen offen · bestellt {items[0].datum}</div>
+                    </div>
+                  </div>
+                  {items.map(b=>(
+                    <div key={b.id} style={{background:C2,borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:selected===b.id?8:0}}>
+                        <div>
+                          <div style={{fontWeight:600,fontSize:12}}>{b.name}</div>
+                          <div style={{fontSize:11,color:TX2}}>Bestellt: {b.menge} {b.einheit} · {b.datum}</div>
+                          {b.emailSent&&<div style={{fontSize:10,color:OK}}>✉ Bestellung wurde per E-Mail gesendet</div>}
+                        </div>
+                        {selected!==b.id?(
+                          <button onClick={()=>starteEingang(b)} style={{background:OK,border:"none",color:BG,borderRadius:8,padding:"7px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Einbuchen</button>
+                        ):(
+                          <button onClick={()=>setSelected(null)} style={{background:"transparent",border:`1px solid ${BR}`,color:TX2,borderRadius:8,padding:"7px 10px",fontSize:11,cursor:"pointer"}}>✕</button>
+                        )}
+                      </div>
+                      {selected===b.id&&(
+                        <div>
+                          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                            <div style={{flex:1}}>
+                              <label style={{fontSize:10,color:TX2,display:"block",marginBottom:3}}>Tatsächlich gelieferte Menge</label>
+                              <input style={INPUT} type="number" value={mengen[b.id]||b.menge} onChange={e=>setMengen(p=>({...p,[b.id]:e.target.value}))}/>
+                            </div>
+                            <button onClick={()=>buchEin(b)} style={{marginTop:18,padding:"9px 16px",borderRadius:8,border:"none",background:OK,color:BG,fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>✓ Einbuchen</button>
+                          </div>
+                          <div style={{fontSize:10,color:TX2,marginTop:6}}>Datum: {new Date(eingangDatum).toLocaleDateString("de-DE")}</div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
+          )}
+        </>
+      )}
+
+      {filter==="geliefert"&&(
+        <div>
+          {geliefert.length===0?(
+            <div style={{textAlign:"center",padding:"40px 20px",color:TX2}}>
+              <div style={{fontSize:32,marginBottom:8}}>📋</div>
+              <div style={{fontSize:13,fontWeight:600}}>Noch keine Eingänge gebucht</div>
+            </div>
+          ):(
+            geliefert.map(b=>{
+              const lc=liefConfig[b.lief];
+              return (
+                <div key={b.id} style={{...CARD,marginBottom:8,opacity:0.75}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                        <div style={{width:7,height:7,borderRadius:"50%",background:lc?.farbe||OK}}/>
+                        <span style={{fontSize:10,color:TX2}}>{b.lief}</span>
+                      </div>
+                      <div style={{fontWeight:600,fontSize:12}}>{b.name}</div>
+                      <div style={{fontSize:11,color:TX2}}>📦 {b.eingangMenge||b.menge} {b.einheit} · Eingang: {b.eingangDatum||b.datum}</div>
+                      <div style={{fontSize:10,color:TX2}}>Bestellt: {b.datum}</div>
+                    </div>
+                    <Badge color={OK} label="Geliefert"/>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── LIEFERANTEN TAB ────────────────────────────────────────────────────────────
+function LieferantenTab({liefConfig,setLiefConfig,ccIntern,setCcIntern,showToast}){
+  const [editing,setEditing]=useState(null);
+  const [editData,setEditData]=useState({});
+
+  function startEdit(name){
+    setEditing(name);
+    setEditData({...liefConfig[name]});
+  }
+  function saveEdit(){
+    setLiefConfig(p=>({...p,[editing]:{...p[editing],...editData}}));
+    setEditing(null);
+    showToast("Lieferant gespeichert");
+  }
+
+  return (
+    <div>
+      {/* CC INTERN */}
+      <div style={{...CARD,marginBottom:14}}>
+        <div style={{fontSize:11,color:TX2,marginBottom:4,fontWeight:600}}>CC INTERNE E-MAIL (alle Bestellungen)</div>
+        <div style={{display:"flex",gap:8}}>
+          <input style={{...INPUT,flex:1}} value={ccIntern} onChange={e=>setCcIntern(e.target.value)} placeholder="lager@bee-doo.de"/>
+          <button onClick={()=>showToast("CC gespeichert")} style={{padding:"8px 14px",borderRadius:8,border:"none",background:Y,color:BG,fontWeight:700,fontSize:12,cursor:"pointer"}}>✓</button>
+        </div>
+      </div>
+
+      <div style={{fontSize:10,color:TX2,fontWeight:700,letterSpacing:"0.5px",marginBottom:8}}>LIEFERANTEN & E-MAIL-ADRESSEN</div>
+
+      {Object.entries(liefConfig).filter(([n])=>n!=="Elektriker").map(([name,l])=>(
+        <div key={name} style={{...CARD,marginBottom:8,borderColor:`${l.farbe}40`}}>
+          {editing===name?(
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                <div style={{width:10,height:10,borderRadius:"50%",background:l.farbe}}/>
+                <span style={{fontWeight:800,fontSize:14}}>{name}</span>
+              </div>
+              <div style={{marginBottom:8}}>
+                <label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>E-Mail Bestellung</label>
+                <input style={INPUT} value={editData.email||""} onChange={e=>setEditData(p=>({...p,email:e.target.value}))} placeholder="bestellung@lieferant.de"/>
+              </div>
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:11,color:TX2,display:"block",marginBottom:4}}>Info / Sortiment</label>
+                <input style={INPUT} value={editData.info||""} onChange={e=>setEditData(p=>({...p,info:e.target.value}))}/>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={saveEdit} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:Y,color:BG,fontWeight:700,fontSize:12,cursor:"pointer"}}>✓ Speichern</button>
+                <button onClick={()=>setEditing(null)} style={{padding:"9px 14px",borderRadius:8,border:`1px solid ${BR}`,background:"transparent",color:TX2,fontSize:12,cursor:"pointer"}}>Abbrechen</button>
+              </div>
+            </div>
+          ):(
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                  <div style={{width:10,height:10,borderRadius:"50%",background:l.farbe}}/>
+                  <span style={{fontWeight:800,fontSize:14}}>{name}</span>
+                </div>
+                <div style={{fontSize:11,color:TX2}}>{l.info}</div>
+                {l.email?<div style={{fontSize:11,color:OK,marginTop:2}}>✉ {l.email}</div>:<div style={{fontSize:11,color:ERR,marginTop:2}}>⚠ Keine E-Mail hinterlegt</div>}
+              </div>
+              <button onClick={()=>startEdit(name)} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${BR}`,background:"transparent",color:TX2,fontSize:11,cursor:"pointer"}}>✏️</button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+
 </script>
 </body>
 </html>
