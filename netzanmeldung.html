@@ -74,18 +74,24 @@ const STATUS = {
 const FLOW = ["erfasst","unterlagen_angefordert","eingereicht","in_pruefung","genehmigt","inbetrieb"];
 
 // ─── PLZ → NETZBETREIBER ──────────────────────────────────────────────────────
-const NB_MAP = {
-  "336": "Stadtwerke Bielefeld Netz", "337": "Stadtwerke Bielefeld Netz",
-  "338": "Stadtwerke Bielefeld Netz", "334": "Westfalen Weser Netz",
-  "326": "Westfalen Weser Netz", "327": "Westfalen Weser Netz",
-  "328": "Westfalen Weser Netz", "329": "Westfalen Weser Netz",
-  "330": "Westfalen Weser Netz", "484": "Stadtwerke Gütersloh",
-  "487": "Stadtwerke Paderborn", "333": "Stadtwerke Bielefeld Netz",
-  "322": "Enervie", "581": "Westfalen Weser Netz",
-};
+// PLZ → Netzbetreiber: dynamisch aus DB-Tabelle netzbetreiber_plz_mapping
+let NB_CACHE = null;
+async function loadNbMapping() {
+  if (NB_CACHE) return;
+  try {
+    const r = await db.get('netzbetreiber_plz_mapping', 'select=plz_prefix,netzbetreiber,portal_url&order=plz_prefix.desc');
+    NB_CACHE = r || [];
+  } catch(e) { NB_CACHE = []; }
+}
 function nb(plz) {
   if (!plz || plz.length < 3) return "";
-  return NB_MAP[plz.substring(0,3)] || NB_MAP[plz.substring(0,2)] || "";
+  if (!NB_CACHE) return "";
+  for (const len of [5, 4, 3]) {
+    const prefix = plz.substring(0, len);
+    const match = NB_CACHE.find(m => m.plz_prefix === prefix);
+    if (match) return match.netzbetreiber;
+  }
+  return "";
 }
 
 // ─── UNTERLAGEN ───────────────────────────────────────────────────────────────
@@ -793,6 +799,7 @@ function App() {
     try {
       const [nm, at] = await Promise.all([
         db.get("netzanmeldungen", "?order=erstellt_am.desc"),
+        loadNbMapping(),
         db.get("pay_auftraege", "?select=id,auftrag_nr,kunde_name,kunde_adresse,kwp&order=auftrag_nr.asc"),
       ]);
       if (nm?.code === "PGRST205" || nm?.message?.includes("netzanmeldungen")) {
