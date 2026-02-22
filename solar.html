@@ -109,9 +109,9 @@
       <div id="gmap"></div>
       <div class="map-badge"><span style="color:#3B82F6">■</span> <span id="panelCountBadge">0</span> Module</div>
     </div>
-    <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;">
-      <button id="deleteModeBtn" onclick="toggleDeleteMode()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;font-family:inherit;">🗑 Module löschen</button>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 16px;font-size:12px;color:var(--muted);">💡 Module verschieben: lang drücken + ziehen</div>
+    <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;align-items:center;">
+      <button id="deleteModeBtn" onclick="toggleDeleteMode()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;font-family:inherit;flex:1;">🗑 Löschen</button>
+      <div id="moveHint" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:12px;color:var(--muted);flex:2;">👆 Modul antippen → gelb = gewählt → neue Stelle tippen</div>
     </div>
 
     <div class="kpi-grid">
@@ -164,7 +164,7 @@ const GKEY = 'AIzaSyD1ZYkqURi5upHcIk_uUeZErgf5kZB9Jd8';
 const WATT = 475, PW = 1.134, PH = 1.762;
 const DIRS = ['N','NO','O','SO','S','SW','W','NW'];
 let solarData = null, mapCenter = null, configs = [], currentIdx = 0;
-let gmap = null, panelPolygons = [], deleteMode = false;
+let gmap = null, panelPolygons = [], deleteMode = false, selectedPanel = null;
 
 function log(msg) {
   const el = document.getElementById('debugLog');
@@ -310,24 +310,34 @@ function drawPanels(cfg) {
       zIndex: idx
     });
 
-    // Click to delete / highlight
+    poly.panelData = { az, isL, clat: p.center.latitude, clng: p.center.longitude };
+
     poly.addListener('click', () => {
       if (deleteMode) {
         poly.setMap(null);
         panelPolygons = panelPolygons.filter(x => x !== poly);
+        if (selectedPanel === poly) selectedPanel = null;
         updatePanelCount();
       } else {
-        const current = poly.get('fillColor');
-        poly.setOptions({ fillColor: current === '#EF4444' ? '#3B82F6' : '#EF4444', fillOpacity: 0.75 });
+        selectPanel(poly);
       }
     });
 
-    // Visual feedback on hover
-    poly.addListener('mouseover', () => { if (!deleteMode) poly.setOptions({ fillOpacity: 0.8, strokeWeight: 1.5 }); });
-    poly.addListener('mouseout', () => { if (!deleteMode) poly.setOptions({ fillOpacity: 0.55, strokeWeight: 1 }); });
+    poly.addListener('mouseover', () => { if (poly !== selectedPanel) poly.setOptions({ fillOpacity: 0.8 }); });
+    poly.addListener('mouseout', () => { if (poly !== selectedPanel) poly.setOptions({ fillOpacity: 0.55 }); });
 
     panelPolygons.push(poly);
   });
+
+  // Map click → move selected panel to clicked location
+  if (!gmap._moveListener) {
+    gmap._moveListener = gmap.addListener('click', (e) => {
+      if (selectedPanel && !deleteMode) {
+        movePanelTo(selectedPanel, e.latLng.lat(), e.latLng.lng());
+        selectPanel(null);
+      }
+    });
+  }
 }
 
 function renderTable(sp) {
@@ -346,6 +356,43 @@ function onSlider(val) {
   currentIdx = parseInt(val);
   updateKpis(configs[currentIdx]);
   drawPanels(configs[currentIdx]);
+}
+
+function selectPanel(poly) {
+  if (selectedPanel && selectedPanel !== poly) {
+    selectedPanel.setOptions({ fillColor: '#3B82F6', fillOpacity: 0.55, strokeColor: '#93C5FD', strokeWeight: 1 });
+  }
+  selectedPanel = poly;
+  if (poly) {
+    poly.setOptions({ fillColor: '#FDE154', fillOpacity: 0.75, strokeColor: '#F59E0B', strokeWeight: 2 });
+    document.getElementById('moveHint').textContent = '📍 Jetzt auf die gewünschte Stelle tippen';
+    document.getElementById('moveHint').style.color = '#FDE154';
+  } else {
+    document.getElementById('moveHint').textContent = '👆 Modul antippen → gelb = gewählt → neue Stelle tippen';
+    document.getElementById('moveHint').style.color = 'var(--muted)';
+  }
+}
+
+function movePanelTo(poly, newLat, newLng) {
+  const { az, isL } = poly.panelData;
+  const GAP = 0.04;
+  const hw = (isL ? PH : PW) / 2 - GAP;
+  const hh = (isL ? PW : PH) / 2 - GAP;
+  const R = 6378137;
+  const mPerDegLat = Math.PI * R / 180;
+  const mPerDegLng = mPerDegLat * Math.cos(newLat * Math.PI / 180);
+  const sE = Math.sin(az), sN = Math.cos(az);
+  const rE = Math.cos(az), rN = -Math.sin(az);
+  const corners = [
+    [ hw*rE + hh*sE,  hw*rN + hh*sN],
+    [-hw*rE + hh*sE, -hw*rN + hh*sN],
+    [-hw*rE - hh*sE, -hw*rN - hh*sN],
+    [ hw*rE - hh*sE,  hw*rN - hh*sN],
+  ].map(([dE,dN]) => ({ lat: newLat + dN/mPerDegLat, lng: newLng + dE/mPerDegLng }));
+  poly.setPath(corners);
+  poly.panelData.clat = newLat;
+  poly.panelData.clng = newLng;
+  poly.setOptions({ fillColor: '#3B82F6', fillOpacity: 0.55, strokeColor: '#93C5FD', strokeWeight: 1 });
 }
 
 function updatePanelCount() {
