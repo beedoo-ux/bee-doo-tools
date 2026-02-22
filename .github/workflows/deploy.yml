@@ -11,17 +11,19 @@ jobs:
 
       - name: Generate config.js
         run: |
-          cat > config.js << CONFIGEOF
-          window.BEEDOO_SVC='${{ secrets.SUPABASE_SERVICE_KEY }}';
-          window.BEEDOO_SB='https://hqzpemfaljxcysyqssng.supabase.co';
-          window.BEEDOO_GKEY='${{ secrets.GOOGLE_API_KEY }}';
-          CONFIGEOF
+          printf "window.BEEDOO_SVC='%s';\nwindow.BEEDOO_SB='https://hqzpemfaljxcysyqssng.supabase.co';\nwindow.BEEDOO_GKEY='%s';\n" \
+            "${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            "${{ secrets.GOOGLE_API_KEY }}" > config.js
+          echo "config.js: $(wc -c < config.js) bytes"
 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
-      - name: Deploy to Vercel
-        run: vercel --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - name: Link Vercel project
+        run: |
+          mkdir -p .vercel
+          echo '{"projectId":"${{ secrets.VERCEL_PROJECT_ID }}","orgId":"${{ secrets.VERCEL_ORG_ID }}"}' > .vercel/project.json
+          echo "project.json: $(cat .vercel/project.json)"
+
+      - name: Deploy to Vercel (prod)
+        run: vercel deploy --token "${{ secrets.VERCEL_TOKEN }}" --prod --yes
