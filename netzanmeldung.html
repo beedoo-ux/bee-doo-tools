@@ -765,6 +765,27 @@ function App() {
   const [selected, setSelected] = useState(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [error, setError] = useState(null);
+  const [migrating, setMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState(null);
+
+  const runMigration = async () => {
+    setMigrating(true);
+    try {
+      const r = await fetch("/api/migrate", {
+        headers: { "x-migrate-token": "EtQkiOCgyug_ZY8aeY01" }
+      });
+      const data = await r.json();
+      if (data.success || (data.results && data.results.some(x => x.ok))) {
+        setMigrateResult({ success: true, message: "✓ Tabelle erstellt! Seite neu laden..." });
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        setMigrateResult({ success: false, message: "Fehler: " + JSON.stringify(data).slice(0, 200) });
+      }
+    } catch(e) {
+      setMigrateResult({ success: false, message: "Netzwerkfehler: " + e.message });
+    }
+    setMigrating(false);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -816,11 +837,15 @@ function App() {
       <div style={{ maxWidth: 1300, margin: "0 auto", padding: "24px 24px 80px" }}>
 
         {error && (
-          <div style={{ background: "#450a0a", border: `1px solid ${C.red}35`, borderRadius: 10, padding: "14px 18px", marginBottom: 20, color: C.red, fontSize: 13, lineHeight: 1.6 }}>
-            {error}
-            <div style={{ marginTop: 6, fontSize: 12, color: "#9CA3AF" }}>
-              SQL-Datei: beedoo-ux/bee-doo-tools/migrations/netzanmeldung-migration.sql
-            </div>
+          <div style={{ background: "#450a0a", border: `1px solid ${C.red}35`, borderRadius: 10, padding: "16px 20px", marginBottom: 20 }}>
+            <div style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</div>
+            <button onClick={runMigration} disabled={migrating} style={{
+              padding: "10px 20px", background: migrating ? C.surface : C.yellow, color: migrating ? C.sec : "#000",
+              border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: migrating ? "default" : "pointer"
+            }}>
+              {migrating ? "⏳ Migration läuft..." : "⚡ Tabelle jetzt erstellen (einmalig)"}
+            </button>
+            {migrateResult && <div style={{ marginTop: 10, fontSize: 12, color: migrateResult.success ? C.green : C.red }}>{migrateResult.message}</div>}
           </div>
         )}
 
