@@ -54,10 +54,11 @@
 
   /* Map */
   .map-wrap { position: relative; width: 100%; max-width: 620px; margin-bottom: 18px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #000; }
-  .map-wrap img { display: block; width: 100%; height: auto; min-height: 300px; object-fit: cover; background: #111; }
-  .map-wrap svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-  .map-badge-top { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); border-radius: 8px; padding: 7px 12px; font-size: 12px; border: 1px solid rgba(255,255,255,0.1); }
-  .map-badge-bot { position: absolute; bottom: 12px; right: 12px; background: rgba(0,0,0,0.65); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--muted); }
+  .map-wrap img { display: none; }
+  .map-wrap svg { display: none; }
+  #leafletMap { width: 100%; height: 400px; border-radius: 12px; }
+  .map-badge-top { position: absolute; top: 12px; left: 48px; z-index: 1000; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); border-radius: 8px; padding: 7px 12px; font-size: 12px; border: 1px solid rgba(255,255,255,0.1); pointer-events: none; }
+  .map-badge-bot { position: absolute; bottom: 28px; right: 12px; z-index: 1000; background: rgba(0,0,0,0.65); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--muted); pointer-events: none; }
 
   /* KPI Grid */
   .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 12px; margin-bottom: 18px; }
@@ -89,6 +90,8 @@
     .kpi-card, .table-box, .addr-banner { border-color: #ccc; }
   }
 </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
@@ -137,8 +140,7 @@
 
     <!-- Map -->
     <div class="map-wrap" id="mapWrap">
-      <img id="mapImg" src="" alt="Satellitenbild" onerror="this.style.display='none'">
-      <svg id="panelSvg" viewBox="0 0 620 460" preserveAspectRatio="none"></svg>
+      <div id="leafletMap"></div>
       <div class="map-badge-top"><span style="color:#3B82F6">■</span> <span id="panelCountBadge">0</span> Module visualisiert</div>
       <div class="map-badge-bot">Google Solar API · Zoom 19</div>
     </div>
@@ -197,6 +199,7 @@ const WATT = 475, PW = 1.134, PH = 1.762;
 const DIRS = ["N","NO","O","SO","S","SW","W","NW"];
 
 let solarData = null, mapCenter = null, configs = [], currentIdx = 0;
+let leafletMap = null, panelLayerGroup = null;
 
 function log(msg) {
   const el = document.getElementById('debugLog');
@@ -317,54 +320,44 @@ function renderMap(cfg) {
   const sp = solarData.solarPotential;
   const { lat, lng } = mapCenter;
 
-  // Google Satellite Static Map
-  const mapWrap = document.getElementById('mapWrap');
-  // Remove any old iframe fallback
-  const oldIframe = mapWrap.querySelector('iframe');
-  if (oldIframe) oldIframe.remove();
+  // Init Leaflet map once
+  if (!leafletMap) {
+    leafletMap = L.map('leafletMap', { zoomControl: true, attributionControl: false });
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 21
+    }).addTo(leafletMap);
+    panelLayerGroup = L.layerGroup().addTo(leafletMap);
+  }
+  leafletMap.setView([lat, lng], ZOOM);
+  panelLayerGroup.clearLayers();
 
-  const mapImg = document.getElementById('mapImg');
-  mapImg.style.display = 'block';
-  mapImg.src = '';
-  // Small timeout to force fresh load
-  setTimeout(() => {
-    mapImg.src = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${ZOOM}&size=${MAP_W}x${MAP_H}&maptype=satellite&key=${GKEY}`;
-  }, 50);
-  mapImg.onerror = function() {
-    log('⚠️ Satellitenbild konnte nicht geladen werden. Maps Static API aktiv?');
-  };
-
-  // SVG panels
-  const svg = document.getElementById('panelSvg');
-  svg.innerHTML = '';
-  const m = mpp(lat);
+  // Draw panels as Leaflet polygons
   const allPanels = (sp.solarPanels || []).slice(0, cfg?.panelsCount || 0);
+  const R = 6378137; // Earth radius meters
 
   allPanels.forEach(p => {
-    const { x, y } = latlngToPx(p.center.latitude, p.center.longitude, lat, lng);
-    if (x < -20 || x > MAP_W + 20 || y < -20 || y > MAP_H + 20) return;
     const seg = sp.roofSegmentStats?.[p.segmentIndex];
-    const az = seg?.azimuthDegrees || 180;
+    const az = (seg?.azimuthDegrees || 180) * Math.PI / 180;
     const isL = p.orientation === 'LANDSCAPE';
-    const pw = (isL ? PH : PW) / m, ph = (isL ? PW : PH) / m;
+    const hw = (isL ? PH : PW) / 2; // half-width meters
+    const hh = (isL ? PW : PH) / 2; // half-height meters
+    const clat = p.center.latitude, clng = p.center.longitude;
+    const mPerDegLat = Math.PI * R / 180;
+    const mPerDegLng = mPerDegLat * Math.cos(clat * Math.PI / 180);
 
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${(az-180).toFixed(1)})`);
+    // 4 corners rotated by azimuth
+    const corners = [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([x,y]) => {
+      const rx = x * Math.cos(az) - y * Math.sin(az);
+      const ry = x * Math.sin(az) + y * Math.cos(az);
+      return [clat + ry / mPerDegLat, clng + rx / mPerDegLng];
+    });
 
-    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.setAttribute('x', (-pw/2).toFixed(1)); rect.setAttribute('y', (-ph/2).toFixed(1));
-    rect.setAttribute('width', pw.toFixed(1)); rect.setAttribute('height', ph.toFixed(1));
-    rect.setAttribute('fill', 'rgba(59,130,246,0.5)');
-    rect.setAttribute('stroke', 'rgba(147,197,253,0.9)');
-    rect.setAttribute('stroke-width', '0.8'); rect.setAttribute('rx', '0.5');
-
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', (-pw/2).toFixed(1)); line.setAttribute('y1', '0');
-    line.setAttribute('x2', (pw/2).toFixed(1)); line.setAttribute('y2', '0');
-    line.setAttribute('stroke', 'rgba(147,197,253,0.6)'); line.setAttribute('stroke-width', '0.3');
-
-    g.appendChild(rect); g.appendChild(line);
-    svg.appendChild(g);
+    L.polygon(corners, {
+      color: 'rgba(147,197,253,0.9)',
+      fillColor: 'rgba(59,130,246,0.55)',
+      fillOpacity: 0.55,
+      weight: 0.8
+    }).addTo(panelLayerGroup);
   });
 }
 
