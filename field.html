@@ -3273,6 +3273,18 @@ function StepFotos({ data, setData }) {
   const [phoneSync, setPhoneSync] = useState({ active: false, count: 0, lastCheck: null });
   const phonePollRef = React.useRef(null);
 
+  // ── Auto-init phone job ID so QR is always visible ──
+  useEffect(() => {
+    if (!data._phoneJobId) {
+      var jobTs = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+      u("_phoneJobId", jobTs);
+      u("_phoneJobActive", true);
+      u("_phonePhotosReceived", 0);
+    } else if (!data._phoneJobActive) {
+      u("_phoneJobActive", true);
+    }
+  }, []);
+
   // ── Polling for external phone photos ──
   useEffect(() => {
     if (!data._phoneJobId || !data._phoneJobActive) return;
@@ -3690,19 +3702,10 @@ function StepFotos({ data, setData }) {
       React.createElement("div", null,
         React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: T.text }}, "Fotos vom Handy"),
         React.createElement("div", { style: { fontSize: 10, color: T.textDim }}, "QR-Code scannen \u2192 Fotos extern hochladen"))),
-    /* QR Code always visible */
-    !data._phoneJobActive ? React.createElement("div", { style: { textAlign: "center" }},
-      React.createElement("button", { onClick: function() {
-        var jobTs = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-        u("_phoneJobId", jobTs);
-        u("_phoneJobActive", true);
-        u("_phonePhotosReceived", 0);
-      }, style: { padding: "10px 20px", borderRadius: 10, border: "1.5px solid " + BRAND.yellow, background: T.accentGlow, color: BRAND.yellow, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: font }}, "\u{1F4F7} Handy verbinden")
-    ) :
+    /* QR Code always visible - no click needed */
     React.createElement("div", { style: { textAlign: "center" }},
-      React.createElement("canvas", { ref: function(el) {
-        if (el && !el._qrDone) {
-          el._qrDone = true;
+      React.createElement("canvas", { key: "qr-" + (data._phoneJobId || "init"), ref: function(el) {
+        if (el && data._phoneJobId) {
           var kundenName = encodeURIComponent([data.vorname, data.nachname].filter(Boolean).join(" ") || "Kunde");
           var addr = encodeURIComponent([data.strasse, data.hausnummer, data.plz, data.ort].filter(Boolean).join(" ") || "");
           var berater = encodeURIComponent(data._beraterName || "");
@@ -3722,7 +3725,7 @@ function StepFotos({ data, setData }) {
           var qrUrl = window.location.origin + "/field-photo.html?job=" + data._phoneJobId + "&name=" + kundenName + "&addr=" + addr + "&berater=" + berater;
           navigator.clipboard.writeText(qrUrl);
         }, style: { padding: "6px 12px", borderRadius: 8, border: "1px solid " + T.border, background: "none", color: T.textDim, fontSize: 10, cursor: "pointer", fontFamily: font }}, "\uD83D\uDCCB Link kopieren"),
-        React.createElement("button", { onClick: function() { u("_phoneJobActive", false); u("_phoneJobId", null); }, style: { padding: "6px 12px", borderRadius: 8, border: "1px solid " + T.border, background: "none", color: T.red, fontSize: 10, cursor: "pointer", fontFamily: font }}, "Sync beenden"))
+        React.createElement("button", { onClick: function() { var newJob = Date.now().toString(36) + Math.random().toString(36).slice(2,6); u("_phoneJobId", newJob); u("_phonePhotosReceived", 0); }, style: { padding: "6px 12px", borderRadius: 8, border: "1px solid " + T.border, background: "none", color: T.textDim, fontSize: 10, cursor: "pointer", fontFamily: font }}, "🔄 Neuer QR-Code"))
     )), /* @__PURE__ */ React.createElement(Section, { title: "Pflichtfotos", icon: "\u26A0\uFE0F", accent: T.red }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 12 } }, pflicht.map((p) => /* @__PURE__ */ React.createElement(
     PhotoTile,
     {
