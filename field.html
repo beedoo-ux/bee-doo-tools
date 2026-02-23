@@ -560,9 +560,9 @@ const AUFNAHME_TYPEN = [
 ];
 function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkehrerClick, onRueckkehrerErledigt }) {
   const [clk, setClk] = useState(new Date());
-  const [alertPhase, setAlertPhase] = useState("alert"); // "alert" | "dashboard"
-  useEffect(function() { if(alertPhase === "alert") { var timer = setTimeout(function() { setAlertPhase("dashboard"); }, 10000); return function() { clearTimeout(timer); }; } }, [alertPhase]);
   const [selectedRK, setSelectedRK] = useState(null);
+  const [alertVisible, setAlertVisible] = useState(true);
+  useEffect(function() { var t = setTimeout(function() { setAlertVisible(false); }, 10000); return function() { clearTimeout(t); }; }, []);
   const [rkNotes, setRkNotes] = useState({});
   const [selectedStorno, setSelectedStorno] = useState(null);
   const [rettungNotiz, setRettungNotiz] = useState("");
@@ -654,11 +654,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
   const ts = clk.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
   const cs = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "18px 20px" };
   const ls = { fontSize: 10, color: "rgba(255,255,255,0.45)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 };
-  if (alertPhase === "alert") {
-    var alertItems = [];
-    stornos.forEach(function(st) { alertItems.push({ type: "storno", name: st.name, detail: st.grund + " · " + st.typ, zeit: st.restStunden + " Std. verbleibend", color: "#f97316" }); });
-    (rueckkehrer || []).forEach(function(rk) { alertItems.push({ type: "rueck", name: rk.name, detail: rk.grund + " · " + rk.typ, zeit: rk.tage + " Tage", color: "#ef4444" }); });
-    return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 10000, background: "#0A0E1A", fontFamily: font, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 }},
+  return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 10000, background: "#0A0E1A", fontFamily: font, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 }},
       React.createElement("style", null, "@keyframes alertPulse { 0%,100%{ box-shadow: 0 0 0px rgba(239,68,68,0); } 50%{ box-shadow: 0 0 40px rgba(239,68,68,0.4); }} @keyframes alertBlink { 0%,100%{ opacity:1; } 50%{ opacity:0.4; }}"),
       React.createElement("div", { style: { animation: "alertBlink 1s infinite", fontSize: 48, marginBottom: 16 }}, "\u{1F6A8}"),
       React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#ef4444", textTransform: "uppercase", letterSpacing: 2, marginBottom: 6, animation: "alertBlink 1.5s infinite" }}, "ACHTUNG \u2014 SOFORT BEARBEITEN"),
@@ -964,8 +960,45 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
           React.createElement("div", { style: { display: "flex", gap: 10 }},
             React.createElement("button", { onClick: function() { setShowManualConfirm(false); }, style: { flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", fontSize: 13, fontFamily: font, cursor: "pointer" }}, "Abbrechen"),
             React.createElement("button", { onClick: function() { setShowManualConfirm(false); onNewAufnahme(); }, style: { flex: 2, padding: "12px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #FDE154, #E8CC3D)", color: "#0A0E1A", fontSize: 13, fontWeight: 800, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 16px rgba(253,225,84,0.25)" }}, "\u26A1 Ja, manuell starten"))))),
+
+    /* ── ALERT OVERLAY: Storno + Rückkehrer (10s) ── */
+    alertVisible && React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 30000, background: "rgba(5,8,15,0.97)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 28, fontFamily: font }},
+      React.createElement("style", null, "@keyframes alertPulse2 { 0%,100%{ box-shadow: 0 0 0px rgba(239,68,68,0); } 50%{ box-shadow: 0 0 40px rgba(239,68,68,0.35); }} @keyframes alertBlink2 { 0%,100%{ opacity:1; } 50%{ opacity:0.3; }} @keyframes alertCountdown { from{width:100%} to{width:0%} }"),
+      React.createElement("div", { style: { animation: "alertBlink2 1s infinite", fontSize: 52, marginBottom: 12 }}, "\u{1F6A8}"),
+      React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#ef4444", textTransform: "uppercase", letterSpacing: 3, marginBottom: 4, textAlign: "center", animation: "alertBlink2 1.5s infinite" }}, "ACHTUNG"),
+      React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#ef4444", letterSpacing: 1, marginBottom: 24, textAlign: "center" }}, "SOFORT BEARBEITEN!"),
+      React.createElement("div", { style: { width: "100%", maxWidth: 480 }},
+        /* Stornos */
+        stornos.map(function(st, i) {
+          return React.createElement("div", { key: "s"+i, style: { display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", marginBottom: 10, borderRadius: 14, background: "rgba(249,115,22,0.1)", border: "1.5px solid rgba(249,115,22,0.35)", animation: "alertPulse2 2s infinite", animationDelay: (i * 0.3) + "s" }},
+            React.createElement("div", { style: { width: 46, height: 46, borderRadius: 12, background: "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}, "\uD83D\uDD25"),
+            React.createElement("div", { style: { flex: 1 }},
+              React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }},
+                React.createElement("span", { style: { fontSize: 9, fontWeight: 800, padding: "2px 8px", borderRadius: 4, background: "#f97316", color: "#fff", textTransform: "uppercase", letterSpacing: 0.5 }}, "STORNO"),
+                React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#fff" }}, st.name)),
+              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.6)" }}, st.grund + " \xB7 " + st.typ)),
+            React.createElement("div", { style: { textAlign: "right" }},
+              React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: "#f97316" }}, st.restStunden + " Std."),
+              React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.4)" }}, "verbleibend")));
+        }),
+        /* Rückkehrer */
+        (rueckkehrer || []).map(function(rk, i) {
+          return React.createElement("div", { key: "r"+i, style: { display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", marginBottom: 10, borderRadius: 14, background: "rgba(239,68,68,0.08)", border: "1.5px solid rgba(239,68,68,0.3)", animation: "alertPulse2 2s infinite", animationDelay: ((stornos.length + i) * 0.3) + "s" }},
+            React.createElement("div", { style: { width: 46, height: 46, borderRadius: 12, background: "rgba(239,68,68,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}, "\u26A0\uFE0F"),
+            React.createElement("div", { style: { flex: 1 }},
+              React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }},
+                React.createElement("span", { style: { fontSize: 9, fontWeight: 800, padding: "2px 8px", borderRadius: 4, background: "#ef4444", color: "#fff", textTransform: "uppercase", letterSpacing: 0.5 }}, "R\xDCCKKEHRER"),
+                React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#fff" }}, rk.name)),
+              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.6)" }}, rk.grund + " \xB7 " + rk.typ)),
+            React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#ef4444" }}, rk.tage + "T \u2192"));
+        })),
+      React.createElement("div", { style: { marginTop: 28, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }},
+        React.createElement("button", { onClick: function() { setAlertVisible(false); }, style: { padding: "16px 48px", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff", fontSize: 16, fontWeight: 900, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 24px rgba(239,68,68,0.5)", animation: "alertPulse2 2s infinite", letterSpacing: 0.5 }}, "\u2705 Verstanden \u2014 zum Dashboard"),
+        React.createElement("div", { style: { width: 200, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden", marginTop: 4 }},
+          React.createElement("div", { style: { height: "100%", background: "#ef4444", borderRadius: 2, animation: "alertCountdown 10s linear forwards" }})),
+        React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 2 }}, "Automatisch in 10 Sekunden"))),
+
     React.createElement("div", { style: { textAlign: "center", padding: "16px 0 24px", fontSize: 10, color: "rgba(255,255,255,0.12)" }}, "v2.0 \xB7 bee-doo FIELD \xB7 Bielefeld \xB7 \uD83D\uDC1D"))));
-}
 function StartScreen({ onStart }) {
   const [hovered, setHovered] = useState(null);
   const [fadeOut, setFadeOut] = useState(false);
