@@ -19,6 +19,7 @@ body { background: #0B0D12; font-family: 'DM Sans', system-ui, sans-serif; color
 @keyframes pulse-orange { 0%,100%{box-shadow:0 0 8px rgba(251,191,36,0.7),0 0 20px rgba(251,191,36,0.3)} 50%{box-shadow:0 0 3px rgba(251,191,36,0.2)} }
 @keyframes pulse-red { 0%,100%{box-shadow:0 0 10px rgba(248,113,113,0.7),0 0 24px rgba(248,113,113,0.3);border-color:rgba(248,113,113,0.8)} 50%{box-shadow:0 0 3px rgba(248,113,113,0.2);border-color:rgba(248,113,113,0.3)} }
 @keyframes pulse-red-badge { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.96)} }
+@keyframes pulse-incomplete { 0%,100%{box-shadow:0 0 8px rgba(255,140,66,0.6),0 0 18px rgba(255,140,66,0.2);border-color:rgba(255,140,66,0.7)} 50%{box-shadow:0 0 2px rgba(255,140,66,0.15);border-color:rgba(255,140,66,0.25)} }
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: #14171F; }
 ::-webkit-scrollbar-thumb { background: #232738; border-radius: 3px; }
@@ -231,9 +232,9 @@ function applyDemoStatus(projects) {
         {step:'fundament',at:'2026-02-23T08:00:00',foto:'https://images.unsplash.com/photo-1513467535987-fd81bc7d62f8?w=200&h=120&fit=crop'},
       ],
       acProgress:[] },
-    // P-004: Brigitte Klein – geplant Mi, noch nicht heute – DC hat schon Progress von gestern
-    { id:'P-2026-004', dcDate:'2026-02-25', dcTechId:3, acDate:'2026-02-26', acTechId:11,
-      engelId:104, planerId:201, status:'fully_planned',
+    // P-004: Brigitte Klein – NUR DC geplant, AC fehlt noch → BLINKT
+    { id:'P-2026-004', dcDate:'2026-02-25', dcTechId:3, acDate:null, acTechId:null,
+      engelId:104, planerId:201, status:'dc_planned',
       dcProgress:[],
       acProgress:[] },
     // P-005: Horst Richter (14.7kWp → 2-Tage DC) – geplant Do+Fr
@@ -392,6 +393,13 @@ function DispatchApp() {
     if(beideDaList.length>0) a.push({ type:'green', key:'beide_da', projects:beideDaList, msg:`✅ ${beideDaList.length} Baustelle(n) laufen planmäßig` });
     const up = unplanned.length;
     if(up>0) a.push({ type:'dim', key:'ungeplant', projects:unplanned, msg:`⚡ ${up} Projekte ungeplant` });
+    // Unvollständige Planung: DC geplant aber AC fehlt (oder umgekehrt)
+    const incompleteList = projekte.filter(p => {
+      const ptype = PROJECT_TYPES[p.type];
+      const needsBoth = !!(ptype.dcSkill && ptype.acSkill);
+      return needsBoth && ((p.dcDate && !p.acDate) || (p.acDate && !p.dcDate));
+    });
+    if(incompleteList.length>0) a.push({ type:'orange', key:'incomplete', projects:incompleteList, msg:`⚠ ${incompleteList.length} Montage(n) unvollständig (DC/AC fehlt)` });
     // Wetter-Warnung
     weekDays.forEach(wd => {
       const ds = fmtDate(wd);
@@ -591,8 +599,55 @@ function DispatchApp() {
 function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, updateProject, onCardClick }) {
   const colTemplate = '160px repeat(5,1fr)';
 
-  // Hover-Highlight: Wenn über DC/AC gehovert, Gegenstück hervorheben, Rest dimmen
+  // Hover-Highlight + Auto-Scroll: Gegenstück sichtbar machen
   const [hoveredProjId, setHoveredProjId] = useState(null);
+  const savedScrollRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+
+  const handleHoverProject = useCallback((projId) => {
+    setHoveredProjId(projId);
+    // Auto-scroll: Finde alle Karten dieses Projekts und scrolle so dass beide sichtbar
+    const container = scrollContainerRef.current || document.querySelector('main');
+    if(!container) return;
+    // Scroll-Position merken
+    savedScrollRef.current = { top: container.scrollTop, left: container.scrollLeft };
+    // Alle Karten des Projekts finden
+    requestAnimationFrame(() => {
+      const cards = container.querySelectorAll(`[data-proj-id="${projId}"]`);
+      if(cards.length < 2) return; // Nur eine Karte = kein Scroll nötig
+      const containerRect = container.getBoundingClientRect();
+      let minTop = Infinity, maxBottom = -Infinity, minLeft = Infinity, maxRight = -Infinity;
+      cards.forEach(card => {
+        const r = card.getBoundingClientRect();
+        minTop = Math.min(minTop, r.top - containerRect.top + container.scrollTop);
+        maxBottom = Math.max(maxBottom, r.bottom - containerRect.top + container.scrollTop);
+        minLeft = Math.min(minLeft, r.left - containerRect.left + container.scrollLeft);
+        maxRight = Math.max(maxRight, r.right - containerRect.left + container.scrollLeft);
+      });
+      // Prüfe ob alle Karten im sichtbaren Bereich
+      const visTop = container.scrollTop;
+      const visBottom = container.scrollTop + containerRect.height;
+      const visLeft = container.scrollLeft;
+      const visRight = container.scrollLeft + containerRect.width;
+      const allVisible = minTop >= visTop && maxBottom <= visBottom && minLeft >= visLeft && maxRight <= visRight;
+      if(!allVisible) {
+        // Scrolle so dass alle Karten zentriert sichtbar sind
+        const targetTop = Math.max(0, (minTop + maxBottom) / 2 - containerRect.height / 2);
+        const targetLeft = Math.max(0, (minLeft + maxRight) / 2 - containerRect.width / 2);
+        container.scrollTo({ top: targetTop, left: targetLeft, behavior: 'smooth' });
+      }
+    });
+  }, []);
+
+  const handleLeaveProject = useCallback(() => {
+    setHoveredProjId(null);
+    // Scroll zurück
+    const container = scrollContainerRef.current || document.querySelector('main');
+    if(container && savedScrollRef.current) {
+      container.scrollTo({ top: savedScrollRef.current.top, left: savedScrollRef.current.left, behavior: 'smooth' });
+      savedScrollRef.current = null;
+    }
+  }, []);
 
   return (
     <div data-dispatch-grid="" style={{minWidth:820, position:'relative'}}>
@@ -679,7 +734,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
                   gridColumn: hasSpan2 ? 'span 2' : undefined,
                 }}>
                   {items.map(({proj, phase, span: itemSpan}) => (
-                    <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)} isSpan2={itemSpan===2} onHoverProject={setHoveredProjId} onLeaveProject={()=>setHoveredProjId(null)}/>
+                    <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)} isSpan2={itemSpan===2} onHoverProject={handleHoverProject} onLeaveProject={handleLeaveProject}/>
                   ))}
                   {full && <div style={{fontSize:9, color:C.red, textAlign:'center', fontWeight:700}}>● VOLL</div>}
                 </div>
@@ -705,8 +760,8 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
                 {items.map(proj => (
                   <div key={proj.id} data-proj-card="" data-proj-id={proj.id}
                     onClick={()=>onCardClick(proj)}
-                    onMouseEnter={()=>setHoveredProjId(proj.id)}
-                    onMouseLeave={()=>setHoveredProjId(null)}
+                    onMouseEnter={()=>handleHoverProject(proj.id)}
+                    onMouseLeave={handleLeaveProject}
                     style={{
                     background:C.teal+'10', border:`1px solid ${C.teal}44`, borderLeft:`3px solid ${C.teal}`,
                     borderRadius:5, padding:'4px 6px', marginBottom:3, cursor:'pointer',
@@ -736,8 +791,20 @@ function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2, onHoverProject, 
   const phaseCol = isExt ? C.orange : phase==='dc' ? C.dc : phase==='ac' ? C.ac : C.teal;
   const phaseLabel = isExt ? `${phase.replace('_ext','').toUpperCase()}+` : phase.toUpperCase();
   const bs = proj.baustelleStatus ? BSTATUS[proj.baustelleStatus] : null;
+
+  // Unvollständige Planung: Projekt braucht DC+AC aber nur eines ist geplant
+  const needsBoth = !!(pt.dcSkill && pt.acSkill);
+  const hasDC = !!proj.dcDate;
+  const hasAC = !!proj.acDate;
+  const isIncomplete = needsBoth && ((hasDC && !hasAC) || (hasAC && !hasDC));
+  const missingPhase = isIncomplete ? (!hasAC ? 'AC' : 'DC') : null;
+
   let cardAnimation = null;
-  if(bs?.animation) cardAnimation = `${bs.animation} 1.2s ease-in-out infinite`;
+  if(isIncomplete) {
+    cardAnimation = 'pulse-incomplete 1.8s ease-in-out infinite';
+  } else if(bs?.animation) {
+    cardAnimation = `${bs.animation} 1.2s ease-in-out infinite`;
+  }
   const techId = phase.startsWith('dc') ? proj.dcTechId : proj.acTechId;
   const tech = MONTEURE.find(m => m.id === techId);
   const [hover, setHover] = useState(false);
@@ -866,6 +933,14 @@ function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2, onHoverProject, 
             )}
             {proj.baustelleStatus === 'monteur_nicht_gestartet' && <StatusBadge col={C.red} label="Nicht gestartet!" blink/>}
             {proj.baustelleStatus === 'gestartet' && <StatusBadge col={C.green} label={`▶ ${fmtTime(proj.montageStartedAt)||''}`} blink/>}
+          </div>
+        )}
+
+        {/* Unvollständige Planung Warnung */}
+        {isIncomplete && (
+          <div style={{marginTop:3, background:C.orange+'15', border:`1px solid ${C.orange}44`, borderRadius:4, padding:'2px 6px', display:'flex', alignItems:'center', gap:4, animation:'blink 1.5s ease-in-out infinite'}}>
+            <span style={{fontSize:9, color:C.orange, fontWeight:800}}>⚠ {missingPhase} fehlt!</span>
+            <span style={{fontSize:8, color:C.dim}}>Montage unvollständig</span>
           </div>
         )}
       </div>
