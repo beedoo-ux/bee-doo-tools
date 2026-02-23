@@ -68,6 +68,7 @@ h1{color:#F5C500;font-size:22px;margin-bottom:4px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 (async function() {
+  try {
   const SB = window.BEEDOO_CONFIG?.SB_URL || "https://hqzpemfaljxcysyqssng.supabase.co";
   const KEY = window.BEEDOO_CONFIG?.SB_SRV || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4";
   const H = { "apikey": KEY, "Authorization": "Bearer " + KEY };
@@ -81,10 +82,12 @@ h1{color:#F5C500;font-size:22px;margin-bottom:4px}
 
   // Load vertriebler
   const res = await fetch(SB + "/rest/v1/vertriebler?aktiv=eq.true&select=*&order=name", { headers: H });
+  if (!res.ok) throw new Error("Vertriebler laden fehlgeschlagen");
   const vertriebler = await res.json();
 
   // Load termin counts
   const tRes = await fetch(SB + "/rest/v1/termine?select=vertrieb_id&datum=gte." + new Date().toISOString().split("T")[0], { headers: H });
+  if (!tRes.ok) throw new Error("Termine laden fehlgeschlagen");
   const termine = await tRes.json();
   const counts = {};
   termine.forEach(t => { counts[t.vertrieb_id] = (counts[t.vertrieb_id] || 0) + 1; });
@@ -133,6 +136,9 @@ h1{color:#F5C500;font-size:22px;margin-bottom:4px}
       colorDark: "#0c1222", colorLight: "#ffffff"
     });
   };
+  } catch (err) {
+    document.getElementById("vertriebler-list").innerHTML = '<div style="text-align:center;padding:20px;color:#f87171">⚠️ Fehler: ' + err.message + '</div>';
+  }
 })();
 </script>
 </body></html>
