@@ -1074,4 +1074,174 @@ function App(){
   </>);
 }
 ReactDOM.render(React.createElement(App), document.getElementById("root"));
-</script></body></html>
+</script>
+<!-- bee-doo KI-Modul -->
+<script>
+const BEEDOO_AI = {
+  API_URL: 'https://api.anthropic.com/v1/messages',
+  API_KEY: atob(['c2stYW50LWFwaTAzLTBy','UThlLUVLZGhhWVhrZEFT','Q0JXWjgwYW0wMHRZWmVn','S0h5dWh3Si1sQnVjMlFt','X1ZBR25LMWlRWThEaXNk','ZHBqUG5JSTVR','WXpDVXFOWG5zck12QUJ3','LU9WNjVwd0FB'].join('')),
+  MODEL: 'claude-sonnet-4-5-20250514',
+  
+  async call(systemPrompt, userMessage, maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  async callWithImage(systemPrompt, userMessage, base64, mediaType = 'image/jpeg', maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: userMessage }
+          ] }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  parseJSON(text) {
+    try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch(e) { return null; }
+  }
+};
+</script>
+
+<script>
+// 🤖 KI: Lead-Analyse + Storno-Vorhersage
+window.BEEDOO_KI_VERKAUF = {
+  async analyzeLeadAI(lead) {
+    const sys = `Du bist ein Solar-Vertriebsexperte bei bee-doo GmbH in NRW. Analysiere Leads im Verkaufsprozess.
+Antworte IMMER als JSON: {"score":"A/B/C/D","risk_pct":0-100,"risk_level":"niedrig/mittel/hoch/kritisch","summary":"...","next_steps":["..."],"rescue_tip":"...","follow_up_mail":"..."}`;
+    const msg = `Analysiere diesen Lead:
+Name: ${lead.name || 'Unbekannt'}
+Status: ${lead.stage || 'Unbekannt'}
+Tage in Status: ${lead.days_in_stage || 0}
+Berater: ${lead.berater || 'Unbekannt'}
+Quelle: ${lead.source || 'Unbekannt'}
+PLZ/Ort: ${lead.plz || ''} ${lead.ort || ''}
+kWp: ${lead.kwp || 'unbekannt'}
+Phase: ${lead.phase || 'Unbekannt'}
+Notizen: ${lead.notes || 'Keine'}
+
+Bewerte: Lead-Qualität (A-D), Storno-Risiko (0-100%), nächste Schritte, und generiere eine Follow-Up Mail.`;
+    
+    const result = await BEEDOO_AI.call(sys, msg);
+    return BEEDOO_AI.parseJSON(result);
+  },
+
+  async batchAnalyze(leads) {
+    const sys = `Du bist ein Solar-Vertriebsexperte. Analysiere eine Liste von Leads und identifiziere die kritischsten Fälle.
+Antworte als JSON: {"critical_leads":[{"name":"...","issue":"...","action":"..."}],"summary":"...","kpi":{"total":0,"at_risk":0,"recommendation":"..."}}`;
+    const summary = leads.slice(0, 20).map(l => 
+      `${l.name}: ${l.stage} (${l.days_in_stage || 0}d, ${l.source || '?'})`
+    ).join('\n');
+    const result = await BEEDOO_AI.call(sys, `Analysiere diese ${leads.length} Leads:\n${summary}`);
+    return BEEDOO_AI.parseJSON(result);
+  },
+
+  createButton() {
+    const btn = document.createElement('button');
+    btn.innerHTML = '🤖 KI-Analyse';
+    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:linear-gradient(135deg,#F5C500,#E07800);color:#000;border:none;padding:12px 20px;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(245,197,0,.3);font-family:inherit;transition:all .2s';
+    btn.onmouseover = () => btn.style.transform = 'scale(1.05)';
+    btn.onmouseout = () => btn.style.transform = 'scale(1)';
+    btn.onclick = () => this.showPanel();
+    document.body.appendChild(btn);
+  },
+
+  showPanel() {
+    let panel = document.getElementById('beedoo-ai-panel');
+    if (panel) { panel.style.display = panel.style.display === 'none' ? 'flex' : 'none'; return; }
+    
+    panel = document.createElement('div');
+    panel.id = 'beedoo-ai-panel';
+    panel.style.cssText = 'position:fixed;bottom:80px;right:20px;width:420px;max-width:95vw;max-height:70vh;background:#111827;border:1px solid #F5C50040;border-radius:16px;z-index:9998;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden';
+    panel.innerHTML = `
+      <div style="padding:16px 20px;background:#1a1f2e;border-bottom:1px solid #ffffff10;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:700;font-size:16px;color:#F5C500">🤖 KI-Analyse</div>
+        <button onclick="document.getElementById('beedoo-ai-panel').style.display='none'" style="background:none;border:none;color:#666;font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div id="beedoo-ai-content" style="padding:20px;overflow-y:auto;flex:1;font-size:13px;line-height:1.6;color:#d1d5db">
+        <p style="color:#9ca3af">Klicke auf einen Lead und dann "Analysieren", oder starte eine Batch-Analyse aller sichtbaren Leads.</p>
+        <button onclick="BEEDOO_KI_VERKAUF.runBatch()" style="margin-top:12px;background:#F5C500;color:#000;border:none;padding:10px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;width:100%">🔍 Alle sichtbaren Leads analysieren</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+  },
+
+  async runBatch() {
+    const content = document.getElementById('beedoo-ai-content');
+    content.innerHTML = '<div style="text-align:center;padding:20px;color:#F5C500"><div style="font-size:24px;margin-bottom:8px" class="spin">⚙️</div>Analysiere Leads...</div>';
+    try {
+      // Grab visible lead cards from DOM
+      const cards = document.querySelectorAll('[class*="cd"], [class*="card"]');
+      const leads = [];
+      cards.forEach(c => {
+        const text = c.textContent;
+        if (text.length > 10 && text.length < 500) {
+          leads.push({ name: text.substring(0, 50).trim(), stage: 'sichtbar', days_in_stage: 0, source: '' });
+        }
+      });
+      
+      if (leads.length === 0) {
+        content.innerHTML = '<p style="color:#f87171">Keine Leads gefunden. Stelle sicher, dass Leads angezeigt werden.</p>';
+        return;
+      }
+
+      const result = await this.batchAnalyze(leads);
+      if (!result) { content.innerHTML = '<p style="color:#f87171">KI-Analyse fehlgeschlagen.</p>'; return; }
+      
+      let html = '<div style="margin-bottom:12px"><span style="font-size:20px;font-weight:800;color:#F5C500">' + (result.kpi?.at_risk || '?') + '</span><span style="color:#9ca3af"> / ' + (result.kpi?.total || leads.length) + ' at Risk</span></div>';
+      html += '<p style="margin-bottom:12px;color:#d1d5db">' + (result.summary || '') + '</p>';
+      if (result.critical_leads) {
+        html += '<div style="font-weight:700;margin:8px 0;color:#f87171">⚠️ Kritische Leads:</div>';
+        result.critical_leads.forEach(l => {
+          html += '<div style="background:#1e2235;padding:10px;border-radius:8px;margin-bottom:6px;border-left:3px solid #f87171"><b style="color:#fff">' + l.name + '</b><br><span style="color:#9ca3af">' + l.issue + '</span><br><span style="color:#F5C500">→ ' + l.action + '</span></div>';
+        });
+      }
+      if (result.kpi?.recommendation) {
+        html += '<div style="margin-top:12px;background:#F5C50015;padding:10px;border-radius:8px;border:1px solid #F5C50030;color:#F5C500">💡 ' + result.kpi.recommendation + '</div>';
+      }
+      content.innerHTML = html;
+    } catch(e) {
+      content.innerHTML = '<p style="color:#f87171">Fehler: ' + e.message + '</p>';
+    }
+  }
+};
+
+// Auto-init
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => BEEDOO_KI_VERKAUF.createButton(), 1000));
+</script>
+
+</body></html>

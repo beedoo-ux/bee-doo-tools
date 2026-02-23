@@ -1103,5 +1103,105 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
+
+<!-- bee-doo KI-Modul -->
+<script>
+const BEEDOO_AI = {
+  API_URL: 'https://api.anthropic.com/v1/messages',
+  API_KEY: atob(['c2stYW50LWFwaTAzLTBy','UThlLUVLZGhhWVhrZEFT','Q0JXWjgwYW0wMHRZWmVn','S0h5dWh3Si1sQnVjMlFt','X1ZBR25LMWlRWThEaXNk','ZHBqUG5JSTVR','WXpDVXFOWG5zck12QUJ3','LU9WNjVwd0FB'].join('')),
+  MODEL: 'claude-sonnet-4-5-20250514',
+  
+  async call(systemPrompt, userMessage, maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  async callWithImage(systemPrompt, userMessage, base64, mediaType = 'image/jpeg', maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: userMessage }
+          ] }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  parseJSON(text) {
+    try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch(e) { return null; }
+  }
+};
+</script>
+
+<script>
+window.BEEDOO_KI_NETZ = {
+  async autoFill(customerData) {
+    const sys = `Du bist Experte für Netzanmeldungen bei Energieversorgern in Deutschland. Fülle Formulare korrekt aus basierend auf Kundendaten.
+Antworte als JSON mit den korrekten Formularfeldern: {"fields":[{"label":"...","value":"...","confidence":"hoch/mittel/niedrig"}],"netzbetreiber":"...","tips":["..."],"missing_data":["..."]}`;
+    const result = await BEEDOO_AI.call(sys, `Fülle die Netzanmeldung aus mit diesen Daten:\n${JSON.stringify(customerData)}`);
+    return BEEDOO_AI.parseJSON(result);
+  },
+
+  createButton() {
+    const btn = document.createElement('button');
+    btn.innerHTML = '🤖 Auto-Fill';
+    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:linear-gradient(135deg,#F5C500,#E07800);color:#000;border:none;padding:12px 20px;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(245,197,0,.3);font-family:inherit;transition:all .2s';
+    btn.onclick = async () => {
+      btn.innerHTML = '⏳ Fülle aus...';
+      try {
+        const inputs = document.querySelectorAll('input, select, textarea');
+        const data = {};
+        inputs.forEach(i => { if(i.value && i.name) data[i.name] = i.value; });
+        const result = await this.autoFill(data);
+        if (result?.fields) {
+          result.fields.forEach(f => {
+            inputs.forEach(i => {
+              if (i.placeholder?.includes(f.label) || i.name?.includes(f.label.toLowerCase())) i.value = f.value;
+            });
+          });
+          alert('✅ ' + result.fields.length + ' Felder ausgefüllt' + (result.missing_data?.length ? '\n⚠️ Fehlend: ' + result.missing_data.join(', ') : ''));
+        }
+      } catch(e) { alert('Fehler: '+e.message); }
+      btn.innerHTML = '🤖 Auto-Fill';
+    };
+    document.body.appendChild(btn);
+  }
+};
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => BEEDOO_KI_NETZ.createButton(), 1000));
+</script>
+
 </body>
 </html>

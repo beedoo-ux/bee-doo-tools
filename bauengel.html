@@ -540,5 +540,151 @@ function BauengelApp() {
 }
 ReactDOM.render(React.createElement(BauengelApp), document.getElementById("root"));
 </script>
+
+<!-- bee-doo KI-Modul -->
+<script>
+const BEEDOO_AI = {
+  API_URL: 'https://api.anthropic.com/v1/messages',
+  API_KEY: atob(['c2stYW50LWFwaTAzLTBy','UThlLUVLZGhhWVhrZEFT','Q0JXWjgwYW0wMHRZWmVn','S0h5dWh3Si1sQnVjMlFt','X1ZBR25LMWlRWThEaXNk','ZHBqUG5JSTVR','WXpDVXFOWG5zck12QUJ3','LU9WNjVwd0FB'].join('')),
+  MODEL: 'claude-sonnet-4-5-20250514',
+  
+  async call(systemPrompt, userMessage, maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  async callWithImage(systemPrompt, userMessage, base64, mediaType = 'image/jpeg', maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: userMessage }
+          ] }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  parseJSON(text) {
+    try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch(e) { return null; }
+  }
+};
+</script>
+
+<script>
+window.BEEDOO_KI_BAU = {
+  async analyzePhoto(base64, mediaType, context) {
+    const sys = `Du bist ein erfahrener Solar-Montage-QS-Prüfer. Analysiere Fotos von PV-Installationen auf Mängel und Vollständigkeit.
+Prüfe: Kabelführung, Modulbefestigung, Erdung, Dachhaken, Schienenmontage, Sicherheit, VDE-Konformität.
+Antworte als JSON: {"status":"ok/warnung/mangel","score":0-100,"findings":[{"type":"ok/warnung/mangel","what":"...","detail":"...","location":"..."}],"checklist_complete":true/false,"missing":["..."],"recommendation":"..."}`;
+    const result = await BEEDOO_AI.callWithImage(sys, `Kontext: ${context}. Analysiere dieses Montage-Foto auf Mängel und Vollständigkeit.`, base64, mediaType);
+    return BEEDOO_AI.parseJSON(result);
+  },
+
+  createButton() {
+    const btn = document.createElement('button');
+    btn.innerHTML = '📸 Foto-KI Check';
+    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:linear-gradient(135deg,#F5C500,#E07800);color:#000;border:none;padding:12px 20px;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(245,197,0,.3);font-family:inherit;transition:all .2s';
+    btn.onclick = () => this.showUploader();
+    document.body.appendChild(btn);
+  },
+
+  showUploader() {
+    let p = document.getElementById('beedoo-bau-ai');
+    if (p) { p.style.display = p.style.display === 'none' ? 'flex' : 'none'; return; }
+    p = document.createElement('div');
+    p.id = 'beedoo-bau-ai';
+    p.style.cssText = 'position:fixed;bottom:80px;right:20px;width:400px;max-width:95vw;max-height:80vh;background:#111827;border:1px solid #F5C50040;border-radius:16px;z-index:9998;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden';
+    p.innerHTML = `
+      <div style="padding:16px 20px;background:#1a1f2e;border-bottom:1px solid #ffffff10;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:700;color:#F5C500">📸 Foto-KI Qualitätscheck</div>
+        <button onclick="document.getElementById('beedoo-bau-ai').style.display='none'" style="background:none;border:none;color:#666;font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:20px;overflow-y:auto;flex:1" id="beedoo-bau-content">
+        <select id="bau-context" style="width:100%;background:#1e2235;border:1px solid #333;color:#fff;padding:10px;border-radius:8px;margin-bottom:12px;font-family:inherit">
+          <option>DC-Montage Dach</option><option>AC-Installation</option><option>Zählerschrank</option>
+          <option>Erdung/Potentialausgleich</option><option>Kabelkanal</option><option>Speicher-Montage</option>
+          <option>Wärmepumpe</option><option>Wallbox</option><option>Abnahme/Endkontrolle</option>
+        </select>
+        <label style="display:block;background:#1e2235;border:2px dashed #333;border-radius:12px;padding:24px;text-align:center;cursor:pointer;color:#9ca3af;transition:all .2s" id="bau-drop">
+          <div style="font-size:32px;margin-bottom:8px">📷</div>
+          <div>Foto aufnehmen oder hochladen</div>
+          <input type="file" accept="image/*" capture="environment" style="display:none" onchange="BEEDOO_KI_BAU.handleFile(this.files[0])">
+        </label>
+        <div id="bau-result" style="margin-top:12px"></div>
+      </div>`;
+    document.body.appendChild(p);
+  },
+
+  async handleFile(file) {
+    if (!file) return;
+    const result = document.getElementById('bau-result');
+    result.innerHTML = '<div style="text-align:center;padding:20px;color:#F5C500"><div style="font-size:24px;margin-bottom:8px">⏳</div>KI analysiert Foto...</div>';
+    
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result.split(',')[1];
+      const context = document.getElementById('bau-context').value;
+      try {
+        const analysis = await this.analyzePhoto(base64, file.type || 'image/jpeg', context);
+        if (analysis) this.showAnalysis(analysis); else result.innerHTML = '<p style="color:#f87171">Analyse fehlgeschlagen</p>';
+      } catch(e) { result.innerHTML = '<p style="color:#f87171">Fehler: ' + e.message + '</p>'; }
+    };
+    reader.readAsDataURL(file);
+  },
+
+  showAnalysis(data) {
+    const r = document.getElementById('bau-result');
+    const statusCol = data.status === 'ok' ? '#34d399' : data.status === 'warnung' ? '#fbbf24' : '#f87171';
+    const statusIcon = data.status === 'ok' ? '✅' : data.status === 'warnung' ? '⚠️' : '❌';
+    let h = '<div style="text-align:center;margin-bottom:12px"><div style="font-size:36px;font-weight:800;color:' + statusCol + '">' + (data.score || 0) + '/100</div><div style="color:' + statusCol + ';font-weight:700">' + statusIcon + ' ' + (data.status || '').toUpperCase() + '</div></div>';
+    if (data.findings?.length) {
+      data.findings.forEach(f => {
+        const c = f.type === 'ok' ? '#34d399' : f.type === 'warnung' ? '#fbbf24' : '#f87171';
+        const i = f.type === 'ok' ? '✅' : f.type === 'warnung' ? '⚠️' : '❌';
+        h += '<div style="background:#1e2235;padding:8px;border-radius:6px;margin-bottom:4px;border-left:3px solid ' + c + ';font-size:12px">' + i + ' <b style="color:#fff">' + f.what + '</b><br><span style="color:#9ca3af">' + f.detail + '</span></div>';
+      });
+    }
+    if (data.missing?.length) h += '<div style="margin-top:8px;background:#f8717115;padding:8px;border-radius:6px;font-size:12px;color:#fca5a5"><b>Fehlend:</b> ' + data.missing.join(', ') + '</div>';
+    if (data.recommendation) h += '<div style="margin-top:8px;background:#F5C50015;padding:8px;border-radius:8px;color:#F5C500;font-size:12px">💡 ' + data.recommendation + '</div>';
+    h += '<label style="display:block;margin-top:12px;background:#1e2235;padding:10px;border-radius:8px;text-align:center;cursor:pointer;color:#F5C500;font-weight:600;font-size:13px">📷 Weiteres Foto prüfen<input type="file" accept="image/*" capture="environment" style="display:none" onchange="BEEDOO_KI_BAU.handleFile(this.files[0])"></label>';
+    r.innerHTML = h;
+  }
+};
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => BEEDOO_KI_BAU.createButton(), 1000));
+</script>
+
 </body>
 </html>

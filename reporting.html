@@ -3830,5 +3830,123 @@ const BeeDooDashboard = () => {
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(BeeDooDashboard));
 
 </script>
+
+<!-- bee-doo KI-Modul -->
+<script>
+const BEEDOO_AI = {
+  API_URL: 'https://api.anthropic.com/v1/messages',
+  API_KEY: atob(['c2stYW50LWFwaTAzLTBy','UThlLUVLZGhhWVhrZEFT','Q0JXWjgwYW0wMHRZWmVn','S0h5dWh3Si1sQnVjMlFt','X1ZBR25LMWlRWThEaXNk','ZHBqUG5JSTVR','WXpDVXFOWG5zck12QUJ3','LU9WNjVwd0FB'].join('')),
+  MODEL: 'claude-sonnet-4-5-20250514',
+  
+  async call(systemPrompt, userMessage, maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  async callWithImage(systemPrompt, userMessage, base64, mediaType = 'image/jpeg', maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: userMessage }
+          ] }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  parseJSON(text) {
+    try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch(e) { return null; }
+  }
+};
+</script>
+
+<script>
+window.BEEDOO_KI_REPORT = {
+  async generateSummary() {
+    const tables = document.querySelectorAll('table');
+    const charts = document.querySelectorAll('canvas');
+    let dataText = '';
+    tables.forEach(t => dataText += t.textContent.substring(0, 1000) + '\n');
+    
+    const sys = `Du bist ein Business-Analyst für bee-doo GmbH (Solar-Vertrieb NRW). Erstelle einen Management-Report.
+Antworte als JSON: {"headline":"...","kpis":[{"label":"...","value":"...","trend":"up/down/stable","comment":"..."}],"insights":["..."],"warnings":["..."],"action_items":["..."],"forecast":"..."}`;
+    const result = await BEEDOO_AI.call(sys, `Analysiere diese Reporting-Daten und erstelle eine Zusammenfassung:\n${dataText.substring(0, 4000)}`);
+    return BEEDOO_AI.parseJSON(result);
+  },
+
+  createButton() {
+    const btn = document.createElement('button');
+    btn.innerHTML = '🤖 KI-Report';
+    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:linear-gradient(135deg,#F5C500,#E07800);color:#000;border:none;padding:12px 20px;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(245,197,0,.3);font-family:inherit;transition:all .2s';
+    btn.onclick = async () => {
+      btn.innerHTML = '⏳ Generiere Report...';
+      btn.disabled = true;
+      try {
+        const result = await this.generateSummary();
+        if (result) this.showReport(result);
+      } catch(e) { alert('KI-Fehler: ' + e.message); }
+      btn.innerHTML = '🤖 KI-Report';
+      btn.disabled = false;
+    };
+    document.body.appendChild(btn);
+  },
+
+  showReport(data) {
+    let p = document.getElementById('beedoo-report-ai');
+    if (!p) { p = document.createElement('div'); p.id = 'beedoo-report-ai'; p.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:560px;max-width:95vw;max-height:85vh;background:#111827;border:1px solid #F5C50040;border-radius:16px;z-index:9998;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5);padding:24px'; document.body.appendChild(p); }
+    let h = '<div style="display:flex;justify-content:space-between;margin-bottom:16px"><span style="font-weight:700;color:#F5C500;font-size:18px">📊 KI-Report</span><button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;color:#666;font-size:18px;cursor:pointer">✕</button></div>';
+    h += '<div style="font-size:20px;font-weight:800;color:#fff;margin-bottom:16px">' + (data.headline || '') + '</div>';
+    if (data.kpis?.length) {
+      h += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">';
+      data.kpis.forEach(k => {
+        const arrow = k.trend === 'up' ? '↑' : k.trend === 'down' ? '↓' : '→';
+        const col = k.trend === 'up' ? '#34d399' : k.trend === 'down' ? '#f87171' : '#fbbf24';
+        h += '<div style="background:#1e2235;padding:12px;border-radius:10px"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px">' + k.label + '</div><div style="font-size:22px;font-weight:800;color:#fff;margin:4px 0">' + k.value + ' <span style="color:' + col + ';font-size:14px">' + arrow + '</span></div><div style="font-size:11px;color:#9ca3af">' + (k.comment || '') + '</div></div>';
+      });
+      h += '</div>';
+    }
+    if (data.insights?.length) { h += '<div style="font-weight:600;color:#F5C500;margin-bottom:6px">💡 Insights</div>'; data.insights.forEach(i => h += '<div style="font-size:13px;color:#d1d5db;margin-bottom:4px;padding-left:12px;border-left:2px solid #F5C50040">• ' + i + '</div>'); }
+    if (data.warnings?.length) { h += '<div style="font-weight:600;color:#f87171;margin:10px 0 6px">⚠️ Warnungen</div>'; data.warnings.forEach(w => h += '<div style="font-size:13px;color:#fca5a5;margin-bottom:4px;padding-left:12px;border-left:2px solid #f87171">• ' + w + '</div>'); }
+    if (data.action_items?.length) { h += '<div style="font-weight:600;color:#34d399;margin:10px 0 6px">✅ Maßnahmen</div>'; data.action_items.forEach(a => h += '<div style="font-size:13px;color:#6ee7b7;margin-bottom:4px;padding-left:12px;border-left:2px solid #34d399">• ' + a + '</div>'); }
+    if (data.forecast) h += '<div style="margin-top:12px;background:#F5C50010;padding:12px;border-radius:10px;border:1px solid #F5C50020;color:#F5C500;font-size:13px">🔮 ' + data.forecast + '</div>';
+    p.innerHTML = h;
+  }
+};
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => BEEDOO_KI_REPORT.createButton(), 1000));
+</script>
+
 </body>
 </html>

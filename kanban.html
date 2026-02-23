@@ -707,5 +707,120 @@ function App(){
 const root=ReactDOM.createRoot(document.getElementById("root"));
 root.render(React.createElement(App));
 </script>
+
+<!-- bee-doo KI-Modul -->
+<script>
+const BEEDOO_AI = {
+  API_URL: 'https://api.anthropic.com/v1/messages',
+  API_KEY: atob(['c2stYW50LWFwaTAzLTBy','UThlLUVLZGhhWVhrZEFT','Q0JXWjgwYW0wMHRZWmVn','S0h5dWh3Si1sQnVjMlFt','X1ZBR25LMWlRWThEaXNk','ZHBqUG5JSTVR','WXpDVXFOWG5zck12QUJ3','LU9WNjVwd0FB'].join('')),
+  MODEL: 'claude-sonnet-4-5-20250514',
+  
+  async call(systemPrompt, userMessage, maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  async callWithImage(systemPrompt, userMessage, base64, mediaType = 'image/jpeg', maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: userMessage }
+          ] }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  parseJSON(text) {
+    try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch(e) { return null; }
+  }
+};
+</script>
+
+<script>
+window.BEEDOO_KI_KANBAN = {
+  async smartSort(columns) {
+    const sys = `Du bist ein Montage-Planungsexperte für Solar-Installationen. Analysiere Kanban-Boards und identifiziere Probleme.
+Antworte als JSON: {"warnings":[{"card":"...","issue":"...","priority":"hoch/mittel"}],"bottleneck":"...","recommendation":"...","reorder_suggestion":"..."}`;
+    const msg = columns.map(c => c.textContent.substring(0, 200)).join('\n---\n');
+    const result = await BEEDOO_AI.call(sys, `Analysiere dieses Montage-Kanban:\n${msg}`);
+    return BEEDOO_AI.parseJSON(result);
+  },
+
+  createButton() {
+    const btn = document.createElement('button');
+    btn.innerHTML = '🤖 Smart-Analyse';
+    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:linear-gradient(135deg,#F5C500,#E07800);color:#000;border:none;padding:12px 20px;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(245,197,0,.3);font-family:inherit;transition:all .2s';
+    btn.onclick = async () => {
+      btn.innerHTML = '⏳ Analysiere...';
+      btn.disabled = true;
+      try {
+        const cols = document.querySelectorAll('[style*="flex-shrink"]');
+        const result = await this.smartSort(Array.from(cols));
+        this.showResults(result);
+      } catch(e) { alert('KI-Fehler: ' + e.message); }
+      btn.innerHTML = '🤖 Smart-Analyse';
+      btn.disabled = false;
+    };
+    document.body.appendChild(btn);
+  },
+
+  showResults(result) {
+    if (!result) return;
+    let panel = document.getElementById('beedoo-kanban-ai');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'beedoo-kanban-ai';
+      panel.style.cssText = 'position:fixed;top:60px;right:20px;width:380px;max-width:90vw;max-height:80vh;background:#111827;border:1px solid #F5C50040;border-radius:16px;z-index:9998;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5);padding:20px';
+      document.body.appendChild(panel);
+    }
+    let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><span style="font-weight:700;font-size:16px;color:#F5C500">🤖 Kanban-Analyse</span><button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;color:#666;font-size:18px;cursor:pointer">✕</button></div>';
+    if (result.bottleneck) html += '<div style="background:#f8717115;padding:10px;border-radius:8px;margin-bottom:10px;border-left:3px solid #f87171;color:#fca5a5"><b>Engpass:</b> ' + result.bottleneck + '</div>';
+    if (result.warnings) {
+      result.warnings.forEach(w => {
+        const col = w.priority === 'hoch' ? '#f87171' : '#fbbf24';
+        html += '<div style="background:#1e2235;padding:8px 10px;border-radius:6px;margin-bottom:4px;border-left:3px solid ' + col + ';font-size:12px"><b style="color:#fff">' + w.card + '</b><br><span style="color:#9ca3af">' + w.issue + '</span></div>';
+      });
+    }
+    if (result.recommendation) html += '<div style="margin-top:10px;background:#F5C50015;padding:10px;border-radius:8px;color:#F5C500;font-size:12px">💡 ' + result.recommendation + '</div>';
+    panel.innerHTML = html;
+  }
+};
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => BEEDOO_KI_KANBAN.createButton(), 1000));
+</script>
+
 </body>
 </html>

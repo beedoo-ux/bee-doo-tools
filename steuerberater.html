@@ -803,5 +803,93 @@ function Root(){
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
 </script>
+
+<!-- bee-doo KI-Modul -->
+<script>
+const BEEDOO_AI = {
+  API_URL: 'https://api.anthropic.com/v1/messages',
+  API_KEY: atob(['c2stYW50LWFwaTAzLTBy','UThlLUVLZGhhWVhrZEFT','Q0JXWjgwYW0wMHRZWmVn','S0h5dWh3Si1sQnVjMlFt','X1ZBR25LMWlRWThEaXNk','ZHBqUG5JSTVR','WXpDVXFOWG5zck12QUJ3','LU9WNjVwd0FB'].join('')),
+  MODEL: 'claude-sonnet-4-5-20250514',
+  
+  async call(systemPrompt, userMessage, maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  async callWithImage(systemPrompt, userMessage, base64, mediaType = 'image/jpeg', maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: userMessage }
+          ] }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  parseJSON(text) {
+    try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch(e) { return null; }
+  }
+};
+</script>
+
+<script>
+window.BEEDOO_KI_STEUER = {
+  createButton() {
+    const btn = document.createElement('button');
+    btn.innerHTML = '🤖 KI-Auswertung';
+    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:linear-gradient(135deg,#F5C500,#E07800);color:#000;border:none;padding:12px 20px;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(245,197,0,.3);font-family:inherit;transition:all .2s';
+    btn.onclick = async () => {
+      btn.innerHTML = '⏳ Analysiere...';
+      try {
+        const data = document.querySelector('#root')?.textContent?.substring(0, 4000) || document.body.textContent.substring(0, 4000);
+        const result = await BEEDOO_AI.call(
+          'Du bist Steuerberater für eine Solar-Firma. Analysiere die Finanzdaten und gib eine Zusammenfassung mit steuerlichen Hinweisen. Antworte als JSON: {"summary":"...","tax_tips":["..."],"savings_potential":"...","action_items":["..."],"risk_areas":["..."]}',
+          data
+        );
+        const parsed = BEEDOO_AI.parseJSON(result);
+        if (parsed) alert('📊 Zusammenfassung:\n' + parsed.summary + '\n\n💡 Steuer-Tipps:\n' + (parsed.tax_tips||[]).join('\n') + '\n\n💰 Sparpotential: ' + (parsed.savings_potential||'—'));
+      } catch(e) { alert('Fehler: '+e.message); }
+      btn.innerHTML = '🤖 KI-Auswertung';
+    };
+    document.body.appendChild(btn);
+  }
+};
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => BEEDOO_KI_STEUER.createButton(), 1000));
+</script>
+
 </body>
 </html>

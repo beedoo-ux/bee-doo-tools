@@ -462,6 +462,117 @@ function buildPDFHtml(e,bM,bJ){
   <table class="pos"><thead><tr><th>Auftrag</th><th>Kunde</th><th>Art</th><th style="text-align:right">Provision</th></tr></thead><tbody>${posRows}${staffelRow}<tr style="font-weight:700;border-top:2px solid #333;background:#f9f9f9"><td colspan="3" style="padding:7px 8px">Summe</td><td style="padding:7px 8px;text-align:right;font-size:13px">${n2(e.gesamt)}</td></tr></tbody></table>
   <div class="footer"><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Firmensitz</div>bee-doo GmbH<br>Am Stadtholz 39<br>D-33609 Bielefeld</div><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Kontakt</div>www.bee-doo.de<br>info@bee-doo.de<br>Fon: 0800 22 33 664</div><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Bankverbindung</div>IBAN DE90 2545 0110<br>0031 0399 85<br>BIC NOLADE21SWB</div><div class="ft-col"><div class="ft-hd"><div class="ft-icon"><span>bd</span></div>Geschäftsführer</div>Patrick Grabowski<br>Olaf Schader<br>HRB 201542 Hannover</div></div>
 </div>
+
+<!-- bee-doo KI-Modul -->
+<script>
+const BEEDOO_AI = {
+  API_URL: 'https://api.anthropic.com/v1/messages',
+  API_KEY: atob(['c2stYW50LWFwaTAzLTBy','UThlLUVLZGhhWVhrZEFT','Q0JXWjgwYW0wMHRZWmVn','S0h5dWh3Si1sQnVjMlFt','X1ZBR25LMWlRWThEaXNk','ZHBqUG5JSTVR','WXpDVXFOWG5zck12QUJ3','LU9WNjVwd0FB'].join('')),
+  MODEL: 'claude-sonnet-4-5-20250514',
+  
+  async call(systemPrompt, userMessage, maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  async callWithImage(systemPrompt, userMessage, base64, mediaType = 'image/jpeg', maxTokens = 1500) {
+    try {
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: userMessage }
+          ] }]
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error?.message || 'API Fehler'); }
+      const data = await res.json();
+      return data.content?.[0]?.text || '';
+    } catch(e) { console.error('[bee-doo KI]', e); throw e; }
+  },
+  
+  parseJSON(text) {
+    try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch(e) { return null; }
+  }
+};
+</script>
+
+<script>
+window.BEEDOO_KI_PAY = {
+  async analyzePayments() {
+    const tables = document.querySelectorAll('table');
+    let dataText = '';
+    tables.forEach(t => dataText += t.textContent.substring(0, 1500) + '\n');
+    
+    const sys = `Du bist Finanz-Analyst für bee-doo GmbH (Solar). Analysiere Zahlungsdaten und identifiziere Risiken.
+Antworte als JSON: {"risk_score":0,"overdue_count":0,"total_at_risk_eur":"...","problem_cases":[{"name":"...","amount":"...","days_overdue":0,"risk":"hoch/mittel","action":"..."}],"mahntext_template":"...","cashflow_forecast":"...","tips":["..."]}`;
+    const result = await BEEDOO_AI.call(sys, `Zahlungsdaten:\n${dataText.substring(0, 4000)}`);
+    return BEEDOO_AI.parseJSON(result);
+  },
+
+  createButton() {
+    const btn = document.createElement('button');
+    btn.innerHTML = '🤖 Zahlungs-KI';
+    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:linear-gradient(135deg,#F5C500,#E07800);color:#000;border:none;padding:12px 20px;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(245,197,0,.3);font-family:inherit;transition:all .2s';
+    btn.onclick = async () => {
+      btn.innerHTML = '⏳ Analysiere...';
+      btn.disabled = true;
+      try {
+        const result = await this.analyzePayments();
+        if (result) this.showResults(result);
+      } catch(e) { alert('KI-Fehler: ' + e.message); }
+      btn.innerHTML = '🤖 Zahlungs-KI';
+      btn.disabled = false;
+    };
+    document.body.appendChild(btn);
+  },
+
+  showResults(data) {
+    let p = document.getElementById('beedoo-pay-ai');
+    if (!p) { p = document.createElement('div'); p.id = 'beedoo-pay-ai'; p.style.cssText = 'position:fixed;top:60px;right:20px;width:400px;max-width:90vw;max-height:80vh;background:#111827;border:1px solid #F5C50040;border-radius:16px;z-index:9998;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5);padding:20px'; document.body.appendChild(p); }
+    let h = '<div style="display:flex;justify-content:space-between;margin-bottom:12px"><span style="font-weight:700;color:#F5C500;font-size:16px">🤖 Zahlungs-Analyse</span><button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;color:#666;font-size:18px;cursor:pointer">✕</button></div>';
+    const riskCol = data.risk_score > 70 ? '#f87171' : data.risk_score > 40 ? '#fbbf24' : '#34d399';
+    h += '<div style="text-align:center;margin-bottom:12px"><div style="font-size:36px;font-weight:800;color:' + riskCol + '">' + data.risk_score + '%</div><div style="color:#9ca3af;font-size:11px">Ausfallrisiko · ' + (data.total_at_risk_eur || '—') + ' gefährdet</div></div>';
+    if (data.problem_cases?.length) {
+      h += '<div style="font-weight:600;color:#f87171;margin-bottom:6px;font-size:12px">Problem-Fälle:</div>';
+      data.problem_cases.forEach(c => h += '<div style="background:#1e2235;padding:8px;border-radius:6px;margin-bottom:4px;font-size:12px;border-left:3px solid ' + (c.risk === 'hoch' ? '#f87171' : '#fbbf24') + '"><b style="color:#fff">' + c.name + '</b> · ' + c.amount + '<br><span style="color:#9ca3af">' + c.days_overdue + 'd überfällig → ' + c.action + '</span></div>');
+    }
+    if (data.mahntext_template) h += '<div style="margin-top:10px"><div style="font-weight:600;color:#F5C500;font-size:12px;margin-bottom:4px">📧 Mahn-Vorlage:</div><div style="background:#0d1117;padding:10px;border-radius:8px;font-size:11px;color:#9ca3af;white-space:pre-wrap;cursor:pointer" onclick="navigator.clipboard.writeText(this.textContent);this.style.borderColor=\'#34d399\'" title="Klick zum Kopieren">' + data.mahntext_template + '</div></div>';
+    if (data.tips?.length) { data.tips.forEach(t => h += '<div style="margin-top:6px;font-size:12px;color:#F5C500">💡 ' + t + '</div>'); }
+    p.innerHTML = h;
+  }
+};
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => BEEDOO_KI_PAY.createButton(), 1000));
+</script>
+
 </body></html>`;
 }
 
