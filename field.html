@@ -561,6 +561,7 @@ const AUFNAHME_TYPEN = [
 function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkehrerClick, onRueckkehrerErledigt }) {
   const [clk, setClk] = useState(new Date());
   const [selectedRK, setSelectedRK] = useState(null);
+  const [rkNotes, setRkNotes] = useState({});
   useEffect(() => { const t = setInterval(() => setClk(new Date()), 60000); return () => clearInterval(t); }, []);
   const termine = [
     { zeit: "09:00", name: "Müller, Detmold", typ: "PV", status: "offen", kunde: { anrede: "Herr", vorname: "Thomas", nachname: "Müller", strasse: "Lemgoer Str.", hausnr: "42", plz: "32756", ort: "Detmold", telefon: "05231 9876543", mobil: "0176 34567890", email: "t.mueller@mail.de" }},
@@ -624,27 +625,59 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
               React.createElement("div", { style: { fontSize: 10, color: "#ef4444", fontWeight: 700 } }, rk.tage + "T \u2192"));
           })
         ),
-        selectedRK && React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 20000, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 } },
-          React.createElement("div", { style: { width: "100%", maxWidth: 420, background: "#1A2332", borderRadius: 18, border: "1.5px solid rgba(239,68,68,0.3)", overflow: "hidden" } },
-            React.createElement("div", { style: { padding: "18px 20px", background: "rgba(239,68,68,0.08)", borderBottom: "1px solid rgba(239,68,68,0.2)" } },
+        selectedRK && React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 20000, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }, onClick: function(e) { if(e.target === e.currentTarget) setSelectedRK(null); } },
+          React.createElement("div", { style: { width: "100%", maxWidth: 440, maxHeight: "90vh", background: "#1A2332", borderRadius: 18, border: "1.5px solid rgba(239,68,68,0.3)", overflow: "auto" } },
+            /* Header */
+            React.createElement("div", { style: { padding: "16px 20px", background: "rgba(239,68,68,0.08)", borderBottom: "1px solid rgba(239,68,68,0.2)", position: "sticky", top: 0, zIndex: 1 } },
               React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
                 React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: "#ef4444" } }, "\u26A0\uFE0F R\xFCckkehrer"),
-                React.createElement("button", { onClick: function() { setSelectedRK(null); }, style: { background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer", padding: "0 4px" } }, "\xD7")),
-              React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#fff", marginTop: 4 } }, selectedRK.name)),
+                React.createElement("button", { onClick: function() { setSelectedRK(null); }, style: { background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 22, cursor: "pointer", padding: "0 4px", lineHeight: 1 } }, "\xD7")),
+              React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#fff", marginTop: 4 } }, selectedRK.name),
+              React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 2 } }, selectedRK.typ, " \xB7 ", selectedRK.plz, " ", selectedRK.ort)),
+
             React.createElement("div", { style: { padding: "16px 20px" } },
-              React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 } },
-                [["Typ", selectedRK.typ], ["PLZ / Ort", selectedRK.plz + " " + selectedRK.ort], ["Grund", selectedRK.grund], ["Seit", selectedRK.tage + " Tagen"]].map(function(pair, j) {
+
+              /* Auftraggeber & Timing */
+              React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 } },
+                [["\u{1F464} Erstellt von", selectedRK.erstelltVon || "Montage"], ["\u{1F4C5} Erstellt am", selectedRK.erstelltAm || "\u2014"], ["\u26A0\uFE0F Grund", selectedRK.grund], ["\u23F3 Seit", selectedRK.tage + " Tagen"]].map(function(pair, j) {
                   return React.createElement("div", { key: j, style: { padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)" } },
                     React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", fontWeight: 700, marginBottom: 2 } }, pair[0]),
-                    React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#fff" } }, pair[1]));
+                    React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: "#fff" } }, pair[1]));
                 })),
-              React.createElement("div", { style: { padding: "12px 14px", background: "rgba(239,68,68,0.06)", borderRadius: 10, border: "1px solid rgba(239,68,68,0.15)", marginBottom: 14 } },
-                React.createElement("div", { style: { fontSize: 10, color: "#ef4444", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 } }, "\u{1F4CB} Aufgabe"),
-                React.createElement("div", { style: { fontSize: 13, color: "#fff", lineHeight: 1.5 } }, selectedRK.aufgabe)),
-              selectedRK.notiz && React.createElement("div", { style: { padding: "10px 14px", background: "rgba(253,225,84,0.04)", borderRadius: 10, border: "1px solid rgba(253,225,84,0.1)", marginBottom: 14, fontSize: 12, color: "rgba(255,255,255,0.6)" } }, "\u{1F4DD} ", selectedRK.notiz),
-              React.createElement("div", { style: { display: "flex", gap: 10 } },
+
+              /* Deadline */
+              selectedRK.deadline && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", marginBottom: 12, borderRadius: 10, background: (function() { var dl = new Date(selectedRK.deadline.split(".").reverse().join("-")); var now = new Date(); var diff = Math.ceil((dl - now) / 86400000); return diff < 0 ? "rgba(239,68,68,0.12)" : diff <= 2 ? "rgba(251,191,36,0.1)" : "rgba(52,211,153,0.06)"; })(), border: "1px solid " + (function() { var dl = new Date(selectedRK.deadline.split(".").reverse().join("-")); var now = new Date(); var diff = Math.ceil((dl - now) / 86400000); return diff < 0 ? "rgba(239,68,68,0.3)" : diff <= 2 ? "rgba(251,191,36,0.25)" : "rgba(52,211,153,0.15)"; })() } },
+                React.createElement("span", { style: { fontSize: 16 } }, (function() { var dl = new Date(selectedRK.deadline.split(".").reverse().join("-")); var diff = Math.ceil((dl - new Date()) / 86400000); return diff < 0 ? "\u{1F6A8}" : diff <= 2 ? "\u23F0" : "\u{1F4C6}"; })()),
+                React.createElement("div", null,
+                  React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", fontWeight: 700 } }, "Deadline"),
+                  React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: (function() { var dl = new Date(selectedRK.deadline.split(".").reverse().join("-")); var diff = Math.ceil((dl - new Date()) / 86400000); return diff < 0 ? "#ef4444" : diff <= 2 ? "#fbbf24" : "#34D399"; })() } }, selectedRK.deadline, (function() { var dl = new Date(selectedRK.deadline.split(".").reverse().join("-")); var diff = Math.ceil((dl - new Date()) / 86400000); return diff < 0 ? " \u2014 \xDCBERF\xC4LLIG!" : diff === 0 ? " \u2014 HEUTE" : diff === 1 ? " \u2014 morgen" : " \u2014 noch " + diff + " Tage"; })()))),
+
+              /* Aufgabe */
+              React.createElement("div", { style: { padding: "12px 14px", background: "rgba(239,68,68,0.06)", borderRadius: 10, border: "1px solid rgba(239,68,68,0.15)", marginBottom: 12 } },
+                React.createElement("div", { style: { fontSize: 10, color: "#ef4444", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 } }, "\u{1F4CB} Aufgabe von ", selectedRK.erstelltVon || "Montage"),
+                React.createElement("div", { style: { fontSize: 13, color: "#fff", lineHeight: 1.6 } }, selectedRK.aufgabe)),
+
+              /* Montage-Notiz (read-only) */
+              selectedRK.notiz && React.createElement("div", { style: { padding: "10px 14px", background: "rgba(253,225,84,0.04)", borderRadius: 10, border: "1px solid rgba(253,225,84,0.1)", marginBottom: 12, fontSize: 12, color: "rgba(255,255,255,0.6)" } },
+                React.createElement("div", { style: { fontSize: 9, color: "rgba(253,225,84,0.6)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "\u{1F4DD} Notiz Montage"),
+                selectedRK.notiz),
+
+              /* Vertrieb Antwort-Feld */
+              React.createElement("div", { style: { marginBottom: 14 } },
+                React.createElement("div", { style: { fontSize: 10, color: "#60A5FA", fontWeight: 700, textTransform: "uppercase", marginBottom: 6, letterSpacing: 0.5 } }, "\u270F\uFE0F Deine Antwort / Notiz"),
+                React.createElement("textarea", {
+                  value: rkNotes[selectedRK.id] || "",
+                  onChange: function(e) { var id = selectedRK.id; setRkNotes(function(prev) { var n = Object.assign({}, prev); n[id] = e.target.value; return n; }); },
+                  placeholder: "Status-Update, R\xFCckfrage, Ergebnis\u2026",
+                  rows: 3,
+                  style: { width: "100%", padding: "12px 14px", background: "rgba(96,165,250,0.06)", border: "1.5px solid rgba(96,165,250,0.2)", borderRadius: 10, color: "#fff", fontSize: 13, fontFamily: font, lineHeight: 1.5, resize: "vertical", outline: "none", boxSizing: "border-box" }
+                }),
+                (rkNotes[selectedRK.id] || "").length > 0 && React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.2)", textAlign: "right", marginTop: 2 } }, (rkNotes[selectedRK.id] || "").length, " Zeichen")),
+
+              /* Buttons */
+              React.createElement("div", { style: { display: "flex", gap: 8 } },
                 React.createElement("button", { onClick: function() { setSelectedRK(null); }, style: { flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", fontSize: 13, fontFamily: font, cursor: "pointer" } }, "Sp\xE4ter"),
-                React.createElement("button", { onClick: function() { if (onRueckkehrerErledigt) onRueckkehrerErledigt(selectedRK.id); setSelectedRK(null); }, style: { flex: 2, padding: "12px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 16px rgba(34,197,94,0.3)" } }, "\u2705 Erledigt \u2192 zur\xFCck an Montage"))
+                React.createElement("button", { onClick: function() { if (onRueckkehrerErledigt) onRueckkehrerErledigt(selectedRK.id, rkNotes[selectedRK.id] || ""); setSelectedRK(null); }, style: { flex: 2, padding: "12px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 16px rgba(34,197,94,0.3)" } }, "\u2705 Erledigt \u2192 Montage"))
             )
           )
         ),
@@ -6389,9 +6422,9 @@ function BeedooField() {
   const [saveStatus, setSaveStatus] = useState(null);
   const [restorePrompt, setRestorePrompt] = useState(null);
   const [rueckkehrer, setRueckkehrer] = useState([
-    { id: "rk1", name: "Krause, Detmold", plz: "32756", ort: "Detmold", typ: "PV 11.4 kWp", grund: "Zählerschrank zu klein", tage: 3, aufgabe: "Kunde muss Elektriker beauftragen für Zählerschrank-Umbau (63A). Angebot einholen und Termin bestätigen. Dann DC-Montage neu einplanen.", notiz: "Kunde weiß Bescheid, wartet auf Elektriker-Angebot von Fa. Meier" },
-    { id: "rk2", name: "Yilmaz, Bielefeld", plz: "33602", ort: "Bielefeld", typ: "PV+WP 14.7 kWp", grund: "Dachsanierung nötig", tage: 7, aufgabe: "Dachdecker-Freigabe fehlt. Kunde hat Termin am 28.02. — danach Rückmeldung ob Dach tragfähig. Erst dann AC-Montage möglich.", notiz: "WP-Stellplatz schon vorbereitet" },
-    { id: "rk3", name: "Hofmann, Herford", plz: "32049", ort: "Herford", typ: "PV 9.5 kWp", grund: "Netzanmeldung abgelehnt", tage: 12, aufgabe: "Westnetz hat Netzanmeldung abgelehnt wegen fehlender Unterlagen (Lageplan + Anlagenzertifikat). Unterlagen nachreichen und erneut einreichen.", notiz: null }
+    { id: "rk1", name: "Krause, Detmold", plz: "32756", ort: "Detmold", typ: "PV 11.4 kWp", grund: "Zählerschrank zu klein", tage: 3, aufgabe: "Kunde muss Elektriker beauftragen für Zählerschrank-Umbau (63A). Angebot einholen und Termin bestätigen. Dann DC-Montage neu einplanen.", notiz: "Kunde weiß Bescheid, wartet auf Elektriker-Angebot von Fa. Meier", erstelltVon: "Kevin M. (DC-Montage)", erstelltAm: "20.02.2026", deadline: "26.02.2026" },
+    { id: "rk2", name: "Yilmaz, Bielefeld", plz: "33602", ort: "Bielefeld", typ: "PV+WP 14.7 kWp", grund: "Dachsanierung nötig", tage: 7, aufgabe: "Dachdecker-Freigabe fehlt. Kunde hat Termin am 28.02. — danach Rückmeldung ob Dach tragfähig. Erst dann AC-Montage möglich.", notiz: "WP-Stellplatz schon vorbereitet", erstelltVon: "Olaf S. (Projektleitung)", erstelltAm: "16.02.2026", deadline: "01.03.2026" },
+    { id: "rk3", name: "Hofmann, Herford", plz: "32049", ort: "Herford", typ: "PV 9.5 kWp", grund: "Netzanmeldung abgelehnt", tage: 12, aufgabe: "Westnetz hat Netzanmeldung abgelehnt wegen fehlender Unterlagen (Lageplan + Anlagenzertifikat). Unterlagen nachreichen und erneut einreichen.", notiz: null, erstelltVon: "Patrick G. (Netzanmeldung)", erstelltAm: "11.02.2026", deadline: "23.02.2026" }
   ]);
   useEffect(() => {
     const t = setInterval(() => setClock(/* @__PURE__ */ new Date()), 3e4);
