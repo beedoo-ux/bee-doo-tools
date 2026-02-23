@@ -591,10 +591,12 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
 
   // Storno-Retter: Kunden die im Board auf Storno stehen — 2 Tage Zeit zum Heilen
   const [selectedStorno, setSelectedStorno] = useState(null);
-  const stornos = [
+  const [rettungNotiz, setRettungNotiz] = useState("");
+  const [showRettungNotiz, setShowRettungNotiz] = useState(false);
+  const [stornos, setStornos] = useState([
     { id: "st1", name: "Petersen, Lemgo", plz: "32657", ort: "Lemgo", typ: "PV 10.2 kWp", grund: "Preis zu hoch", stornoDatum: "22.02.2026", restStunden: 26, aufgabe: "Kunde hat bei Enpal günstiger gesehen. Nachverhandlung möglich — Rabattfreigabe bei Patrick anfragen. Persönliches Gespräch bevorzugt.", notiz: "Frau Petersen war beim Termin sehr interessiert, Mann hat gebremst", kontakt: "0170 1234567" },
     { id: "st2", name: "Klein, Herford", plz: "32049", ort: "Herford", typ: "PV+WP 13.5 kWp", grund: "Finanzierung abgelehnt", stornoDatum: "23.02.2026", restStunden: 44, aufgabe: "EFS hat abgelehnt, Alternative: SWK Finanzierung prüfen oder Barzahlung mit Sonderskonto anbieten.", notiz: null, kontakt: "0152 9876543" },
-  ];
+  ]);
 
   // Ranking / Leaderboard (Demo — in Produktion aus Supabase)
   const ranking = [
@@ -707,7 +709,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
           React.createElement("div", { style: { padding: "18px 20px", background: "rgba(249,115,22,0.08)", borderBottom: "1px solid rgba(249,115,22,0.2)" }},
             React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" }},
               React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: "#f97316" }}, "\uD83D\uDD25 Storno retten"),
-              React.createElement("button", { onClick: function() { setSelectedStorno(null); }, style: { background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer", padding: "0 4px" }}, "\xD7")),
+              React.createElement("button", { onClick: function() { setSelectedStorno(null); setRettungNotiz(""); setShowRettungNotiz(false); }, style: { background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer", padding: "0 4px" }}, "\xD7")),
             React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#fff", marginTop: 4 }}, selectedStorno.name)),
           React.createElement("div", { style: { padding: "16px 20px" }},
             React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }},
@@ -722,8 +724,12 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
             selectedStorno.notiz && React.createElement("div", { style: { padding: "10px 14px", background: "rgba(253,225,84,0.04)", borderRadius: 10, border: "1px solid rgba(253,225,84,0.1)", marginBottom: 14, fontSize: 12, color: "rgba(255,255,255,0.6)" }}, "\uD83D\uDCDD " + selectedStorno.notiz),
             React.createElement("a", { href: "tel:" + selectedStorno.kontakt, style: { display: "block", textAlign: "center", padding: "12px", borderRadius: 10, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", color: "#34D399", fontSize: 13, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}, "\uD83D\uDCDE " + selectedStorno.kontakt + " anrufen"),
             React.createElement("div", { style: { display: "flex", gap: 10 }},
-              React.createElement("button", { onClick: function() { setSelectedStorno(null); }, style: { flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", fontSize: 13, fontFamily: font, cursor: "pointer" }}, "Sp\xE4ter"),
-              React.createElement("button", { onClick: function() { setSelectedStorno(null); }, style: { flex: 2, padding: "12px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #f97316, #ea580c)", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 16px rgba(249,115,22,0.3)" }}, "\u2705 Gerettet \u2192 zur\xFCck ins Board"))))
+              React.createElement("button", { onClick: function() { setSelectedStorno(null); setRettungNotiz(""); setShowRettungNotiz(false); }, style: { flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", fontSize: 13, fontFamily: font, cursor: "pointer" }}, "Sp\xE4ter"),
+              React.createElement("button", { onClick: function() { setShowRettungNotiz(true); }, style: { flex: 2, padding: "12px", borderRadius: 10, border: "none", background: showRettungNotiz ? "rgba(249,115,22,0.2)" : "linear-gradient(135deg, #f97316, #ea580c)", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: font, cursor: "pointer", boxShadow: showRettungNotiz ? "none" : "0 4px 16px rgba(249,115,22,0.3)" }}, "\u2705 Gerettet \u2192 Notiz schreiben")),
+            showRettungNotiz && React.createElement("div", { style: { marginTop: 12, animation: "fadeInUp 0.2s ease" }},
+              React.createElement("div", { style: { fontSize: 10, color: "#f97316", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}, "\uD83D\uDCDD Rettungs-Notiz (Pflicht)"),
+              React.createElement("textarea", { value: rettungNotiz, onChange: function(e) { setRettungNotiz(e.target.value); }, placeholder: "Was wurde besprochen? Wie wurde der Kunde gerettet? Neuer Preis, neues Angebot, etc\u2026", style: { width: "100%", minHeight: 80, padding: "12px", borderRadius: 10, border: "1.5px solid rgba(249,115,22,0.3)", background: "rgba(249,115,22,0.04)", color: "#fff", fontSize: 13, fontFamily: font, resize: "vertical", outline: "none", lineHeight: 1.5 }}),
+              React.createElement("button", { onClick: function() { if(!rettungNotiz.trim()) return; console.log("[Storno-Retter] Gerettet:", selectedStorno.name, "Notiz:", rettungNotiz); setStornos(function(prev) { return prev.filter(function(s) { return s.id !== selectedStorno.id; }); }); setSelectedStorno(null); setRettungNotiz(""); setShowRettungNotiz(false); }, disabled: !rettungNotiz.trim(), style: { width: "100%", marginTop: 8, padding: "14px", borderRadius: 10, border: "none", background: rettungNotiz.trim() ? "linear-gradient(135deg, #22c55e, #16a34a)" : "rgba(255,255,255,0.06)", color: rettungNotiz.trim() ? "#fff" : "rgba(255,255,255,0.2)", fontSize: 14, fontWeight: 800, fontFamily: font, cursor: rettungNotiz.trim() ? "pointer" : "not-allowed", boxShadow: rettungNotiz.trim() ? "0 4px 16px rgba(34,197,94,0.3)" : "none", transition: "all 0.2s" }}, "\u2705 Gerettet \u2192 zur\xFCck ins Board"))))
       ),
 
       /* ── RANKING / LEADERBOARD ── */
