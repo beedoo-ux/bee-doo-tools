@@ -560,6 +560,8 @@ const AUFNAHME_TYPEN = [
 ];
 function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkehrerClick, onRueckkehrerErledigt }) {
   const [clk, setClk] = useState(new Date());
+  const [alertPhase, setAlertPhase] = useState("alert"); // "alert" | "dashboard"
+  useEffect(function() { if(alertPhase === "alert") { var timer = setTimeout(function() { setAlertPhase("dashboard"); }, 10000); return function() { clearTimeout(timer); }; } }, [alertPhase]);
   const [selectedRK, setSelectedRK] = useState(null);
   const [rkNotes, setRkNotes] = useState({});
   const [selectedStorno, setSelectedStorno] = useState(null);
@@ -642,7 +644,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
 
   // Provisionstufe: ab 8 Auftr\xE4ge = 1700\u20AC
   var salesMonat = salesStats.monat;
-  var provStufen = [{ab:0,prov:1200},{ab:5,prov:1400},{ab:8,prov:1700},{ab:12,prov:2000},{ab:16,prov:2400}];
+  var provStufen = [{ab:0,prov:1400},{ab:8,prov:1700},{ab:12,prov:2000},{ab:16,prov:2400}];
   var currentStufe = provStufen.slice().reverse().find(function(s){ return salesMonat >= s.ab; }) || provStufen[0];
   var nextStufe = provStufen.find(function(s){ return s.ab > salesMonat; });
   var fehlendBis = nextStufe ? (nextStufe.ab - salesMonat) : 0;
@@ -652,6 +654,31 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
   const ts = clk.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
   const cs = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "18px 20px" };
   const ls = { fontSize: 10, color: "rgba(255,255,255,0.45)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 };
+  if (alertPhase === "alert") {
+    var alertItems = [];
+    stornos.forEach(function(st) { alertItems.push({ type: "storno", name: st.name, detail: st.grund + " · " + st.typ, zeit: st.restStunden + " Std. verbleibend", color: "#f97316" }); });
+    (rueckkehrer || []).forEach(function(rk) { alertItems.push({ type: "rueck", name: rk.name, detail: rk.grund + " · " + rk.typ, zeit: rk.tage + " Tage", color: "#ef4444" }); });
+    return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 10000, background: "#0A0E1A", fontFamily: font, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 }},
+      React.createElement("style", null, "@keyframes alertPulse { 0%,100%{ box-shadow: 0 0 0px rgba(239,68,68,0); } 50%{ box-shadow: 0 0 40px rgba(239,68,68,0.4); }} @keyframes alertBlink { 0%,100%{ opacity:1; } 50%{ opacity:0.4; }}"),
+      React.createElement("div", { style: { animation: "alertBlink 1s infinite", fontSize: 48, marginBottom: 16 }}, "\u{1F6A8}"),
+      React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#ef4444", textTransform: "uppercase", letterSpacing: 2, marginBottom: 6, animation: "alertBlink 1.5s infinite" }}, "ACHTUNG \u2014 SOFORT BEARBEITEN"),
+      React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 28 }}, alertItems.length + " offene F\xE4lle warten auf dich"),
+      React.createElement("div", { style: { width: "100%", maxWidth: 500 }},
+        alertItems.map(function(item, i) {
+          var isStorno = item.type === "storno";
+          return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", marginBottom: 10, borderRadius: 14, background: isStorno ? "rgba(249,115,22,0.08)" : "rgba(239,68,68,0.08)", border: "1.5px solid " + (isStorno ? "rgba(249,115,22,0.3)" : "rgba(239,68,68,0.3)"), animation: "alertPulse 2s infinite", animationDelay: (i * 0.3) + "s" }},
+            React.createElement("div", { style: { width: 44, height: 44, borderRadius: 12, background: isStorno ? "rgba(249,115,22,0.15)" : "rgba(239,68,68,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}, isStorno ? "\uD83D\uDD25" : "\u26A0\uFE0F"),
+            React.createElement("div", { style: { flex: 1 }},
+              React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }},
+                React.createElement("span", { style: { fontSize: 8, fontWeight: 800, padding: "2px 8px", borderRadius: 4, background: item.color, color: "#fff", textTransform: "uppercase" }}, isStorno ? "STORNO" : "R\xDCCKKEHRER"),
+                React.createElement("span", { style: { fontSize: 14, fontWeight: 700, color: "#fff" }}, item.name)),
+              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.55)" }}, item.detail)),
+            React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: item.color, whiteSpace: "nowrap" }}, item.zeit));
+        })),
+      React.createElement("div", { style: { marginTop: 32, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }},
+        React.createElement("button", { onClick: function() { setAlertPhase("dashboard"); }, style: { padding: "14px 40px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff", fontSize: 15, fontWeight: 800, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 20px rgba(239,68,68,0.4)", animation: "alertPulse 2s infinite" }}, "\u2705 Verstanden \u2014 zum Dashboard"),
+        React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.3)" }}, "Automatisch in 10 Sek.")));
+  }
   return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 10000, background: "radial-gradient(ellipse at 30% 20%, rgba(232,212,77,0.06) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(96,165,250,0.04) 0%, transparent 50%), #0A0E1A", fontFamily: font, color: "#fff", overflow: "auto", padding: 0 }},
     /* ── HEADER mit Name + Wetter ── */
     React.createElement("div", { style: { padding: "28px 32px 16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }},
