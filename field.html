@@ -706,6 +706,8 @@ function AlertScreen({ stornos, rueckkehrer, onDismiss }) {
 
 function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkehrerClick, onRueckkehrerErledigt }) {
   const [clk, setClk] = useState(new Date());
+  const [showAlertSplash, setShowAlertSplash] = useState(true);
+  const [alertPulse, setAlertPulse] = useState(true);
   const [selectedRK, setSelectedRK] = useState(null);
   const [rkNotes, setRkNotes] = useState({});
   const [selectedStorno, setSelectedStorno] = useState(null);
@@ -714,6 +716,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
   const [showManualConfirm, setShowManualConfirm] = useState(false);
   const [statsPopup, setStatsPopup] = useState(null);
   useEffect(() => { const t = setInterval(() => setClk(new Date()), 60000); return () => clearInterval(t); }, []);
+  useEffect(() => { if(showAlertSplash) { var p = setInterval(function(){ setAlertPulse(function(v){return !v;}); }, 600); var t2 = setTimeout(function(){ setShowAlertSplash(false); }, 10000); return function(){ clearTimeout(t2); clearInterval(p); }; } }, [showAlertSplash]);
 
   // Termine mit Distanzen, Wetter & Scouter-Notizen
   const termine = [
@@ -801,7 +804,46 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
   const cs = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "18px 20px" };
   const ls = { fontSize: 10, color: "rgba(255,255,255,0.45)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 };
   return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 10000, background: "radial-gradient(ellipse at 30% 20%, rgba(232,212,77,0.06) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(96,165,250,0.04) 0%, transparent 50%), #0A0E1A", fontFamily: font, color: "#fff", overflow: "auto", padding: 0 }},
-    /* ── HEADER mit Name + Wetter ── */
+    /* ── ALERT SPLASH (10s) ── */
+    showAlertSplash && React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 30000, background: "radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.08) 0%, #0A0E1A 70%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 28, fontFamily: font, animation: "fadeInUp 0.4s ease" }},
+      React.createElement("div", { style: { fontSize: 48, marginBottom: 16, animation: alertPulse ? "none" : "none" }}, "\u{1F6A8}"),
+      React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: alertPulse ? "#ef4444" : "#ff6b6b", marginBottom: 6, transition: "color 0.3s", textAlign: "center" }}, "ACHTUNG \u2014 OFFENE AUFGABEN"),
+      React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 28 }}, "Diese Kunden brauchen deine Aufmerksamkeit!"),
+
+      /* Storno-Retter */
+      stornos.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 440, marginBottom: 16 }},
+        React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#f97316", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}, "\uD83D\uDD25 STORNO-RETTER \u2014 Frist l\xE4uft!"),
+        stornos.map(function(st, i) {
+          var urgent = st.restStunden < 30;
+          return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginBottom: 8, borderRadius: 12, background: alertPulse && urgent ? "rgba(239,68,68,0.12)" : "rgba(249,115,22,0.06)", border: alertPulse && urgent ? "2px solid rgba(239,68,68,0.5)" : "1.5px solid rgba(249,115,22,0.25)", transition: "all 0.3s" }},
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 }},
+              React.createElement("div", { style: { fontSize: 22 }}, "\uD83D\uDD25"),
+              React.createElement("div", null,
+                React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#fff" }}, st.name),
+                React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)" }}, st.grund + " \xB7 " + st.typ))),
+            React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: urgent ? (alertPulse ? "#ef4444" : "#ff8888") : "#f97316", transition: "color 0.3s" }}, st.restStunden + " Std."));
+        })),
+
+      /* R\xFCckkehrer */
+      React.createElement("div", { style: { width: "100%", maxWidth: 440, marginBottom: 28 }},
+        React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#ef4444", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}, "\u{1F6A8} R\xDCCKKEHRER AUS MONTAGE \u2014 Aktion n\xF6tig!"),
+        (rueckkehrer || [{ name: "Krause, Detmold", grund: "Z\xE4hlerschrank zu klein", typ: "PV 11.4 kWp", tage: "3T" }, { name: "Yilmaz, Bielefeld", grund: "Dachsanierung n\xF6tig", typ: "PV+WP 14.7 kWp", tage: "7T" }, { name: "Hofmann, Herford", grund: "Netzanmeldung abgelehnt", typ: "PV 9.5 kWp", tage: "12T" }]).map(function(rk, i) {
+          return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginBottom: 8, borderRadius: 12, background: alertPulse ? "rgba(239,68,68,0.08)" : "rgba(239,68,68,0.04)", border: alertPulse ? "2px solid rgba(239,68,68,0.4)" : "1.5px solid rgba(239,68,68,0.2)", transition: "all 0.3s" }},
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 }},
+              React.createElement("div", { style: { width: 32, height: 32, borderRadius: 8, background: "rgba(239,68,68,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}, "\u26A0\uFE0F"),
+              React.createElement("div", null,
+                React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#fff" }}, rk.name),
+                React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)" }}, rk.grund + " \xB7 " + rk.typ))),
+            React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: alertPulse ? "#ef4444" : "#ff8888", transition: "color 0.3s" }}, rk.tage + " \u2192"));
+        })),
+
+      /* Countdown + Skip Button */
+      React.createElement("div", { style: { textAlign: "center" }},
+        React.createElement("button", { onClick: function() { setShowAlertSplash(false); }, style: { padding: "14px 40px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)", fontSize: 14, fontWeight: 600, fontFamily: font, cursor: "pointer" }}, "Verstanden \u2192 zum Dashboard"),
+        React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 8 }}, "Wechselt automatisch in 10 Sekunden"))),
+
+
+        /* ── HEADER mit Name + Wetter ── */
     React.createElement("div", { style: { padding: "28px 32px 16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }},
       React.createElement("div", null,
         React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }},
