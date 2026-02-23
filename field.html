@@ -558,15 +558,15 @@ const AUFNAHME_TYPEN = [
   { id: "WP", label: "W\xE4rmepumpe", icon: "\u2668\uFE0F", desc: "W\xE4rmepumpen-Aufnahme", color: "#60A5FA" },
   { id: "PV+WP", label: "PV + W\xE4rmepumpe", icon: "\u26A1", desc: "Kombi-Aufnahme", color: "#34D399" }
 ];
-function DashboardScreen({ onNewAufnahme, rueckkehrer, onRueckkehrerClick, onRueckkehrerErledigt }) {
+function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkehrerClick, onRueckkehrerErledigt }) {
   const [clk, setClk] = useState(new Date());
   const [selectedRK, setSelectedRK] = useState(null);
   useEffect(() => { const t = setInterval(() => setClk(new Date()), 60000); return () => clearInterval(t); }, []);
   const termine = [
-    { zeit: "09:00", name: "Müller, Detmold", typ: "PV", status: "offen" },
-    { zeit: "11:30", name: "Weber, Bielefeld", typ: "WP", status: "offen" },
-    { zeit: "14:00", name: "Schmidt, Gütersloh", typ: "PV+WP", status: "offen" },
-    { zeit: "16:30", name: "Braun, Paderborn", typ: "PV", status: "bestätigt" },
+    { zeit: "09:00", name: "Müller, Detmold", typ: "PV", status: "offen", kunde: { anrede: "Herr", vorname: "Thomas", nachname: "Müller", strasse: "Lemgoer Str.", hausnr: "42", plz: "32756", ort: "Detmold", telefon: "05231 9876543", mobil: "0176 34567890", email: "t.mueller@mail.de" }},
+    { zeit: "11:30", name: "Weber, Bielefeld", typ: "WP", status: "offen", kunde: { anrede: "Frau", vorname: "Sandra", nachname: "Weber", strasse: "Herforder Str.", hausnr: "118", plz: "33602", ort: "Bielefeld", telefon: "0521 1234567", mobil: "0171 98765432", email: "s.weber@web.de" }},
+    { zeit: "14:00", name: "Schmidt, Gütersloh", typ: "PV+WP", status: "offen", kunde: { anrede: "Herr", vorname: "Martin", nachname: "Schmidt", strasse: "Berliner Str.", hausnr: "7a", plz: "33330", ort: "Gütersloh", telefon: "05241 5556677", mobil: "0152 12345678", email: "m.schmidt@gmail.com" }},
+    { zeit: "16:30", name: "Braun, Paderborn", typ: "PV", status: "bestätigt", kunde: { anrede: "Herr", vorname: "Klaus", nachname: "Braun", strasse: "Warburger Str.", hausnr: "55", plz: "33098", ort: "Paderborn", telefon: "05251 4443322", mobil: "0163 87654321", email: "k.braun@t-online.de" }},
   ];
   const stats = { heute: 2, woche: 8, monat: 31, quote: 72 };
   const letzte = [
@@ -597,7 +597,7 @@ function DashboardScreen({ onNewAufnahme, rueckkehrer, onRueckkehrerClick, onRue
           React.createElement("div", { style: { fontSize: 28, fontWeight: 800, color: s.c }}, s.v)))),
       React.createElement("div", { style: cs },
         React.createElement("div", { style: ls }, "\uD83D\uDCC5 Heutige Termine"),
-        ...termine.map((t, i) => React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < termine.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }},
+        ...termine.map((t, i) => React.createElement("div", { key: i, onClick: () => onTerminClick && onTerminClick(t), style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < termine.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", cursor: "pointer", borderRadius: 8, margin: "0 -6px", padding: "10px 6px", transition: "background 0.15s" }, onMouseEnter: (e) => e.currentTarget.style.background = "rgba(253,225,84,0.06)", onMouseLeave: (e) => e.currentTarget.style.background = "transparent" },
           React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#FDE154", minWidth: 48 }}, t.zeit),
           React.createElement("div", { style: { flex: 1 }},
             React.createElement("div", { style: { fontSize: 13, fontWeight: 600 }}, t.name),
@@ -2553,6 +2553,28 @@ function StepEinstieg({ data, setData, hasPV = true, hasWP = false }) {
     border: `1.5px solid ${data[s.k] ? T.blue : T.border}`
   } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, s.icon), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: data[s.k] ? T.blue : T.text } }, data[s.k] ? "\u2705" : "\u2610", " ", s.l)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: T.textDim, marginTop: 2, paddingLeft: 20 } }, s.desc)))), (data.shSHELLY || data.shHomeAssistant || data.shWallboxSmart) && /* @__PURE__ */ React.createElement(AIHint, { text: "Smart Home + PV = maximaler Eigenverbrauch! Automatische Steuerung von Ger\xE4ten bei Sonnenschein spart extra.", color: T.blue })));
 }
+function compressImage(file, maxWidth, quality) {
+  maxWidth = maxWidth || 1600;
+  quality = quality || 0.75;
+  return new Promise(function(resolve) {
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+      var canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(function(blob) {
+        var compressed = new File([blob], file.name || "photo.jpg", { type: "image/jpeg" });
+        console.log("[bee-doo] Komprimiert: " + Math.round(file.size/1024) + "KB → " + Math.round(compressed.size/1024) + "KB");
+        resolve(compressed);
+      }, "image/jpeg", quality);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 function StepFotos({ data, setData }) {
   const u = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const [gDriveConnected, setGDriveConnected] = useState(!!gDriveState.token);
@@ -2614,17 +2636,32 @@ function StepFotos({ data, setData }) {
     } catch (e) {
     }
   };
-  const capturePhoto = (photoKey, useCamera, label) => {
+  const capturePhoto = async (photoKey, useCamera, label) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
     if (useCamera) input.capture = "environment";
-    input.onchange = (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      u(photoKey, URL.createObjectURL(file));
-      u(`${photoKey}_file`, file);
-      triggerGDriveUpload(file, photoKey, label || photoKey, data, u);
+    input.setAttribute("multiple", "");
+    input.onchange = async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      // Determine target slots: if single file → use photoKey, if multiple → fill next empty pflicht slots
+      const pflichtKeys = ["fotoZaehler","fotoHAK","fotoPotential","fotoNeuerZS","fotoKabelwegInnen","fotoKabelwegWRZS","fotoKabelwegHAKZS","fotoKabelwegAussen","fotoAufstellortWR","fotoZSgeschlossen","fotoZSgeoeffnet","fotoDachboden"];
+      const getNextEmptySlots = (count) => {
+        const empty = pflichtKeys.filter(k => !data[k]);
+        return empty.slice(0, count);
+      };
+      const targets = files.length === 1 ? [photoKey] : (() => {
+        const slots = [photoKey, ...getNextEmptySlots(files.length).filter(k => k !== photoKey)];
+        return slots.slice(0, files.length);
+      })();
+      for (let i = 0; i < files.length && i < targets.length; i++) {
+        const compressed = await compressImage(files[i], 1600, 0.75);
+        const blobUrl = URL.createObjectURL(compressed);
+        u(targets[i], blobUrl);
+        u(targets[i] + "_file", compressed);
+        triggerGDriveUpload(compressed, targets[i], label || targets[i], data, u);
+      }
     };
     input.click();
   };
@@ -2682,10 +2719,11 @@ function StepFotos({ data, setData }) {
     input.onchange = async (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      const blobUrl = URL.createObjectURL(file);
+      const compressed = await compressImage(file, 1600, 0.75);
+      const blobUrl = URL.createObjectURL(compressed);
       u(photoKey, blobUrl);
-      u(`${photoKey}_file`, file);
-      triggerGDriveUpload(file, photoKey, photoKey, data, u);
+      u(`${photoKey}_file`, compressed);
+      triggerGDriveUpload(compressed, photoKey, photoKey, data, u);
       if (photoKey === "fotoZaehler") {
         u("panelScanning", true);
         u("panelPhoto", URL.createObjectURL(file));
@@ -6399,7 +6437,15 @@ function BeedooField() {
         @keyframes pulseRed { 0%,100% { box-shadow: 0 0 0px rgba(239,68,68,0); } 50% { box-shadow: 0 0 16px rgba(239,68,68,0.4); } }
         @keyframes minionBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
         @keyframes minionWobble { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(2deg); } 75% { transform: rotate(-2deg); } }
-      `), showDashboard && React.createElement(DashboardScreen, { onNewAufnahme: function() { setShowDashboard(false); }, rueckkehrer: rueckkehrer, onRueckkehrerErledigt: function(id) { setRueckkehrer(function(prev) { return prev.filter(function(r) { return r.id !== id; }); }); } }), !showDashboard && showStart && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(StartScreen, { onStart: (typ) => {
+      `), showDashboard && React.createElement(DashboardScreen, { onNewAufnahme: function() { setShowDashboard(false); }, onTerminClick: function(termin) {
+        var typMap = { "PV": "PV", "WP": "WP", "PV+WP": "PV+WP" };
+        var aufTyp = typMap[termin.typ] || "PV";
+        var kd = termin.kunde || {};
+        setData(function(d) { return Object.assign({}, d, kd, { _aufnahmeTyp: aufTyp, _startZeit: new Date().toISOString(), _terminImport: true }); });
+        setShowDashboard(false);
+        setShowStart(false);
+        setStep(0);
+      }, rueckkehrer: rueckkehrer, onRueckkehrerErledigt: function(id) { setRueckkehrer(function(prev) { return prev.filter(function(r) { return r.id !== id; }); }); } }), !showDashboard && showStart && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(StartScreen, { onStart: (typ) => {
     setData((d) => ({ ...d, _aufnahmeTyp: typ, _startZeit: (/* @__PURE__ */ new Date()).toISOString() }));
     setShowStart(false);
     setRestorePrompt(null);
