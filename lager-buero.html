@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>bee-doo · BÜROLAGER</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏢</text></svg>"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0c1222;color:#e1e7ef;font-family:'DM Sans',system-ui,sans-serif;min-height:100vh}
+button,select,input,textarea{font-family:inherit}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#263354;border-radius:2px}
+.back-btn{position:fixed;top:10px;left:10px;z-index:9999;background:#151d30;border:1px solid #263354;color:#5c6b8a;padding:6px 14px;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;text-decoration:none;transition:all .15s}
+.back-btn:hover{border-color:#F5C500;color:#F5C500}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.slide-up{animation:slideUp .25s ease both}
+.fade-in{animation:fadeIn .2s ease both}
+</style>
+</head>
+<body>
+<a href="index.html" class="back-btn">← Launcher</a>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useMemo,useRef,useCallback}=React;
+
+// ── DESIGN TOKENS ─────────────────────────────────────────
+const Y="#F5C500",BG="#0c1222",C1="#151d30",C2="#1c2640",BR="#263354";
+const TX="#e1e7ef",TX2="#5c6b8a";
+const OK="#34d399",WARN="#f59e0b",ERR="#f87171",PURPLE="#E879F9",BLUE="#60A5FA",PINK="#F472B6",TEAL="#2DD4BF";
+const FARBEN=[BLUE,OK,PURPLE,WARN,PINK,TEAL,Y,ERR,"#818CF8","#FB923C"];
+
+// ── SUPABASE ──────────────────────────────────────────────
+const SB_URL="https://hqzpemfaljxcysyqssng.supabase.co";
+const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const sbHeaders={"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`,"Content-Type":"application/json","Prefer":"return=representation"};
+
+async function sbGet(table,query=""){
+  const r=await fetch(`${SB_URL}/rest/v1/${table}?${query}`,{headers:sbHeaders});
+  return r.ok?r.json():[];
+}
+async function sbPost(table,data){
+  const r=await fetch(`${SB_URL}/rest/v1/${table}`,{method:"POST",headers:sbHeaders,body:JSON.stringify(data)});
+  return r.ok?r.json():null;
+}
+async function sbPatch(table,id,data){
+  const r=await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`,{method:"PATCH",headers:{...sbHeaders,"Prefer":"return=representation"},body:JSON.stringify(data)});
+  return r.ok?r.json():null;
+}
+async function sbDelete(table,id){
+  const r=await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`,{method:"DELETE",headers:sbHeaders});
+  return r.ok;
+}
+
+// ── LOKALER STORAGE (Fallback & Primär) ───────────────────
+const LS_KEY="beedoo_buero_lager";
+function lsLoad(){try{return JSON.parse(localStorage.getItem(LS_KEY))||null}catch{return null}}
+function lsSave(d){try{localStorage.setItem(LS_KEY,JSON.stringify(d))}catch{}}
+
+// ── DEFAULT DATEN ─────────────────────────────────────────
+const DEFAULT_KATEGORIEN=[
+  {id:"kat-1",name:"Tablets & IT",icon:"💻",farbe:BLUE},
+  {id:"kat-2",name:"Kleidung",icon:"🧥",farbe:PURPLE},
+  {id:"kat-3",name:"Büromaterial",icon:"📎",farbe:OK},
+  {id:"kat-4",name:"Fahrzeuge",icon:"🚗",farbe:WARN},
+  {id:"kat-5",name:"Werkzeug",icon:"🔧",farbe:PINK},
+  {id:"kat-6",name:"Messen & Events",icon:"🎪",farbe:TEAL},
+];
+
+const DEFAULT_ITEMS=[
+  {id:"it-1",katId:"kat-1",name:"iPad Pro 11\"",bestand:8,min:3,einheit:"Stk",standort:"Büro Schrank A",notiz:"Für Außendienst-Scouts",zugewiesen:"",status:"verfuegbar"},
+  {id:"it-2",katId:"kat-1",name:"iPad Hülle mit Tastatur",bestand:6,min:3,einheit:"Stk",standort:"Büro Schrank A",notiz:"",zugewiesen:"",status:"verfuegbar"},
+  {id:"it-3",katId:"kat-1",name:"Ladekabel USB-C",bestand:15,min:5,einheit:"Stk",standort:"Büro Schublade",notiz:"",zugewiesen:"",status:"verfuegbar"},
+  {id:"it-4",katId:"kat-1",name:"Powerbank 20.000mAh",bestand:4,min:2,einheit:"Stk",standort:"Büro Schrank A",notiz:"",zugewiesen:"",status:"verfuegbar"},
+  {id:"kl-1",katId:"kat-2",name:"bee-doo Jacke Schwarz",bestand:12,min:5,einheit:"Stk",standort:"Garderobe",notiz:"Größen S-XXL",zugewiesen:"",status:"verfuegbar"},
+  {id:"kl-2",katId:"kat-2",name:"bee-doo Polo Gelb",bestand:20,min:10,einheit:"Stk",standort:"Garderobe",notiz:"Corporate Design",zugewiesen:"",status:"verfuegbar"},
+  {id:"kl-3",katId:"kat-2",name:"bee-doo Cap",bestand:15,min:5,einheit:"Stk",standort:"Garderobe",notiz:"One-size",zugewiesen:"",status:"verfuegbar"},
+  {id:"kl-4",katId:"kat-2",name:"Sicherheitsschuhe",bestand:6,min:3,einheit:"Paar",standort:"Lager",notiz:"Für Monteure",zugewiesen:"",status:"verfuegbar"},
+  {id:"bm-1",katId:"kat-3",name:"Visitenkarten (Box 500)",bestand:4,min:2,einheit:"Box",standort:"Büro",notiz:"",zugewiesen:"",status:"verfuegbar"},
+  {id:"bm-2",katId:"kat-3",name:"Flyer Solar-Paket",bestand:200,min:50,einheit:"Stk",standort:"Büro",notiz:"Aktuelles Design",zugewiesen:"",status:"verfuegbar"},
+  {id:"bm-3",katId:"kat-3",name:"Kugelschreiber bee-doo",bestand:80,min:30,einheit:"Stk",standort:"Büro Schublade",notiz:"Werbe-Kulis",zugewiesen:"",status:"verfuegbar"},
+  {id:"fz-1",katId:"kat-4",name:"Transporter Sprinter",bestand:2,min:1,einheit:"Stk",standort:"Parkplatz",notiz:"BI-BD 001 / BI-BD 002",zugewiesen:"",status:"verfuegbar"},
+  {id:"wz-1",katId:"kat-5",name:"Akkuschrauber Makita",bestand:4,min:2,einheit:"Stk",standort:"Werkzeugwand",notiz:"18V Set",zugewiesen:"",status:"verfuegbar"},
+  {id:"wz-2",katId:"kat-5",name:"Multimeter Fluke",bestand:3,min:2,einheit:"Stk",standort:"Werkzeugwand",notiz:"",zugewiesen:"",status:"verfuegbar"},
+  {id:"ev-1",katId:"kat-6",name:"Roll-Up Display",bestand:3,min:1,einheit:"Stk",standort:"Lager Regal 3",notiz:"85x200cm",zugewiesen:"",status:"verfuegbar"},
+  {id:"ev-2",katId:"kat-6",name:"Pavillon 3x3m",bestand:1,min:1,einheit:"Stk",standort:"Lager",notiz:"bee-doo Branding",zugewiesen:"",status:"verfuegbar"},
+];
+
+const DEFAULT_LOG=[];
+
+// ── HELFER ────────────────────────────────────────────────
+const uid=()=>"id-"+Date.now()+"-"+Math.random().toString(36).slice(2,7);
+const today=()=>new Date().toISOString().slice(0,10);
+const now=()=>new Date().toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+
+// ── STYLES ────────────────────────────────────────────────
+const CARD={background:C1,border:`1px solid ${BR}`,borderRadius:14,padding:"16px"};
+const INPUT_S={background:C2,border:`1px solid ${BR}`,borderRadius:8,color:TX,padding:"9px 12px",fontSize:13,width:"100%",boxSizing:"border-box",outline:"none",fontFamily:"inherit"};
+const BTN_Y={background:Y,color:"#000",border:"none",borderRadius:8,padding:"9px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"};
+const BTN_GHOST={background:"transparent",border:`1px solid ${BR}`,color:TX2,borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit"};
+const BADGE=(bg)=>({background:bg+"22",color:bg,fontSize:11,fontWeight:600,padding:"3px 8px",borderRadius:6,display:"inline-block"});
+
+// ── MODAL ─────────────────────────────────────────────────
+function Modal({open,onClose,title,children,wide}){
+  if(!open)return null;
+  return React.createElement("div",{className:"fade-in",style:{position:"fixed",inset:0,zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.6)",padding:16},onClick:onClose},
+    React.createElement("div",{className:"slide-up",onClick:e=>e.stopPropagation(),style:{background:C1,border:`1px solid ${BR}`,borderRadius:16,padding:24,width:"100%",maxWidth:wide?680:480,maxHeight:"90vh",overflow:"auto"}},
+      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
+        React.createElement("h3",{style:{fontSize:17,fontWeight:700}},title),
+        React.createElement("button",{onClick:onClose,style:{background:"none",border:"none",color:TX2,fontSize:20,cursor:"pointer"}},"✕")
+      ),
+      children
+    )
+  );
+}
+
+// ── CONFIRM-DIALOG ────────────────────────────────────────
+function Confirm({open,onOk,onCancel,text}){
+  return React.createElement(Modal,{open,onClose:onCancel,title:"Bestätigung"},
+    React.createElement("p",{style:{color:TX2,fontSize:14,marginBottom:16}},text),
+    React.createElement("div",{style:{display:"flex",gap:8,justifyContent:"flex-end"}},
+      React.createElement("button",{onClick:onCancel,style:BTN_GHOST},"Abbrechen"),
+      React.createElement("button",{onClick:onOk,style:{...BTN_Y,background:ERR,color:"#fff"}},"Löschen")
+    )
+  );
+}
+
+// ── TOAST ─────────────────────────────────────────────────
+function Toast({msg,type}){
+  if(!msg)return null;
+  const bg=type==="ok"?OK:type==="warn"?WARN:ERR;
+  return React.createElement("div",{className:"slide-up",style:{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:bg,color:"#000",padding:"10px 20px",borderRadius:10,fontSize:13,fontWeight:600,zIndex:99999,boxShadow:"0 8px 30px rgba(0,0,0,.4)"}},msg);
+}
+
+// ── HAUPTAPP ──────────────────────────────────────────────
+function App(){
+  // State
+  const [kategorien,setKategorien]=useState(DEFAULT_KATEGORIEN);
+  const [items,setItems]=useState(DEFAULT_ITEMS);
+  const [log,setLog]=useState(DEFAULT_LOG);
+  const [loaded,setLoaded]=useState(false);
+
+  // UI State
+  const [view,setView]=useState("dashboard"); // dashboard | items | log | admin
+  const [filter,setFilter]=useState("Alle");
+  const [search,setSearch]=useState("");
+  const [toast,setToast]=useState(null);
+  const toastTimer=useRef(null);
+
+  // Modal State
+  const [itemModal,setItemModal]=useState(null); // null | {mode:'add'|'edit', item:{...}}
+  const [katModal,setKatModal]=useState(null);
+  const [buchungModal,setBuchungModal]=useState(null); // {item, typ:'aus'|'ein'}
+  const [confirmDel,setConfirmDel]=useState(null); // {type:'item'|'kat', id}
+
+  // ── Load from localStorage ────────────────────────────
+  useEffect(()=>{
+    const saved=lsLoad();
+    if(saved){
+      if(saved.kategorien)setKategorien(saved.kategorien);
+      if(saved.items)setItems(saved.items);
+      if(saved.log)setLog(saved.log);
+    }
+    setLoaded(true);
+  },[]);
+
+  // ── Auto-save ─────────────────────────────────────────
+  useEffect(()=>{
+    if(loaded)lsSave({kategorien,items,log});
+  },[kategorien,items,log,loaded]);
+
+  // ── Toast helper ──────────────────────────────────────
+  const flash=(msg,type="ok")=>{
+    setToast({msg,type});
+    clearTimeout(toastTimer.current);
+    toastTimer.current=setTimeout(()=>setToast(null),2200);
+  };
+
+  // ── Buchungs-Log ──────────────────────────────────────
+  const addLog=(itemName,typ,menge,person,notiz)=>{
+    setLog(prev=>[{id:uid(),zeit:now(),itemName,typ,menge,person,notiz},...prev].slice(0,500));
+  };
+
+  // ── Statistiken ───────────────────────────────────────
+  const stats=useMemo(()=>{
+    const total=items.length;
+    const lowStock=items.filter(i=>i.min>0&&i.bestand<=i.min).length;
+    const outOfStock=items.filter(i=>i.bestand===0&&i.min>0).length;
+    const totalValue=items.reduce((s,i)=>s+i.bestand,0);
+    const ausgegeben=items.filter(i=>i.status==="ausgegeben").length;
+    return {total,lowStock,outOfStock,totalValue,ausgegeben};
+  },[items]);
+
+  // ── Gefilterte Items ──────────────────────────────────
+  const filtered=useMemo(()=>{
+    let arr=items;
+    if(filter!=="Alle")arr=arr.filter(i=>i.katId===filter);
+    if(search.trim()){
+      const q=search.toLowerCase();
+      arr=arr.filter(i=>i.name.toLowerCase().includes(q)||i.standort.toLowerCase().includes(q)||(i.notiz||"").toLowerCase().includes(q)||(i.zugewiesen||"").toLowerCase().includes(q));
+    }
+    return arr;
+  },[items,filter,search]);
+
+  // ── Item speichern ────────────────────────────────────
+  const saveItem=(item)=>{
+    if(itemModal.mode==="add"){
+      setItems(prev=>[...prev,{...item,id:uid()}]);
+      flash("Artikel hinzugefügt");
+    }else{
+      setItems(prev=>prev.map(i=>i.id===item.id?item:i));
+      flash("Artikel aktualisiert");
+    }
+    setItemModal(null);
+  };
+
+  // ── Item löschen ──────────────────────────────────────
+  const deleteItem=(id)=>{
+    setItems(prev=>prev.filter(i=>i.id!==id));
+    flash("Artikel gelöscht","warn");
+    setConfirmDel(null);
+  };
+
+  // ── Kategorie speichern ───────────────────────────────
+  const saveKat=(kat)=>{
+    if(katModal.mode==="add"){
+      setKategorien(prev=>[...prev,{...kat,id:uid()}]);
+      flash("Kategorie hinzugefügt");
+    }else{
+      setKategorien(prev=>prev.map(k=>k.id===kat.id?kat:k));
+      flash("Kategorie aktualisiert");
+    }
+    setKatModal(null);
+  };
+
+  // ── Kategorie löschen ─────────────────────────────────
+  const deleteKat=(id)=>{
+    const hasItems=items.some(i=>i.katId===id);
+    if(hasItems){flash("Kategorie hat noch Artikel!","warn");setConfirmDel(null);return;}
+    setKategorien(prev=>prev.filter(k=>k.id!==id));
+    flash("Kategorie gelöscht","warn");
+    setConfirmDel(null);
+  };
+
+  // ── Buchung (Ein/Aus) ─────────────────────────────────
+  const doBuchung=(itemId,typ,menge,person,notiz)=>{
+    setItems(prev=>prev.map(i=>{
+      if(i.id!==itemId){return i;}
+      const nb=typ==="aus"?Math.max(0,i.bestand-menge):i.bestand+menge;
+      return {...i,bestand:nb,zugewiesen:typ==="aus"?person:i.zugewiesen,status:typ==="aus"&&nb===0?"ausgegeben":"verfuegbar"};
+    }));
+    const itemName=(items.find(i=>i.id===itemId)||{}).name||"?";
+    addLog(itemName,typ,menge,person,notiz);
+    flash(typ==="aus"?`${menge}x ausgegeben`:`${menge}x eingebucht`);
+    setBuchungModal(null);
+  };
+
+  // ── Kat-Lookup ────────────────────────────────────────
+  const katMap=useMemo(()=>{
+    const m={};kategorien.forEach(k=>m[k.id]=k);return m;
+  },[kategorien]);
+
+  // ── NAV ───────────────────────────────────────────────
+  const NAV=[
+    {key:"dashboard",label:"Dashboard",icon:"📊"},
+    {key:"items",label:"Artikel",icon:"📦"},
+    {key:"log",label:"Protokoll",icon:"📋"},
+    {key:"admin",label:"Admin",icon:"⚙️"},
+  ];
+
+  // ══════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════
+  return React.createElement("div",{style:{maxWidth:1100,margin:"0 auto",padding:"60px 16px 100px"}},
+    // Header
+    React.createElement("div",{style:{textAlign:"center",marginBottom:28}},
+      React.createElement("div",{style:{fontSize:11,fontWeight:700,letterSpacing:2,color:Y,textTransform:"uppercase",marginBottom:4}},"bee-doo"),
+      React.createElement("h1",{style:{fontSize:26,fontWeight:800}},"Bürolager"),
+      React.createElement("p",{style:{color:TX2,fontSize:13,marginTop:4}},"Inventar · Ausgabe · Verwaltung")
+    ),
+
+    // Nav Tabs
+    React.createElement("div",{style:{display:"flex",gap:6,marginBottom:24,justifyContent:"center",flexWrap:"wrap"}},
+      NAV.map(n=>React.createElement("button",{key:n.key,onClick:()=>setView(n.key),style:{...BTN_GHOST,borderColor:view===n.key?Y:BR,color:view===n.key?Y:TX2,fontSize:13,fontWeight:view===n.key?600:400}},n.icon+" "+n.label))
+    ),
+
+    // ── DASHBOARD ─────────────────────────────────────
+    view==="dashboard"&&React.createElement("div",{className:"slide-up"},
+      // Stat Cards
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:24}},
+        [{label:"Artikel",val:stats.total,color:BLUE,icon:"📦"},{label:"Gesamtbestand",val:stats.totalValue,color:OK,icon:"📊"},{label:"Kritisch",val:stats.lowStock,color:WARN,icon:"⚠️"},{label:"Leer",val:stats.outOfStock,color:ERR,icon:"🚫"},{label:"Ausgegeben",val:stats.ausgegeben,color:PURPLE,icon:"👤"}].map((s,i)=>
+          React.createElement("div",{key:i,style:{...CARD,textAlign:"center",cursor:"pointer"},onClick:()=>setView("items")},
+            React.createElement("div",{style:{fontSize:22,marginBottom:4}},s.icon),
+            React.createElement("div",{style:{fontSize:24,fontWeight:800,color:s.color}},s.val),
+            React.createElement("div",{style:{fontSize:11,color:TX2,marginTop:2}},s.label)
+          )
+        )
+      ),
+
+      // Kategorie-Übersicht
+      React.createElement("h3",{style:{fontSize:15,fontWeight:700,marginBottom:12}},"Kategorien"),
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10,marginBottom:24}},
+        kategorien.map(k=>{
+          const cnt=items.filter(i=>i.katId===k.id).length;
+          const low=items.filter(i=>i.katId===k.id&&i.min>0&&i.bestand<=i.min).length;
+          return React.createElement("div",{key:k.id,style:{...CARD,cursor:"pointer",borderLeft:`3px solid ${k.farbe}`,transition:"border-color .15s"},onClick:()=>{setFilter(k.id);setView("items")}},
+            React.createElement("div",{style:{fontSize:22,marginBottom:4}},k.icon),
+            React.createElement("div",{style:{fontSize:14,fontWeight:600}},k.name),
+            React.createElement("div",{style:{fontSize:12,color:TX2,marginTop:4}},cnt+" Artikel"),
+            low>0&&React.createElement("div",{style:{...BADGE(WARN),marginTop:6}},low+" kritisch")
+          );
+        })
+      ),
+
+      // Kritische Artikel
+      (()=>{
+        const crit=items.filter(i=>i.min>0&&i.bestand<=i.min);
+        if(!crit.length)return null;
+        return React.createElement("div",null,
+          React.createElement("h3",{style:{fontSize:15,fontWeight:700,marginBottom:12,color:WARN}},"⚠️ Nachbestellen"),
+          React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+            crit.map(it=>{
+              const k=katMap[it.katId]||{icon:"📦",farbe:TX2};
+              return React.createElement("div",{key:it.id,style:{...CARD,display:"flex",alignItems:"center",gap:12,padding:"12px 16px"}},
+                React.createElement("span",{style:{fontSize:20}},k.icon),
+                React.createElement("div",{style:{flex:1}},
+                  React.createElement("div",{style:{fontSize:13,fontWeight:600}},it.name),
+                  React.createElement("div",{style:{fontSize:11,color:TX2}},it.standort)
+                ),
+                React.createElement("div",{style:{textAlign:"right"}},
+                  React.createElement("div",{style:{fontSize:16,fontWeight:700,color:it.bestand===0?ERR:WARN}},it.bestand," ",React.createElement("span",{style:{fontSize:11,color:TX2}},it.einheit)),
+                  React.createElement("div",{style:{fontSize:10,color:TX2}},"Min: ",it.min)
+                )
+              );
+            })
+          )
+        );
+      })(),
+
+      // Letzte Aktivitäten
+      log.length>0&&React.createElement("div",{style:{marginTop:24}},
+        React.createElement("h3",{style:{fontSize:15,fontWeight:700,marginBottom:12}},"Letzte Aktivitäten"),
+        React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+          log.slice(0,8).map(l=>React.createElement("div",{key:l.id,style:{...CARD,display:"flex",alignItems:"center",gap:10,padding:"10px 14px",fontSize:12}},
+            React.createElement("span",{style:{fontSize:16}},l.typ==="aus"?"🔴":"🟢"),
+            React.createElement("div",{style:{flex:1}},
+              React.createElement("span",{style:{fontWeight:600}},l.itemName),
+              React.createElement("span",{style:{color:TX2}}," — ",l.typ==="aus"?"Ausgabe":"Eingang"," ×",l.menge),
+              l.person&&React.createElement("span",{style:{color:BLUE}}," → ",l.person)
+            ),
+            React.createElement("span",{style:{color:TX2,fontSize:11}},l.zeit)
+          ))
+        )
+      )
+    ),
+
+    // ── ARTIKEL-LISTE ─────────────────────────────────
+    view==="items"&&React.createElement("div",{className:"slide-up"},
+      // Toolbar
+      React.createElement("div",{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}},
+        React.createElement("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"Suche...",style:{...INPUT_S,flex:1,minWidth:180}}),
+        React.createElement("select",{value:filter,onChange:e=>setFilter(e.target.value),style:{...INPUT_S,width:"auto",minWidth:140,cursor:"pointer"}},
+          React.createElement("option",{value:"Alle"},"Alle Kategorien"),
+          kategorien.map(k=>React.createElement("option",{key:k.id,value:k.id},k.icon+" "+k.name))
+        ),
+        React.createElement("button",{onClick:()=>setItemModal({mode:"add",item:{id:"",katId:kategorien[0]?.id||"",name:"",bestand:0,min:0,einheit:"Stk",standort:"",notiz:"",zugewiesen:"",status:"verfuegbar"}}),style:BTN_Y},"+ Artikel")
+      ),
+
+      // Item-Tabelle
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+        filtered.length===0&&React.createElement("div",{style:{textAlign:"center",padding:40,color:TX2}},"Keine Artikel gefunden."),
+        filtered.map(it=>{
+          const k=katMap[it.katId]||{icon:"📦",name:"?",farbe:TX2};
+          const isLow=it.min>0&&it.bestand<=it.min;
+          const isEmpty=it.bestand===0&&it.min>0;
+          return React.createElement("div",{key:it.id,style:{...CARD,display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderLeft:`3px solid ${isEmpty?ERR:isLow?WARN:k.farbe}`}},
+            React.createElement("span",{style:{fontSize:24}},k.icon),
+            React.createElement("div",{style:{flex:1,minWidth:0}},
+              React.createElement("div",{style:{fontSize:14,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},it.name),
+              React.createElement("div",{style:{fontSize:11,color:TX2,marginTop:2}},k.name," · ",it.standort),
+              it.zugewiesen&&React.createElement("div",{style:{fontSize:11,color:BLUE,marginTop:2}},"→ ",it.zugewiesen),
+              it.notiz&&React.createElement("div",{style:{fontSize:11,color:TX2,fontStyle:"italic",marginTop:1}},it.notiz)
+            ),
+            React.createElement("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}},
+              React.createElement("div",{style:{fontSize:18,fontWeight:700,color:isEmpty?ERR:isLow?WARN:TX}},it.bestand," ",React.createElement("span",{style:{fontSize:11,color:TX2}},it.einheit)),
+              it.min>0&&React.createElement("div",{style:{fontSize:10,color:TX2}},"Min: ",it.min),
+              React.createElement("div",{style:{display:"flex",gap:4}},
+                React.createElement("button",{onClick:()=>setBuchungModal({item:it,typ:"aus"}),style:{...BTN_GHOST,padding:"4px 8px",fontSize:11,color:ERR,borderColor:ERR+"44"},title:"Ausgeben"},"↗ Aus"),
+                React.createElement("button",{onClick:()=>setBuchungModal({item:it,typ:"ein"}),style:{...BTN_GHOST,padding:"4px 8px",fontSize:11,color:OK,borderColor:OK+"44"},title:"Einbuchen"},"↙ Ein"),
+                React.createElement("button",{onClick:()=>setItemModal({mode:"edit",item:{...it}}),style:{...BTN_GHOST,padding:"4px 8px",fontSize:11},title:"Bearbeiten"},"✎"),
+                React.createElement("button",{onClick:()=>setConfirmDel({type:"item",id:it.id,name:it.name}),style:{...BTN_GHOST,padding:"4px 8px",fontSize:11,color:ERR,borderColor:ERR+"44"},title:"Löschen"},"🗑")
+              )
+            )
+          );
+        })
+      )
+    ),
+
+    // ── PROTOKOLL ─────────────────────────────────────
+    view==="log"&&React.createElement("div",{className:"slide-up"},
+      React.createElement("h3",{style:{fontSize:16,fontWeight:700,marginBottom:16}},"📋 Buchungsprotokoll"),
+      log.length===0&&React.createElement("div",{style:{textAlign:"center",padding:40,color:TX2}},"Noch keine Buchungen."),
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+        log.map(l=>React.createElement("div",{key:l.id,style:{...CARD,display:"flex",alignItems:"center",gap:10,padding:"10px 14px",fontSize:12}},
+          React.createElement("span",{style:{fontSize:18}},l.typ==="aus"?"🔴":"🟢"),
+          React.createElement("div",{style:{flex:1}},
+            React.createElement("span",{style:{fontWeight:600}},l.itemName),
+            React.createElement("span",{style:{color:TX2}}," — ",l.typ==="aus"?"Ausgabe":"Eingang"," ×",l.menge),
+            l.person&&React.createElement("span",{style:{color:BLUE}}," → ",l.person),
+            l.notiz&&React.createElement("div",{style:{color:TX2,fontStyle:"italic",marginTop:2}},l.notiz)
+          ),
+          React.createElement("span",{style:{color:TX2,fontSize:11,whiteSpace:"nowrap"}},l.zeit)
+        ))
+      )
+    ),
+
+    // ── ADMIN ─────────────────────────────────────────
+    view==="admin"&&React.createElement("div",{className:"slide-up"},
+      React.createElement("h3",{style:{fontSize:16,fontWeight:700,marginBottom:16}},"⚙️ Kategorien verwalten"),
+      React.createElement("button",{onClick:()=>setKatModal({mode:"add",kat:{id:"",name:"",icon:"📦",farbe:FARBEN[kategorien.length%FARBEN.length]}}),style:{...BTN_Y,marginBottom:16}},"+ Neue Kategorie"),
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+        kategorien.map(k=>{
+          const cnt=items.filter(i=>i.katId===k.id).length;
+          return React.createElement("div",{key:k.id,style:{...CARD,display:"flex",alignItems:"center",gap:12,borderLeft:`3px solid ${k.farbe}`}},
+            React.createElement("span",{style:{fontSize:26}},k.icon),
+            React.createElement("div",{style:{flex:1}},
+              React.createElement("div",{style:{fontSize:14,fontWeight:600}},k.name),
+              React.createElement("div",{style:{fontSize:11,color:TX2}},cnt," Artikel")
+            ),
+            React.createElement("div",{style:{display:"flex",gap:6}},
+              React.createElement("button",{onClick:()=>setKatModal({mode:"edit",kat:{...k}}),style:{...BTN_GHOST,padding:"6px 10px",fontSize:11}},"✎ Bearbeiten"),
+              React.createElement("button",{onClick:()=>setConfirmDel({type:"kat",id:k.id,name:k.name}),style:{...BTN_GHOST,padding:"6px 10px",fontSize:11,color:ERR,borderColor:ERR+"44"}},"🗑 Löschen")
+            )
+          );
+        })
+      ),
+
+      // Daten-Management
+      React.createElement("div",{style:{marginTop:32,...CARD}},
+        React.createElement("h4",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"📥 Daten-Management"),
+        React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+          React.createElement("button",{onClick:()=>{
+            const d=JSON.stringify({kategorien,items,log},null,2);
+            const b=new Blob([d],{type:"application/json"});
+            const u=URL.createObjectURL(b);
+            const a=document.createElement("a");a.href=u;a.download="buero-lager-backup-"+today()+".json";a.click();URL.revokeObjectURL(u);
+            flash("Backup heruntergeladen");
+          },style:BTN_GHOST},"💾 Backup exportieren"),
+          React.createElement("button",{onClick:()=>{
+            const inp=document.createElement("input");inp.type="file";inp.accept=".json";
+            inp.onchange=e=>{
+              const f=e.target.files[0];if(!f)return;
+              const r=new FileReader();
+              r.onload=ev=>{
+                try{
+                  const d=JSON.parse(ev.target.result);
+                  if(d.kategorien)setKategorien(d.kategorien);
+                  if(d.items)setItems(d.items);
+                  if(d.log)setLog(d.log);
+                  flash("Backup importiert");
+                }catch{flash("Ungültige Datei","warn");}
+              };
+              r.readAsText(f);
+            };
+            inp.click();
+          },style:BTN_GHOST},"📂 Backup importieren"),
+          React.createElement("button",{onClick:()=>{
+            if(confirm("Alle Daten zurücksetzen?")){
+              setKategorien(DEFAULT_KATEGORIEN);setItems(DEFAULT_ITEMS);setLog([]);
+              flash("Daten zurückgesetzt","warn");
+            }
+          },style:{...BTN_GHOST,color:ERR,borderColor:ERR+"44"}},"🔄 Auf Werkseinstellungen")
+        )
+      )
+    ),
+
+    // ── ITEM MODAL ────────────────────────────────────
+    React.createElement(ItemModal,{open:!!itemModal,data:itemModal,kategorien,onSave:saveItem,onClose:()=>setItemModal(null)}),
+
+    // ── KATEGORIE MODAL ───────────────────────────────
+    React.createElement(KatModal,{open:!!katModal,data:katModal,farben:FARBEN,onSave:saveKat,onClose:()=>setKatModal(null)}),
+
+    // ── BUCHUNG MODAL ─────────────────────────────────
+    React.createElement(BuchungModal,{open:!!buchungModal,data:buchungModal,onBuchen:doBuchung,onClose:()=>setBuchungModal(null)}),
+
+    // ── CONFIRM DELETE ────────────────────────────────
+    React.createElement(Confirm,{open:!!confirmDel,text:confirmDel?`"${confirmDel.name}" wirklich löschen?`:"",onOk:()=>confirmDel.type==="item"?deleteItem(confirmDel.id):deleteKat(confirmDel.id),onCancel:()=>setConfirmDel(null)}),
+
+    // ── TOAST ─────────────────────────────────────────
+    toast&&React.createElement(Toast,{msg:toast.msg,type:toast.type})
+  );
+}
+
+// ── ITEM MODAL COMPONENT ──────────────────────────────────
+function ItemModal({open,data,kategorien,onSave,onClose}){
+  const [form,setForm]=useState({});
+  useEffect(()=>{if(data)setForm({...data.item})},[data]);
+  if(!open||!data)return null;
+  const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const Row=({label,children})=>React.createElement("div",{style:{marginBottom:12}},React.createElement("label",{style:{fontSize:11,color:TX2,display:"block",marginBottom:4}},label),children);
+
+  return React.createElement(Modal,{open:true,onClose,title:data.mode==="add"?"Artikel hinzufügen":"Artikel bearbeiten"},
+    React.createElement(Row,{label:"Name"},React.createElement("input",{value:form.name||"",onChange:e=>upd("name",e.target.value),style:INPUT_S,placeholder:"z.B. iPad Pro 11\""})),
+    React.createElement(Row,{label:"Kategorie"},React.createElement("select",{value:form.katId||"",onChange:e=>upd("katId",e.target.value),style:{...INPUT_S,cursor:"pointer"}},kategorien.map(k=>React.createElement("option",{key:k.id,value:k.id},k.icon+" "+k.name)))),
+    React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}},
+      React.createElement(Row,{label:"Bestand"},React.createElement("input",{type:"number",value:form.bestand||0,onChange:e=>upd("bestand",+e.target.value),style:INPUT_S,min:0})),
+      React.createElement(Row,{label:"Min-Bestand"},React.createElement("input",{type:"number",value:form.min||0,onChange:e=>upd("min",+e.target.value),style:INPUT_S,min:0})),
+      React.createElement(Row,{label:"Einheit"},React.createElement("select",{value:form.einheit||"Stk",onChange:e=>upd("einheit",e.target.value),style:{...INPUT_S,cursor:"pointer"}},["Stk","Paar","Box","m","kg","Liter","Set"].map(e=>React.createElement("option",{key:e,value:e},e))))
+    ),
+    React.createElement(Row,{label:"Standort"},React.createElement("input",{value:form.standort||"",onChange:e=>upd("standort",e.target.value),style:INPUT_S,placeholder:"z.B. Büro Schrank A"})),
+    React.createElement(Row,{label:"Notiz"},React.createElement("textarea",{value:form.notiz||"",onChange:e=>upd("notiz",e.target.value),style:{...INPUT_S,minHeight:50,resize:"vertical"},placeholder:"Optional..."})),
+    React.createElement("div",{style:{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}},
+      React.createElement("button",{onClick:onClose,style:BTN_GHOST},"Abbrechen"),
+      React.createElement("button",{onClick:()=>{if(!form.name?.trim()){alert("Name ist Pflichtfeld");return;}onSave(form)},style:BTN_Y},data.mode==="add"?"Hinzufügen":"Speichern")
+    )
+  );
+}
+
+// ── KATEGORIE MODAL ───────────────────────────────────────
+function KatModal({open,data,farben,onSave,onClose}){
+  const [form,setForm]=useState({});
+  useEffect(()=>{if(data)setForm({...data.kat})},[data]);
+  if(!open||!data)return null;
+  const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const ICONS=["📦","💻","🧥","📎","🚗","🔧","🎪","🏠","📱","🖨","🪑","🔌","🛡","📐","🎒","🧰","💡","📷"];
+
+  return React.createElement(Modal,{open:true,onClose,title:data.mode==="add"?"Neue Kategorie":"Kategorie bearbeiten"},
+    React.createElement("div",{style:{marginBottom:12}},
+      React.createElement("label",{style:{fontSize:11,color:TX2,display:"block",marginBottom:4}},"Name"),
+      React.createElement("input",{value:form.name||"",onChange:e=>upd("name",e.target.value),style:INPUT_S,placeholder:"z.B. Büromöbel"})
+    ),
+    React.createElement("div",{style:{marginBottom:12}},
+      React.createElement("label",{style:{fontSize:11,color:TX2,display:"block",marginBottom:6}},"Icon"),
+      React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+        ICONS.map(ic=>React.createElement("button",{key:ic,onClick:()=>upd("icon",ic),style:{fontSize:22,background:form.icon===ic?Y+"33":"transparent",border:form.icon===ic?`2px solid ${Y}`:`1px solid ${BR}`,borderRadius:8,width:40,height:40,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}},ic))
+      )
+    ),
+    React.createElement("div",{style:{marginBottom:12}},
+      React.createElement("label",{style:{fontSize:11,color:TX2,display:"block",marginBottom:6}},"Farbe"),
+      React.createElement("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+        farben.map(f=>React.createElement("button",{key:f,onClick:()=>upd("farbe",f),style:{width:32,height:32,borderRadius:8,background:f,border:form.farbe===f?"3px solid #fff":`2px solid ${BR}`,cursor:"pointer"}}))
+      )
+    ),
+    React.createElement("div",{style:{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}},
+      React.createElement("button",{onClick:onClose,style:BTN_GHOST},"Abbrechen"),
+      React.createElement("button",{onClick:()=>{if(!form.name?.trim()){alert("Name ist Pflichtfeld");return;}onSave(form)},style:BTN_Y},data.mode==="add"?"Erstellen":"Speichern")
+    )
+  );
+}
+
+// ── BUCHUNG MODAL ─────────────────────────────────────────
+function BuchungModal({open,data,onBuchen,onClose}){
+  const [menge,setMenge]=useState(1);
+  const [person,setPerson]=useState("");
+  const [notiz,setNotiz]=useState("");
+  useEffect(()=>{setMenge(1);setPerson("");setNotiz("")},[data]);
+  if(!open||!data)return null;
+  const {item,typ}=data;
+  const isAus=typ==="aus";
+  const maxMenge=isAus?item.bestand:9999;
+
+  return React.createElement(Modal,{open:true,onClose,title:isAus?`↗ ${item.name} ausgeben`:`↙ ${item.name} einbuchen`},
+    React.createElement("div",{style:{marginBottom:12,padding:12,borderRadius:10,background:isAus?ERR+"11":OK+"11",border:`1px solid ${isAus?ERR+"33":OK+"33"}`}},
+      React.createElement("div",{style:{fontSize:13,fontWeight:600,color:isAus?ERR:OK}},isAus?"Ausgabe":"Eingang"),
+      React.createElement("div",{style:{fontSize:12,color:TX2,marginTop:2}},"Aktueller Bestand: ",React.createElement("strong",{style:{color:TX}},item.bestand," ",item.einheit))
+    ),
+    React.createElement("div",{style:{marginBottom:12}},
+      React.createElement("label",{style:{fontSize:11,color:TX2,display:"block",marginBottom:4}},"Menge"),
+      React.createElement("input",{type:"number",value:menge,onChange:e=>setMenge(Math.max(1,Math.min(maxMenge,+e.target.value))),style:INPUT_S,min:1,max:maxMenge})
+    ),
+    isAus&&React.createElement("div",{style:{marginBottom:12}},
+      React.createElement("label",{style:{fontSize:11,color:TX2,display:"block",marginBottom:4}},"An wen?"),
+      React.createElement("input",{value:person,onChange:e=>setPerson(e.target.value),style:INPUT_S,placeholder:"Name des Mitarbeiters"})
+    ),
+    React.createElement("div",{style:{marginBottom:12}},
+      React.createElement("label",{style:{fontSize:11,color:TX2,display:"block",marginBottom:4}},"Notiz (optional)"),
+      React.createElement("input",{value:notiz,onChange:e=>setNotiz(e.target.value),style:INPUT_S,placeholder:"z.B. Grund, Projekt..."})
+    ),
+    React.createElement("div",{style:{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}},
+      React.createElement("button",{onClick:onClose,style:BTN_GHOST},"Abbrechen"),
+      React.createElement("button",{onClick:()=>{
+        if(isAus&&menge>item.bestand){alert("Nicht genug auf Lager!");return;}
+        onBuchen(item.id,typ,menge,person,notiz);
+      },style:{...BTN_Y,background:isAus?ERR:OK,color:isAus?"#fff":"#000"}},isAus?"Ausgeben":"Einbuchen")
+    )
+  );
+}
+
+// ── MOUNT ─────────────────────────────────────────────────
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
