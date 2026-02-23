@@ -579,11 +579,46 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
     return -1;
   })();
   const stats = { heute: 2, woche: 8, monat: 31, quote: 72 };
+
+  // Letzte Aufnahmen MIT Board-Status
   const letzte = [
-    { name: "Schneider", ort: "Herford", typ: "PV", kwp: "9.8", zeit: "Gestern 16:20" },
-    { name: "Fischer", ort: "Minden", typ: "WP", kwp: "\u2014", zeit: "Gestern 11:45" },
-    { name: "Hoffmann", ort: "Bielefeld", typ: "PV", kwp: "12.3", zeit: "21.02. 14:10" },
+    { name: "Schneider", ort: "Herford", typ: "PV", kwp: "9.8", zeit: "Gestern 16:20", board: "DC-Montage", boardColor: "#3b82f6" },
+    { name: "Fischer", ort: "Minden", typ: "WP", kwp: "\u2014", zeit: "Gestern 11:45", board: "Netzanmeldung", boardColor: "#a855f7" },
+    { name: "Hoffmann", ort: "Bielefeld", typ: "PV", kwp: "12.3", zeit: "21.02. 14:10", board: "Abgeschlossen", boardColor: "#22c55e" },
+    { name: "Yilmaz", ort: "Bielefeld", typ: "PV+WP", kwp: "14.7", zeit: "20.02. 10:30", board: "AC-Montage", boardColor: "#f59e0b" },
+    { name: "Krause", ort: "Detmold", typ: "PV", kwp: "11.4", zeit: "19.02. 15:00", board: "Storno", boardColor: "#ef4444" },
   ];
+
+  // Storno-Retter: Kunden die im Board auf Storno stehen — 2 Tage Zeit zum Heilen
+  const [selectedStorno, setSelectedStorno] = useState(null);
+  const stornos = [
+    { id: "st1", name: "Petersen, Lemgo", plz: "32657", ort: "Lemgo", typ: "PV 10.2 kWp", grund: "Preis zu hoch", stornoDatum: "22.02.2026", restStunden: 26, aufgabe: "Kunde hat bei Enpal günstiger gesehen. Nachverhandlung möglich — Rabattfreigabe bei Patrick anfragen. Persönliches Gespräch bevorzugt.", notiz: "Frau Petersen war beim Termin sehr interessiert, Mann hat gebremst", kontakt: "0170 1234567" },
+    { id: "st2", name: "Klein, Herford", plz: "32049", ort: "Herford", typ: "PV+WP 13.5 kWp", grund: "Finanzierung abgelehnt", stornoDatum: "23.02.2026", restStunden: 44, aufgabe: "EFS hat abgelehnt, Alternative: SWK Finanzierung prüfen oder Barzahlung mit Sonderskonto anbieten.", notiz: null, kontakt: "0152 9876543" },
+  ];
+
+  // Ranking / Leaderboard (Demo — in Produktion aus Supabase)
+  const ranking = [
+    { name: "Du", short: "DU", color: "#FDE154", aufnahmen: stats.monat, termine: 14, abschluss: 10, quote: 72 },
+    { name: "Lisa M.", short: "LM", color: "#ec4899", aufnahmen: 28, termine: 12, abschluss: 9, quote: 75 },
+    { name: "Kevin T.", short: "KT", color: "#3b82f6", aufnahmen: 25, termine: 10, abschluss: 7, quote: 70 },
+    { name: "Sarah W.", short: "SW", color: "#22c55e", aufnahmen: 22, termine: 8, abschluss: 5, quote: 63 },
+    { name: "Max B.", short: "MB", color: "#f97316", aufnahmen: 19, termine: 6, abschluss: 4, quote: 67 },
+  ];
+  var sortedRank = ranking.slice().sort(function(a,b) { return b.abschluss - a.abschluss; });
+  var myRank = sortedRank.findIndex(function(r) { return r.name === "Du"; }) + 1;
+
+  // Nächster Termin Countdown + Wegstrecke
+  var nextTermin = (() => {
+    var now = clk.getHours() * 60 + clk.getMinutes();
+    for (var i = 0; i < termine.length; i++) {
+      var parts = termine[i].zeit.split(":");
+      var tMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+      if (tMin > now) return { ...termine[i], minBis: tMin - now };
+    }
+    return null;
+  })();
+  // Wegstrecke Demo-Daten
+  var wegInfo = nextTermin ? { km: nextTermin.name.indexOf("Detmold") >= 0 ? 28 : nextTermin.name.indexOf("Bielefeld") >= 0 ? 5 : nextTermin.name.indexOf("Gütersloh") >= 0 ? 18 : 35, minFahrt: nextTermin.name.indexOf("Detmold") >= 0 ? 32 : nextTermin.name.indexOf("Bielefeld") >= 0 ? 8 : nextTermin.name.indexOf("Gütersloh") >= 0 ? 22 : 40 } : null;
   const gr = clk.getHours() < 12 ? "Guten Morgen" : clk.getHours() < 18 ? "Guten Tag" : "Guten Abend";
   const ds = clk.toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
   const ts = clk.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
@@ -621,12 +656,96 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
         })),
       React.createElement("div", { style: cs },
         React.createElement("div", { style: ls }, "\uD83D\uDD70 Letzte Aufnahmen"),
-        ...letzte.map((l, i) => React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < letzte.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }},
+        ...letzte.map(function(l, i) { return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < letzte.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }},
           React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: l.typ === "PV" ? "rgba(253,225,84,0.1)" : l.typ === "WP" ? "rgba(239,68,68,0.1)" : "rgba(96,165,250,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}, l.typ === "PV" ? "\u2600\uFE0F" : l.typ === "WP" ? "\uD83C\uDF21" : "\u26A1"),
           React.createElement("div", { style: { flex: 1 }},
             React.createElement("div", { style: { fontSize: 13, fontWeight: 600 }}, l.name + ", " + l.ort),
-            React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)" }}, l.typ + (l.kwp !== "\u2014" ? " \xB7 " + l.kwp + " kWp" : ""))),
-          React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.25)" }}, l.zeit)))),
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 2 }},
+              React.createElement("span", { style: { fontSize: 10, color: "rgba(255,255,255,0.35)" }}, l.typ + (l.kwp !== "\u2014" ? " \xB7 " + l.kwp + " kWp" : "")),
+              React.createElement("span", { style: { fontSize: 8, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: (l.boardColor || "#666") + "20", color: l.boardColor || "#666", textTransform: "uppercase", letterSpacing: 0.5 }}, l.board || "Neu"))),
+          React.createElement("div", { style: { textAlign: "right" }},
+            React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.25)" }}, l.zeit),
+            l.board === "Storno" && React.createElement("div", { style: { fontSize: 8, color: "#ef4444", fontWeight: 700, marginTop: 2 }}, "\u26A0 STORNO"))
+        ); })),
+
+      /* ── NÄCHSTER TERMIN COUNTDOWN + WEGSTRECKE ── */
+      nextTermin && React.createElement("div", { style: { ...cs, gridColumn: "1 / -1", background: "rgba(52,211,153,0.04)", borderColor: "rgba(52,211,153,0.15)" }},
+        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" }},
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }},
+            React.createElement("div", { style: { width: 44, height: 44, borderRadius: 12, background: "rgba(52,211,153,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}, "\uD83D\uDE97"),
+            React.createElement("div", null,
+              React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#34D399" }}, "N\xE4chster Termin in " + (nextTermin.minBis >= 60 ? Math.floor(nextTermin.minBis / 60) + "h " + (nextTermin.minBis % 60) + "min" : nextTermin.minBis + " min")),
+              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 2 }}, nextTermin.name + " \xB7 " + nextTermin.typ))),
+          React.createElement("div", { style: { textAlign: "right" }},
+            React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#34D399" }}, nextTermin.zeit),
+            wegInfo && React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}, "\uD83D\uDCCD " + wegInfo.km + " km \xB7 ~" + wegInfo.minFahrt + " min")))),
+
+      /* ── STORNO-RETTER ── */
+      stornos.length > 0 && React.createElement("div", { style: { ...cs, gridColumn: "1 / -1", borderColor: "rgba(249,115,22,0.3)", background: "rgba(249,115,22,0.03)" }},
+        React.createElement("div", { style: { ...ls, color: "#f97316", display: "flex", alignItems: "center", gap: 6 }}, "\uD83D\uDD25 STORNO-RETTER ", React.createElement("span", { style: { background: "#f97316", color: "#fff", borderRadius: 10, padding: "1px 7px", fontSize: 10, fontWeight: 800 }}, stornos.length)),
+        React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 10, marginTop: -6 }}, "Kunden heilen bevor die Frist abl\xE4uft!"),
+        stornos.map(function(st, i) {
+          var pct = Math.max(0, Math.round((st.restStunden / 48) * 100));
+          var barColor = pct > 50 ? "#f97316" : pct > 25 ? "#ef4444" : "#dc2626";
+          return React.createElement("button", { key: i, onClick: function() { setSelectedStorno(st); }, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", marginBottom: i < stornos.length - 1 ? 8 : 0, borderRadius: 12, border: "1.5px solid rgba(249,115,22,0.2)", background: "rgba(249,115,22,0.04)", cursor: "pointer", fontFamily: font, textAlign: "left" }},
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flex: 1 }},
+              React.createElement("div", { style: { width: 38, height: 38, borderRadius: 10, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}, "\uD83D\uDD25"),
+              React.createElement("div", { style: { flex: 1 }},
+                React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#fff" }}, st.name),
+                React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.4)" }}, st.grund + " \xB7 " + st.typ),
+                React.createElement("div", { style: { marginTop: 4, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }},
+                  React.createElement("div", { style: { width: pct + "%", height: "100%", background: barColor, borderRadius: 2, transition: "width 0.5s" }})))),
+            React.createElement("div", { style: { textAlign: "right", flexShrink: 0, marginLeft: 10 }},
+              React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: barColor }}, st.restStunden + "h"),
+              React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.3)" }}, "verbleibend")));
+        })
+      ),
+
+      /* ── STORNO DETAIL MODAL ── */
+      selectedStorno && React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 20000, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }},
+        React.createElement("div", { style: { width: "100%", maxWidth: 420, background: "#1A2332", borderRadius: 18, border: "1.5px solid rgba(249,115,22,0.3)", overflow: "hidden" }},
+          React.createElement("div", { style: { padding: "18px 20px", background: "rgba(249,115,22,0.08)", borderBottom: "1px solid rgba(249,115,22,0.2)" }},
+            React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" }},
+              React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: "#f97316" }}, "\uD83D\uDD25 Storno retten"),
+              React.createElement("button", { onClick: function() { setSelectedStorno(null); }, style: { background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer", padding: "0 4px" }}, "\xD7")),
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#fff", marginTop: 4 }}, selectedStorno.name)),
+          React.createElement("div", { style: { padding: "16px 20px" }},
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }},
+              [["Typ", selectedStorno.typ], ["PLZ / Ort", selectedStorno.plz + " " + selectedStorno.ort], ["Storno-Grund", selectedStorno.grund], ["Rest-Zeit", selectedStorno.restStunden + " Stunden"]].map(function(pair, j) {
+                return React.createElement("div", { key: j, style: { padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)" }},
+                  React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", fontWeight: 700, marginBottom: 2 }}, pair[0]),
+                  React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#fff" }}, pair[1]));
+              })),
+            React.createElement("div", { style: { padding: "12px 14px", background: "rgba(249,115,22,0.06)", borderRadius: 10, border: "1px solid rgba(249,115,22,0.15)", marginBottom: 14 }},
+              React.createElement("div", { style: { fontSize: 10, color: "#f97316", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}, "\uD83D\uDCCB Rettungs-Strategie"),
+              React.createElement("div", { style: { fontSize: 13, color: "#fff", lineHeight: 1.5 }}, selectedStorno.aufgabe)),
+            selectedStorno.notiz && React.createElement("div", { style: { padding: "10px 14px", background: "rgba(253,225,84,0.04)", borderRadius: 10, border: "1px solid rgba(253,225,84,0.1)", marginBottom: 14, fontSize: 12, color: "rgba(255,255,255,0.6)" }}, "\uD83D\uDCDD " + selectedStorno.notiz),
+            React.createElement("a", { href: "tel:" + selectedStorno.kontakt, style: { display: "block", textAlign: "center", padding: "12px", borderRadius: 10, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", color: "#34D399", fontSize: 13, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}, "\uD83D\uDCDE " + selectedStorno.kontakt + " anrufen"),
+            React.createElement("div", { style: { display: "flex", gap: 10 }},
+              React.createElement("button", { onClick: function() { setSelectedStorno(null); }, style: { flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", fontSize: 13, fontFamily: font, cursor: "pointer" }}, "Sp\xE4ter"),
+              React.createElement("button", { onClick: function() { setSelectedStorno(null); }, style: { flex: 2, padding: "12px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #f97316, #ea580c)", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 16px rgba(249,115,22,0.3)" }}, "\u2705 Gerettet \u2192 zur\xFCck ins Board"))))
+      ),
+
+      /* ── RANKING / LEADERBOARD ── */
+      React.createElement("div", { style: { ...cs, gridColumn: "1 / -1" }},
+        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }},
+          React.createElement("div", { style: ls }, "\uD83C\uDFC6 TEAM RANKING \xB7 MONAT"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: myRank <= 3 ? "#22c55e" : "#FDE154" }}, "#" + myRank)),
+        sortedRank.map(function(r, i) {
+          var isMe = r.name === "Du";
+          var medal = i === 0 ? "\uD83E\uDD47" : i === 1 ? "\uD83E\uDD48" : i === 2 ? "\uD83E\uDD49" : "";
+          return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", marginBottom: 4, borderRadius: 10, background: isMe ? "rgba(253,225,84,0.08)" : "transparent", border: isMe ? "1.5px solid rgba(253,225,84,0.2)" : "1.5px solid transparent" }},
+            React.createElement("div", { style: { width: 22, fontSize: 12, fontWeight: 800, color: i < 3 ? ["#ffd700","#c0c0c0","#cd7f32"][i] : "rgba(255,255,255,0.25)", textAlign: "center" }}, medal || (i + 1)),
+            React.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: r.color + "22", border: "2px solid " + r.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: r.color }}, r.short),
+            React.createElement("div", { style: { flex: 1 }},
+              React.createElement("div", { style: { fontSize: 13, fontWeight: isMe ? 800 : 600, color: isMe ? "#FDE154" : "#fff" }}, r.name),
+              React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.35)" }}, r.aufnahmen + " Aufn. \xB7 " + r.termine + " Termine \xB7 " + r.quote + "% Quote")),
+            React.createElement("div", { style: { textAlign: "right" }},
+              React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: isMe ? "#22c55e" : "rgba(255,255,255,0.6)" }}, r.abschluss),
+              React.createElement("div", { style: { fontSize: 8, color: "rgba(255,255,255,0.25)", textTransform: "uppercase" }}, "Abschl\xFCsse")));
+        })
+      ),
+
       React.createElement("div", { style: { gridColumn: "1 / -1" }},
         rueckkehrer && rueckkehrer.length > 0 && React.createElement("div", { style: { ...cs, marginBottom: 14, borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.04)" } },
           React.createElement("div", { style: { ...ls, color: "#ef4444", display: "flex", alignItems: "center", gap: 6 } }, "\u{1F6A8} R\xDCCKKEHRER AUS MONTAGE ", React.createElement("span", { style: { background: "#ef4444", color: "#fff", borderRadius: 10, padding: "1px 7px", fontSize: 10, fontWeight: 800, animation: "pulseRed 1.5s infinite" } }, rueckkehrer.length)),
