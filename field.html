@@ -13,6 +13,7 @@
   body { background: #0c1222; overflow-x: hidden; }
   #root { min-height: 100vh; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -2832,6 +2833,68 @@ function StepFotos({ data, setData }) {
           u("_qrResults", updated);
         }, style: { background: "none", border: "none", color: T.textDim, cursor: "pointer", fontSize: 14 }}, "✕")
       ))
+    )
+  ), 
+
+  /* ── 📱 Fotos vom Handy – QR-Code Generator ── */
+  React.createElement("div", { style: { background: T.card, borderRadius: 14, border: "1.5px solid " + T.border, padding: "16px 18px", marginBottom: 16, marginTop: 8 }},
+    React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" }},
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 }},
+        React.createElement("span", { style: { fontSize: 20 }}, "📱"),
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: T.text }}, "Fotos vom Handy"),
+          React.createElement("div", { style: { fontSize: 10, color: T.textDim }}, "QR-Code scannen \u2192 Fotos extern hochladen")
+        )
+      ),
+      React.createElement("button", { onClick: function() {
+        var jobTs = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+        var kundenName = encodeURIComponent([data.vorname, data.nachname].filter(Boolean).join(" ") || "Kunde");
+        var addr = encodeURIComponent([data.strasse, data.hausnummer, data.plz, data.ort].filter(Boolean).join(" ") || "");
+        var berater = encodeURIComponent(data._beraterName || "");
+        var baseUrl = window.location.origin + "/field-photo.html";
+        var qrUrl = baseUrl + "?job=" + jobTs + "&name=" + kundenName + "&addr=" + addr + "&berater=" + berater;
+        
+        var overlay = document.createElement("div");
+        overlay.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(12,18,34,.95);backdrop-filter:blur(12px);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;";
+        
+        var inner = document.createElement("div");
+        inner.style.cssText = "background:#151d30;border:1.5px solid #263354;border-radius:20px;padding:28px;max-width:360px;width:100%;text-align:center;";
+        
+        inner.innerHTML = '<div style="font-size:15px;font-weight:800;color:#e1e7ef;margin-bottom:4px;">\ud83d\udcf1 Fotos vom Handy</div>' +
+          '<div style="font-size:11px;color:#5c6b8a;margin-bottom:16px;">QR-Code mit dem Handy scannen</div>' +
+          '<canvas id="phoneQrCanvas" style="border-radius:12px;margin:0 auto 12px;display:block;"></canvas>' +
+          '<div style="font-size:10px;color:#5c6b8a;word-break:break-all;margin-bottom:16px;max-height:40px;overflow:hidden;">' + qrUrl.slice(0,80) + '...</div>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button id="qrCopyBtn" style="flex:1;padding:10px;border-radius:10px;border:1.5px solid #263354;background:#1c2640;color:#e1e7ef;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif;">\ud83d\udccb Link kopieren</button>' +
+            '<button id="qrCloseBtn" style="flex:1;padding:10px;border-radius:10px;border:1.5px solid #263354;background:#1c2640;color:#5c6b8a;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif;">Schließen</button>' +
+          '</div>';
+        
+        overlay.appendChild(inner);
+        document.body.appendChild(overlay);
+        
+        setTimeout(function() {
+          try {
+            new QRious({ element: document.getElementById("phoneQrCanvas"), value: qrUrl, size: 220, backgroundAlpha: 1, background: "#ffffff", foreground: "#0c1222", level: "M" });
+          } catch(e) { console.error("QR:", e); }
+        }, 50);
+        
+        document.getElementById("qrCopyBtn").onclick = function() {
+          navigator.clipboard.writeText(qrUrl).then(function() {
+            document.getElementById("qrCopyBtn").textContent = "\u2705 Kopiert!";
+            document.getElementById("qrCopyBtn").style.borderColor = "#34D399";
+            document.getElementById("qrCopyBtn").style.color = "#34D399";
+          });
+        };
+        document.getElementById("qrCloseBtn").onclick = function() { overlay.remove(); };
+        overlay.onclick = function(ev) { if(ev.target === overlay) overlay.remove(); };
+        
+      }, style: {
+        padding: "8px 16px", borderRadius: 8,
+        border: "1.5px solid " + BRAND.yellow,
+        background: T.accentGlow,
+        color: BRAND.yellow,
+        fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: font
+      }}, "QR erzeugen")
     )
   ), /* @__PURE__ */ React.createElement(Section, { title: "Pflichtfotos", icon: "\u26A0\uFE0F", accent: T.red }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 12 } }, pflicht.map((p) => /* @__PURE__ */ React.createElement(
     PhotoTile,
