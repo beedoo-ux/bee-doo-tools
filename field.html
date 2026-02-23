@@ -565,7 +565,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
   useEffect(() => { const t = setInterval(() => setClk(new Date()), 60000); return () => clearInterval(t); }, []);
   const termine = [
     { zeit: "09:00", name: "Müller, Detmold", typ: "PV", status: "offen", kunde: { anrede: "Herr", vorname: "Thomas", nachname: "Müller", strasse: "Lemgoer Str.", hausnr: "42", plz: "32756", ort: "Detmold", telefon: "05231 9876543", mobil: "0176 34567890", email: "t.mueller@mail.de" }},
-    { zeit: "11:30", name: "Weber, Bielefeld", typ: "WP", status: "offen", kunde: { anrede: "Frau", vorname: "Sandra", nachname: "Weber", strasse: "Herforder Str.", hausnr: "118", plz: "33602", ort: "Bielefeld", telefon: "0521 1234567", mobil: "0171 98765432", email: "s.weber@web.de" }},
+    { zeit: "11:30", name: "Weber, Bielefeld", typ: "WP", status: "offen", distVon: "Detmold", distKm: 32, distMin: 35, kunde: { anrede: "Frau", vorname: "Sandra", nachname: "Weber", strasse: "Herforder Str.", hausnr: "118", plz: "33602", ort: "Bielefeld", telefon: "0521 1234567", mobil: "0171 98765432", email: "s.weber@web.de" }},
     { zeit: "14:00", name: "Schmidt, Gütersloh", typ: "PV+WP", status: "offen", kunde: { anrede: "Herr", vorname: "Martin", nachname: "Schmidt", strasse: "Berliner Str.", hausnr: "7a", plz: "33330", ort: "Gütersloh", telefon: "05241 5556677", mobil: "0152 12345678", email: "m.schmidt@gmail.com" }},
     { zeit: "16:30", name: "Braun, Paderborn", typ: "PV", status: "bestätigt", kunde: { anrede: "Herr", vorname: "Klaus", nachname: "Braun", strasse: "Warburger Str.", hausnr: "55", plz: "33098", ort: "Paderborn", telefon: "05251 4443322", mobil: "0163 87654321", email: "k.braun@t-online.de" }},
   ];
@@ -593,6 +593,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
   const [selectedStorno, setSelectedStorno] = useState(null);
   const [rettungNotiz, setRettungNotiz] = useState("");
   const [showRettungNotiz, setShowRettungNotiz] = useState(false);
+  const [showManualConfirm, setShowManualConfirm] = useState(false);
   const [stornos, setStornos] = useState([
     { id: "st1", name: "Petersen, Lemgo", plz: "32657", ort: "Lemgo", typ: "PV 10.2 kWp", grund: "Preis zu hoch", stornoDatum: "22.02.2026", restStunden: 26, aufgabe: "Kunde hat bei Enpal günstiger gesehen. Nachverhandlung möglich — Rabattfreigabe bei Patrick anfragen. Persönliches Gespräch bevorzugt.", notiz: "Frau Petersen war beim Termin sehr interessiert, Mann hat gebremst", kontakt: "0170 1234567" },
     { id: "st2", name: "Klein, Herford", plz: "32049", ort: "Herford", typ: "PV+WP 13.5 kWp", grund: "Finanzierung abgelehnt", stornoDatum: "23.02.2026", restStunden: 44, aufgabe: "EFS hat abgelehnt, Alternative: SWK Finanzierung prüfen oder Barzahlung mit Sonderskonto anbieten.", notiz: null, kontakt: "0152 9876543" },
@@ -642,6 +643,24 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
         ...[{ l: "Heute", v: stats.heute, i: "\uD83D\uDCCB", c: "#FDE154" }, { l: "Diese Woche", v: stats.woche, i: "\uD83D\uDCCA", c: "#60A5FA" }, { l: "Dieser Monat", v: stats.monat, i: "\uD83D\uDCC8", c: "#34D399" }, { l: "Abschlussquote", v: stats.quote + "%", i: "\uD83C\uDFAF", c: "#A78BFA" }].map((s, i) => React.createElement("div", { key: i, style: { textAlign: "center", padding: "10px 0" }},
           React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 6 }}, s.i + " " + s.l),
           React.createElement("div", { style: { fontSize: 28, fontWeight: 800, color: s.c }}, s.v)))),
+      /* ── RANKING / LEADERBOARD ── */
+      React.createElement("div", { style: { ...cs, gridColumn: "1 / -1" }},
+        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }},
+          React.createElement("div", { style: ls }, "\uD83C\uDFC6 TEAM RANKING \xB7 MONAT"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: myRank <= 3 ? "#22c55e" : "#FDE154" }}, "#" + myRank)),
+        ranking.map(function(r, i) {
+          var isMe = r.name === "Du";
+          return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 8px", borderRadius: 10, background: isMe ? "rgba(253,225,84,0.06)" : "transparent", border: isMe ? "1.5px solid rgba(253,225,84,0.15)" : "1.5px solid transparent", marginBottom: 4 }},
+            React.createElement("div", { style: { width: 22, fontSize: 12, fontWeight: 800, color: i < 3 ? ["#ffd700","#c0c0c0","#cd7f32"][i] : "rgba(255,255,255,0.25)", textAlign: "center" }}, i < 3 ? ["\uD83E\uDD47","\uD83E\uDD48","\uD83E\uDD49"][i] : (i+1)),
+            React.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: r.color + "22", border: "2px solid " + r.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: r.color }}, r.initialen),
+            React.createElement("div", { style: { flex: 1 }},
+              React.createElement("div", { style: { fontSize: 13, fontWeight: isMe ? 800 : 600, color: isMe ? "#FDE154" : "#fff" }}, r.name),
+              React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.35)" }}, r.aufnahmen + " Aufn. \xB7 " + r.termine + " Termine \xB7 " + r.quote + " Quote")),
+            React.createElement("div", { style: { textAlign: "right" }},
+              React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: isMe ? "#22c55e" : "rgba(255,255,255,0.6)" }}, r.abschluesse),
+              React.createElement("div", { style: { fontSize: 8, color: "rgba(255,255,255,0.25)", textTransform: "uppercase" }}, "Abschl\xFCsse")));
+        })
+      ),
       React.createElement("div", { style: cs },
         React.createElement("div", { style: ls }, "\uD83D\uDCC5 Heutige Termine"),
         ...termine.map(function(t, i) {
@@ -651,7 +670,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
             React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#FDE154", minWidth: 48 } }, t.zeit),
             React.createElement("div", { style: { flex: 1 } },
               React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, t.name),
-              React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)" } }, t.typ)),
+              React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)" } }, t.typ), t.distKm && React.createElement("div", { style: { fontSize: 9, color: "rgba(96,165,250,0.6)", marginTop: 2 }}, "\uD83D\uDEE3\uFE0F " + t.distKm + " km \xB7 ~" + t.distMin + " min von " + t.distVon)),
             React.createElement("div", { style: { fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: isCurrent ? "rgba(52,211,153,0.2)" : t.status === "best\xE4tigt" ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.1)", color: isCurrent ? "#34D399" : t.status === "best\xE4tigt" ? "#34D399" : "#FDE154" } }, isCurrent ? "JETZT" : t.status.toUpperCase()),
             t.kunde && React.createElement("span", { style: { fontSize: 14, color: isCurrent ? "rgba(52,211,153,0.6)" : "rgba(253,225,84,0.4)", marginLeft: 4 } }, "\u203A")
           );
@@ -698,7 +717,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
                 React.createElement("div", { style: { marginTop: 4, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }},
                   React.createElement("div", { style: { width: pct + "%", height: "100%", background: barColor, borderRadius: 2, transition: "width 0.5s" }})))),
             React.createElement("div", { style: { textAlign: "right", flexShrink: 0, marginLeft: 10 }},
-              React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: barColor }}, st.restStunden + "h"),
+              React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: barColor }}, st.restStunden + " Std."),
               React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.3)" }}, "verbleibend")));
         })
       ),
@@ -713,7 +732,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
             React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#fff", marginTop: 4 }}, selectedStorno.name)),
           React.createElement("div", { style: { padding: "16px 20px" }},
             React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }},
-              [["Typ", selectedStorno.typ], ["PLZ / Ort", selectedStorno.plz + " " + selectedStorno.ort], ["Storno-Grund", selectedStorno.grund], ["Rest-Zeit", selectedStorno.restStunden + " Stunden"]].map(function(pair, j) {
+              [["Typ", selectedStorno.typ], ["PLZ / Ort", selectedStorno.plz + " " + selectedStorno.ort], ["Storno-Grund", selectedStorno.grund], ["Rest-Zeit", selectedStorno.restStunden + " Std."]].map(function(pair, j) {
                 return React.createElement("div", { key: j, style: { padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)" }},
                   React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", fontWeight: 700, marginBottom: 2 }}, pair[0]),
                   React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#fff" }}, pair[1]));
@@ -730,26 +749,6 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
               React.createElement("div", { style: { fontSize: 10, color: "#f97316", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}, "\uD83D\uDCDD Rettungs-Notiz (Pflicht)"),
               React.createElement("textarea", { value: rettungNotiz, onChange: function(e) { setRettungNotiz(e.target.value); }, placeholder: "Was wurde besprochen? Wie wurde der Kunde gerettet? Neuer Preis, neues Angebot, etc\u2026", style: { width: "100%", minHeight: 80, padding: "12px", borderRadius: 10, border: "1.5px solid rgba(249,115,22,0.3)", background: "rgba(249,115,22,0.04)", color: "#fff", fontSize: 13, fontFamily: font, resize: "vertical", outline: "none", lineHeight: 1.5 }}),
               React.createElement("button", { onClick: function() { if(!rettungNotiz.trim()) return; console.log("[Storno-Retter] Gerettet:", selectedStorno.name, "Notiz:", rettungNotiz); setStornos(function(prev) { return prev.filter(function(s) { return s.id !== selectedStorno.id; }); }); setSelectedStorno(null); setRettungNotiz(""); setShowRettungNotiz(false); }, disabled: !rettungNotiz.trim(), style: { width: "100%", marginTop: 8, padding: "14px", borderRadius: 10, border: "none", background: rettungNotiz.trim() ? "linear-gradient(135deg, #22c55e, #16a34a)" : "rgba(255,255,255,0.06)", color: rettungNotiz.trim() ? "#fff" : "rgba(255,255,255,0.2)", fontSize: 14, fontWeight: 800, fontFamily: font, cursor: rettungNotiz.trim() ? "pointer" : "not-allowed", boxShadow: rettungNotiz.trim() ? "0 4px 16px rgba(34,197,94,0.3)" : "none", transition: "all 0.2s" }}, "\u2705 Gerettet \u2192 zur\xFCck ins Board"))))
-      ),
-
-      /* ── RANKING / LEADERBOARD ── */
-      React.createElement("div", { style: { ...cs, gridColumn: "1 / -1" }},
-        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }},
-          React.createElement("div", { style: ls }, "\uD83C\uDFC6 TEAM RANKING \xB7 MONAT"),
-          React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: myRank <= 3 ? "#22c55e" : "#FDE154" }}, "#" + myRank)),
-        sortedRank.map(function(r, i) {
-          var isMe = r.name === "Du";
-          var medal = i === 0 ? "\uD83E\uDD47" : i === 1 ? "\uD83E\uDD48" : i === 2 ? "\uD83E\uDD49" : "";
-          return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", marginBottom: 4, borderRadius: 10, background: isMe ? "rgba(253,225,84,0.08)" : "transparent", border: isMe ? "1.5px solid rgba(253,225,84,0.2)" : "1.5px solid transparent" }},
-            React.createElement("div", { style: { width: 22, fontSize: 12, fontWeight: 800, color: i < 3 ? ["#ffd700","#c0c0c0","#cd7f32"][i] : "rgba(255,255,255,0.25)", textAlign: "center" }}, medal || (i + 1)),
-            React.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: r.color + "22", border: "2px solid " + r.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: r.color }}, r.short),
-            React.createElement("div", { style: { flex: 1 }},
-              React.createElement("div", { style: { fontSize: 13, fontWeight: isMe ? 800 : 600, color: isMe ? "#FDE154" : "#fff" }}, r.name),
-              React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.35)" }}, r.aufnahmen + " Aufn. \xB7 " + r.termine + " Termine \xB7 " + r.quote + "% Quote")),
-            React.createElement("div", { style: { textAlign: "right" }},
-              React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: isMe ? "#22c55e" : "rgba(255,255,255,0.6)" }}, r.abschluss),
-              React.createElement("div", { style: { fontSize: 8, color: "rgba(255,255,255,0.25)", textTransform: "uppercase" }}, "Abschl\xFCsse")));
-        })
       ),
 
       React.createElement("div", { style: { gridColumn: "1 / -1" }},
@@ -821,7 +820,15 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
             )
           )
         ),
-        React.createElement("button", { onClick: onNewAufnahme, style: { width: "100%", padding: "18px 0", borderRadius: 14, background: "linear-gradient(135deg, #FDE154, #E8CC3D)", border: "none", cursor: "pointer", fontFamily: font, fontSize: 17, fontWeight: 800, color: "#0A0E1A", letterSpacing: 0.5, boxShadow: "0 4px 24px rgba(253,225,84,0.25)" }}, "\u26A1 Neue Aufnahme starten"))),
+        React.createElement("button", { onClick: function() { setShowManualConfirm(true); }, style: { width: "100%", padding: "18px 0", borderRadius: 14, background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(255,255,255,0.12)", cursor: "pointer", fontFamily: font, fontSize: 15, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: 0.5 }}, "\u270D\uFE0F Manuelle Aufnahme (ohne Kundendaten)"),
+        showManualConfirm && React.createElement("div", { style: { marginTop: 12, padding: "16px", borderRadius: 12, background: "rgba(249,115,22,0.06)", border: "1.5px solid rgba(249,115,22,0.3)", animation: "fadeInUp 0.2s ease" }},
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }},
+            React.createElement("span", { style: { fontSize: 20 }}, "\u26A0\uFE0F"),
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#f97316" }}, "Bist du sicher?")),
+          React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 14, lineHeight: 1.5 }}, "Du startest eine neue Aufnahme ohne vorhandene Kundendaten. Alle Felder m\xFCssen manuell ausgef\xFCllt werden."),
+          React.createElement("div", { style: { display: "flex", gap: 10 }},
+            React.createElement("button", { onClick: function() { setShowManualConfirm(false); }, style: { flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", fontSize: 13, fontFamily: font, cursor: "pointer" }}, "Abbrechen"),
+            React.createElement("button", { onClick: function() { setShowManualConfirm(false); onNewAufnahme(); }, style: { flex: 2, padding: "12px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #FDE154, #E8CC3D)", color: "#0A0E1A", fontSize: 13, fontWeight: 800, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 16px rgba(253,225,84,0.25)" }}, "\u26A1 Ja, manuell starten"))))),
     React.createElement("div", { style: { textAlign: "center", padding: "16px 0 24px", fontSize: 10, color: "rgba(255,255,255,0.12)" }}, "v2.0 \xB7 bee-doo FIELD \xB7 Bielefeld \xB7 \uD83D\uDC1D"));
 }
 function StartScreen({ onStart }) {
