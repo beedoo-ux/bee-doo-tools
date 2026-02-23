@@ -591,49 +591,29 @@ function DispatchApp() {
 function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, updateProject, onCardClick }) {
   const colTemplate = '160px repeat(5,1fr)';
 
-  // DC→AC Verbindungslinien zeichnen
-  // Wir nutzen SVG-Overlay
-  const gridRef = useRef(null);
-  const [connections, setConnections] = useState([]);
-
-  // Verbindungen berechnen nach Render
-  useEffect(() => {
-    if(!gridRef.current) return;
-    const timer = setTimeout(() => {
-      const lines = [];
-      projekte.forEach(p => {
-        if(!p.dcDate || !p.acDate || !p.dcTechId || !p.acTechId) return;
-        const dcEl = gridRef.current.querySelector(`[data-proj="${p.id}-dc"]`);
-        const acEl = gridRef.current.querySelector(`[data-proj="${p.id}-ac"]`);
-        if(dcEl && acEl) {
-          const gridRect = gridRef.current.getBoundingClientRect();
-          const dcRect = dcEl.getBoundingClientRect();
-          const acRect = acEl.getBoundingClientRect();
-          lines.push({
-            id: p.id,
-            x1: dcRect.right - gridRect.left,
-            y1: dcRect.top + dcRect.height/2 - gridRect.top,
-            x2: acRect.left - gridRect.left,
-            y2: acRect.top + acRect.height/2 - gridRect.top,
-            color: PROJECT_TYPES[p.type]?.color || C.dim,
-          });
-        }
-      });
-      setConnections(lines);
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [projekte, weekDays, techs]);
+  // Hover-Highlight: Wenn über DC/AC gehovert, Gegenstück hervorheben, Rest dimmen
+  const [hoveredProjId, setHoveredProjId] = useState(null);
 
   return (
-    <div ref={gridRef} style={{minWidth:820, position:'relative'}}>
-      {/* SVG Verbindungslinien */}
-      {connections.length > 0 && (
-        <svg style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:5}}>
-          {connections.map(c => (
-            <line key={c.id} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2}
-              stroke={c.color} strokeWidth={1.5} strokeDasharray="4,3" opacity={0.5}/>
-          ))}
-        </svg>
+    <div data-dispatch-grid="" style={{minWidth:820, position:'relative'}}>
+
+      {/* Dimming overlay when hovering a project */}
+      {hoveredProjId && (
+        <style>{`
+          [data-dispatch-grid] [data-proj-card]:not([data-proj-id="${hoveredProjId}"]) {
+            opacity: 0.2 !important;
+            filter: grayscale(0.7) !important;
+            transition: opacity 0.2s, filter 0.2s !important;
+          }
+          [data-dispatch-grid] [data-proj-card][data-proj-id="${hoveredProjId}"] {
+            opacity: 1 !important;
+            filter: none !important;
+            transform: scale(1.02);
+            z-index: 20;
+            box-shadow: 0 0 16px rgba(245,197,0,0.25), 0 0 4px rgba(245,197,0,0.15);
+            transition: all 0.2s !important;
+          }
+        `}</style>
       )}
 
       {/* Header */}
@@ -699,7 +679,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
                   gridColumn: hasSpan2 ? 'span 2' : undefined,
                 }}>
                   {items.map(({proj, phase, span: itemSpan}) => (
-                    <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)} isSpan2={itemSpan===2}/>
+                    <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)} isSpan2={itemSpan===2} onHoverProject={setHoveredProjId} onLeaveProject={()=>setHoveredProjId(null)}/>
                   ))}
                   {full && <div style={{fontSize:9, color:C.red, textAlign:'center', fontWeight:700}}>● VOLL</div>}
                 </div>
@@ -723,9 +703,14 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
             return (
               <div key={ds} style={{background:C.teal+'04', borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`, padding:'3px 3px', minHeight:60, position:'relative'}}>
                 {items.map(proj => (
-                  <div key={proj.id} onClick={()=>onCardClick(proj)} style={{
+                  <div key={proj.id} data-proj-card="" data-proj-id={proj.id}
+                    onClick={()=>onCardClick(proj)}
+                    onMouseEnter={()=>setHoveredProjId(proj.id)}
+                    onMouseLeave={()=>setHoveredProjId(null)}
+                    style={{
                     background:C.teal+'10', border:`1px solid ${C.teal}44`, borderLeft:`3px solid ${C.teal}`,
-                    borderRadius:5, padding:'4px 6px', marginBottom:3, cursor:'pointer'
+                    borderRadius:5, padding:'4px 6px', marginBottom:3, cursor:'pointer',
+                    transition:'opacity 0.2s, filter 0.2s, transform 0.2s',
                   }}>
                     <div style={{fontSize:10, fontWeight:700, color:C.teal}}>🕊️ QS</div>
                     <div style={{fontSize:11, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{proj.customer}</div>
@@ -745,7 +730,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROJECT CARD (in Wochenansicht)
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2 }) {
+function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2, onHoverProject, onLeaveProject }) {
   const pt = PROJECT_TYPES[proj.type];
   const isExt = phase.includes('ext');
   const phaseCol = isExt ? C.orange : phase==='dc' ? C.dc : phase==='ac' ? C.ac : C.teal;
@@ -767,11 +752,15 @@ function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2 }) {
   const displayFoto = (lastFoto && lastFoto.foto) || proj.bauFoto;
 
   return (
-    <div data-proj={dataAttr} onClick={onClick} style={{
+    <div data-proj={dataAttr} data-proj-card="" data-proj-id={proj.id}
+      onClick={onClick}
+      onMouseEnter={()=>onHoverProject && onHoverProject(proj.id)}
+      onMouseLeave={()=>onLeaveProject && onLeaveProject()}
+      style={{
       background:C.cardHover, border:`1px solid ${bs ? bs.col+'66' : phaseCol+'44'}`,
       borderLeft:`3px solid ${bs ? bs.col : phaseCol}`,
       borderRadius:6, padding:0, marginBottom:3, cursor:'pointer', position:'relative',
-      animation: cardAnimation, overflow:'hidden',
+      animation: cardAnimation, overflow:'hidden', transition:'opacity 0.2s, filter 0.2s, transform 0.2s',
     }}>
       {/* Bau-Bild oben */}
       {displayFoto && (
