@@ -542,6 +542,62 @@ const AUFNAHME_TYPEN = [
   { id: "WP", label: "W\xE4rmepumpe", icon: "\u2668\uFE0F", desc: "W\xE4rmepumpen-Aufnahme", color: "#60A5FA" },
   { id: "PV+WP", label: "PV + W\xE4rmepumpe", icon: "\u26A1", desc: "Kombi-Aufnahme", color: "#34D399" }
 ];
+function DashboardScreen({ onNewAufnahme }) {
+  const [clk, setClk] = useState(new Date());
+  useEffect(() => { const t = setInterval(() => setClk(new Date()), 60000); return () => clearInterval(t); }, []);
+  const termine = [
+    { zeit: "09:00", name: "Müller, Detmold", typ: "PV", status: "offen" },
+    { zeit: "11:30", name: "Weber, Bielefeld", typ: "WP", status: "offen" },
+    { zeit: "14:00", name: "Schmidt, Gütersloh", typ: "PV+WP", status: "offen" },
+    { zeit: "16:30", name: "Braun, Paderborn", typ: "PV", status: "bestätigt" },
+  ];
+  const stats = { heute: 2, woche: 8, monat: 31, quote: 72 };
+  const letzte = [
+    { name: "Schneider", ort: "Herford", typ: "PV", kwp: "9.8", zeit: "Gestern 16:20" },
+    { name: "Fischer", ort: "Minden", typ: "WP", kwp: "\u2014", zeit: "Gestern 11:45" },
+    { name: "Hoffmann", ort: "Bielefeld", typ: "PV", kwp: "12.3", zeit: "21.02. 14:10" },
+  ];
+  const gr = clk.getHours() < 12 ? "Guten Morgen" : clk.getHours() < 18 ? "Guten Tag" : "Guten Abend";
+  const ds = clk.toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  const ts = clk.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  const cs = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "18px 20px" };
+  const ls = { fontSize: 10, color: "rgba(255,255,255,0.35)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 };
+  return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 10000, background: "radial-gradient(ellipse at 30% 20%, rgba(232,212,77,0.06) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(96,165,250,0.04) 0%, transparent 50%), #0A0E1A", fontFamily: font, color: "#fff", overflow: "auto", padding: 0 }},
+    React.createElement("div", { style: { padding: "24px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }},
+      React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }},
+          React.createElement("span", { style: { fontSize: 36, fontWeight: 800, letterSpacing: -1 }}, "bee-doo"),
+          React.createElement("div", { style: { width: 1, height: 28, background: "rgba(255,255,255,0.15)", margin: "0 4px" }}),
+          React.createElement("span", { style: { fontSize: 20, fontWeight: 800, letterSpacing: 3, background: "linear-gradient(135deg, #FDE154, #FFE566)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}, "FIELD")),
+        React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.4)" }}, gr + " \xB7 " + ds)),
+      React.createElement("div", { style: { textAlign: "right" }},
+        React.createElement("div", { style: { fontSize: 28, fontWeight: 700, color: "#FDE154" }}, ts),
+        React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.3)" }}, "NRW \xB7 bee-doo GmbH"))),
+    React.createElement("div", { style: { padding: "20px 28px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 900, margin: "0 auto" }},
+      React.createElement("div", { style: { ...cs, gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }},
+        ...[{ l: "Heute", v: stats.heute, i: "\uD83D\uDCCB", c: "#FDE154" }, { l: "Diese Woche", v: stats.woche, i: "\uD83D\uDCCA", c: "#60A5FA" }, { l: "Dieser Monat", v: stats.monat, i: "\uD83D\uDCC8", c: "#34D399" }, { l: "Abschlussquote", v: stats.quote + "%", i: "\uD83C\uDFAF", c: "#A78BFA" }].map((s, i) => React.createElement("div", { key: i, style: { textAlign: "center", padding: "10px 0" }},
+          React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 6 }}, s.i + " " + s.l),
+          React.createElement("div", { style: { fontSize: 28, fontWeight: 800, color: s.c }}, s.v)))),
+      React.createElement("div", { style: cs },
+        React.createElement("div", { style: ls }, "\uD83D\uDCC5 Heutige Termine"),
+        ...termine.map((t, i) => React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < termine.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }},
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#FDE154", minWidth: 48 }}, t.zeit),
+          React.createElement("div", { style: { flex: 1 }},
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 600 }}, t.name),
+            React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)" }}, t.typ)),
+          React.createElement("div", { style: { fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: t.status === "best\xE4tigt" ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.1)", color: t.status === "best\xE4tigt" ? "#34D399" : "#FDE154" }}, t.status.toUpperCase())))),
+      React.createElement("div", { style: cs },
+        React.createElement("div", { style: ls }, "\uD83D\uDD70 Letzte Aufnahmen"),
+        ...letzte.map((l, i) => React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < letzte.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }},
+          React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: l.typ === "PV" ? "rgba(253,225,84,0.1)" : l.typ === "WP" ? "rgba(239,68,68,0.1)" : "rgba(96,165,250,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}, l.typ === "PV" ? "\u2600\uFE0F" : l.typ === "WP" ? "\uD83C\uDF21" : "\u26A1"),
+          React.createElement("div", { style: { flex: 1 }},
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 600 }}, l.name + ", " + l.ort),
+            React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)" }}, l.typ + (l.kwp !== "\u2014" ? " \xB7 " + l.kwp + " kWp" : ""))),
+          React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.25)" }}, l.zeit)))),
+      React.createElement("div", { style: { gridColumn: "1 / -1" }},
+        React.createElement("button", { onClick: onNewAufnahme, style: { width: "100%", padding: "18px 0", borderRadius: 14, background: "linear-gradient(135deg, #FDE154, #E8CC3D)", border: "none", cursor: "pointer", fontFamily: font, fontSize: 17, fontWeight: 800, color: "#0A0E1A", letterSpacing: 0.5, boxShadow: "0 4px 24px rgba(253,225,84,0.25)" }}, "\u26A1 Neue Aufnahme starten"))),
+    React.createElement("div", { style: { textAlign: "center", padding: "16px 0 24px", fontSize: 10, color: "rgba(255,255,255,0.12)" }}, "v2.0 \xB7 bee-doo FIELD \xB7 Bielefeld \xB7 \uD83D\uDC1D"));
+}
 function StartScreen({ onStart }) {
   const [hovered, setHovered] = useState(null);
   const [fadeOut, setFadeOut] = useState(false);
@@ -6053,6 +6109,7 @@ ${data.plz || ""} ${data.ort || ""}`;
   })()));
 }
 function BeedooField() {
+  const [showDashboard, setShowDashboard] = useState(true);
   const [showStart, setShowStart] = useState(true);
   const [step, setStep] = useState(0);
   const [data, setData] = useState({ anrede: "Herr", preismodell: "Finanzierung", finanzDienstleister: "EFS", efsTarif: "Basic", zins: "5.99", finanzJahre: "15", dynStromtarif: true, par14: true, dynStrompreis: "26", par14Erstattung: "160", stromSteigerung: "4", _startZeit: (/* @__PURE__ */ new Date()).toISOString() });
@@ -6171,7 +6228,7 @@ function BeedooField() {
         @keyframes pulseRed { 0%,100% { box-shadow: 0 0 0px rgba(239,68,68,0); } 50% { box-shadow: 0 0 16px rgba(239,68,68,0.4); } }
         @keyframes minionBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
         @keyframes minionWobble { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(2deg); } 75% { transform: rotate(-2deg); } }
-      `), showStart && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(StartScreen, { onStart: (typ) => {
+      `), showDashboard && React.createElement(DashboardScreen, { onNewAufnahme: function() { setShowDashboard(false); } }), !showDashboard && showStart && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(StartScreen, { onStart: (typ) => {
     setData((d) => ({ ...d, _aufnahmeTyp: typ, _startZeit: (/* @__PURE__ */ new Date()).toISOString() }));
     setShowStart(false);
     setRestorePrompt(null);
