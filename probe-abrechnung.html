@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>bee-doo · Probeabrechnung</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#root{height:100%;min-height:100%}
+body{background:#0A0A0B;color:#F0F0F4;font-family:'DM Sans',sans-serif}
+button,select,input,textarea{color:inherit;font-family:inherit}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:#111113}
+::-webkit-scrollbar-thumb{background:#2A2A33;border-radius:4px}
+.back{position:fixed;top:9px;left:10px;z-index:999;background:#16161A;border:1px solid #2A2A33;color:#8A8A9A;padding:5px 12px;border-radius:7px;font-size:11px;cursor:pointer;text-decoration:none;transition:all .15s}
+.back:hover{border-color:#F5C500;color:#F5C500}
+.inp{width:100%;background:#111113;border:1px solid #2A2A33;border-radius:6px;padding:7px 10px;font-size:12px;outline:none;transition:border-color .15s}
+.inp:focus{border-color:#F5C50050}
+.inp:disabled{opacity:.4;cursor:not-allowed}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.fade{animation:fadeIn .2s ease}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin .7s linear infinite;display:inline-block}
+</style>
+</head>
+<body>
+<a href="index.html" class="back">← Launcher</a>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo,useCallback,useEffect,useRef}=React;
+
+// ── CONSTANTS ────────────────────────────────────────────────────
+const SB="https://hqzpemfaljxcysyqssng.supabase.co";
+const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const H={apikey:KEY,Authorization:"Bearer "+KEY,"Content-Type":"application/json"};
+
+const C={
+  bg:"#0A0A0B",sur:"#111113",card:"#16161A",b:"#1E1E24",bl:"#2A2A33",
+  Y:"#F5C500",YD:"#F5C50015",tx:"#F0F0F4",ts:"#8A8A9A",tm:"#4A4A5A",
+  G:"#34D399",GD:"#34D39915",R:"#F87171",RD:"#F8717115",
+  O:"#FBBF24",OD:"#FBBF2415",B:"#60A5FA",BD:"#60A5FA15",
+  P:"#A78BFA",PD:"#A78BFA15"
+};
+
+const TLBL={angestellt_scouter:"Ang. Scouter",hgb_scouter:"§84 Scout",angestellt_vertriebler:"Ang. VB",hgb_vertriebler_agentur:"§84 VB Ag.",hgb_vertriebler_haupt:"§84 VB Hpt."};
+const TCLR={angestellt_scouter:C.B,hgb_scouter:C.P,angestellt_vertriebler:C.G,hgb_vertriebler_agentur:C.O,hgb_vertriebler_haupt:C.Y};
+const MO=["","Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+const MOL=["","Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+
+const eur=n=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",minimumFractionDigits:2}).format(+n||0);
+const db={
+  get:async(t,p="")=>{const r=await fetch(SB+"/rest/v1/"+t+p,{headers:H});if(!r.ok)throw new Error(await r.text());return r.json()}
+};
+
+// ── HELPERS ───────────────────────────────────────────────────────
+const isAngestellt=m=>m?.typ?.startsWith("angestellt");
+const isHGB=m=>m?.typ?.startsWith("hgb");
+// Kranktage-Abzug: Grundgehalt / Arbeitstage * Kranktage
+const calcKranken=(grundgehalt,kranktage,at=21)=>
+  (!kranktage||kranktage<=0||!grundgehalt)?0:Math.round((+grundgehalt/at)*(+kranktage)*100)/100;
+
+// ── DEFAULT GLOBAL REGEL ──────────────────────────────────────────
+const DEFAULT_REGEL={
+  id:"global",name:"Global (Standard)",
+  basis_betrag_sale:500,staffel_schwelle:5,staffel_betrag_sale:600,rueckwirkend:true,
+  betrag_termin_sf:50,betrag_eigenlead:100,betrag_empfehlung:75,betrag_speicher:50
+};
+
+// ── BERECHNUNG ────────────────────────────────────────────────────
+// kranktageMap: { maId: {tage, arbeitstage} }
+function calcProbe(auftraege, mitarb, regelMap, kranktageMap, bM, bJ){
+  const MM=Object.fromEntries(mitarb.map(m=>[m.id,m]));
+  const rel=auftraege.filter(a=>{
+    const d=new Date(a.auftrags_datum);
+    return d.getMonth()+1===bM && d.getFullYear()===bJ;
+  });
+
+  // count sales per vertriebler
+  const sc={};
+  rel.forEach(a=>{if(a.vertriebler_id) sc[a.vertriebler_id]=(sc[a.vertriebler_id]||0)+1});
+
+  const E={};
+  const init=id=>{
+    if(!E[id]){
+      const ma=MM[id]; if(!ma) return null;
+      const regel=regelMap[id]||regelMap["global"]||DEFAULT_REGEL;
+      const krank=kranktageMap[id]||{tage:0,arbeitstage:21};
+      const grundgehalt=isAngestellt(ma)?(+ma.grundgehalt||0):0;
+      const kranken_abzug=isAngestellt(ma)?calcKranken(grundgehalt,krank.tage,krank.arbeitstage||21):0;
+      E[id]={ma,regel,pos:[],sales:sc[id]||0,
+        grundgehalt,krank_tage:krank.tage||0,kranken_abzug,
+        provision_summe:0,gesamt:0,netto:0};
+    }
+    return E[id];
+  };
+
+  // Angestellte immer initialisieren (erscheinen auch ohne Aufträge)
+  mitarb.filter(m=>isAngestellt(m)).forEach(m=>init(m.id));
+  // HGB: nur wenn sie Aufträge haben (werden unten per rel initialisiert)
+
+  rel.forEach(a=>{
+    // Vertriebler
+    if(a.vertriebler_id){
+      const e=init(a.vertriebler_id); if(!e) return;
+      const r=e.regel;
+      const cnt=sc[a.vertriebler_id]||0;
+      const sa=r.rueckwirkend && cnt>=(+r.staffel_schwelle);
+      const rate=sa ? +r.staffel_betrag_sale : +r.basis_betrag_sale;
+      e.pos.push({typ:"sale",nr:a.auftrag_nr||"–",kunde:a.kunde_name||"–",betrag:rate,info:(sa?"⚡ Staffel ":"Basis ")+eur(rate)});
+      if(a.lead_quelle==="eigenlead"&&+r.betrag_eigenlead>0)
+        e.pos.push({typ:"eigenlead",nr:a.auftrag_nr||"–",kunde:a.kunde_name||"–",betrag:+r.betrag_eigenlead,info:"🎯 Eigenlead"});
+      if(a.lead_quelle==="empfehlung"&&+r.betrag_empfehlung>0)
+        e.pos.push({typ:"empfehlung",nr:a.auftrag_nr||"–",kunde:a.kunde_name||"–",betrag:+r.betrag_empfehlung,info:"👥 Empfehlung"});
+      if(a.speichererweiterung&&+r.betrag_speicher>0)
+        e.pos.push({typ:"speicher",nr:a.auftrag_nr||"–",kunde:a.kunde_name||"–",betrag:+r.betrag_speicher,info:"🔋 Speicher"});
+    }
+    // Scouter
+    if(a.scouter_id){
+      const e=init(a.scouter_id); if(!e) return;
+      const r=e.regel;
+      if(a.termin_stattgefunden&&+r.betrag_termin_sf>0)
+        e.pos.push({typ:"termin",nr:a.auftrag_nr||"–",kunde:a.kunde_name||"–",betrag:+r.betrag_termin_sf,info:"📅 Termin SF"});
+    }
+  });
+
+  Object.values(E).forEach(e=>{
+    // Staffel rückwirkend: alle Sale-Positionen auf Staffel-Betrag hochsetzen
+    if(e.regel.rueckwirkend && e.sales>=(+e.regel.staffel_schwelle)){
+      e.pos.forEach(p=>{if(p.typ==="sale"){p.betrag=+e.regel.staffel_betrag_sale;p.info="⚡ Staffel "+eur(e.regel.staffel_betrag_sale);}});
+    }
+    e.provision_summe=e.pos.reduce((s,p)=>s+p.betrag,0);
+    // Angestellt: Grundgehalt + Provision - Kranktage-Abzug
+    // HGB: nur Provision
+    if(isAngestellt(e.ma)){
+      e.gesamt=e.grundgehalt+e.provision_summe;
+      e.netto=Math.max(0,e.gesamt-e.kranken_abzug);
+    } else {
+      e.gesamt=e.provision_summe;
+      e.netto=e.gesamt;
+    }
+  });
+  return E;
+}
+
+// ── BADGE ─────────────────────────────────────────────────────────
+function Badge({label,color}){
+  return <span style={{background:color+"20",color,border:`1px solid ${color}40`,borderRadius:4,padding:"2px 7px",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{label}</span>;
+}
+
+// ── REGEL EDITOR ──────────────────────────────────────────────────
+function RegelEditor({regel,onChange,label,compact=false}){
+  const f=(k,v)=>onChange({...regel,[k]:v});
+  const row=(l,k,type="number")=>(
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+      <label style={{fontSize:11,color:C.ts,width:compact?120:160,flexShrink:0}}>{l}</label>
+      {type==="checkbox"
+        ? <input type="checkbox" checked={!!regel[k]} onChange={e=>f(k,e.target.checked)} style={{accentColor:C.Y,width:14,height:14}}/>
+        : <input className="inp" type="number" value={regel[k]||0} onChange={e=>f(k,parseFloat(e.target.value)||0)} style={{maxWidth:100}}/>
+      }
+    </div>
+  );
+  return(
+    <div>
+      {label&&<div style={{fontSize:11,fontWeight:700,color:C.ts,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{label}</div>}
+      <div style={{display:"grid",gridTemplateColumns:compact?"1fr":"1fr 1fr",gap:"0 24px"}}>
+        <div>
+          {row("Sale Basis (€)","basis_betrag_sale")}
+          {row("Staffel Schwelle (Anzahl Sales)","staffel_schwelle")}
+          {row("Sale Staffel (€)","staffel_betrag_sale")}
+          {row("Rückwirkend","rueckwirkend","checkbox")}
+        </div>
+        <div>
+          {row("Termin SF (€)","betrag_termin_sf")}
+          {row("Eigenlead (€)","betrag_eigenlead")}
+          {row("Empfehlung (€)","betrag_empfehlung")}
+          {row("Speicher+ (€)","betrag_speicher")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AUFTRAG FORM ──────────────────────────────────────────────────
+function AuftragForm({mitarb,onAdd,bM,bJ}){
+  const today=`${bJ}-${String(bM).padStart(2,"0")}-01`;
+  const [f,setF]=useState({auftrag_nr:"",auftrags_datum:today,kunde_name:"",vertriebler_id:"",scouter_id:"",lead_quelle:"sale_basis",speichererweiterung:false,termin_stattgefunden:false});
+  const up=(k,v)=>setF(p=>({...p,[k]:v}));
+  const vbs=mitarb.filter(m=>m.typ&&m.typ.includes("vertriebler"));
+  const scs=mitarb.filter(m=>m.typ&&m.typ.includes("scouter"));
+
+  const add=()=>{
+    if(!f.auftrags_datum) return;
+    onAdd({...f,id:"m_"+Date.now()});
+    setF(p=>({...p,auftrag_nr:"",kunde_name:"",speichererweiterung:false,termin_stattgefunden:false}));
+  };
+
+  const s={display:"flex",flexDirection:"column",gap:4};
+  const lbl={fontSize:10,color:C.ts,marginBottom:2};
+
+  return(
+    <div style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:10,padding:16}}>
+      <div style={{fontWeight:700,fontSize:12,marginBottom:12,color:C.Y}}>+ Auftrag manuell hinzufügen</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
+        <div style={s}><div style={lbl}>Datum</div><input className="inp" type="date" value={f.auftrags_datum} onChange={e=>up("auftrags_datum",e.target.value)}/></div>
+        <div style={s}><div style={lbl}>Auftrag Nr.</div><input className="inp" placeholder="A-2024-001" value={f.auftrag_nr} onChange={e=>up("auftrag_nr",e.target.value)}/></div>
+        <div style={s}><div style={lbl}>Kunde</div><input className="inp" placeholder="Max Muster" value={f.kunde_name} onChange={e=>up("kunde_name",e.target.value)}/></div>
+        <div style={s}><div style={lbl}>Vertriebler</div>
+          <select className="inp" value={f.vertriebler_id} onChange={e=>up("vertriebler_id",e.target.value)}>
+            <option value="">– kein –</option>
+            {vbs.map(m=><option key={m.id} value={m.id}>{m.vorname||""} {m.nachname||m.name||""}</option>)}
+          </select>
+        </div>
+        <div style={s}><div style={lbl}>Scouter</div>
+          <select className="inp" value={f.scouter_id} onChange={e=>up("scouter_id",e.target.value)}>
+            <option value="">– kein –</option>
+            {scs.map(m=><option key={m.id} value={m.id}>{m.vorname||""} {m.nachname||m.name||""}</option>)}
+          </select>
+        </div>
+        <div style={s}><div style={lbl}>Lead-Quelle</div>
+          <select className="inp" value={f.lead_quelle} onChange={e=>up("lead_quelle",e.target.value)}>
+            <option value="sale_basis">Standard</option>
+            <option value="eigenlead">🎯 Eigenlead</option>
+            <option value="empfehlung">👥 Empfehlung</option>
+          </select>
+        </div>
+        <div style={s}><div style={lbl}>Extras</div>
+          <div style={{display:"flex",gap:12,marginTop:4}}>
+            <label style={{fontSize:11,display:"flex",gap:5,alignItems:"center",cursor:"pointer"}}>
+              <input type="checkbox" checked={f.speichererweiterung} onChange={e=>up("speichererweiterung",e.target.checked)} style={{accentColor:C.Y}}/>🔋 Speicher
+            </label>
+            <label style={{fontSize:11,display:"flex",gap:5,alignItems:"center",cursor:"pointer"}}>
+              <input type="checkbox" checked={f.termin_stattgefunden} onChange={e=>up("termin_stattgefunden",e.target.checked)} style={{accentColor:C.Y}}/>📅 Termin
+            </label>
+          </div>
+        </div>
+      </div>
+      <button onClick={add} style={{marginTop:12,background:C.Y,color:"#000",border:"none",borderRadius:7,padding:"8px 20px",fontWeight:700,fontSize:12,cursor:"pointer"}}>Auftrag hinzufügen</button>
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────
+function App(){
+  const now=new Date();
+  const [step,setStep]=useState(0);
+  const [bM,setBM]=useState(now.getMonth()+1);
+  const [bJ,setBJ]=useState(now.getFullYear());
+  const [loading,setLoading]=useState(false);
+  const [msg,setMsg]=useState(null);
+
+  // Mitarbeiter
+  const [mitarb,setMitarb]=useState([]);
+  const [sbMitarb,setSbMitarb]=useState([]); // from supabase
+  const [sbRegeln,setSbRegeln]=useState([]); // from supabase
+
+  // Regeln
+  const [globalRegel,setGlobalRegel]=useState({...DEFAULT_REGEL});
+  const [regelOverrides,setRegelOverrides]=useState({}); // maId -> regel|null
+
+  // Aufträge
+  const [auftraege,setAuftraege]=useState([]);
+  const [altesSystem,setAltesSystem]=useState({}); // maId -> string
+  const [kranktageMap,setKranktageMap]=useState({}); // maId -> {tage, arbeitstage}
+
+  // Ergebnis
+  const [ergebnis,setErgebnis]=useState(null);
+  const [openDetail,setOpenDetail]=useState(null);
+
+  const toast=(t,c=C.G)=>{ setMsg({t,c}); setTimeout(()=>setMsg(null),3000); };
+
+  // Supabase laden: Mitarbeiter + Regeln
+  const loadSB=async()=>{
+    setLoading(true);
+    try{
+      const [mas,regs]=await Promise.all([
+        db.get("mitarbeiter","?select=*&order=nachname"),
+        db.get("provisions_regeln","?select=*")
+      ]);
+      setSbMitarb(mas||[]);
+      setSbRegeln(regs||[]);
+      setMitarb(mas||[]);
+      toast(`${(mas||[]).length} Mitarbeiter + ${(regs||[]).length} Regeln geladen`);
+    }catch(e){ toast("Fehler: "+e.message,C.R); }
+    setLoading(false);
+  };
+
+  // Supabase: Aufträge für Monat laden
+  const loadSBAuftraege=async()=>{
+    setLoading(true);
+    try{
+      const start=`${bJ}-${String(bM).padStart(2,"0")}-01`;
+      const endM=bM===12?1:bM+1; const endJ=bM===12?bJ+1:bJ;
+      const end=`${endJ}-${String(endM).padStart(2,"0")}-01`;
+      const data=await db.get("auftraege",`?select=*&auftrags_datum=gte.${start}&auftrags_datum=lt.${end}&zahlungsstatus=neq.offen&zahlungsstatus=neq.storniert&order=auftrags_datum`);
+      setAuftraege(p=>{
+        const existingIds=new Set(p.map(a=>a.id));
+        const neu=(data||[]).filter(a=>!existingIds.has(a.id));
+        return [...p,...neu];
+      });
+      toast(`${(data||[]).length} Aufträge geladen für ${MO[bM]} ${bJ}`);
+    }catch(e){ toast("Fehler: "+e.message,C.R); }
+    setLoading(false);
+  };
+
+  // CSV Import
+  const csvRef=useRef();
+  const importCSV=e=>{
+    const file=e.target.files[0]; if(!file) return;
+    Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{
+      const rows=res.data;
+      // Auto-map columns (flexible)
+      const mapped=rows.map((r,i)=>{
+        const k=Object.keys(r);
+        const find=(...a)=>{const f=k.find(x=>a.some(s=>x.toLowerCase().includes(s)));return f?r[f]:""};
+        const vbName=find("vertriebler","vertrieb","vb","sales");
+        const scName=find("scouter","scout");
+        const vb=mitarb.find(m=>{
+          const n=(m.vorname||"")+" "+(m.nachname||m.name||"");
+          return n.toLowerCase().includes(vbName.toLowerCase()) && vbName.length>2;
+        });
+        const sc=mitarb.find(m=>{
+          const n=(m.vorname||"")+" "+(m.nachname||m.name||"");
+          return n.toLowerCase().includes(scName.toLowerCase()) && scName.length>2;
+        });
+        const datVal=find("datum","date","auftrag") || `${bJ}-${String(bM).padStart(2,"0")}-15`;
+        // normalize date
+        let normDate=datVal;
+        if(datVal.includes(".")){
+          const p=datVal.split(".");
+          if(p.length===3) normDate=`${p[2].length===2?"20"+p[2]:p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`;
+        }
+        return{
+          id:"csv_"+i+"_"+Date.now(),
+          auftrag_nr:find("nr","nummer","auftrag_nr","bestell"),
+          auftrags_datum:normDate,
+          kunde_name:find("kunde","name","customer"),
+          vertriebler_id:vb?.id||"",
+          scouter_id:sc?.id||"",
+          lead_quelle:find("lead","quelle","source")||"sale_basis",
+          speichererweiterung:String(find("speicher","storage")).toLowerCase()==="ja"||String(find("speicher")).toLowerCase()==="true",
+          termin_stattgefunden:String(find("termin")).toLowerCase()==="ja"||String(find("termin")).toLowerCase()==="true",
+          _raw:r
+        };
+      });
+      setAuftraege(p=>[...p,...mapped]);
+      toast(`${mapped.length} Aufträge aus CSV importiert`);
+      csvRef.current.value="";
+    }});
+  };
+
+  // Manuelle Mitarbeiter anlegen
+  const [newMA,setNewMA]=useState({vorname:"",nachname:"",typ:"hgb_vertriebler_haupt",kuerzel:"",grundgehalt:""});
+  const addMA=()=>{
+    if(!newMA.vorname&&!newMA.nachname) return;
+    const id="ma_"+Date.now();
+    setMitarb(p=>[...p,{...newMA,id}]);
+    setNewMA({vorname:"",nachname:"",typ:"hgb_vertriebler_haupt",kuerzel:"",grundgehalt:""});
+  };
+
+  // Regel-Map aufbauen
+  const regelMap=useMemo(()=>{
+    const m={"global":globalRegel};
+    // SB-Regeln als Basis falls vorhanden
+    sbMitarb.forEach(ma=>{
+      const r=sbRegeln.find(r=>r.id===ma.provisions_regel_id);
+      if(r) m[ma.id]=r;
+    });
+    // Overrides
+    Object.entries(regelOverrides).forEach(([id,r])=>{ if(r) m[id]=r; });
+    return m;
+  },[globalRegel,regelOverrides,sbMitarb,sbRegeln]);
+
+  // Berechnen
+  const berechnen=()=>{
+    const E=calcProbe(auftraege,mitarb,regelMap,kranktageMap,bM,bJ);
+    setErgebnis(E);
+    setStep(2);
+  };
+
+  // Steps
+  const STEPS=["📋 Mitarbeiter & Regeln","📦 Aufträge","🧮 Probeabrechnung"];
+
+  const rel=auftraege.filter(a=>{const d=new Date(a.auftrags_datum);return d.getMonth()+1===bM&&d.getFullYear()===bJ});
+
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,padding:"60px 20px 40px"}}>
+      {/* Toast */}
+      {msg&&<div style={{position:"fixed",bottom:24,right:24,background:msg.c,color:"#000",padding:"10px 18px",borderRadius:8,fontWeight:700,fontSize:13,zIndex:9999,animation:"fadeIn .2s ease"}}>{msg.t}</div>}
+
+      {/* Header */}
+      <div style={{maxWidth:1100,margin:"0 auto"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
+          <div style={{background:C.Y,borderRadius:10,width:38,height:38,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>🧮</div>
+          <div>
+            <div style={{fontWeight:900,fontSize:22}}>Probeabrechnung</div>
+            <div style={{fontSize:12,color:C.ts}}>Test & Vergleich mit altem System</div>
+          </div>
+
+          {/* Monat */}
+          <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+            <select className="inp" value={bM} onChange={e=>setBM(+e.target.value)} style={{width:"auto",fontWeight:700}}>
+              {MO.slice(1).map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+            </select>
+            <input className="inp" type="number" value={bJ} onChange={e=>setBJ(+e.target.value)} style={{width:80,fontWeight:700}}/>
+          </div>
+        </div>
+
+        {/* Step Nav */}
+        <div style={{display:"flex",gap:4,marginBottom:28}}>
+          {STEPS.map((s,i)=>(
+            <button key={i} onClick={()=>setStep(i)}
+              style={{padding:"8px 18px",borderRadius:7,fontSize:12,fontWeight:700,cursor:"pointer",border:"none",
+                background:step===i?C.Y:C.card,color:step===i?"#000":C.ts,transition:"all .15s"}}>
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {/* ── STEP 0: MITARBEITER & REGELN ────────────────────────── */}
+        {step===0&&<div className="fade">
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+
+            {/* Mitarbeiter */}
+            <div>
+              <div style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:10,padding:20}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                  <div style={{fontWeight:800,fontSize:15}}>Mitarbeiter</div>
+                  <button onClick={loadSB} style={{background:C.BD,color:C.B,border:`1px solid ${C.B}40`,borderRadius:6,padding:"5px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    {loading?<span className="spin">⟳</span>:"🔄 Supabase laden"}
+                  </button>
+                </div>
+
+                {/* Manuell */}
+                <div style={{background:C.sur,borderRadius:8,padding:12,marginBottom:12}}>
+                  <div style={{fontSize:11,color:C.ts,marginBottom:8,fontWeight:700}}>Manuell hinzufügen</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                    <input className="inp" placeholder="Vorname" value={newMA.vorname} onChange={e=>setNewMA(p=>({...p,vorname:e.target.value}))}/>
+                    <input className="inp" placeholder="Nachname" value={newMA.nachname} onChange={e=>setNewMA(p=>({...p,nachname:e.target.value}))}/>
+                    <select className="inp" value={newMA.typ} onChange={e=>setNewMA(p=>({...p,typ:e.target.value}))}>
+                      <optgroup label="── Angestellt ──">
+                        <option value="angestellt_vertriebler">Ang. Vertriebler</option>
+                        <option value="angestellt_scouter">Ang. Scouter</option>
+                      </optgroup>
+                      <optgroup label="── Selbstständig §84 ──">
+                        <option value="hgb_vertriebler_haupt">§84 VB Hauptberuflich</option>
+                        <option value="hgb_vertriebler_agentur">§84 VB Agentur</option>
+                        <option value="hgb_scouter">§84 Scout</option>
+                      </optgroup>
+                    </select>
+                    <input className="inp" placeholder="Kürzel (z.B. MGR)" value={newMA.kuerzel} onChange={e=>setNewMA(p=>({...p,kuerzel:e.target.value}))}/>
+                    {newMA.typ.startsWith("angestellt")&&(
+                      <div style={{gridColumn:"1/-1"}}>
+                        <input className="inp" type="number" placeholder="Grundgehalt (€) – nur für Angestellte" value={newMA.grundgehalt} onChange={e=>setNewMA(p=>({...p,grundgehalt:e.target.value}))}/>
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={addMA} style={{marginTop:8,background:C.Y,color:"#000",border:"none",borderRadius:6,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Hinzufügen</button>
+                </div>
+
+                {/* Liste */}
+                {mitarb.length===0&&<div style={{color:C.ts,fontSize:12,textAlign:"center",padding:20}}>Keine Mitarbeiter. Supabase laden oder manuell hinzufügen.</div>}
+                {mitarb.map(m=>{
+                  const ang=isAngestellt(m);
+                  const k=kranktageMap[m.id]||{tage:0,arbeitstage:21};
+                  return(
+                    <div key={m.id} style={{padding:"10px 0",borderBottom:`1px solid ${C.bl}`}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        {/* Angestellt / Selbstständig Pill */}
+                        <div style={{
+                          background:ang?"#60A5FA18":"#F5C50018",
+                          border:`1px solid ${ang?C.B:C.Y}40`,
+                          borderRadius:5,padding:"2px 8px",fontSize:10,fontWeight:800,
+                          color:ang?C.B:C.Y,whiteSpace:"nowrap",flexShrink:0
+                        }}>{ang?"👔 Angestellt":"🤝 Selbstständig"}</div>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:700,fontSize:13}}>{m.vorname} {m.nachname||m.name}</div>
+                          <div style={{display:"flex",gap:6,marginTop:2}}>
+                            <Badge label={TLBL[m.typ]||m.typ} color={TCLR[m.typ]||C.ts}/>
+                            {m.kuerzel&&<span style={{fontSize:10,color:C.ts}}>{m.kuerzel}</span>}
+                            {ang&&m.grundgehalt>0&&<span style={{fontSize:10,color:C.G}}>Ø {eur(m.grundgehalt)}/Monat</span>}
+                          </div>
+                        </div>
+                        <div style={{fontSize:10,color:C.ts}}>{regelOverrides[m.id]?"🔧 Custom":"📋 Global"}</div>
+                        <button onClick={()=>setMitarb(p=>p.filter(x=>x.id!==m.id))}
+                          style={{background:"none",border:"none",color:C.tm,cursor:"pointer",fontSize:14}}>×</button>
+                      </div>
+                      {/* Grundgehalt inline edit für Angestellte */}
+                      {ang&&(
+                        <div style={{display:"flex",gap:8,marginTop:8,paddingLeft:2}}>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:10,color:C.ts,marginBottom:3}}>Grundgehalt (€)</div>
+                            <input className="inp" type="number" placeholder="z.B. 2000" value={m.grundgehalt||""}
+                              onChange={e=>setMitarb(p=>p.map(x=>x.id===m.id?{...x,grundgehalt:e.target.value}:x))}
+                              style={{borderColor:C.B+"60"}}/>
+                          </div>
+                          <div style={{width:80}}>
+                            <div style={{fontSize:10,color:C.ts,marginBottom:3}}>Kranktage</div>
+                            <input className="inp" type="number" placeholder="0" value={k.tage||""}
+                              onChange={e=>setKranktageMap(p=>({...p,[m.id]:{...k,tage:+e.target.value}}))}
+                              style={{borderColor:C.R+"40"}}/>
+                          </div>
+                          <div style={{width:80}}>
+                            <div style={{fontSize:10,color:C.ts,marginBottom:3}}>Arbeitstage</div>
+                            <input className="inp" type="number" placeholder="21" value={k.arbeitstage||""}
+                              onChange={e=>setKranktageMap(p=>({...p,[m.id]:{...k,arbeitstage:+e.target.value}}))}/>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Regeln */}
+            <div>
+              {/* Global Regel */}
+              <div style={{background:C.card,border:`1px solid ${C.Y}40`,borderRadius:10,padding:20,marginBottom:16}}>
+                <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>⚡ Globale Provisions-Regel</div>
+                <RegelEditor regel={globalRegel} onChange={setGlobalRegel}/>
+              </div>
+
+              {/* Per-MA Overrides */}
+              {mitarb.length>0&&<div style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:10,padding:20}}>
+                <div style={{fontWeight:800,fontSize:14,marginBottom:14}}>🔧 Individuelle Overrides</div>
+                {mitarb.map(m=>{
+                  const hasOverride=!!regelOverrides[m.id];
+                  const over=regelOverrides[m.id]||{...globalRegel,id:m.id+"_r",name:"Override "+m.vorname};
+                  return(
+                    <div key={m.id} style={{marginBottom:16,paddingBottom:16,borderBottom:`1px solid ${C.bl}`}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:hasOverride?10:0}}>
+                        <span style={{fontWeight:700,fontSize:12}}>{m.vorname} {m.nachname||m.name}</span>
+                        <Badge label={TLBL[m.typ]||m.typ} color={TCLR[m.typ]||C.ts}/>
+                        <label style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center",fontSize:11,cursor:"pointer",color:C.ts}}>
+                          <input type="checkbox" checked={hasOverride} onChange={e=>{
+                            if(e.target.checked) setRegelOverrides(p=>({...p,[m.id]:{...globalRegel,id:m.id+"_r"}}));
+                            else setRegelOverrides(p=>{const n={...p};delete n[m.id];return n;});
+                          }} style={{accentColor:C.Y}}/>
+                          Custom Regel
+                        </label>
+                      </div>
+                      {hasOverride&&<RegelEditor compact regel={over} onChange={r=>setRegelOverrides(p=>({...p,[m.id]:r}))}/>}
+                    </div>
+                  );
+                })}
+              </div>}
+            </div>
+          </div>
+
+          <div style={{textAlign:"right",marginTop:16}}>
+            <button onClick={()=>setStep(1)} style={{background:C.Y,color:"#000",border:"none",borderRadius:8,padding:"10px 28px",fontWeight:800,fontSize:14,cursor:"pointer"}}>
+              Weiter → Aufträge
+            </button>
+          </div>
+        </div>}
+
+        {/* ── STEP 1: AUFTRÄGE ────────────────────────────────────── */}
+        {step===1&&<div className="fade">
+          <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+            <button onClick={loadSBAuftraege} style={{background:C.BD,color:C.B,border:`1px solid ${C.B}40`,borderRadius:7,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              {loading?<span className="spin">⟳</span>:"🔄 Aufträge aus Supabase laden"} ({MOL[bM]} {bJ})
+            </button>
+            <label style={{background:C.GD,color:C.G,border:`1px solid ${C.G}40`,borderRadius:7,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              📂 CSV importieren
+              <input ref={csvRef} type="file" accept=".csv" onChange={importCSV} style={{display:"none"}}/>
+            </label>
+            {auftraege.length>0&&<button onClick={()=>setAuftraege([])} style={{background:C.RD,color:C.R,border:`1px solid ${C.R}40`,borderRadius:7,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:"pointer"}}>🗑 Alle löschen</button>}
+            <div style={{marginLeft:"auto",background:C.card,border:`1px solid ${C.bl}`,borderRadius:7,padding:"8px 16px",fontSize:12,color:C.ts}}>
+              <b style={{color:C.tx}}>{rel.length}</b> Aufträge im Monat
+            </div>
+          </div>
+
+          {/* CSV Hinweis */}
+          <div style={{background:C.sur,border:`1px solid ${C.bl}`,borderRadius:8,padding:12,marginBottom:16,fontSize:11,color:C.ts}}>
+            💡 <b style={{color:C.tx}}>CSV-Format:</b> Spalten werden automatisch erkannt. Empfohlen: <code>datum, auftrag_nr, kunde, vertriebler, scouter, lead_quelle, speicher, termin</code>. Lead-Quelle: <code>sale_basis / eigenlead / empfehlung</code>. Speicher/Termin: <code>ja / nein</code>.
+          </div>
+
+          <AuftragForm mitarb={mitarb} onAdd={a=>setAuftraege(p=>[...p,a])} bM={bM} bJ={bJ}/>
+
+          {/* Auftrags-Tabelle */}
+          {rel.length>0&&<div style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:10,marginTop:16,overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"100px 1fr 1fr 1fr 1fr 80px 60px",background:C.sur,padding:"8px 12px",fontSize:10,color:C.ts,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,gap:8}}>
+              <div>Datum</div><div>Auftrag Nr.</div><div>Kunde</div><div>Vertriebler</div><div>Scouter</div><div>Extras</div><div></div>
+            </div>
+            {rel.map((a,i)=>{
+              const vb=mitarb.find(m=>m.id===a.vertriebler_id);
+              const sc=mitarb.find(m=>m.id===a.scouter_id);
+              return(
+                <div key={a.id} style={{display:"grid",gridTemplateColumns:"100px 1fr 1fr 1fr 1fr 80px 60px",padding:"8px 12px",fontSize:12,gap:8,borderBottom:`1px solid ${C.bl}`,alignItems:"center"}}>
+                  <div style={{color:C.ts}}>{a.auftrags_datum?.slice(0,10)}</div>
+                  <div style={{fontWeight:700}}>{a.auftrag_nr||"–"}</div>
+                  <div>{a.kunde_name||"–"}</div>
+                  <div style={{color:vb?C.G:C.tm}}>{vb?(vb.vorname+" "+vb.nachname):a.vertriebler_id||"–"}</div>
+                  <div style={{color:sc?C.P:C.tm}}>{sc?(sc.vorname+" "+sc.nachname):a.scouter_id||"–"}</div>
+                  <div style={{fontSize:10,display:"flex",gap:3}}>
+                    {a.speichererweiterung&&<span>🔋</span>}
+                    {a.termin_stattgefunden&&<span>📅</span>}
+                    {a.lead_quelle==="eigenlead"&&<span>🎯</span>}
+                    {a.lead_quelle==="empfehlung"&&<span>👥</span>}
+                  </div>
+                  <div><button onClick={()=>setAuftraege(p=>p.filter(x=>x.id!==a.id))} style={{background:"none",border:"none",color:C.tm,cursor:"pointer",fontSize:16}}>×</button></div>
+                </div>
+              );
+            })}
+          </div>}
+
+          {auftraege.length===0&&<div style={{textAlign:"center",padding:40,color:C.ts,fontSize:13}}>
+            Noch keine Aufträge. Aus Supabase laden, CSV importieren oder manuell eingeben.
+          </div>}
+
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:20}}>
+            <button onClick={()=>setStep(0)} style={{background:C.card,color:C.ts,border:`1px solid ${C.bl}`,borderRadius:8,padding:"10px 20px",fontWeight:700,fontSize:13,cursor:"pointer"}}>← Zurück</button>
+            <button onClick={berechnen} style={{background:C.Y,color:"#000",border:"none",borderRadius:8,padding:"10px 28px",fontWeight:800,fontSize:14,cursor:"pointer"}}>
+              🧮 Probeabrechnung berechnen
+            </button>
+          </div>
+        </div>}
+
+        {/* ── STEP 2: ERGEBNIS ────────────────────────────────────── */}
+        {step===2&&ergebnis&&<div className="fade">
+          <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:20,flexWrap:"wrap"}}>
+            <div style={{fontWeight:900,fontSize:18}}>Probeabrechnung {MOL[bM]} {bJ}</div>
+            <button onClick={berechnen} style={{marginLeft:"auto",background:C.YD,color:C.Y,border:`1px solid ${C.Y}40`,borderRadius:7,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>🔄 Neu berechnen</button>
+            <button onClick={()=>{
+              // CSV Export
+              const rows=[["Mitarbeiter","Typ","Sales","Brutto","Netto (berechnet)","Altes System","Differenz"]];
+              Object.values(ergebnis).forEach(e=>{
+                const alt=parseFloat(altesSystem[e.ma.id])||0;
+                const diff=e.netto-alt;
+                rows.push([e.ma.vorname+" "+e.ma.nachname,TLBL[e.ma.typ]||e.ma.typ,e.sales,e.gesamt.toFixed(2),e.netto.toFixed(2),alt.toFixed(2),diff.toFixed(2)]);
+              });
+              const csv=rows.map(r=>r.join(";")).join("\n");
+              const blob=new Blob(["\uFEFF"+csv],{type:"text/csv"});
+              const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`probe-${bJ}-${String(bM).padStart(2,"0")}.csv`;a.click();
+            }} style={{background:C.GD,color:C.G,border:`1px solid ${C.G}40`,borderRadius:7,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>⬇ CSV Export</button>
+          </div>
+
+          {/* Summary Cards */}
+          {(()=>{
+            const entries=Object.values(ergebnis);
+            const totalBrutto=entries.reduce((s,e)=>s+e.gesamt,0);
+            const totalNetto=entries.reduce((s,e)=>s+e.netto,0);
+            const totalAlt=entries.reduce((s,e)=>s+(parseFloat(altesSystem[e.ma.id])||0),0);
+            const diff=totalNetto-totalAlt;
+            return(
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+                {[
+                  {l:"Mitarbeiter",v:entries.length,c:C.B},
+                  {l:"Total Brutto",v:eur(totalBrutto),c:C.Y},
+                  {l:"Total Netto",v:eur(totalNetto),c:C.G},
+                  {l:"Diff. zu Alt",v:(diff>0?"+":"")+eur(diff),c:diff===0?C.ts:diff>0?C.G:C.R}
+                ].map(({l,v,c})=>(
+                  <div key={l} style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:10,padding:16}}>
+                    <div style={{fontSize:10,color:C.ts,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>{l}</div>
+                    <div style={{fontSize:22,fontWeight:900,color:c}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* Eingabe: Altes System */}
+          <div style={{background:C.sur,border:`1px solid ${C.bl}`,borderRadius:8,padding:"8px 14px",fontSize:11,color:C.ts,marginBottom:12}}>
+            💡 In der Spalte <b style={{color:C.tx}}>"Altes System"</b> kannst du die Werte aus deiner bisherigen Abrechnung eintragen um zu vergleichen.
+          </div>
+
+          {/* Tabelle */}
+          <div style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:10,overflow:"hidden"}}>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",minWidth:900}}>
+                <thead>
+                  <tr style={{background:C.sur}}>
+                    {["Mitarbeiter","Typ","Sales","Positionen","Brutto","Netto 🧮","Altes System","Differenz",""].map(h=>(
+                      <th key={h} style={{padding:"10px 12px",fontSize:10,color:C.ts,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,textAlign:h==="Brutto"||h==="Netto 🧮"||h==="Altes System"||h==="Differenz"?"right":"left"}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.values(ergebnis).map(e=>{
+                    const alt=parseFloat(altesSystem[e.ma.id])||0;
+                    const diff=alt>0?e.netto-alt:null;
+                    const dOk=diff===null?null:Math.abs(diff)<0.01?"equal":diff>0?"plus":"minus";
+                    return(
+                      <React.Fragment key={e.ma.id}>
+                        <tr style={{borderBottom:`1px solid ${C.bl}`,cursor:"pointer"}} onClick={()=>setOpenDetail(openDetail===e.ma.id?null:e.ma.id)}>
+                          <td style={{padding:"10px 12px",fontWeight:700}}>{e.ma.vorname} {e.ma.nachname||e.ma.name}</td>
+                          <td style={{padding:"10px 12px"}}><Badge label={TLBL[e.ma.typ]||e.ma.typ} color={TCLR[e.ma.typ]||C.ts}/></td>
+                          <td style={{padding:"10px 12px",fontWeight:700,color:e.sales>0?C.Y:C.ts}}>{e.sales}</td>
+                          <td style={{padding:"10px 12px",fontSize:11,color:C.ts}}>{e.pos.length} Pos.</td>
+                          <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700}}>{eur(e.gesamt)}</td>
+                          <td style={{padding:"10px 12px",textAlign:"right",fontWeight:800,color:C.G}}>{eur(e.netto)}</td>
+                          <td style={{padding:"10px 12px",textAlign:"right"}} onClick={ev=>ev.stopPropagation()}>
+                            <input className="inp" type="number" placeholder="0,00" value={altesSystem[e.ma.id]||""} onChange={ev=>setAltesSystem(p=>({...p,[e.ma.id]:ev.target.value}))}
+                              style={{width:110,textAlign:"right",fontWeight:700,borderColor:alt>0?C.O+"80":C.bl}}/>
+                          </td>
+                          <td style={{padding:"10px 12px",textAlign:"right",fontWeight:800,
+                            color:dOk===null?C.tm:dOk==="equal"?C.G:dOk==="plus"?C.G:C.R}}>
+                            {dOk===null?"–":dOk==="equal"?"✓ 0,00":(diff>0?"+":"")+eur(diff)}
+                          </td>
+                          <td style={{padding:"10px 8px",color:C.ts,fontSize:12}}>{openDetail===e.ma.id?"▲":"▼"}</td>
+                        </tr>
+                        {openDetail===e.ma.id&&(
+                          <tr>
+                            <td colSpan={9} style={{padding:0,background:C.sur}}>
+                              <div style={{padding:"12px 20px",animation:"fadeIn .15s ease"}}>
+                                {/* Angestellt: Gehalts-Zusammenfassung */}
+                                {isAngestellt(e.ma)&&(
+                                  <div style={{background:C.BD,border:`1px solid ${C.B}30`,borderRadius:8,padding:"10px 14px",marginBottom:12,display:"flex",gap:24,flexWrap:"wrap"}}>
+                                    <span style={{fontSize:12}}>👔 <b style={{color:C.B}}>Angestellt</b></span>
+                                    <span style={{fontSize:12,color:C.ts}}>Grundgehalt: <b style={{color:C.tx}}>{eur(e.grundgehalt)}</b></span>
+                                    <span style={{fontSize:12,color:C.ts}}>Provision: <b style={{color:C.Y}}>{eur(e.provision_summe)}</b></span>
+                                    {e.krank_tage>0&&<span style={{fontSize:12,color:C.ts}}>Kranktage: <b style={{color:C.R}}>{e.krank_tage}d → -{eur(e.kranken_abzug)}</b></span>}
+                                    <span style={{fontSize:12,color:C.ts}}>Brutto: <b style={{color:C.tx}}>{eur(e.gesamt)}</b></span>
+                                  </div>
+                                )}
+                                {isHGB(e.ma)&&(
+                                  <div style={{background:C.YD,border:`1px solid ${C.Y}30`,borderRadius:8,padding:"10px 14px",marginBottom:12,display:"flex",gap:24}}>
+                                    <span style={{fontSize:12}}>🤝 <b style={{color:C.Y}}>Selbstständig §84</b></span>
+                                    <span style={{fontSize:12,color:C.ts}}>Nur Provision: <b style={{color:C.G}}>{eur(e.provision_summe)}</b></span>
+                                    <span style={{fontSize:12,color:C.ts}}>Kein Grundgehalt · Keine Kranktage</span>
+                                  </div>
+                                )}
+                                <div style={{fontSize:11,fontWeight:700,color:C.ts,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Positions-Detail</div>
+                                {e.pos.length===0&&<div style={{color:C.tm,fontSize:12,fontStyle:"italic"}}>Keine Einzelpositionen</div>}
+                                {e.pos.map((p,i)=>(
+                                  <div key={i} style={{display:"flex",gap:12,padding:"5px 0",borderBottom:`1px solid ${C.bl}`,fontSize:12}}>
+                                    <span style={{color:C.ts,width:80,flexShrink:0}}>{p.nr}</span>
+                                    <span style={{flex:1}}>{p.kunde}</span>
+                                    <span style={{color:C.ts}}>{p.info}</span>
+                                    <span style={{fontWeight:700,color:C.Y,minWidth:80,textAlign:"right"}}>{eur(p.betrag)}</span>
+                                  </div>
+                                ))}
+                                <div style={{display:"flex",justifyContent:"flex-end",gap:24,marginTop:10,paddingTop:10,borderTop:`1px solid ${C.bl}`}}>
+                                  {isAngestellt(e.ma)&&<span style={{fontSize:12,color:C.ts}}>Grundgehalt: <b style={{color:C.B}}>{eur(e.grundgehalt)}</b></span>}
+                                  <span style={{fontSize:12,color:C.ts}}>Provision: <b style={{color:C.Y}}>{eur(e.provision_summe)}</b></span>
+                                  {e.kranken_abzug>0&&<span style={{fontSize:12,color:C.R}}>- Krank: <b>{eur(e.kranken_abzug)}</b></span>}
+                                  <span style={{fontSize:12,color:C.ts}}>Brutto: <b style={{color:C.tx}}>{eur(e.gesamt)}</b></span>
+                                  <span style={{fontSize:12,color:C.ts}}>Netto: <b style={{color:C.G}}>{eur(e.netto)}</b></span>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style={{marginTop:16}}>
+            <button onClick={()=>setStep(1)} style={{background:C.card,color:C.ts,border:`1px solid ${C.bl}`,borderRadius:8,padding:"10px 20px",fontWeight:700,fontSize:13,cursor:"pointer"}}>← Aufträge bearbeiten</button>
+          </div>
+        </div>}
+
+        {step===2&&!ergebnis&&<div style={{textAlign:"center",padding:60,color:C.ts}}>
+          Bitte zuerst berechnen. <button onClick={()=>setStep(1)} style={{background:C.Y,color:"#000",border:"none",borderRadius:7,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:"pointer",marginLeft:10}}>→ Aufträge</button>
+        </div>}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
