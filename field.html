@@ -562,14 +562,22 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
   const [clk, setClk] = useState(new Date());
   const [selectedRK, setSelectedRK] = useState(null);
   const [rkNotes, setRkNotes] = useState({});
+  const [selectedStorno, setSelectedStorno] = useState(null);
+  const [rettungNotiz, setRettungNotiz] = useState("");
+  const [showRettungNotiz, setShowRettungNotiz] = useState(false);
+  const [showManualConfirm, setShowManualConfirm] = useState(false);
+  const [statsPopup, setStatsPopup] = useState(null);
   useEffect(() => { const t = setInterval(() => setClk(new Date()), 60000); return () => clearInterval(t); }, []);
+
+  // Termine mit Distanzen, Wetter & Scouter-Notizen
   const termine = [
-    { zeit: "09:00", name: "Müller, Detmold", typ: "PV", status: "offen", kunde: { anrede: "Herr", vorname: "Thomas", nachname: "Müller", strasse: "Lemgoer Str.", hausnr: "42", plz: "32756", ort: "Detmold", telefon: "05231 9876543", mobil: "0176 34567890", email: "t.mueller@mail.de" }},
-    { zeit: "11:30", name: "Weber, Bielefeld", typ: "WP", status: "offen", distVon: "Detmold", distKm: 32, distMin: 35, kunde: { anrede: "Frau", vorname: "Sandra", nachname: "Weber", strasse: "Herforder Str.", hausnr: "118", plz: "33602", ort: "Bielefeld", telefon: "0521 1234567", mobil: "0171 98765432", email: "s.weber@web.de" }},
-    { zeit: "14:00", name: "Schmidt, Gütersloh", typ: "PV+WP", status: "offen", kunde: { anrede: "Herr", vorname: "Martin", nachname: "Schmidt", strasse: "Berliner Str.", hausnr: "7a", plz: "33330", ort: "Gütersloh", telefon: "05241 5556677", mobil: "0152 12345678", email: "m.schmidt@gmail.com" }},
-    { zeit: "16:30", name: "Braun, Paderborn", typ: "PV", status: "bestätigt", kunde: { anrede: "Herr", vorname: "Klaus", nachname: "Braun", strasse: "Warburger Str.", hausnr: "55", plz: "33098", ort: "Paderborn", telefon: "05251 4443322", mobil: "0163 87654321", email: "k.braun@t-online.de" }},
+    { zeit: "09:00", name: "M\xFCller, Detmold", typ: "PV", status: "offen", distVon: "Bielefeld (Start)", distKm: 32, distMin: 35, wetter: "\u2600\uFE0F 4\xB0C", scouterNotiz: "Hat einen Hund (Sch\xE4ferhund). Klingel defekt, bitte klopfen.", kunde: { anrede: "Herr", vorname: "Thomas", nachname: "M\xFCller", strasse: "Lemgoer Str.", hausnr: "42", plz: "32756", ort: "Detmold", telefon: "05231 9876543", mobil: "0176 34567890", email: "t.mueller@mail.de" }},
+    { zeit: "11:30", name: "Weber, Bielefeld", typ: "WP", status: "offen", distVon: "Detmold", distKm: 32, distMin: 35, wetter: "\u26C5 5\xB0C", scouterNotiz: "Ehepaar, beide m\xFCssen anwesend sein. Dach Ost-West.", kunde: { anrede: "Frau", vorname: "Sandra", nachname: "Weber", strasse: "Herforder Str.", hausnr: "118", plz: "33602", ort: "Bielefeld", telefon: "0521 1234567", mobil: "0171 98765432", email: "s.weber@web.de" }},
+    { zeit: "14:00", name: "Schmidt, G\xFCtersloh", typ: "PV+WP", status: "offen", distVon: "Bielefeld", distKm: 18, distMin: 22, wetter: "\uD83C\uDF24\uFE0F 6\xB0C", scouterNotiz: "Neubau 2023, WP bereits geplant. Hoher Stromverbrauch 6000 kWh.", kunde: { anrede: "Herr", vorname: "Martin", nachname: "Schmidt", strasse: "Berliner Str.", hausnr: "7a", plz: "33330", ort: "G\xFCtersloh", telefon: "05241 5556677", mobil: "0152 12345678", email: "m.schmidt@gmail.com" }},
+    { zeit: "16:30", name: "Braun, Paderborn", typ: "PV", status: "best\xE4tigt", distVon: "G\xFCtersloh", distKm: 35, distMin: 40, wetter: "\uD83C\uDF27\uFE0F 3\xB0C", scouterNotiz: "Kunde will schnell, Vergleich mit Enpal. Garage-Dach evtl. zus\xE4tzlich.", kunde: { anrede: "Herr", vorname: "Klaus", nachname: "Braun", strasse: "Warburger Str.", hausnr: "55", plz: "33098", ort: "Paderborn", telefon: "05251 4443322", mobil: "0163 87654321", email: "k.braun@t-online.de" }},
   ];
-  // Aktuellen Termin ermitteln (Zeitfenster zwischen diesem und nächstem Termin)
+
+  // Aktuellen Termin ermitteln
   const currentTerminIdx = (() => {
     const now = clk.getHours() * 60 + clk.getMinutes();
     for (let i = termine.length - 1; i >= 0; i--) {
@@ -578,7 +586,23 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
     }
     return -1;
   })();
-  const stats = { heute: 2, woche: 8, monat: 31, quote: 72 };
+
+  // Stats mit klickbaren Detail-Listen
+  const terminStats = { heute: 4, woche: 12, monat: 38 };
+  const salesStats = { heute: 1, woche: 3, monat: 10 };
+  const stornoStats = { heute: 0, woche: 1, monat: 3 };
+  // Demo Kundenlisten f\xFCr Klick-Popup
+  const statsListen = {
+    "termine_heute": [{n:"M\xFCller, Detmold",t:"PV"},{n:"Weber, Bielefeld",t:"WP"},{n:"Schmidt, G\xFCtersloh",t:"PV+WP"},{n:"Braun, Paderborn",t:"PV"}],
+    "termine_woche": [{n:"M\xFCller, Detmold",t:"PV"},{n:"Weber, Bielefeld",t:"WP"},{n:"Schmidt, G\xFCtersloh",t:"PV+WP"},{n:"Braun, Paderborn",t:"PV"},{n:"Schulze, Herford",t:"PV"},{n:"Becker, Minden",t:"WP"},{n:"Huber, Lage",t:"PV"},{n:"Frank, Horn",t:"PV+WP"},{n:"Meier, Bad Salzuflen",t:"PV"},{n:"Wagner, Detmold",t:"WP"},{n:"Koch, Bielefeld",t:"PV"},{n:"Richter, G\xFCtersloh",t:"PV+WP"}],
+    "termine_monat": [{n:"38 Termine in Feb. 2026",t:"Liste"}],
+    "sales_heute": [{n:"Schmidt, G\xFCtersloh",t:"PV+WP 14.2 kWp"}],
+    "sales_woche": [{n:"Schmidt, G\xFCtersloh",t:"PV+WP 14.2 kWp"},{n:"Schulze, Herford",t:"PV 9.8 kWp"},{n:"Becker, Minden",t:"WP 12 kW"}],
+    "sales_monat": [{n:"10 Abschl\xFCsse in Feb.",t:"Pipeline 142.000\u20AC"}],
+    "storno_heute": [],
+    "storno_woche": [{n:"Petersen, Lemgo",t:"Preis zu hoch"}],
+    "storno_monat": [{n:"Petersen, Lemgo",t:"Preis"},{n:"Drescher, Herford",t:"Finanzierung"},{n:"Klein, Herford",t:"Finanzierung"}],
+  };
 
   // Letzte Aufnahmen MIT Board-Status
   const letzte = [
@@ -589,92 +613,142 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
     { name: "Krause", ort: "Detmold", typ: "PV", kwp: "11.4", zeit: "19.02. 15:00", board: "Storno", boardColor: "#ef4444" },
   ];
 
-  // Storno-Retter: Kunden die im Board auf Storno stehen — 2 Tage Zeit zum Heilen
-  const [selectedStorno, setSelectedStorno] = useState(null);
-  const [rettungNotiz, setRettungNotiz] = useState("");
-  const [showRettungNotiz, setShowRettungNotiz] = useState(false);
-  const [showManualConfirm, setShowManualConfirm] = useState(false);
+  // Storno-Retter
   const [stornos, setStornos] = useState([
-    { id: "st1", name: "Petersen, Lemgo", plz: "32657", ort: "Lemgo", typ: "PV 10.2 kWp", grund: "Preis zu hoch", stornoDatum: "22.02.2026", restStunden: 26, aufgabe: "Kunde hat bei Enpal günstiger gesehen. Nachverhandlung möglich — Rabattfreigabe bei Patrick anfragen. Persönliches Gespräch bevorzugt.", notiz: "Frau Petersen war beim Termin sehr interessiert, Mann hat gebremst", kontakt: "0170 1234567" },
-    { id: "st2", name: "Klein, Herford", plz: "32049", ort: "Herford", typ: "PV+WP 13.5 kWp", grund: "Finanzierung abgelehnt", stornoDatum: "23.02.2026", restStunden: 44, aufgabe: "EFS hat abgelehnt, Alternative: SWK Finanzierung prüfen oder Barzahlung mit Sonderskonto anbieten.", notiz: null, kontakt: "0152 9876543" },
+    { id: "st1", name: "Petersen, Lemgo", plz: "32657", ort: "Lemgo", typ: "PV 10.2 kWp", grund: "Preis zu hoch", stornoDatum: "22.02.2026", restStunden: 26, aufgabe: "Kunde hat bei Enpal g\xFCnstiger gesehen. Nachverhandlung m\xF6glich \u2014 Rabattfreigabe bei Patrick anfragen.", notiz: "Frau Petersen war beim Termin sehr interessiert, Mann hat gebremst", kontakt: "0170 1234567" },
+    { id: "st2", name: "Klein, Herford", plz: "32049", ort: "Herford", typ: "PV+WP 13.5 kWp", grund: "Finanzierung abgelehnt", stornoDatum: "23.02.2026", restStunden: 44, aufgabe: "EFS hat abgelehnt, Alternative: SWK Finanzierung pr\xFCfen oder Barzahlung mit Sonderskonto.", notiz: null, kontakt: "0152 9876543" },
   ]);
 
-  // Ranking / Leaderboard (Demo — in Produktion aus Supabase)
+  // Ranking
   const ranking = [
-    { name: "Du", short: "DU", color: "#FDE154", aufnahmen: stats.monat, termine: 14, abschluss: 10, quote: 72 },
-    { name: "Lisa M.", short: "LM", color: "#ec4899", aufnahmen: 28, termine: 12, abschluss: 9, quote: 75 },
-    { name: "Kevin T.", short: "KT", color: "#3b82f6", aufnahmen: 25, termine: 10, abschluss: 7, quote: 70 },
-    { name: "Sarah W.", short: "SW", color: "#22c55e", aufnahmen: 22, termine: 8, abschluss: 5, quote: 63 },
-    { name: "Max B.", short: "MB", color: "#f97316", aufnahmen: 19, termine: 6, abschluss: 4, quote: 67 },
+    { name: "Du", initialen: "DU", color: "#FDE154", aufnahmen: 31, termine: 14, abschluesse: 10, quote: "72%" },
+    { name: "Lisa M.", initialen: "LM", color: "#ec4899", aufnahmen: 28, termine: 12, abschluesse: 9, quote: "75%" },
+    { name: "Kevin T.", initialen: "KT", color: "#3b82f6", aufnahmen: 25, termine: 10, abschluesse: 7, quote: "70%" },
+    { name: "Sarah W.", initialen: "SW", color: "#22c55e", aufnahmen: 22, termine: 8, abschluesse: 5, quote: "63%" },
+    { name: "Max B.", initialen: "MB", color: "#f97316", aufnahmen: 19, termine: 6, abschluesse: 4, quote: "67%" },
   ];
-  var sortedRank = ranking.slice().sort(function(a,b) { return b.abschluss - a.abschluss; });
-  var myRank = sortedRank.findIndex(function(r) { return r.name === "Du"; }) + 1;
+  var myRank = 1;
 
-  // Nächster Termin Countdown + Wegstrecke
+  // N\xE4chster Termin
   var nextTermin = (() => {
     var now = clk.getHours() * 60 + clk.getMinutes();
     for (var i = 0; i < termine.length; i++) {
       var parts = termine[i].zeit.split(":");
       var tMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-      if (tMin > now) return { ...termine[i], minBis: tMin - now };
+      if (tMin > now) return Object.assign({}, termine[i], { minBis: tMin - now });
     }
     return null;
   })();
-  // Wegstrecke Demo-Daten
-  var wegInfo = nextTermin ? { km: nextTermin.name.indexOf("Detmold") >= 0 ? 28 : nextTermin.name.indexOf("Bielefeld") >= 0 ? 5 : nextTermin.name.indexOf("Gütersloh") >= 0 ? 18 : 35, minFahrt: nextTermin.name.indexOf("Detmold") >= 0 ? 32 : nextTermin.name.indexOf("Bielefeld") >= 0 ? 8 : nextTermin.name.indexOf("Gütersloh") >= 0 ? 22 : 40 } : null;
+
+  // Provisionstufe: ab 8 Auftr\xE4ge = 1700\u20AC
+  var salesMonat = salesStats.monat;
+  var provStufen = [{ab:0,prov:1200},{ab:5,prov:1400},{ab:8,prov:1700},{ab:12,prov:2000},{ab:16,prov:2400}];
+  var currentStufe = provStufen.slice().reverse().find(function(s){ return salesMonat >= s.ab; }) || provStufen[0];
+  var nextStufe = provStufen.find(function(s){ return s.ab > salesMonat; });
+  var fehlendBis = nextStufe ? (nextStufe.ab - salesMonat) : 0;
+
   const gr = clk.getHours() < 12 ? "Guten Morgen" : clk.getHours() < 18 ? "Guten Tag" : "Guten Abend";
   const ds = clk.toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
   const ts = clk.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
   const cs = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "18px 20px" };
   const ls = { fontSize: 10, color: "rgba(255,255,255,0.35)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 };
   return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 10000, background: "radial-gradient(ellipse at 30% 20%, rgba(232,212,77,0.06) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(96,165,250,0.04) 0%, transparent 50%), #0A0E1A", fontFamily: font, color: "#fff", overflow: "auto", padding: 0 }},
-    React.createElement("div", { style: { padding: "24px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }},
+    /* ── HEADER mit Name + Wetter ── */
+    React.createElement("div", { style: { padding: "28px 32px 16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }},
       React.createElement("div", null,
         React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }},
-          React.createElement("span", { style: { fontSize: 36, fontWeight: 800, letterSpacing: -1 }}, "bee-doo"),
-          React.createElement("div", { style: { width: 1, height: 28, background: "rgba(255,255,255,0.15)", margin: "0 4px" }}),
-          React.createElement("span", { style: { fontSize: 20, fontWeight: 800, letterSpacing: 3, background: "linear-gradient(135deg, #FDE154, #FFE566)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}, "FIELD")),
-        React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.4)" }}, gr + " \xB7 " + ds)),
+          React.createElement("span", { style: { fontSize: 32, fontWeight: 900 }}, "bee"),
+          React.createElement("span", { style: { fontSize: 32, fontWeight: 900, color: "#FDE154" }}, "\xB7"),
+          React.createElement("span", { style: { fontSize: 32, fontWeight: 900 }}, "doo"),
+          React.createElement("span", { style: { fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.3)", marginLeft: 12, borderLeft: "2px solid rgba(255,255,255,0.15)", paddingLeft: 12 }}, "FIELD")),
+        React.createElement("div", { style: { fontSize: 15, color: "rgba(255,255,255,0.6)", marginTop: 4 }}, "Hallo Bernd \uD83D\uDC4B Willkommen in der bee-doo Welt"),
+        React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 2 }}, gr + " \xB7 " + ds)),
       React.createElement("div", { style: { textAlign: "right" }},
-        React.createElement("div", { style: { fontSize: 28, fontWeight: 700, color: "#FDE154" }}, ts),
+        React.createElement("div", { style: { fontSize: 32, fontWeight: 900, color: "#FDE154" }}, ts),
         React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.3)" }}, "NRW \xB7 bee-doo GmbH"))),
-    React.createElement("div", { style: { padding: "20px 28px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 900, margin: "0 auto" }},
-      React.createElement("div", { style: { ...cs, gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }},
-        ...[{ l: "Heute", v: stats.heute, i: "\uD83D\uDCCB", c: "#FDE154" }, { l: "Diese Woche", v: stats.woche, i: "\uD83D\uDCCA", c: "#60A5FA" }, { l: "Dieser Monat", v: stats.monat, i: "\uD83D\uDCC8", c: "#34D399" }, { l: "Abschlussquote", v: stats.quote + "%", i: "\uD83C\uDFAF", c: "#A78BFA" }].map((s, i) => React.createElement("div", { key: i, style: { textAlign: "center", padding: "10px 0" }},
-          React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 6 }}, s.i + " " + s.l),
-          React.createElement("div", { style: { fontSize: 28, fontWeight: 800, color: s.c }}, s.v)))),
-      /* ── RANKING / LEADERBOARD ── */
-      React.createElement("div", { style: { ...cs, gridColumn: "1 / -1" }},
-        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }},
-          React.createElement("div", { style: ls }, "\uD83C\uDFC6 TEAM RANKING \xB7 MONAT"),
-          React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: myRank <= 3 ? "#22c55e" : "#FDE154" }}, "#" + myRank)),
-        ranking.map(function(r, i) {
-          var isMe = r.name === "Du";
-          return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 8px", borderRadius: 10, background: isMe ? "rgba(253,225,84,0.06)" : "transparent", border: isMe ? "1.5px solid rgba(253,225,84,0.15)" : "1.5px solid transparent", marginBottom: 4 }},
-            React.createElement("div", { style: { width: 22, fontSize: 12, fontWeight: 800, color: i < 3 ? ["#ffd700","#c0c0c0","#cd7f32"][i] : "rgba(255,255,255,0.25)", textAlign: "center" }}, i < 3 ? ["\uD83E\uDD47","\uD83E\uDD48","\uD83E\uDD49"][i] : (i+1)),
-            React.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: r.color + "22", border: "2px solid " + r.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: r.color }}, r.initialen),
-            React.createElement("div", { style: { flex: 1 }},
-              React.createElement("div", { style: { fontSize: 13, fontWeight: isMe ? 800 : 600, color: isMe ? "#FDE154" : "#fff" }}, r.name),
-              React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.35)" }}, r.aufnahmen + " Aufn. \xB7 " + r.termine + " Termine \xB7 " + r.quote + " Quote")),
-            React.createElement("div", { style: { textAlign: "right" }},
-              React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: isMe ? "#22c55e" : "rgba(255,255,255,0.6)" }}, r.abschluesse),
-              React.createElement("div", { style: { fontSize: 8, color: "rgba(255,255,255,0.25)", textTransform: "uppercase" }}, "Abschl\xFCsse")));
-        })
-      ),
+
+    React.createElement("div", { style: { padding: "0 28px 28px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 900, margin: "0 auto" }},
+
+      /* ── NÄCHSTER TERMIN (ganz oben, volle Breite) ── */
+      nextTermin && React.createElement("div", { style: { ...cs, gridColumn: "1 / -1", background: "rgba(52,211,153,0.04)", borderColor: "rgba(52,211,153,0.2)", cursor: "pointer" }, onClick: function() { if(onTerminClick && nextTermin.kunde) onTerminClick(nextTermin); } },
+        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" }},
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }},
+            React.createElement("div", { style: { width: 44, height: 44, borderRadius: 12, background: "rgba(52,211,153,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}, "\uD83D\uDE97"),
+            React.createElement("div", null,
+              React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#34D399" }}, "N\xE4chster Termin in " + (nextTermin.minBis >= 60 ? Math.floor(nextTermin.minBis/60) + "h " + (nextTermin.minBis%60) + "min" : nextTermin.minBis + "min")),
+              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 2 }}, nextTermin.name + " \xB7 " + nextTermin.typ),
+              nextTermin.scouterNotiz && React.createElement("div", { style: { fontSize: 10, color: "rgba(96,165,250,0.7)", marginTop: 3 }}, "\uD83D\uDCDD " + nextTermin.scouterNotiz))),
+          React.createElement("div", { style: { textAlign: "right" }},
+            React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#34D399" }}, nextTermin.zeit),
+            React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.3)" }}, nextTermin.wetter),
+            nextTermin.distKm && React.createElement("div", { style: { fontSize: 10, color: "rgba(96,165,250,0.6)", marginTop: 2 }}, "\uD83D\uDEE3\uFE0F " + nextTermin.distKm + " km \xB7 ~" + nextTermin.distMin + " min")))),
+
+      /* ── STATS: Termine / Sales / Storno (klickbar) ── */
+      React.createElement("div", { style: { ...cs, gridColumn: "1 / -1", padding: "14px 16px" }},
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 1 }},
+          /* Termine */
+          React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}, "\uD83D\uDCC5 Termine"),
+            [["Heute", terminStats.heute, "termine_heute"],["Woche", terminStats.woche, "termine_woche"],["Monat", terminStats.monat, "termine_monat"]].map(function(r) {
+              return React.createElement("div", { key: r[0], onClick: function() { setStatsPopup({title: "Termine " + r[0], list: statsListen[r[2]] || []}); }, style: { display: "flex", justifyContent: "space-between", padding: "4px 8px", cursor: "pointer", borderRadius: 6, marginBottom: 2 }, onMouseEnter: function(e){e.currentTarget.style.background="rgba(253,225,84,0.06)";}, onMouseLeave: function(e){e.currentTarget.style.background="transparent";} },
+                React.createElement("span", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)" }}, r[0]),
+                React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#FDE154" }}, r[1]));
+            })),
+          /* Sales */
+          React.createElement("div", { style: { borderLeft: "1px solid rgba(255,255,255,0.06)", paddingLeft: 12 }},
+            React.createElement("div", { style: { fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}, "\uD83D\uDCB0 Sales"),
+            [["Heute", salesStats.heute, "sales_heute"],["Woche", salesStats.woche, "sales_woche"],["Monat", salesStats.monat, "sales_monat"]].map(function(r) {
+              return React.createElement("div", { key: r[0], onClick: function() { setStatsPopup({title: "Sales " + r[0], list: statsListen[r[2]] || []}); }, style: { display: "flex", justifyContent: "space-between", padding: "4px 8px", cursor: "pointer", borderRadius: 6, marginBottom: 2 }, onMouseEnter: function(e){e.currentTarget.style.background="rgba(52,211,153,0.06)";}, onMouseLeave: function(e){e.currentTarget.style.background="transparent";} },
+                React.createElement("span", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)" }}, r[0]),
+                React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#22c55e" }}, r[1]));
+            })),
+          /* Storno */
+          React.createElement("div", { style: { borderLeft: "1px solid rgba(255,255,255,0.06)", paddingLeft: 12 }},
+            React.createElement("div", { style: { fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}, "\u274C Storno"),
+            [["Heute", stornoStats.heute, "storno_heute"],["Woche", stornoStats.woche, "storno_woche"],["Monat", stornoStats.monat, "storno_monat"]].map(function(r) {
+              return React.createElement("div", { key: r[0], onClick: function() { setStatsPopup({title: "Storno " + r[0], list: statsListen[r[2]] || []}); }, style: { display: "flex", justifyContent: "space-between", padding: "4px 8px", cursor: "pointer", borderRadius: 6, marginBottom: 2 }, onMouseEnter: function(e){e.currentTarget.style.background="rgba(239,68,68,0.06)";}, onMouseLeave: function(e){e.currentTarget.style.background="transparent";} },
+                React.createElement("span", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)" }}, r[0]),
+                React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: r[1] > 0 ? "#ef4444" : "rgba(255,255,255,0.2)" }}, r[1]));
+            }))),
+
+      /* ── Stats Popup Modal ── */
+      statsPopup && React.createElement("div", { onClick: function() { setStatsPopup(null); }, style: { position: "fixed", inset: 0, zIndex: 21000, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }},
+        React.createElement("div", { onClick: function(e) { e.stopPropagation(); }, style: { width: "100%", maxWidth: 360, background: "#1A2332", borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden" }},
+          React.createElement("div", { style: { padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }},
+            React.createElement("div", { style: { fontSize: 14, fontWeight: 700 }}, statsPopup.title),
+            React.createElement("button", { onClick: function() { setStatsPopup(null); }, style: { background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 18, cursor: "pointer" }}, "\xD7")),
+          React.createElement("div", { style: { padding: "12px 18px", maxHeight: 300, overflow: "auto" }},
+            statsPopup.list.length === 0 ? React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.3)", textAlign: "center", padding: 20 }}, "Keine Eintr\xE4ge") :
+            statsPopup.list.map(function(item, i) {
+              return React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < statsPopup.list.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }},
+                React.createElement("span", { style: { fontSize: 12, fontWeight: 600 }}, item.n),
+                React.createElement("span", { style: { fontSize: 11, color: "rgba(255,255,255,0.4)" }}, item.t));
+            })))),
+
+      /* ── HEUTIGE TERMINE mit Fahrtzeiten + Wetter + Scouter-Notizen ── */
       React.createElement("div", { style: cs },
         React.createElement("div", { style: ls }, "\uD83D\uDCC5 Heutige Termine"),
         ...termine.map(function(t, i) {
           var isCurrent = i === currentTerminIdx;
-          return React.createElement("div", { key: i, onClick: function() { if(onTerminClick && t.kunde) onTerminClick(t); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 6px", borderBottom: i < termine.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", cursor: t.kunde ? "pointer" : "default", borderRadius: 8, margin: "0 -6px", background: isCurrent ? "rgba(52,211,153,0.08)" : "transparent", border: isCurrent ? "1.5px solid rgba(52,211,153,0.3)" : "1.5px solid transparent", animation: isCurrent ? "pulseGreen 2s infinite" : "none" }, onMouseEnter: function(e) { if(t.kunde) e.currentTarget.style.background = isCurrent ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.06)"; }, onMouseLeave: function(e) { e.currentTarget.style.background = isCurrent ? "rgba(52,211,153,0.08)" : "transparent"; } },
-            isCurrent && React.createElement("div", { style: { width: 6, height: 6, borderRadius: "50%", background: "#34D399", boxShadow: "0 0 8px rgba(52,211,153,0.6)", animation: "pulse 1.5s infinite", flexShrink: 0 } }),
-            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#FDE154", minWidth: 48 } }, t.zeit),
-            React.createElement("div", { style: { flex: 1 } },
-              React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, t.name),
-              React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)" } }, t.typ), t.distKm && React.createElement("div", { style: { fontSize: 9, color: "rgba(96,165,250,0.6)", marginTop: 2 }}, "\uD83D\uDEE3\uFE0F " + t.distKm + " km \xB7 ~" + t.distMin + " min von " + t.distVon)),
-            React.createElement("div", { style: { fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: isCurrent ? "rgba(52,211,153,0.2)" : t.status === "best\xE4tigt" ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.1)", color: isCurrent ? "#34D399" : t.status === "best\xE4tigt" ? "#34D399" : "#FDE154" } }, isCurrent ? "JETZT" : t.status.toUpperCase()),
-            t.kunde && React.createElement("span", { style: { fontSize: 14, color: isCurrent ? "rgba(52,211,153,0.6)" : "rgba(253,225,84,0.4)", marginLeft: 4 } }, "\u203A")
-          );
+          return React.createElement(React.Fragment, { key: i },
+            i > 0 && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "4px 0 4px 48px", margin: "2px 0" }},
+              React.createElement("div", { style: { flex: 1, height: 1, background: "rgba(96,165,250,0.15)" }}),
+              React.createElement("div", { style: { fontSize: 9, color: "rgba(96,165,250,0.5)", whiteSpace: "nowrap" }}, "\uD83D\uDE97 " + (t.distKm || "?") + " km \xB7 ~" + (t.distMin || "?") + " min"),
+              React.createElement("div", { style: { flex: 1, height: 1, background: "rgba(96,165,250,0.15)" }})),
+            React.createElement("div", { onClick: function() { if(onTerminClick && t.kunde) onTerminClick(t); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 6px", cursor: t.kunde ? "pointer" : "default", borderRadius: 8, margin: "0 -6px", background: isCurrent ? "rgba(52,211,153,0.08)" : "transparent", border: isCurrent ? "1.5px solid rgba(52,211,153,0.3)" : "1.5px solid transparent", animation: isCurrent ? "pulseGreen 2s infinite" : "none" }, onMouseEnter: function(e) { if(t.kunde) e.currentTarget.style.background = isCurrent ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.06)"; }, onMouseLeave: function(e) { e.currentTarget.style.background = isCurrent ? "rgba(52,211,153,0.08)" : "transparent"; } },
+              isCurrent && React.createElement("div", { style: { width: 6, height: 6, borderRadius: "50%", background: "#34D399", boxShadow: "0 0 8px rgba(52,211,153,0.6)", animation: "pulse 1.5s infinite", flexShrink: 0 } }),
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#FDE154", minWidth: 48 } }, t.zeit),
+              React.createElement("div", { style: { flex: 1 } },
+                React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, t.name),
+                React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)" } }, t.typ),
+                t.scouterNotiz && React.createElement("div", { style: { fontSize: 9, color: "rgba(96,165,250,0.6)", marginTop: 2 }}, "\uD83D\uDCDD " + t.scouterNotiz)),
+              React.createElement("div", { style: { textAlign: "right" }},
+                React.createElement("div", { style: { fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: isCurrent ? "rgba(52,211,153,0.2)" : t.status === "best\xE4tigt" ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.1)", color: isCurrent ? "#34D399" : t.status === "best\xE4tigt" ? "#34D399" : "#FDE154" } }, isCurrent ? "JETZT" : t.status.toUpperCase()),
+                React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 3 }}, t.wetter || "")),
+              t.kunde && React.createElement("span", { style: { fontSize: 14, color: isCurrent ? "rgba(52,211,153,0.6)" : "rgba(253,225,84,0.4)", marginLeft: 4 } }, "\u203A")));
         })),
+
+      /* ── LETZTE AUFNAHMEN ── */
       React.createElement("div", { style: cs },
         React.createElement("div", { style: ls }, "\uD83D\uDD70 Letzte Aufnahmen"),
         ...letzte.map(function(l, i) { return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < letzte.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }},
@@ -682,24 +756,19 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
           React.createElement("div", { style: { flex: 1 }},
             React.createElement("div", { style: { fontSize: 13, fontWeight: 600 }}, l.name + ", " + l.ort),
             React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 2 }},
-              React.createElement("span", { style: { fontSize: 10, color: "rgba(255,255,255,0.35)" }}, l.typ + (l.kwp !== "\u2014" ? " \xB7 " + l.kwp + " kWp" : "")),
-              React.createElement("span", { style: { fontSize: 8, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: (l.boardColor || "#666") + "20", color: l.boardColor || "#666", textTransform: "uppercase", letterSpacing: 0.5 }}, l.board || "Neu"))),
+              React.createElement("span", { style: { fontSize: 10, color: "rgba(255,255,255,0.4)" }}, l.typ + (l.kwp !== "\u2014" ? " \xB7 " + l.kwp + " kWp" : "")),
+              React.createElement("span", { style: { fontSize: 8, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: l.boardColor + "20", color: l.boardColor }}, l.board.toUpperCase()))),
           React.createElement("div", { style: { textAlign: "right" }},
             React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.25)" }}, l.zeit),
-            l.board === "Storno" && React.createElement("div", { style: { fontSize: 8, color: "#ef4444", fontWeight: 700, marginTop: 2 }}, "\u26A0 STORNO"))
-        ); })),
+            l.board === "Storno" && React.createElement("div", { style: { fontSize: 9, color: "#ef4444", fontWeight: 700, marginTop: 2 }}, "\u26A0 STORNO"))); })),
 
-      /* ── NÄCHSTER TERMIN COUNTDOWN + WEGSTRECKE ── */
-      nextTermin && React.createElement("div", { style: { ...cs, gridColumn: "1 / -1", background: "rgba(52,211,153,0.04)", borderColor: "rgba(52,211,153,0.15)" }},
-        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" }},
-          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }},
-            React.createElement("div", { style: { width: 44, height: 44, borderRadius: 12, background: "rgba(52,211,153,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}, "\uD83D\uDE97"),
-            React.createElement("div", null,
-              React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#34D399" }}, "N\xE4chster Termin in " + (nextTermin.minBis >= 60 ? Math.floor(nextTermin.minBis / 60) + "h " + (nextTermin.minBis % 60) + "min" : nextTermin.minBis + " min")),
-              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 2 }}, nextTermin.name + " \xB7 " + nextTermin.typ))),
-          React.createElement("div", { style: { textAlign: "right" }},
-            React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#34D399" }}, nextTermin.zeit),
-            wegInfo && React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}, "\uD83D\uDCCD " + wegInfo.km + " km \xB7 ~" + wegInfo.minFahrt + " min")))),
+      /* ── PROVISIONSSTUFE ── */
+      nextStufe && React.createElement("div", { style: { ...cs, gridColumn: "1 / -1", background: "rgba(253,225,84,0.03)", borderColor: "rgba(253,225,84,0.15)" }},
+        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }},
+          React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#FDE154" }}, "\uD83D\uDCB0 Provision: " + currentStufe.prov + "\u20AC / Auftrag"),
+          React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.4)" }}, "Noch " + fehlendBis + " Auftr\xE4ge bis " + nextStufe.prov + "\u20AC")),
+        React.createElement("div", { style: { height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden" }},
+          React.createElement("div", { style: { width: Math.round((salesMonat / nextStufe.ab) * 100) + "%", height: "100%", background: "linear-gradient(90deg, #FDE154, #E8CC3D)", borderRadius: 3, transition: "width 0.5s" }}))),
 
       /* ── STORNO-RETTER ── */
       stornos.length > 0 && React.createElement("div", { style: { ...cs, gridColumn: "1 / -1", borderColor: "rgba(249,115,22,0.3)", background: "rgba(249,115,22,0.03)" }},
@@ -721,6 +790,9 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
               React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.3)" }}, "verbleibend")));
         })
       ),
+
+      /* ── RÜCKKEHRER AUS MONTAGE ── */
+      React.createElement("div", { style: { gridColumn: "1 / -1" }},
 
       /* ── STORNO DETAIL MODAL ── */
       selectedStorno && React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 20000, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }},
@@ -820,7 +892,27 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
             )
           )
         ),
-        React.createElement("button", { onClick: function() { setShowManualConfirm(true); }, style: { width: "100%", padding: "18px 0", borderRadius: 14, background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(255,255,255,0.12)", cursor: "pointer", fontFamily: font, fontSize: 15, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: 0.5 }}, "\u270D\uFE0F Manuelle Aufnahme (ohne Kundendaten)"),
+        
+      /* ── RANKING / LEADERBOARD (unten) ── */
+      React.createElement("div", { style: { ...cs, gridColumn: "1 / -1" }},
+        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }},
+          React.createElement("div", { style: ls }, "\uD83C\uDFC6 TEAM RANKING \xB7 MONAT"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: myRank <= 3 ? "#22c55e" : "#FDE154" }}, "#" + myRank)),
+        ranking.map(function(r, i) {
+          var isMe = r.name === "Du";
+          return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 8px", borderRadius: 10, background: isMe ? "rgba(253,225,84,0.06)" : "transparent", border: isMe ? "1.5px solid rgba(253,225,84,0.15)" : "1.5px solid transparent", marginBottom: 4 }},
+            React.createElement("div", { style: { width: 22, fontSize: 12, fontWeight: 800, color: i < 3 ? ["#ffd700","#c0c0c0","#cd7f32"][i] : "rgba(255,255,255,0.25)", textAlign: "center" }}, i < 3 ? ["\uD83E\uDD47","\uD83E\uDD48","\uD83E\uDD49"][i] : (i+1)),
+            React.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: r.color + "22", border: "2px solid " + r.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: r.color }}, r.initialen),
+            React.createElement("div", { style: { flex: 1 }},
+              React.createElement("div", { style: { fontSize: 13, fontWeight: isMe ? 800 : 600, color: isMe ? "#FDE154" : "#fff" }}, r.name),
+              React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.35)" }}, r.aufnahmen + " Aufn. \xB7 " + r.termine + " Termine \xB7 " + r.quote + " Quote")),
+            React.createElement("div", { style: { textAlign: "right" }},
+              React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: isMe ? "#22c55e" : "rgba(255,255,255,0.6)" }}, r.abschluesse),
+              React.createElement("div", { style: { fontSize: 8, color: "rgba(255,255,255,0.25)", textTransform: "uppercase" }}, "Abschl\xFCsse")));
+        })
+      ),
+
+      React.createElement("button", { onClick: function() { setShowManualConfirm(true); }, style: { width: "100%", padding: "18px 0", borderRadius: 14, background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(255,255,255,0.12)", cursor: "pointer", fontFamily: font, fontSize: 15, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: 0.5 }}, "\u270D\uFE0F Manuelle Aufnahme (ohne Kundendaten)"),
         showManualConfirm && React.createElement("div", { style: { marginTop: 12, padding: "16px", borderRadius: 12, background: "rgba(249,115,22,0.06)", border: "1.5px solid rgba(249,115,22,0.3)", animation: "fadeInUp 0.2s ease" }},
           React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }},
             React.createElement("span", { style: { fontSize: 20 }}, "\u26A0\uFE0F"),
@@ -829,7 +921,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
           React.createElement("div", { style: { display: "flex", gap: 10 }},
             React.createElement("button", { onClick: function() { setShowManualConfirm(false); }, style: { flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", fontSize: 13, fontFamily: font, cursor: "pointer" }}, "Abbrechen"),
             React.createElement("button", { onClick: function() { setShowManualConfirm(false); onNewAufnahme(); }, style: { flex: 2, padding: "12px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #FDE154, #E8CC3D)", color: "#0A0E1A", fontSize: 13, fontWeight: 800, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 16px rgba(253,225,84,0.25)" }}, "\u26A1 Ja, manuell starten"))))),
-    React.createElement("div", { style: { textAlign: "center", padding: "16px 0 24px", fontSize: 10, color: "rgba(255,255,255,0.12)" }}, "v2.0 \xB7 bee-doo FIELD \xB7 Bielefeld \xB7 \uD83D\uDC1D"));
+    React.createElement("div", { style: { textAlign: "center", padding: "16px 0 24px", fontSize: 10, color: "rgba(255,255,255,0.12)" }}, "v2.0 \xB7 bee-doo FIELD \xB7 Bielefeld \xB7 \uD83D\uDC1D"))));
 }
 function StartScreen({ onStart }) {
   const [hovered, setHovered] = useState(null);
