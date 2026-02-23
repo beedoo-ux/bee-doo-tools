@@ -183,32 +183,43 @@ function applyDemoStatus(projects) {
       montageStartedAt:'2026-02-23T07:45:00', engelArrivedAt:'2026-02-23T08:02:00',
       fotoCount:4, letzteAktualisierung:'2026-02-23T09:12:00',
       dcProgress:[
-        {step:'geruest',at:'2026-02-23T08:15:00',foto:true},
-        {step:'uk',at:'2026-02-23T09:00:00',foto:true},
-      ] },
+        {step:'geruest',at:'2026-02-23T08:15:00',foto:'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=200&h=120&fit=crop'},
+        {step:'uk',at:'2026-02-23T09:00:00',foto:'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=200&h=120&fit=crop'},
+      ],
+      acProgress:[] },
     // P-002: Carmen Böhm (12.5kWp → 2-Tage DC) – Bauengel vor Ort, Montage NICHT gestartet = ROT
     { id:'P-2026-002', dcDate:'2026-02-23', dcTechId:5, dcDuration:2, acDate:'2026-02-25', acTechId:8,
       engelId:102, planerId:202, status:'fully_planned', baustelleStatus:'engel_vor_ort',
       montageStartedAt:null, engelArrivedAt:'2026-02-23T08:15:00',
       fotoCount:2, letzteAktualisierung:'2026-02-23T08:55:00',
-      dcProgress:[] },
+      dcProgress:[],
+      acProgress:[] },
     // P-003: Werner Schäfer – Montage gestartet, Bauengel FEHLT = ORANGE
     { id:'P-2026-003', dcDate:'2026-02-23', dcTechId:2, acDate:'2026-02-24', acTechId:10,
       engelId:null, planerId:203, status:'dc_planned', baustelleStatus:'engel_fehlt',
       montageStartedAt:'2026-02-23T07:55:00', engelArrivedAt:null,
       fotoCount:1, letzteAktualisierung:'2026-02-23T08:02:00',
-      dcProgress:[{step:'fundament',at:'2026-02-23T08:00:00',foto:true}] },
-    // P-004: Brigitte Klein – geplant, noch nicht heute
+      dcProgress:[
+        {step:'fundament',at:'2026-02-23T08:00:00',foto:'https://images.unsplash.com/photo-1513467535987-fd81bc7d62f8?w=200&h=120&fit=crop'},
+      ],
+      acProgress:[] },
+    // P-004: Brigitte Klein – geplant Mi, noch nicht heute – DC hat schon Progress von gestern
     { id:'P-2026-004', dcDate:'2026-02-25', dcTechId:3, acDate:'2026-02-26', acTechId:11,
-      engelId:104, planerId:201, status:'fully_planned' },
-    // P-005: Horst Richter (14.7kWp → 2-Tage DC) – geplant
+      engelId:104, planerId:201, status:'fully_planned',
+      dcProgress:[],
+      acProgress:[] },
+    // P-005: Horst Richter (14.7kWp → 2-Tage DC) – geplant Do+Fr
     { id:'P-2026-005', dcDate:'2026-02-26', dcTechId:7, dcDuration:2, acDate:'2026-02-28', acTechId:9,
-      engelId:101, planerId:202, status:'fully_planned' },
-    // P-006: Elke Vogel – Monteur verspätet = ROT
+      engelId:101, planerId:202, status:'fully_planned',
+      dcProgress:[],
+      acProgress:[] },
+    // P-006: Elke Vogel – DC läuft, AC hat auch schon Fortschritt (WR montiert)
     { id:'P-2026-006', dcDate:'2026-02-23', dcTechId:13, acDate:'2026-02-25', acTechId:15,
       engelId:102, planerId:201, status:'fully_planned', baustelleStatus:'monteur_nicht_gestartet',
       montageStartedAt:null, engelArrivedAt:null,
-      fotoCount:0, letzteAktualisierung:null },
+      fotoCount:0, letzteAktualisierung:null,
+      dcProgress:[],
+      acProgress:[] },
   ];
   return projects.map(p => {
     const d = demos.find(x => x.id === p.id);
@@ -746,26 +757,40 @@ function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2 }) {
       </div>
       {proj.notes && <div style={{fontSize:8, color:C.muted, marginTop:2}}>📋 {proj.notes}</div>}
 
-      {/* Baufortschritt Mini-Anzeige */}
+      {/* Baufortschritt – IMMER anzeigen */}
       {(() => {
         const steps = phase.startsWith('dc') ? getDcSteps(proj.type) : getAcSteps(proj.type);
         const progress = phase.startsWith('dc') ? (proj.dcProgress||[]) : (proj.acProgress||[]);
-        if(steps && progress.length > 0) {
-          const lastStep = progress[progress.length-1];
-          const stepDef = steps.find(s => s.key === lastStep.step);
-          return (
-            <div style={{marginTop:3}}>
-              <div style={{display:'flex', gap:1, marginBottom:2}}>
-                {steps.map((s,i) => {
-                  const done = progress.some(p => p.step === s.key);
-                  return <div key={s.key} style={{flex:1, height:3, borderRadius:1, background:done?C.green:C.border, transition:'all 0.3s'}}/>;
-                })}
-              </div>
-              <div style={{fontSize:8, color:C.green, fontWeight:600}}>{stepDef?.icon} {stepDef?.label}{lastStep.foto?' 📷':''}</div>
+        if(!steps) return null;
+        const lastStep = progress.length > 0 ? progress[progress.length-1] : null;
+        const stepDef = lastStep ? steps.find(s => s.key === lastStep.step) : null;
+        const pct = steps.length > 0 ? (progress.length / steps.length * 100) : 0;
+        // Letztes Foto
+        const lastFoto = [...progress].reverse().find(p => p.foto);
+        return (
+          <div style={{marginTop:3}}>
+            {/* Fortschrittsbalken */}
+            <div style={{display:'flex', gap:1, marginBottom:2}}>
+              {steps.map(s => {
+                const done = progress.some(p => p.step === s.key);
+                return <div key={s.key} style={{flex:1, height:3, borderRadius:1, background:done?C.green:C.border+'88'}}/>;
+              })}
             </div>
-          );
-        }
-        return null;
+            {/* Status-Text */}
+            {stepDef ? (
+              <div style={{fontSize:8, color:C.green, fontWeight:600}}>{stepDef.icon} {stepDef.label}</div>
+            ) : (
+              <div style={{fontSize:8, color:C.muted}}>⏳ {progress.length}/{steps.length} Schritte</div>
+            )}
+            {/* Foto-Thumbnail */}
+            {lastFoto && lastFoto.foto && (
+              <div style={{marginTop:3, borderRadius:4, overflow:'hidden', border:`1px solid ${C.border}`, height:isSpan2?52:38, position:'relative'}}>
+                <img src={lastFoto.foto} style={{width:'100%', height:'100%', objectFit:'cover', display:'block', opacity:0.85}} onError={e=>{e.target.style.display='none'}}/>
+                <div style={{position:'absolute', bottom:2, right:4, background:'rgba(0,0,0,0.7)', borderRadius:3, padding:'1px 5px', fontSize:8, color:C.text, fontWeight:600}}>📷 Bauengel</div>
+              </div>
+            )}
+          </div>
+        );
       })()}
 
       {/* Baustellen-Status Badge(s) */}
@@ -1342,23 +1367,32 @@ function DetailModal({ proj, onClose, onReplan }) {
           return <div key={s.key} style={{flex:1, height:4, borderRadius:2, background:done?C.green:C.border+'66', transition:'all 0.3s'}}/>;
         })}
       </div>
+      <div style={{fontSize:10, color:C.dim, marginBottom:4}}>{progress.length}/{steps.length} Schritte abgeschlossen</div>
       {steps.map(s => {
         const entry = progress.find(p => p.step === s.key);
         return (
-          <div key={s.key} style={{display:'flex', alignItems:'center', gap:8, padding:'4px 0', opacity:entry?1:0.4}}>
-            <div style={{width:22, height:22, borderRadius:'50%', background:entry?C.green+'22':C.border, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, flexShrink:0, border:`1px solid ${entry?C.green:C.border}`}}>
-              {entry ? '✓' : s.icon}
+          <React.Fragment key={s.key}>
+            <div style={{display:'flex', alignItems:'center', gap:8, padding:'4px 0', opacity:entry?1:0.4}}>
+              <div style={{width:22, height:22, borderRadius:'50%', background:entry?C.green+'22':C.border, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, flexShrink:0, border:`1px solid ${entry?C.green:C.border}`}}>
+                {entry ? '✓' : s.icon}
+              </div>
+              <div style={{flex:1, minWidth:0}}>
+                <span style={{fontSize:11, fontWeight:entry?700:400, color:entry?C.text:C.muted}}>{s.label}</span>
+              </div>
+              {entry && (
+                <div style={{display:'flex', gap:4, alignItems:'center'}}>
+                  {entry.foto && <span style={{fontSize:10, background:C.blue+'18', color:C.blue, borderRadius:3, padding:'1px 5px'}}>📷</span>}
+                  <span style={{fontSize:10, color:C.dim}}>{fmtTime(entry.at)}</span>
+                </div>
+              )}
             </div>
-            <div style={{flex:1, minWidth:0}}>
-              <span style={{fontSize:11, fontWeight:entry?700:400, color:entry?C.text:C.muted}}>{s.label}</span>
-            </div>
-            {entry && (
-              <div style={{display:'flex', gap:4, alignItems:'center'}}>
-                {entry.foto && <span style={{fontSize:10, background:C.blue+'18', color:C.blue, borderRadius:3, padding:'1px 5px'}}>📷 Foto</span>}
-                <span style={{fontSize:10, color:C.dim}}>{fmtTime(entry.at)}</span>
+            {/* Inline Foto vom Bauengel/Monteur */}
+            {entry && entry.foto && (
+              <div style={{marginLeft:30, marginBottom:6, borderRadius:6, overflow:'hidden', border:`1px solid ${C.border}`, maxHeight:100}}>
+                <img src={entry.foto} style={{width:'100%', height:100, objectFit:'cover', display:'block'}} onError={e=>{e.target.parentElement.style.display='none'}}/>
               </div>
             )}
-          </div>
+          </React.Fragment>
         );
       })}
     </div>
