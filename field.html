@@ -2503,6 +2503,57 @@ function StepEinstieg({ data, setData, hasPV = true, hasWP = false }) {
 function StepFotos({ data, setData }) {
   const u = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const [gDriveConnected, setGDriveConnected] = useState(!!gDriveState.token);
+  const [qrScanning, setQrScanning] = useState(false);
+  const [qrResult, setQrResult] = useState(data._qrResults || []);
+  const qrVideoRef = React.useRef(null);
+  const qrStreamRef = React.useRef(null);
+
+  const startQrScan = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      qrStreamRef.current = stream;
+      setQrScanning(true);
+      setTimeout(() => {
+        if (qrVideoRef.current) {
+          qrVideoRef.current.srcObject = stream;
+          qrVideoRef.current.play();
+          // Use BarcodeDetector if available, otherwise fallback
+          if ('BarcodeDetector' in window) {
+            const detector = new BarcodeDetector({ formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39'] });
+            const scanLoop = async () => {
+              if (!qrVideoRef.current || !qrStreamRef.current) return;
+              try {
+                const barcodes = await detector.detect(qrVideoRef.current);
+                if (barcodes.length > 0) {
+                  const val = barcodes[0].rawValue;
+                  setQrResult(prev => {
+                    if (prev.some(r => r.value === val)) return prev;
+                    const updated = [...prev, { value: val, type: barcodes[0].format, time: new Date().toLocaleTimeString('de-DE') }];
+                    u('_qrResults', updated);
+                    return updated;
+                  });
+                }
+              } catch(e) {}
+              if (qrStreamRef.current) requestAnimationFrame(scanLoop);
+            };
+            requestAnimationFrame(scanLoop);
+          }
+        }
+      }, 100);
+    } catch (e) {
+      alert('Kamera-Zugriff nicht möglich: ' + e.message);
+    }
+  };
+
+  const stopQrScan = () => {
+    if (qrStreamRef.current) {
+      qrStreamRef.current.getTracks().forEach(t => t.stop());
+      qrStreamRef.current = null;
+    }
+    setQrScanning(false);
+  };
+
+  React.useEffect(() => { return () => { if (qrStreamRef.current) { qrStreamRef.current.getTracks().forEach(t => t.stop()); } }; }, []);
   const connectGDrive = async () => {
     try {
       await gDriveAuth();
