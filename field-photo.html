@@ -288,6 +288,61 @@ function capture(key,label){
   inp.click();
 }
 
+
+function compressVideo(file, maxSizeMB) {
+  maxSizeMB = maxSizeMB || 15;
+  return new Promise(function(resolve) {
+    if (file.size <= maxSizeMB * 1024 * 1024) { resolve(file); return; }
+    var video = document.createElement("video");
+    video.muted = true; video.playsInline = true;
+    video.src = URL.createObjectURL(file);
+    video.onloadedmetadata = function() {
+      var scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+      var w = Math.round(video.videoWidth * scale);
+      var h = Math.round(video.videoHeight * scale);
+      var canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext("2d");
+      var stream = canvas.captureStream(15);
+      var recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8", videoBitsPerSecond: 1500000 });
+      var chunks = [];
+      recorder.ondataavailable = function(e) { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = function() {
+        var blob = new Blob(chunks, { type: "video/webm" });
+        var compressed = new File([blob], file.name.replace(/\.[^.]+$/, ".webm"), { type: "video/webm" });
+        console.log("[field-photo] Video komprimiert: " + Math.round(file.size/1024) + "KB -> " + Math.round(compressed.size/1024) + "KB");
+        URL.revokeObjectURL(video.src);
+        resolve(compressed);
+      };
+      recorder.start();
+      video.currentTime = 0; video.play();
+      var drawFrame = function() {
+        if (video.ended || video.paused) { recorder.stop(); return; }
+        ctx.drawImage(video, 0, 0, w, h);
+        requestAnimationFrame(drawFrame);
+      };
+      drawFrame();
+      video.onended = function() { recorder.stop(); };
+    };
+  });
+}
+function compressImage(file, maxW, q) {
+  return new Promise(function(resolve) {
+    if (file.size < 300000) { resolve(file); return; }
+    var img = new Image();
+    img.onload = function() {
+      var scale = Math.min(1, maxW / Math.max(img.width, img.height));
+      var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      var c = document.createElement("canvas"); c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      c.toBlob(function(blob) {
+        resolve(new File([blob], file.name || "photo.jpg", { type: "image/jpeg" }));
+      }, "image/jpeg", q);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 async function upload(file,key,label){
   const ts=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
   const ext=file.type.includes('video')?'mp4':file.type.includes('png')?'png':'jpg';
