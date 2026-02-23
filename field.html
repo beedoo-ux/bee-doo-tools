@@ -11,6 +11,88 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0c1222; overflow-x: hidden; }
+function compressVideo(file, maxSizeMB) {
+  maxSizeMB = maxSizeMB || 15;
+  return new Promise(function(resolve) {
+    if (file.size <= maxSizeMB * 1024 * 1024) {
+      console.log("[bee-doo] Video klein genug: " + Math.round(file.size/1024) + "KB");
+      resolve(file);
+      return;
+    }
+    // For large videos, create a compressed version using canvas+mediarecorder
+    var video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.src = URL.createObjectURL(file);
+    video.onloadedmetadata = function() {
+      var scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+      var w = Math.round(video.videoWidth * scale);
+      var h = Math.round(video.videoHeight * scale);
+      var canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext("2d");
+      var stream = canvas.captureStream(15);
+      // Try to get audio
+      try {
+        var audioCtx = new AudioContext();
+        var source = audioCtx.createMediaElementSource(video);
+        var dest = audioCtx.createMediaStreamDestination();
+        source.connect(dest);
+        source.connect(audioCtx.destination);
+        dest.stream.getAudioTracks().forEach(function(t) { stream.addTrack(t); });
+      } catch(e) {}
+      var recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8", videoBitsPerSecond: 1500000 });
+      var chunks = [];
+      recorder.ondataavailable = function(e) { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = function() {
+        var blob = new Blob(chunks, { type: "video/webm" });
+        var compressed = new File([blob], file.name.replace(/\.[^.]+$/, ".webm"), { type: "video/webm" });
+        console.log("[bee-doo] Video komprimiert: " + Math.round(file.size/1024) + "KB -> " + Math.round(compressed.size/1024) + "KB");
+        URL.revokeObjectURL(video.src);
+        resolve(compressed);
+      };
+      recorder.start();
+      video.currentTime = 0;
+      video.play();
+      var drawFrame = function() {
+        if (video.ended || video.paused) { recorder.stop(); return; }
+        ctx.drawImage(video, 0, 0, w, h);
+        requestAnimationFrame(drawFrame);
+      };
+      drawFrame();
+      video.onended = function() { recorder.stop(); };
+    };
+  });
+}
+function generateVideoThumbnail(file) {
+  return new Promise(function(resolve) {
+    var video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.src = URL.createObjectURL(file);
+    video.onloadeddata = function() {
+      video.currentTime = Math.min(1, video.duration / 2);
+    };
+    video.onseeked = function() {
+      var canvas = document.createElement("canvas");
+      var w = Math.min(400, video.videoWidth);
+      var h = Math.round(w * (video.videoHeight / video.videoWidth));
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, w, h);
+      // Draw play button overlay
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.beginPath(); ctx.arc(w/2, h/2, 24, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.moveTo(w/2-8, h/2-12); ctx.lineTo(w/2+12, h/2); ctx.lineTo(w/2-8, h/2+12); ctx.closePath(); ctx.fill();
+      canvas.toBlob(function(blob) {
+        URL.revokeObjectURL(video.src);
+        resolve(URL.createObjectURL(blob));
+      }, "image/jpeg", 0.7);
+    };
+  });
+}
+
   #root { min-height: 100vh; }
 
     @keyframes pulseRedBorder {
@@ -569,87 +651,58 @@ function AlertScreen({ stornos, rueckkehrer, onDismiss }) {
   const [countdown, setCountdown] = useState(10);
   const [tried, setTried] = useState(0);
   const [shakeMsg, setShakeMsg] = useState("");
-  const countdownRef = React.useRef(10);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      countdownRef.current = countdownRef.current - 1;
-      setCountdown(countdownRef.current);
-      if (countdownRef.current <= 0) { clearInterval(t); onDismiss(); }
+  const [canDismiss, setCanDismiss] = useState(false);
+  const timerRef = React.useRef(null);
+  function startTimer(secs) {
+    if (timerRef.current) clearInterval(timerRef.current);
+    var c = secs;
+    setCountdown(c);
+    setCanDismiss(false);
+    timerRef.current = setInterval(function() {
+      c--;
+      if (c <= 0) { clearInterval(timerRef.current); setCanDismiss(true); setCountdown(0); }
+      else { setCountdown(c); }
     }, 1000);
-    return () => clearInterval(t);
-  }, []);
-
+  }
+  useEffect(function() { startTimer(10); return function() { if(timerRef.current) clearInterval(timerRef.current); }; }, []);
   var totalItems = (stornos ? stornos.length : 0) + (rueckkehrer ? rueckkehrer.length : 0);
-  if (totalItems === 0) { onDismiss(); return null; }
-
-  var msgs = [
-    "\u274C Das kannst du nicht wegklicken! Bearbeite deine offenen F\xE4lle!",
-    "\u274C Netter Versuch! +10 Sekunden. K\xFCmmere dich um deine Kunden!",
-    "\u274C Schon wieder? +10 Sekunden! Diese Kunden brauchen dich JETZT!",
-    "\u274C Du kommst hier nicht raus! Lies dir die F\xE4lle durch!",
-    "\u274C Aufgeben? Niemals! +10 Sekunden. Deine Kunden warten!"
-  ];
-
-  function handleTrySkip() {
-    countdownRef.current = countdownRef.current + 10;
-    setCountdown(countdownRef.current);
+  var msgs = ["\u274C Das kannst du nicht wegklicken! Bearbeite deine F\xe4lle!","\u274C Netter Versuch! +10s. K\xfcmmere dich um deine Kunden!","\u274C Schon wieder? +10s! Diese Kunden brauchen dich JETZT!","\u274C Du kommst hier nicht raus!","\u274C Aufgeben? Niemals! +10s."];
+  function handleBtn() {
+    if (canDismiss) { onDismiss(); return; }
+    startTimer(countdown + 10);
     setShakeMsg(msgs[tried % msgs.length]);
-    setTried(function(t) { return t + 1; });
+    setTried(function(p) { return p + 1; });
     setTimeout(function() { setShakeMsg(""); }, 4000);
   }
-
-  return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 30000, background: "radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.2) 0%, #0A0E1A 70%)", fontFamily: font, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "32px 20px", overflow: "auto" }},
-    React.createElement("style", null, "@keyframes alertPulse3{0%,100%{box-shadow:0 0 0 rgba(239,68,68,0);}50%{box-shadow:0 0 60px rgba(239,68,68,0.5);}} @keyframes shake{0%,100%{transform:translateX(0);}10%,30%,50%,70%,90%{transform:translateX(-4px);}20%,40%,60%,80%{transform:translateX(4px);}} @keyframes borderFlash{0%,100%{border-color:rgba(239,68,68,0.3);}50%{border-color:rgba(239,68,68,0.8);}}"),
-
-    /* Header */
-    React.createElement("div", { style: { textAlign: "center", marginBottom: 24, marginTop: 20 }},
-      React.createElement("div", { style: { fontSize: 56, marginBottom: 12, animation: "alertPulse3 1.5s infinite" }}, "\uD83D\uDEA8"),
-      React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#ef4444", textTransform: "uppercase", letterSpacing: 2, animation: "alertPulse3 2s infinite" }}, "ACHTUNG \u2014 SOFORT BEARBEITEN!"),
-      React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", marginTop: 8 }}, totalItems + " offene F\xE4lle warten auf dich")),
-
-    /* Storno items */
-    stornos && stornos.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 520, marginBottom: 20 }},
-      React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: "#f97316", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}, "\uD83D\uDD25 STORNO-RETTER ", React.createElement("span", { style: { background: "#f97316", color: "#fff", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 800 }}, stornos.length)),
+  return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 30000, background: "radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.2) 0%, #0A0E1A 70%)", fontFamily: font, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "28px 20px", overflow: "auto" }},
+    React.createElement("style", null, "@keyframes shk{0%,100%{transform:translateX(0);}25%{transform:translateX(-5px);}75%{transform:translateX(5px);}} @keyframes bf{0%,100%{border-color:rgba(239,68,68,0.15);box-shadow:0 0 0 rgba(239,68,68,0);}50%{border-color:rgba(239,68,68,0.8);box-shadow:0 0 20px rgba(239,68,68,0.3);}} @keyframes bl{0%,100%{opacity:1;}50%{opacity:0.3;}}"),
+    React.createElement("div", { style: { textAlign: "center", marginBottom: 20, marginTop: 16 }},
+      React.createElement("div", { style: { fontSize: 56, marginBottom: 10, animation: "bl 1s infinite" }}, "\ud83d\udea8"),
+      React.createElement("div", { style: { fontSize: 26, fontWeight: 900, color: "#ef4444", textTransform: "uppercase", letterSpacing: 3, animation: "bl 1.5s infinite" }}, "ACHTUNG"),
+      React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: "#ef4444", marginTop: 4 }}, "SOFORT BEARBEITEN!"),
+      React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.55)", marginTop: 8 }}, totalItems + " offene F\xe4lle warten auf dich")),
+    stornos && stornos.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 520, marginBottom: 16 }},
+      React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: "#f97316", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}, "\ud83d\udd25 STORNO-RETTER (" + stornos.length + ")"),
       stornos.map(function(st, i) {
-        var pct = Math.max(0, Math.round((st.restStunden / 48) * 100));
-        var barColor = pct > 50 ? "#f97316" : pct > 25 ? "#ef4444" : "#dc2626";
-        return React.createElement("div", { key: "st" + i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", marginBottom: 8, borderRadius: 14, background: "rgba(249,115,22,0.08)", border: "2px solid rgba(249,115,22,0.4)", animation: "borderFlash 2s infinite", animationDelay: (i * 0.5) + "s" }},
-          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }},
-            React.createElement("div", { style: { fontSize: 28 }}, "\uD83D\uDD25"),
-            React.createElement("div", null,
-              React.createElement("div", { style: { fontSize: 16, fontWeight: 700 }}, st.name),
-              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.55)" }}, st.grund + " \xB7 " + st.typ))),
-          React.createElement("div", { style: { textAlign: "right" }},
-            React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: barColor }}, st.restStunden + " Std."),
-            React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.45)" }}, "verbleibend")));
+        var bc = st.restStunden > 24 ? "#f97316" : "#dc2626";
+        return React.createElement("div", { key: "s"+i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", marginBottom: 8, borderRadius: 14, background: "rgba(249,115,22,0.1)", border: "2px solid rgba(249,115,22,0.4)", animation: "bf 2s infinite" }},
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }}, React.createElement("div", { style: { fontSize: 28 }}, "\ud83d\udd25"), React.createElement("div", null, React.createElement("div", { style: { fontSize: 16, fontWeight: 700 }}, st.name), React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.55)" }}, st.grund + " \xb7 " + st.typ))),
+          React.createElement("div", { style: { textAlign: "right" }}, React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: bc }}, st.restStunden + " Std."), React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.4)" }}, "verbleibend")));
       })),
-
-    /* Rückkehrer items */
-    rueckkehrer && rueckkehrer.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 520, marginBottom: 24 }},
-      React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: "#ef4444", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}, "\uD83D\uDEA8 R\xDCCKKEHRER AUS MONTAGE ", React.createElement("span", { style: { background: "#ef4444", color: "#fff", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 800 }}, rueckkehrer.length)),
+    rueckkehrer && rueckkehrer.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 520, marginBottom: 20 }},
+      React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: "#ef4444", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}, "\ud83d\udea8 R\xdcCKKEHRER (" + rueckkehrer.length + ")"),
       rueckkehrer.map(function(rk, i) {
-        return React.createElement("div", { key: "rk" + i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", marginBottom: 8, borderRadius: 14, background: "rgba(239,68,68,0.06)", border: "2px solid rgba(239,68,68,0.35)", animation: "borderFlash 2s infinite", animationDelay: ((stornos ? stornos.length : 0) * 0.5 + i * 0.5) + "s" }},
-          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }},
-            React.createElement("div", { style: { fontSize: 28 }}, "\u26A0\uFE0F"),
-            React.createElement("div", null,
-              React.createElement("div", { style: { fontSize: 16, fontWeight: 700 }}, rk.name),
-              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.55)" }}, rk.grund + " \xB7 " + rk.typ))),
+        return React.createElement("div", { key: "r"+i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", marginBottom: 8, borderRadius: 14, background: "rgba(239,68,68,0.08)", border: "2px solid rgba(239,68,68,0.35)", animation: "bf 2s infinite" }},
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }}, React.createElement("div", { style: { fontSize: 28 }}, "\u26a0\ufe0f"), React.createElement("div", null, React.createElement("div", { style: { fontSize: 16, fontWeight: 700 }}, rk.name), React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.55)" }}, rk.grund + " \xb7 " + rk.typ))),
           React.createElement("div", { style: { fontSize: 17, fontWeight: 800, color: "#ef4444" }}, rk.tage + " Tage \u2192"));
       })),
-
-    /* Warning message when tried to skip */
-    shakeMsg && React.createElement("div", { style: { width: "100%", maxWidth: 520, padding: "14px 18px", borderRadius: 12, background: "rgba(239,68,68,0.15)", border: "2px solid rgba(239,68,68,0.6)", marginBottom: 16, textAlign: "center", animation: "shake 0.5s ease" }},
-      React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#ef4444" }}, shakeMsg)),
-
-    /* Countdown + Button */
+    shakeMsg && React.createElement("div", { style: { width: "100%", maxWidth: 520, padding: "14px 18px", borderRadius: 12, background: "rgba(239,68,68,0.15)", border: "2px solid rgba(239,68,68,0.6)", marginBottom: 14, textAlign: "center", animation: "shk 0.5s ease" }}, React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#ef4444" }}, shakeMsg)),
     React.createElement("div", { style: { textAlign: "center", marginTop: 8 }},
-      React.createElement("div", { style: { width: 64, height: 64, borderRadius: "50%", border: "3px solid rgba(239,68,68,0.5)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 24, fontWeight: 900, color: "#ef4444", background: "rgba(239,68,68,0.08)" }}, countdown > 0 ? countdown : "\u2713"),
-      React.createElement("button", { onClick: handleTrySkip, style: { padding: "14px 40px", borderRadius: 12, border: "2px solid rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.08)", color: "#ef4444", fontSize: 15, fontWeight: 800, fontFamily: font, cursor: "pointer", transition: "all 0.3s" }}, "\u2192 Zum Dashboard"),
-      tried > 0 && React.createElement("div", { style: { fontSize: 11, color: "rgba(239,68,68,0.6)", marginTop: 8, fontWeight: 700 }}, "Versuch " + tried + " \u2014 +" + (tried * 10) + "s hinzugef\xFCgt"),
-      React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 6 }}, "Automatisch weiter in " + countdown + " Sek.")));
+      React.createElement("div", { style: { width: 64, height: 64, borderRadius: "50%", border: "3px solid " + (canDismiss ? "rgba(52,211,153,0.5)" : "rgba(239,68,68,0.5)"), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 24, fontWeight: 900, color: canDismiss ? "#34D399" : "#ef4444", background: canDismiss ? "rgba(52,211,153,0.08)" : "rgba(239,68,68,0.08)" }}, canDismiss ? "\u2713" : countdown),
+      React.createElement("button", { onClick: handleBtn, style: { padding: "14px 40px", borderRadius: 12, border: canDismiss ? "none" : "2px solid rgba(239,68,68,0.4)", background: canDismiss ? "linear-gradient(135deg, #22c55e, #16a34a)" : "rgba(239,68,68,0.08)", color: canDismiss ? "#fff" : "#ef4444", fontSize: 15, fontWeight: 800, fontFamily: font, cursor: "pointer", boxShadow: canDismiss ? "0 4px 20px rgba(34,197,94,0.4)" : "none" }}, canDismiss ? "\u2705 Weiter zum Dashboard" : "\u2192 Zum Dashboard"),
+      tried > 0 && React.createElement("div", { style: { fontSize: 12, color: "rgba(239,68,68,0.7)", marginTop: 10, fontWeight: 700 }}, "Versuch " + tried + " \u2014 +" + (tried * 10) + "s hinzugef\xfcgt"),
+      React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 6 }}, canDismiss ? "Du darfst jetzt weiter" : "Noch " + countdown + " Sek. warten")));
 }
-
 
 function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkehrerClick, onRueckkehrerErledigt }) {
   const [clk, setClk] = useState(new Date());
@@ -1550,7 +1603,7 @@ function AIHint({ text, color = BRAND.yellow }) {
     marginTop: 12
   } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16, flexShrink: 0, marginTop: 1 } }, "\u{1F916}"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color, lineHeight: 1.5, fontWeight: 400 } }, text));
 }
-function PhotoTile({ label, icon, photoUrl, onCapture, onGallery, onRemove, hasAnalysis, note, required, gdStatus }) {
+function PhotoTile({ label, icon, photoUrl, onCapture, onGallery, onRemove, hasAnalysis, note, required, gdStatus, onZoom, isVideo }) {
   const captured = !!photoUrl;
   return /* @__PURE__ */ React.createElement("div", { style: {
     flex: "1 1 calc(50% - 8px)",
@@ -1561,7 +1614,7 @@ function PhotoTile({ label, icon, photoUrl, onCapture, onGallery, onRemove, hasA
     overflow: "hidden",
     transition: "all 0.2s ease",
     position: "relative"
-  } }, captured ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { width: "100%", height: 110, background: T.card, position: "relative" } }, typeof photoUrl === "string" && photoUrl.startsWith("blob:") ? /* @__PURE__ */ React.createElement("img", { src: photoUrl, alt: label, style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ React.createElement("div", { style: { width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: `${T.green}12` } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 40 } }, "\u2705")), hasAnalysis && /* @__PURE__ */ React.createElement("div", { style: {
+  } }, captured ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { width: "100%", height: 110, background: T.card, position: "relative" } }, typeof photoUrl === "string" && photoUrl.startsWith("blob:") ? /* @__PURE__ */ React.createElement(isVideo ? "div" : "img", Object.assign({ onClick: function(e) { e.stopPropagation(); if(onZoom) onZoom(photoUrl, isVideo); } }, isVideo ? { style: { width: "100%", height: "100%", position: "relative", cursor: "zoom-in" } } : { src: photoUrl, alt: label, style: { width: "100%", height: "100%", objectFit: "cover", cursor: "zoom-in" } }), isVideo ? React.createElement("img", { src: photoUrl, style: { width: "100%", height: "100%", objectFit: "cover" } }) : null) : /* @__PURE__ */ React.createElement("div", { style: { width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: `${T.green}12` } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 40 } }, "\u2705")), hasAnalysis && /* @__PURE__ */ React.createElement("div", { style: {
     position: "absolute",
     top: 6,
     right: 6,
@@ -2153,7 +2206,7 @@ function StepKunde({ data, setData }) {
   } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20 } }, "\u{1F4B3}"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: T.text } }, "EC-/Bankkarte scannen"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.textSec } }, "IBAN automatisch von der Karte ablesen")), /* @__PURE__ */ React.createElement("button", { onClick: () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = "image/*,video/*";
     input.capture = "environment";
     input.onchange = async (e) => {
       const file = e.target.files?.[0];
@@ -2964,6 +3017,8 @@ function StepFotos({ data, setData }) {
   const u = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const [gDriveConnected, setGDriveConnected] = useState(!!gDriveState.token);
   const [qrScanning, setQrScanning] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [lightboxIsVideo, setLightboxIsVideo] = useState(false);
   const [qrResult, setQrResult] = useState(data._qrResults || []);
   const [phoneSync, setPhoneSync] = useState({ active: false, count: 0, lastCheck: null });
   const phonePollRef = React.useRef(null);
@@ -2994,7 +3049,10 @@ function StepFotos({ data, setData }) {
               headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY }
             });
             var blob = await imgResp.blob();
-            var file = new File([blob], photo.photo_key + ".jpg", { type: "image/jpeg" });
+            var mimeType = photo.mime_type || "image/jpeg";
+              var isVid = mimeType.startsWith("video/");
+              var ext = isVid ? ".webm" : ".jpg";
+              var file = new File([blob], photo.photo_key + ext, { type: mimeType });
             
             // Compress
             var compressed = await compressImage(file, 1600, 0.75);
@@ -3080,7 +3138,7 @@ function StepFotos({ data, setData }) {
   const capturePhoto = async (photoKey, useCamera, label) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = "image/*,video/*";
     if (useCamera) input.capture = "environment";
     input.setAttribute("multiple", "");
     input.onchange = async (e) => {
@@ -3097,8 +3155,16 @@ function StepFotos({ data, setData }) {
         return slots.slice(0, files.length);
       })();
       for (let i = 0; i < files.length && i < targets.length; i++) {
-        const compressed = await compressImage(files[i], 1600, 0.75);
-        const blobUrl = URL.createObjectURL(compressed);
+        var isVid = files[i].type && files[i].type.startsWith("video/");
+        var compressed, blobUrl;
+        if (isVid) {
+          compressed = await compressVideo(files[i], 15);
+          blobUrl = await generateVideoThumbnail(files[i]);
+          u(targets[i] + "_isVideo", true);
+        } else {
+          compressed = await compressImage(files[i], 1600, 0.75);
+          blobUrl = URL.createObjectURL(compressed);
+        }
         u(targets[i], blobUrl);
         u(targets[i] + "_file", compressed);
         triggerGDriveUpload(compressed, targets[i], label || targets[i], data, u);
@@ -3155,7 +3221,7 @@ function StepFotos({ data, setData }) {
   const handleSmartCapture = async (photoKey, useCamera) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = "image/*,video/*";
     if (useCamera) input.capture = "environment";
     input.onchange = async (e) => {
       const file = e.target.files?.[0];
@@ -3369,76 +3435,45 @@ function StepFotos({ data, setData }) {
 
   /* ── 📱 Fotos vom Handy – QR-Code Generator ── */
   React.createElement("div", { style: { background: T.card, borderRadius: 14, border: "1.5px solid " + T.border, padding: "16px 18px", marginBottom: 16, marginTop: 8 }},
-    React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" }},
-      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 }},
-        React.createElement("span", { style: { fontSize: 20 }}, "📱"),
-        React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: T.text }}, "Fotos vom Handy"),
-          React.createElement("div", { style: { fontSize: 10, color: T.textDim }}, "QR-Code scannen \u2192 Fotos extern hochladen")
-        )
-      ),
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }},
+      React.createElement("span", { style: { fontSize: 20 }}, "\uD83D\uDCF1"),
+      React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: T.text }}, "Fotos vom Handy"),
+        React.createElement("div", { style: { fontSize: 10, color: T.textDim }}, "QR-Code scannen \u2192 Fotos extern hochladen"))),
+    /* QR Code always visible */
+    !data._phoneJobActive ? React.createElement("div", { style: { textAlign: "center" }},
       React.createElement("button", { onClick: function() {
         var jobTs = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
         u("_phoneJobId", jobTs);
         u("_phoneJobActive", true);
         u("_phonePhotosReceived", 0);
-        var kundenName = encodeURIComponent([data.vorname, data.nachname].filter(Boolean).join(" ") || "Kunde");
-        var addr = encodeURIComponent([data.strasse, data.hausnummer, data.plz, data.ort].filter(Boolean).join(" ") || "");
-        var berater = encodeURIComponent(data._beraterName || "");
-        var baseUrl = window.location.origin + "/field-photo.html";
-        var qrUrl = baseUrl + "?job=" + jobTs + "&name=" + kundenName + "&addr=" + addr + "&berater=" + berater;
-        
-        var overlay = document.createElement("div");
-        overlay.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(12,18,34,.95);backdrop-filter:blur(12px);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;";
-        
-        var inner = document.createElement("div");
-        inner.style.cssText = "background:#151d30;border:1.5px solid #263354;border-radius:20px;padding:28px;max-width:360px;width:100%;text-align:center;";
-        
-        inner.innerHTML = '<div style="font-size:15px;font-weight:800;color:#e1e7ef;margin-bottom:4px;">\ud83d\udcf1 Fotos vom Handy</div>' +
-          '<div style="font-size:11px;color:#5c6b8a;margin-bottom:16px;">QR-Code mit dem Handy scannen</div>' +
-          '<canvas id="phoneQrCanvas" style="border-radius:12px;margin:0 auto 12px;display:block;"></canvas>' +
-          '<div style="font-size:10px;color:#5c6b8a;word-break:break-all;margin-bottom:16px;max-height:40px;overflow:hidden;">' + qrUrl.slice(0,80) + '...</div>' +
-          '<div style="display:flex;gap:8px;">' +
-            '<button id="qrCopyBtn" style="flex:1;padding:10px;border-radius:10px;border:1.5px solid #263354;background:#1c2640;color:#e1e7ef;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif;">\ud83d\udccb Link kopieren</button>' +
-            '<button id="qrCloseBtn" style="flex:1;padding:10px;border-radius:10px;border:1.5px solid #263354;background:#1c2640;color:#5c6b8a;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif;">Schließen</button>' +
-          '</div>';
-        
-        overlay.appendChild(inner);
-        document.body.appendChild(overlay);
-        
-        setTimeout(function() {
-          try {
-            new QRious({ element: document.getElementById("phoneQrCanvas"), value: qrUrl, size: 220, backgroundAlpha: 1, background: "#ffffff", foreground: "#0c1222", level: "M" });
-          } catch(e) { console.error("QR:", e); }
-        }, 50);
-        
-        document.getElementById("qrCopyBtn").onclick = function() {
-          navigator.clipboard.writeText(qrUrl).then(function() {
-            document.getElementById("qrCopyBtn").textContent = "\u2705 Kopiert!";
-            document.getElementById("qrCopyBtn").style.borderColor = "#34D399";
-            document.getElementById("qrCopyBtn").style.color = "#34D399";
-          });
-        };
-        document.getElementById("qrCloseBtn").onclick = function() { overlay.remove(); };
-        overlay.onclick = function(ev) { if(ev.target === overlay) overlay.remove(); };
-        
-      }, style: {
-        padding: "8px 16px", borderRadius: 8,
-        border: "1.5px solid " + BRAND.yellow,
-        background: T.accentGlow,
-        color: BRAND.yellow,
-        fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: font
-      }}, "QR erzeugen"),
-      data._phoneJobActive && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginLeft: 8 }},
+      }, style: { padding: "10px 20px", borderRadius: 10, border: "1.5px solid " + BRAND.yellow, background: T.accentGlow, color: BRAND.yellow, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: font }}, "\u{1F4F7} Handy verbinden")
+    ) :
+    React.createElement("div", { style: { textAlign: "center" }},
+      React.createElement("canvas", { ref: function(el) {
+        if (el && !el._qrDone) {
+          el._qrDone = true;
+          var kundenName = encodeURIComponent([data.vorname, data.nachname].filter(Boolean).join(" ") || "Kunde");
+          var addr = encodeURIComponent([data.strasse, data.hausnummer, data.plz, data.ort].filter(Boolean).join(" ") || "");
+          var berater = encodeURIComponent(data._beraterName || "");
+          var qrUrl = window.location.origin + "/field-photo.html?job=" + data._phoneJobId + "&name=" + kundenName + "&addr=" + addr + "&berater=" + berater;
+          try { new QRious({ element: el, value: qrUrl, size: 200, backgroundAlpha: 1, background: "#ffffff", foreground: "#0c1222", level: "M" }); } catch(e) {}
+        }
+      }, style: { borderRadius: 12, display: "block", margin: "0 auto 8px" }}),
+      React.createElement("div", { style: { fontSize: 10, color: T.textDim, marginBottom: 8 }}, "QR-Code mit dem Handy scannen"),
+      React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 }},
         React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: phoneSync.active ? "#34D399" : T.textDim, animation: phoneSync.active ? "pulse 1.5s infinite" : "none" }}),
-        React.createElement("span", { style: { fontSize: 10, color: phoneSync.count > 0 ? "#34D399" : T.textDim, fontWeight: 600 }}, phoneSync.count > 0 ? phoneSync.count + " empfangen" : "wartet\u2026")
-      )
-    ),
-    data._phoneJobActive && React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, padding: "8px 0" }},
-      React.createElement("div", { style: { fontSize: 10, color: T.textDim }}, "\uD83D\uDCF1 Live-Sync aktiv \u00B7 Job: " + (data._phoneJobId || "").slice(0,6)),
-      React.createElement("button", { onClick: function() { u("_phoneJobActive", false); u("_phoneJobId", null); }, style: { fontSize: 10, color: T.red, background: "none", border: "none", cursor: "pointer", fontFamily: font, textDecoration: "underline" }}, "Sync beenden")
-    )
-  ), /* @__PURE__ */ React.createElement(Section, { title: "Pflichtfotos", icon: "\u26A0\uFE0F", accent: T.red }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 12 } }, pflicht.map((p) => /* @__PURE__ */ React.createElement(
+        React.createElement("span", { style: { fontSize: 10, color: phoneSync.count > 0 ? "#34D399" : T.textDim, fontWeight: 600 }}, phoneSync.count > 0 ? phoneSync.count + " empfangen" : "wartet\u2026")),
+      React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "center" }},
+        React.createElement("button", { onClick: function() {
+          var kundenName = encodeURIComponent([data.vorname, data.nachname].filter(Boolean).join(" ") || "Kunde");
+          var addr = encodeURIComponent([data.strasse, data.hausnummer, data.plz, data.ort].filter(Boolean).join(" ") || "");
+          var berater = encodeURIComponent(data._beraterName || "");
+          var qrUrl = window.location.origin + "/field-photo.html?job=" + data._phoneJobId + "&name=" + kundenName + "&addr=" + addr + "&berater=" + berater;
+          navigator.clipboard.writeText(qrUrl);
+        }, style: { padding: "6px 12px", borderRadius: 8, border: "1px solid " + T.border, background: "none", color: T.textDim, fontSize: 10, cursor: "pointer", fontFamily: font }}, "\uD83D\uDCCB Link kopieren"),
+        React.createElement("button", { onClick: function() { u("_phoneJobActive", false); u("_phoneJobId", null); }, style: { padding: "6px 12px", borderRadius: 8, border: "1px solid " + T.border, background: "none", color: T.red, fontSize: 10, cursor: "pointer", fontFamily: font }}, "Sync beenden"))
+    )), /* @__PURE__ */ React.createElement(Section, { title: "Pflichtfotos", icon: "\u26A0\uFE0F", accent: T.red }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 12 } }, pflicht.map((p) => /* @__PURE__ */ React.createElement(
     PhotoTile,
     {
       key: p.key,
@@ -7256,3 +7291,11 @@ root.render(React.createElement(BeedooField));
 </script>
 </body>
 </html>
+    /* ── Lightbox for full-screen photo/video view ── */
+    lightboxSrc && React.createElement("div", { onClick: function() { setLightboxSrc(null); setLightboxIsVideo(false); }, style: { position: "fixed", inset: 0, zIndex: 50000, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 20 }},
+      React.createElement("button", { onClick: function(e) { e.stopPropagation(); setLightboxSrc(null); setLightboxIsVideo(false); }, style: { position: "absolute", top: 16, right: 16, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 24, width: 40, height: 40, borderRadius: "50%", cursor: "pointer", zIndex: 50001 }}, "\xD7"),
+      lightboxIsVideo ?
+        React.createElement("video", { src: lightboxSrc, controls: true, autoPlay: true, style: { maxWidth: "95%", maxHeight: "90vh", borderRadius: 12 }, onClick: function(e) { e.stopPropagation(); } }) :
+        React.createElement("img", { src: lightboxSrc, style: { maxWidth: "95%", maxHeight: "90vh", objectFit: "contain", borderRadius: 12 }, onClick: function(e) { e.stopPropagation(); } })
+    ),
+
