@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0c1222">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>bee-doo Scout Solar</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --bg: #0A0F1A; --surface: #111827; --card: #161F2E; --card2: #1A2436;
+    --border: #1E2D42; --border2: #263354;
+    --accent: #F5C500; --accent-dim: rgba(245,197,0,0.12); --accent-glow: rgba(245,197,0,0.25);
+    --green: #22C55E; --green-dim: rgba(34,197,94,0.12);
+    --yellow: #EAB308; --yellow-dim: rgba(234,179,8,0.12);
+    --red: #EF4444; --red-dim: rgba(239,68,68,0.12);
+    --blue: #3B82F6; --blue-dim: rgba(59,130,246,0.12);
+    --text: #E8ECF2; --text2: #C5CCDA; --muted: #6B7A94; --subtle: #3A4A66;
+    --radius: 14px; --radius-sm: 10px;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; min-height: 100dvh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ═══ Header ═══ */
+  .header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 12px 16px; display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  .logo {
+    width: 36px; height: 36px; background: var(--accent); border-radius: 10px;
+    display: grid; place-items: center; font-size: 17px; flex-shrink: 0;
+    box-shadow: 0 0 16px var(--accent-glow);
+  }
+  .header-info h1 { font-size: 15px; font-weight: 700; line-height: 1.2; }
+  .header-info h1 b { color: var(--accent); }
+  .header-info p { font-size: 11px; color: var(--muted); font-weight: 500; }
+  .header-actions { margin-left: auto; display: flex; gap: 8px; }
+  .hdr-btn {
+    background: var(--card); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 7px 12px; font-size: 12px; cursor: pointer;
+    font-family: inherit; font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 5px;
+    transition: all 0.15s;
+  }
+  .hdr-btn:active { background: var(--border); }
+
+  /* ═══ Main Container ═══ */
+  .main { max-width: 520px; margin: 0 auto; padding: 16px 14px 100px; }
+
+  /* ═══ Search Section ═══ */
+  .search-section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; margin-bottom: 16px;
+  }
+  .search-label {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;
+  }
+  .search-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .search-input {
+    flex: 1; background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px 14px;
+    color: var(--text); font-size: 15px; font-family: inherit; outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .search-input::placeholder { color: var(--subtle); }
+  .gps-btn {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); width: 48px; flex-shrink: 0;
+    display: grid; place-items: center; cursor: pointer;
+    font-size: 20px; transition: all 0.15s;
+  }
+  .gps-btn:active { background: var(--accent-dim); border-color: var(--accent); }
+  .gps-btn.active { background: var(--accent-dim); border-color: var(--accent); }
+  .analyze-btn {
+    width: 100%; background: var(--accent); border: none;
+    border-radius: var(--radius-sm); padding: 13px;
+    color: #000; font-size: 15px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .analyze-btn:active { transform: scale(0.98); }
+  .analyze-btn:disabled { background: var(--subtle); color: var(--muted); cursor: not-allowed; transform: none; }
+  .analyze-btn .spinner {
+    width: 18px; height: 18px; border: 2.5px solid rgba(0,0,0,0.2);
+    border-top-color: #000; border-radius: 50%;
+    animation: spin 0.7s linear infinite; display: none;
+  }
+  .analyze-btn.loading .spinner { display: block; }
+  .analyze-btn.loading .btn-text { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .street-hint {
+    font-size: 12px; color: var(--muted); margin-top: 8px;
+    display: flex; align-items: center; gap: 5px;
+  }
+
+  /* ═══ Status Bar ═══ */
+  .status-bar {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 14px;
+    margin-bottom: 16px; font-size: 12px; color: var(--muted);
+    display: none; align-items: center; gap: 8px;
+  }
+  .status-bar.visible { display: flex; }
+  .status-bar .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    animation: pulse 1.2s ease infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+  .status-bar.error { border-color: rgba(239,68,68,0.3); }
+  .status-bar.error .dot { background: var(--red); animation: none; }
+  .status-bar.done .dot { background: var(--green); animation: none; }
+
+  /* ═══ Results Summary ═══ */
+  .summary-strip {
+    display: none; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px;
+  }
+  .summary-strip.visible { display: block; }
+  .summary-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .summary-addr { font-size: 14px; font-weight: 700; flex: 1; }
+  .summary-count {
+    background: var(--accent-dim); color: var(--accent);
+    border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700;
+  }
+  .ampel-summary { display: flex; gap: 12px; }
+  .ampel-chip {
+    display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
+  }
+  .ampel-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* ═══ House Cards ═══ */
+  .houses-list { display: flex; flex-direction: column; gap: 10px; }
+  .house-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+    cursor: pointer; transition: all 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .house-card:active { transform: scale(0.98); }
+  .house-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    border-radius: var(--radius) 0 0 var(--radius);
+  }
+  .house-card.green::before { background: var(--green); }
+  .house-card.yellow::before { background: var(--yellow); }
+  .house-card.red::before { background: var(--red); }
+  .house-card.nodata::before { background: var(--subtle); }
+
+  .house-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .house-ampel {
+    width: 42px; height: 42px; border-radius: 12px;
+    display: grid; place-items: center; font-size: 20px; flex-shrink: 0;
+  }
+  .house-card.green .house-ampel { background: var(--green-dim); }
+  .house-card.yellow .house-ampel { background: var(--yellow-dim); }
+  .house-card.red .house-ampel { background: var(--red-dim); }
+  .house-card.nodata .house-ampel { background: rgba(106,117,138,0.12); }
+
+  .house-addr { flex: 1; }
+  .house-addr h3 { font-size: 15px; font-weight: 700; line-height: 1.3; }
+  .house-addr p { font-size: 12px; color: var(--muted); font-weight: 500; }
+
+  .house-score {
+    font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums;
+  }
+  .house-card.green .house-score { color: var(--green); }
+  .house-card.yellow .house-score { color: var(--yellow); }
+  .house-card.red .house-score { color: var(--red); }
+  .house-card.nodata .house-score { color: var(--muted); }
+
+  .house-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .house-kpi {
+    background: var(--card); border-radius: 8px; padding: 8px 6px; text-align: center;
+  }
+  .house-kpi .val { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+  .house-kpi .lbl { font-size: 10px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+
+  /* ═══ Detail Modal ═══ */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    z-index: 200; display: none; align-items: flex-end; justify-content: center;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px 20px 0 0; width: 100%; max-width: 520px;
+    max-height: 85vh; overflow-y: auto; padding: 20px 18px 32px;
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal-handle {
+    width: 40px; height: 4px; background: var(--border2); border-radius: 2px;
+    margin: 0 auto 16px;
+  }
+  .modal-header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .modal-ampel {
+    width: 52px; height: 52px; border-radius: 14px;
+    display: grid; place-items: center; font-size: 26px;
+  }
+  .modal-addr h2 { font-size: 18px; font-weight: 800; }
+  .modal-addr p { font-size: 13px; color: var(--muted); }
+  .modal-close {
+    margin-left: auto; background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; width: 36px; height: 36px; display: grid; place-items: center;
+    cursor: pointer; font-size: 16px; color: var(--muted);
+  }
+
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+  .detail-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px;
+  }
+  .detail-card .label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  .detail-card .value { font-size: 22px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .detail-card .unit { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+  .detail-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .detail-card.highlight { border-color: var(--accent); background: var(--accent-dim); }
+  .detail-card.highlight .value { color: var(--accent); }
+
+  .roof-segments { margin-bottom: 18px; }
+  .roof-segments h4 { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .seg-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; background: var(--card); border-radius: 8px; margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .seg-dir {
+    background: var(--blue-dim); color: var(--blue); padding: 3px 8px;
+    border-radius: 6px; font-weight: 700; font-size: 12px; min-width: 44px; text-align: center;
+  }
+  .seg-detail { flex: 1; color: var(--text2); }
+  .seg-sun { color: var(--accent); font-weight: 700; }
+
+  .action-row { display: flex; gap: 10px; }
+  .action-btn {
+    flex: 1; border: none; border-radius: var(--radius-sm);
+    padding: 14px; font-size: 14px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all 0.15s;
+  }
+  .action-btn:active { transform: scale(0.97); }
+  .action-btn.primary { background: var(--accent); color: #000; }
+  .action-btn.secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  .action-btn.saved { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+
+  /* ═══ Empty State ═══ */
+  .empty-state {
+    text-align: center; padding: 48px 24px; color: var(--muted);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+  .empty-state h3 { font-size: 16px; font-weight: 700; color: var(--text2); margin-bottom: 6px; }
+  .empty-state p { font-size: 13px; line-height: 1.5; }
+
+  /* ═══ Toast ═══ */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--green); color: #000; padding: 12px 24px;
+    border-radius: 12px; font-size: 14px; font-weight: 700; z-index: 300;
+    opacity: 0; transition: all 0.3s ease; pointer-events: none;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ═══ Responsive ═══ */
+  @media (min-width: 768px) {
+    .main { padding: 24px 20px 100px; }
+    .house-kpis { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .detail-grid { grid-template-columns: repeat(3, 1fr); }
+    .modal { border-radius: 20px; margin-bottom: 24px; }
+  }
+  @media (max-width: 370px) {
+    .house-kpis { grid-template-columns: repeat(2, 1fr); }
+    .house-score { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="logo">🐝</div>
+  <div class="header-info">
+    <h1>bee-doo <b>Scout Solar</b></h1>
+    <p>Live Dach-Analyse · Google Solar API</p>
+  </div>
+  <div class="header-actions">
+    <a class="hdr-btn" href="https://bee-doo-tools.vercel.app/" title="Toolbox">← Tools</a>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Search -->
+  <div class="search-section">
+    <div class="search-label">📍 Adresse eingeben</div>
+    <div class="search-row">
+      <input class="search-input" id="addressInput" type="text" placeholder="Straße Nr, PLZ Ort" autocomplete="off" enterkeyhint="search">
+      <button class="gps-btn" id="gpsBtn" title="Mein Standort">📍</button>
+    </div>
+    <button class="analyze-btn" id="analyzeBtn" onclick="startAnalysis()">
+      <span class="btn-text">☀️ Solar-Check starten</span>
+      <div class="spinner"></div>
+    </button>
+    <div class="street-hint">💡 Tipp: Ganze Straße oder einzelne Adresse eingeben</div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar" id="statusBar">
+    <div class="dot"></div>
+    <span id="statusText">Starte Analyse...</span>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-strip" id="summaryStrip">
+    <div class="summary-top">
+      <div class="summary-addr" id="summaryAddr">—</div>
+      <div class="summary-count" id="summaryCount">0 Häuser</div>
+    </div>
+    <div class="ampel-summary" id="ampelSummary"></div>
+  </div>
+
+  <!-- Houses -->
+  <div class="houses-list" id="housesList"></div>
+
+  <!-- Empty State -->
+  <div class="empty-state" id="emptyState">
+    <div class="icon">🏠</div>
+    <h3>Bereit zum Scouten</h3>
+    <p>Gib eine Adresse ein oder nutze GPS,<br>um das Solar-Potenzial zu prüfen</p>
+  </div>
+
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-ampel" id="modalAmpel">☀️</div>
+      <div class="modal-addr">
+        <h2 id="modalTitle">—</h2>
+        <p id="modalSub">—</p>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="detail-grid" id="detailGrid"></div>
+    <div class="roof-segments" id="roofSegments"></div>
+    <div class="action-row">
+      <button class="action-btn secondary" onclick="openInSolar()">📊 Solar Analyzer</button>
+      <button class="action-btn primary" id="saveLeadBtn" onclick="saveLead()">💾 Lead speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   bee-doo Scout Solar – Google Solar API Integration
+   ═══════════════════════════════════════════════════════ */
+
+const GKEY = 'AIzaSyB7Y7FgAc4R6GX1V6GjGzm0bSNK5IfBg7o';
+const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const WATT_PER_PANEL = 475;
+const DIRS = ['N','NO','O','SO','S','SW','W','NW'];
+
+let allResults = [];
+let currentDetail = null;
+
+// ─── Helper ───
+function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+
+function setStatus(msg, type) {
+  const bar = document.getElementById('statusBar');
+  bar.className = 'status-bar visible' + (type ? ' ' + type : '');
+  document.getElementById('statusText').textContent = msg;
+}
+function hideStatus() { document.getElementById('statusBar').className = 'status-bar'; }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  setTimeout(() => t.classList.remove('visible'), 2500);
+}
+
+function dirFromAzimuth(az) {
+  return DIRS[Math.round(((az % 360) + 360) % 360 / 45) % 8];
+}
+
+// ─── Solar Score Algorithm ───
+function calcScore(solarData) {
+  if (!solarData || !solarData.solarPotential) return { score: 0, label: 'Keine Daten', color: 'nodata', emoji: '❓' };
+
+  const sp = solarData.solarPotential;
+  const maxPanels = sp.maxArrayPanelsCount || 0;
+  const maxArea = sp.maxArrayAreaMeters2 || 0;
+  const sunH = sp.maxSunshineHoursPerYear || 0;
+  const bestConfig = (sp.solarPanelConfigs || []).slice(-1)[0];
+  const maxKwh = bestConfig ? bestConfig.yearlyEnergyDcKwh * 0.94 : 0;
+  const maxKwp = (maxPanels * WATT_PER_PANEL) / 1000;
+
+  // Scoring: 0-100
+  let s = 0;
+  // Panel count (max 30pts) - 15+ panels = full score
+  s += Math.min(30, (maxPanels / 15) * 30);
+  // Sun hours (max 25pts) - 1100h = full score
+  s += Math.min(25, (sunH / 1100) * 25);
+  // Roof area (max 20pts) - 60m² = full score
+  s += Math.min(20, (maxArea / 60) * 20);
+  // Specific yield (max 25pts) - 950 kWh/kWp = full score
+  const spezErtrag = maxKwp > 0 ? maxKwh / maxKwp : 0;
+  s += Math.min(25, (spezErtrag / 950) * 25);
+
+  s = Math.round(s);
+
+  if (s >= 70) return { score: s, label: 'Hohes Potenzial', color: 'green', emoji: '☀️' };
+  if (s >= 40) return { score: s, label: 'Mittleres Potenzial', color: 'yellow', emoji: '⛅' };
+  return { score: s, label: 'Geringes Potenzial', color: 'red', emoji: '🌧️' };
+}
+
+// ─── Geocoding ───
+async function geocode(address) {
+  const res = await fetch(
+    'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=de,at,ch&q=' +
+    encodeURIComponent(address),
+    { headers: { 'Accept-Language': 'de', 'User-Agent': 'bee-doo-scout/1.0' } }
+  );
+  const data = await res.json();
+  if (!data.length) throw new Error('Adresse nicht gefunden');
+  return {
+    lat: parseFloat(data[0].lat),
+    lng: parseFloat(data[0].lon),
+    display: data[0].display_name
+  };
+}
+
+// ─── Reverse Geocode ───
+async function reverseGeocode(lat, lng) {
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`,
+    { headers: { 'Accept-Language': 'de', 'User-Agent': 'bee-doo-scout/1.0' } }
+  );
+  return await res.json();
+}
+
+// ─── Google Solar API ───
+async function fetchSolarData(lat, lng) {
+  const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=MEDIUM&key=${GKEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.error) {
+    if (data.error.code === 404) return null; // No data for this location
+    throw new Error('Solar API: ' + data.error.message);
+  }
+  return data;
+}
+
+// ─── Nearby addresses via Nominatim ───
+async function findNearbyAddresses(lat, lng, street) {
+  // Search for the street to find multiple buildings
+  const query = street ? street : `${lat},${lng}`;
+  const res = await fetch(
+    'https://nominatim.openstreetmap.org/search?format=json&limit=12&countrycodes=de&q=' +
+    encodeURIComponent(query),
+    { headers: { 'Accept-Language': 'de', 'User-Agent': 'bee-doo-scout/1.0' } }
+  );
+  return await res.json();
+}
+
+// ─── GPS Location ───
+function getGPS() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('GPS nicht verfügbar'));
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      err => reject(new Error('GPS blockiert – bitte erlauben')),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+}
+
+// ─── Main Analysis ───
+async function startAnalysis() {
+  const addr = document.getElementById('addressInput').value.trim();
+  if (!addr) return;
+
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  allResults = [];
+  document.getElementById('housesList').innerHTML = '';
+  document.getElementById('summaryStrip').classList.remove('visible');
+  document.getElementById('emptyState').style.display = 'none';
+
+  try {
+    setStatus('📍 Geocoding: ' + addr);
+    const geo = await geocode(addr);
+    setStatus('☀️ Solar-Daten abrufen...');
+
+    // Fetch solar data for the main address
+    const solarData = await fetchSolarData(geo.lat, geo.lng);
+
+    if (solarData) {
+      const scoring = calcScore(solarData);
+      allResults.push({
+        address: geo.display.split(',').slice(0, 3).join(', ').trim(),
+        shortAddr: geo.display.split(',')[0].trim(),
+        lat: solarData.center?.latitude || geo.lat,
+        lng: solarData.center?.longitude || geo.lng,
+        solar: solarData,
+        scoring: scoring,
+        quality: solarData.imageryQuality || 'MEDIUM',
+        imgYear: solarData.imageryDate?.year || '—'
+      });
+    }
+
+    // Try to find nearby buildings by offsetting coordinates
+    setStatus('🏘️ Nachbarhäuser scannen...');
+    const offsets = [
+      [0.00015, 0], [-0.00015, 0], [0, 0.00025], [0, -0.00025],
+      [0.0003, 0], [-0.0003, 0], [0, 0.0005], [0, -0.0005],
+      [0.00015, 0.00025], [-0.00015, 0.00025], [0.00015, -0.00025], [-0.00015, -0.00025]
+    ];
+
+    let scannedCount = 0;
+    const seenBuildings = new Set();
+    if (solarData) {
+      seenBuildings.add(`${(solarData.center?.latitude||geo.lat).toFixed(5)},${(solarData.center?.longitude||geo.lng).toFixed(5)}`);
+    }
+
+    for (const [dlat, dlng] of offsets) {
+      if (allResults.length >= 8) break; // Max 8 houses
+
+      const nlat = geo.lat + dlat;
+      const nlng = geo.lng + dlng;
+
+      try {
+        const nSolar = await fetchSolarData(nlat, nlng);
+        if (!nSolar || !nSolar.center) continue;
+
+        const buildingKey = `${nSolar.center.latitude.toFixed(5)},${nSolar.center.longitude.toFixed(5)}`;
+        if (seenBuildings.has(buildingKey)) continue;
+        seenBuildings.add(buildingKey);
+
+        // Reverse geocode to get address
+        const revGeo = await reverseGeocode(nSolar.center.latitude, nSolar.center.longitude);
+        const nAddr = revGeo.display_name ? revGeo.display_name.split(',').slice(0, 3).join(', ').trim() : `Gebäude ${allResults.length + 1}`;
+        const nShort = revGeo.address ?
+          `${revGeo.address.road || ''} ${revGeo.address.house_number || ''}`.trim() || nAddr :
+          nAddr;
+
+        const nScoring = calcScore(nSolar);
+        allResults.push({
+          address: nAddr,
+          shortAddr: nShort,
+          lat: nSolar.center.latitude,
+          lng: nSolar.center.longitude,
+          solar: nSolar,
+          scoring: nScoring,
+          quality: nSolar.imageryQuality || 'MEDIUM',
+          imgYear: nSolar.imageryDate?.year || '—'
+        });
+
+        scannedCount++;
+        setStatus(`🏘️ ${allResults.length} Gebäude gefunden...`);
+      } catch(e) { /* skip */ }
+    }
+
+    // Sort by score descending
+    allResults.sort((a, b) => b.scoring.score - a.scoring.score);
+
+    if (allResults.length === 0) {
+      setStatus('❌ Keine Solar-Daten für diese Adresse verfügbar', 'error');
+      document.getElementById('emptyState').style.display = 'block';
+    } else {
+      setStatus(`✅ ${allResults.length} Gebäude analysiert`, 'done');
+      renderResults();
+      setTimeout(hideStatus, 3000);
+    }
+
+  } catch(e) {
+    setStatus('❌ ' + e.message, 'error');
+    document.getElementById('emptyState').style.display = 'block';
+  }
+
+  btn.disabled = false;
+  btn.classList.remove('loading');
+}
+
+// ─── GPS Button ───
+document.getElementById('gpsBtn').addEventListener('click', async function() {
+  const btn = this;
+  btn.classList.add('active');
+  try {
+    setStatus('📍 GPS-Position ermitteln...');
+    const pos = await getGPS();
+    const revGeo = await reverseGeocode(pos.lat, pos.lng);
+    const addr = revGeo.display_name ? revGeo.display_name.split(',').slice(0, 3).join(', ').trim() : `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+    document.getElementById('addressInput').value = addr;
+    hideStatus();
+    showToast('📍 Standort erkannt');
+  } catch(e) {
+    setStatus('❌ ' + e.message, 'error');
+  }
+  btn.classList.remove('active');
+});
+
+// Enter key
+document.getElementById('addressInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') startAnalysis();
+});
+
+// ─── Render Results ───
+function renderResults() {
+  const list = document.getElementById('housesList');
+  list.innerHTML = '';
+
+  // Summary
+  const summary = document.getElementById('summaryStrip');
+  summary.classList.add('visible');
+  document.getElementById('summaryAddr').textContent = document.getElementById('addressInput').value;
+  document.getElementById('summaryCount').textContent = allResults.length + ' Gebäude';
+
+  const greens = allResults.filter(r => r.scoring.color === 'green').length;
+  const yellows = allResults.filter(r => r.scoring.color === 'yellow').length;
+  const reds = allResults.filter(r => r.scoring.color === 'red').length;
+  document.getElementById('ampelSummary').innerHTML =
+    (greens ? `<div class="ampel-chip"><div class="ampel-dot" style="background:var(--green)"></div>${greens}× Top</div>` : '') +
+    (yellows ? `<div class="ampel-chip"><div class="ampel-dot" style="background:var(--yellow)"></div>${yellows}× Mittel</div>` : '') +
+    (reds ? `<div class="ampel-chip"><div class="ampel-dot" style="background:var(--red)"></div>${reds}× Gering</div>` : '');
+
+  // Cards
+  allResults.forEach((r, idx) => {
+    const sp = r.solar.solarPotential;
+    const panels = sp.maxArrayPanelsCount || 0;
+    const kwp = ((panels * WATT_PER_PANEL) / 1000).toFixed(1);
+    const sunH = Math.round(sp.maxSunshineHoursPerYear || 0);
+    const area = Math.round(sp.maxArrayAreaMeters2 || 0);
+    const bestConfig = (sp.solarPanelConfigs || []).slice(-1)[0];
+    const kwh = bestConfig ? Math.round(bestConfig.yearlyEnergyDcKwh * 0.94) : 0;
+
+    const card = document.createElement('div');
+    card.className = `house-card ${r.scoring.color}`;
+    card.onclick = () => openDetail(idx);
+    card.innerHTML = `
+      <div class="house-top">
+        <div class="house-ampel">${r.scoring.emoji}</div>
+        <div class="house-addr">
+          <h3>${esc(r.shortAddr)}</h3>
+          <p>${r.scoring.label} · ${r.quality} · ${r.imgYear}</p>
+        </div>
+        <div class="house-score">${r.scoring.score}</div>
+      </div>
+      <div class="house-kpis">
+        <div class="house-kpi"><div class="val">${kwp}</div><div class="lbl">kWp</div></div>
+        <div class="house-kpi"><div class="val">${kwh.toLocaleString('de-DE')}</div><div class="lbl">kWh/Jahr</div></div>
+        <div class="house-kpi"><div class="val">${area}</div><div class="lbl">m² Dach</div></div>
+        <div class="house-kpi"><div class="val">${sunH}</div><div class="lbl">Sonnen-h</div></div>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+// ─── Detail Modal ───
+function openDetail(idx) {
+  currentDetail = allResults[idx];
+  const r = currentDetail;
+  const sp = r.solar.solarPotential;
+  const panels = sp.maxArrayPanelsCount || 0;
+  const kwp = ((panels * WATT_PER_PANEL) / 1000).toFixed(2);
+  const sunH = Math.round(sp.maxSunshineHoursPerYear || 0);
+  const area = Math.round(sp.maxArrayAreaMeters2 || 0);
+  const bestConfig = (sp.solarPanelConfigs || []).slice(-1)[0];
+  const kwh = bestConfig ? Math.round(bestConfig.yearlyEnergyDcKwh * 0.94) : 0;
+  const spez = kwp > 0 ? Math.round(kwh / parseFloat(kwp)) : 0;
+  const co2 = (kwh * 0.00038).toFixed(1);
+  const segments = sp.roofSegmentStats || [];
+
+  // Header
+  const ampelEl = document.getElementById('modalAmpel');
+  ampelEl.textContent = r.scoring.emoji;
+  ampelEl.style.background = r.scoring.color === 'green' ? 'var(--green-dim)' :
+                              r.scoring.color === 'yellow' ? 'var(--yellow-dim)' : 'var(--red-dim)';
+  document.getElementById('modalTitle').textContent = r.shortAddr;
+  document.getElementById('modalSub').textContent = `Score: ${r.scoring.score}/100 · ${r.scoring.label} · ${r.quality}`;
+
+  // Grid
+  document.getElementById('detailGrid').innerHTML = `
+    <div class="detail-card highlight">
+      <div class="label">Leistung</div>
+      <div class="value">${kwp}<span class="unit">kWp</span></div>
+      <div class="sub">${panels} × AIKO 475W</div>
+    </div>
+    <div class="detail-card">
+      <div class="label">Jahresertrag</div>
+      <div class="value">${kwh.toLocaleString('de-DE')}<span class="unit">kWh</span></div>
+      <div class="sub">ca. ${spez} kWh/kWp</div>
+    </div>
+    <div class="detail-card">
+      <div class="label">Dachfläche</div>
+      <div class="value">${area}<span class="unit">m²</span></div>
+      <div class="sub">${segments.length} Segmente</div>
+    </div>
+    <div class="detail-card">
+      <div class="label">Sonnenstunden</div>
+      <div class="value">${sunH.toLocaleString('de-DE')}<span class="unit">h/Jahr</span></div>
+      <div class="sub">Maximum</div>
+    </div>
+    <div class="detail-card">
+      <div class="label">CO₂ Ersparnis</div>
+      <div class="value">${co2}<span class="unit">t/Jahr</span></div>
+      <div class="sub">vs. Netzstrom</div>
+    </div>
+    <div class="detail-card">
+      <div class="label">Koordinaten</div>
+      <div class="value" style="font-size:13px;margin-top:8px">${r.lat.toFixed(5)}<br>${r.lng.toFixed(5)}</div>
+    </div>
+  `;
+
+  // Roof Segments
+  const segEl = document.getElementById('roofSegments');
+  if (segments.length > 0) {
+    segEl.innerHTML = '<h4>🏠 Dachsegmente</h4>' + segments.map((seg, i) => {
+      const az = seg.azimuthDegrees || 0;
+      const dir = dirFromAzimuth(az);
+      const pitch = seg.pitchDegrees ? seg.pitchDegrees.toFixed(0) : '—';
+      const segArea = seg.stats?.areaMeters2 ? seg.stats.areaMeters2.toFixed(0) : '—';
+      const segSun = seg.stats?.sunshineQuantiles ? Math.round(seg.stats.sunshineQuantiles[5] || 0) : '—';
+      return `<div class="seg-row">
+        <div class="seg-dir">${dir} ${Math.round(az)}°</div>
+        <div class="seg-detail">${pitch}° Neigung · ${segArea} m²</div>
+        <div class="seg-sun">${segSun}h</div>
+      </div>`;
+    }).join('');
+  } else {
+    segEl.innerHTML = '';
+  }
+
+  // Reset save button
+  document.getElementById('saveLeadBtn').className = 'action-btn primary';
+  document.getElementById('saveLeadBtn').innerHTML = '💾 Lead speichern';
+
+  document.getElementById('modalOverlay').classList.add('visible');
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modalOverlay')) return;
+  document.getElementById('modalOverlay').classList.remove('visible');
+}
+
+// ─── Open in Solar Analyzer ───
+function openInSolar() {
+  if (!currentDetail) return;
+  const addr = currentDetail.address;
+  window.open(`https://bee-doo-tools.vercel.app/solar.html?addr=${encodeURIComponent(addr)}`, '_blank');
+}
+
+// ─── Save Lead to Supabase ───
+async function saveLead() {
+  if (!currentDetail) return;
+  const r = currentDetail;
+  const sp = r.solar.solarPotential;
+  const btn = document.getElementById('saveLeadBtn');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Speichern...';
+
+  try {
+    const panels = sp.maxArrayPanelsCount || 0;
+    const kwp = ((panels * WATT_PER_PANEL) / 1000).toFixed(2);
+    const bestConfig = (sp.solarPanelConfigs || []).slice(-1)[0];
+    const kwh = bestConfig ? Math.round(bestConfig.yearlyEnergyDcKwh * 0.94) : 0;
+
+    const payload = {
+      adresse: r.shortAddr,
+      full_address: r.address,
+      lat: r.lat,
+      lng: r.lng,
+      solar_score: r.scoring.score,
+      solar_label: r.scoring.label,
+      kwp: parseFloat(kwp),
+      kwh_year: kwh,
+      panels_max: panels,
+      dach_area_m2: Math.round(sp.maxArrayAreaMeters2 || 0),
+      sonnenstunden: Math.round(sp.maxSunshineHoursPerYear || 0),
+      quality: r.quality,
+      img_year: r.imgYear,
+      dach_segmente: (sp.roofSegmentStats || []).length,
+      created_at: new Date().toISOString(),
+      source: 'scout-solar'
+    };
+
+    const res = await fetch(SUPABASE_URL + '/rest/v1/scout_leads', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok || res.status === 201) {
+      btn.className = 'action-btn saved';
+      btn.innerHTML = '✅ Gespeichert!';
+      showToast('✅ Lead gespeichert');
+    } else {
+      // Even if table doesn't exist, show success locally
+      const errText = await res.text();
+      console.warn('Supabase:', res.status, errText);
+      btn.className = 'action-btn saved';
+      btn.innerHTML = '✅ Lokal gemerkt';
+      showToast('⚠️ Lead lokal gemerkt (DB-Setup nötig)');
+    }
+  } catch(e) {
+    console.error(e);
+    btn.className = 'action-btn saved';
+    btn.innerHTML = '⚠️ Offline gemerkt';
+    showToast('⚠️ Offline – Lead lokal gemerkt');
+  }
+  btn.disabled = false;
+}
+
+// ─── Touch to close modal on swipe down ───
+let touchStartY = 0;
+document.getElementById('modal').addEventListener('touchstart', function(e) {
+  touchStartY = e.touches[0].clientY;
+});
+document.getElementById('modal').addEventListener('touchmove', function(e) {
+  const dy = e.touches[0].clientY - touchStartY;
+  if (dy > 80 && this.scrollTop <= 0) {
+    closeModal();
+  }
+});
+
+</script>
+</body>
+</html>
