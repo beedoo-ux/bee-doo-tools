@@ -12,6 +12,11 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0c1222; overflow-x: hidden; }
   #root { min-height: 100vh; }
+
+    @keyframes pulseRedBorder {
+      0%, 100% { border-color: rgba(239,68,68,0.35); box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+      50% { border-color: rgba(239,68,68,0.8); box-shadow: 0 0 20px rgba(239,68,68,0.15); }
+    }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 </head>
@@ -558,6 +563,58 @@ const AUFNAHME_TYPEN = [
   { id: "WP", label: "W\xE4rmepumpe", icon: "\u2668\uFE0F", desc: "W\xE4rmepumpen-Aufnahme", color: "#60A5FA" },
   { id: "PV+WP", label: "PV + W\xE4rmepumpe", icon: "\u26A1", desc: "Kombi-Aufnahme", color: "#34D399" }
 ];
+
+function AlertScreen({ stornos, rueckkehrer, onDismiss }) {
+  const [pulse, setPulse] = useState(true);
+  const [countdown, setCountdown] = useState(10);
+  useEffect(() => {
+    const t = setInterval(() => { setCountdown(function(c) { return c > 0 ? c - 1 : 0; }); }, 1000);
+    return () => clearInterval(t);
+  }, []);
+  var totalItems = (stornos ? stornos.length : 0) + (rueckkehrer ? rueckkehrer.length : 0);
+  if (totalItems === 0) { onDismiss(); return null; }
+  return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 30000, background: "radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.15) 0%, #0A0E1A 70%)", fontFamily: font, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20, overflow: "auto" }},
+    /* Animated warning icon */
+    React.createElement("div", { style: { fontSize: 64, marginBottom: 16, animation: "pulse 1s infinite" }}, "\u26A0\uFE0F"),
+    React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#ef4444", textAlign: "center", marginBottom: 6, animation: "pulse 1.5s infinite" }}, "ACHTUNG \u2014 OFFENE AUFGABEN!"),
+    React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 28 }}, totalItems + " Kunden brauchen deine Aufmerksamkeit"),
+
+    /* Storno items */
+    stornos && stornos.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 500, marginBottom: 20 }},
+      React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#f97316", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}, "\uD83D\uDD25 STORNO-RETTER", React.createElement("span", { style: { background: "#f97316", color: "#fff", borderRadius: 10, padding: "2px 8px", fontSize: 10 }}, stornos.length)),
+      stornos.map(function(st, i) {
+        var pct = Math.max(0, Math.round((st.restStunden / 48) * 100));
+        var barColor = pct > 50 ? "#f97316" : pct > 25 ? "#ef4444" : "#dc2626";
+        return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginBottom: 8, borderRadius: 14, background: "rgba(249,115,22,0.08)", border: "2px solid rgba(249,115,22,0.4)", animation: "pulseRedBorder 2s infinite" }},
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }},
+            React.createElement("div", { style: { fontSize: 24 }}, "\uD83D\uDD25"),
+            React.createElement("div", null,
+              React.createElement("div", { style: { fontSize: 15, fontWeight: 700 }}, st.name),
+              React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)" }}, st.grund + " \xB7 " + st.typ))),
+          React.createElement("div", { style: { textAlign: "right" }},
+            React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: barColor, animation: "pulse 1s infinite" }}, st.restStunden + " Std."),
+            React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.4)" }}, "verbleibend")));
+      })),
+
+    /* Rückkehrer items */
+    rueckkehrer && rueckkehrer.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 500, marginBottom: 24 }},
+      React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#ef4444", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}, "\uD83D\uDEA8 R\xDCCKKEHRER AUS MONTAGE", React.createElement("span", { style: { background: "#ef4444", color: "#fff", borderRadius: 10, padding: "2px 8px", fontSize: 10 }}, rueckkehrer.length)),
+      rueckkehrer.map(function(rk, i) {
+        return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginBottom: 8, borderRadius: 14, background: "rgba(239,68,68,0.06)", border: "2px solid rgba(239,68,68,0.35)", animation: "pulseRedBorder 2s infinite" }},
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }},
+            React.createElement("div", { style: { fontSize: 24 }}, "\u26A0\uFE0F"),
+            React.createElement("div", null,
+              React.createElement("div", { style: { fontSize: 15, fontWeight: 700 }}, rk.name),
+              React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)" }}, rk.grund + " \xB7 " + rk.typ))),
+          React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: "#ef4444" }}, rk.tage + "T \u2192"));
+      })),
+
+    /* Countdown + Skip */
+    React.createElement("div", { style: { textAlign: "center" }},
+      React.createElement("div", { style: { width: 56, height: 56, borderRadius: "50%", border: "3px solid rgba(239,68,68,0.4)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: 22, fontWeight: 900, color: "#ef4444" }}, countdown > 0 ? countdown : "\u2713"),
+      React.createElement("button", { onClick: onDismiss, style: { padding: "12px 32px", borderRadius: 12, border: countdown > 0 ? "1.5px solid rgba(255,255,255,0.1)" : "none", background: countdown > 0 ? "transparent" : "linear-gradient(135deg, #ef4444, #dc2626)", color: countdown > 0 ? "rgba(255,255,255,0.4)" : "#fff", fontSize: 14, fontWeight: 700, fontFamily: font, cursor: "pointer", transition: "all 0.3s" }}, countdown > 0 ? "\xFCberspringen (" + countdown + "s)" : "\u2192 Zum Dashboard")));
+}
+
 function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkehrerClick, onRueckkehrerErledigt }) {
   const [clk, setClk] = useState(new Date());
   const [selectedRK, setSelectedRK] = useState(null);
@@ -648,6 +705,8 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
   var currentStufe = provStufen.slice().reverse().find(function(s){ return salesMonat >= s.ab; }) || provStufen[0];
   var nextStufe = provStufen.find(function(s){ return s.ab > salesMonat; });
   var fehlendBis = nextStufe ? (nextStufe.ab - salesMonat) : 0;
+  // Rückwirkend: ab 8 Aufträge werden ALLE mit 1700€ vergütet
+  var provVerdient = salesMonat >= 8 ? salesMonat * 1700 : salesMonat * 1400;
 
   const gr = clk.getHours() < 12 ? "Guten Morgen" : clk.getHours() < 18 ? "Guten Tag" : "Guten Abend";
   const ds = clk.toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
@@ -788,7 +847,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
       /* ── PROVISIONSSTUFE ── */
       nextStufe && React.createElement("div", { style: { ...cs, gridColumn: "1 / -1", background: "rgba(253,225,84,0.03)", borderColor: "rgba(253,225,84,0.15)" }},
         React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }},
-          React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#FDE154" }}, "\uD83D\uDCB0 Provision: " + currentStufe.prov + "\u20AC / Auftrag"),
+          React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#FDE154" }}, "\uD83D\uDCB0 " + currentStufe.prov + "\u20AC / Auftrag" + (salesMonat >= 8 ? " (r\xFCckwirkend!)" : "")),
           React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.55)" }}, "Noch " + fehlendBis + " Auftr\xE4ge bis " + nextStufe.prov + "\u20AC")),
         React.createElement("div", { style: { height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden" }},
           React.createElement("div", { style: { width: Math.round((salesMonat / nextStufe.ab) * 100) + "%", height: "100%", background: "linear-gradient(90deg, #FDE154, #E8CC3D)", borderRadius: 3, transition: "width 0.5s" }}))),
@@ -6729,6 +6788,7 @@ ${data.plz || ""} ${data.ort || ""}`;
 }
 function BeedooField() {
   const [showDashboard, setShowDashboard] = useState(true);
+  const [showAlert, setShowAlert] = useState(true);
   const [showStart, setShowStart] = useState(true);
   const [step, setStep] = useState(0);
   const [data, setData] = useState({ anrede: "Herr", preismodell: "Finanzierung", finanzDienstleister: "EFS", efsTarif: "Basic", zins: "5.99", finanzJahre: "15", dynStromtarif: true, par14: true, dynStrompreis: "26", par14Erstattung: "160", stromSteigerung: "4", _startZeit: (/* @__PURE__ */ new Date()).toISOString() });
@@ -6750,6 +6810,12 @@ function BeedooField() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+  useEffect(() => {
+    if (showAlert) {
+      const t = setTimeout(() => setShowAlert(false), 10000);
+      return () => clearTimeout(t);
+    }
+  }, [showAlert]);
   useEffect(() => {
     (async () => {
       try {
@@ -6853,7 +6919,7 @@ function BeedooField() {
         @keyframes pulseGreen { 0%,100% { box-shadow: 0 0 0px rgba(52,211,153,0); } 50% { box-shadow: 0 0 12px rgba(52,211,153,0.3); } }
         @keyframes minionBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
         @keyframes minionWobble { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(2deg); } 75% { transform: rotate(-2deg); } }
-      `), showDashboard && React.createElement(DashboardScreen, { onNewAufnahme: function() { setShowDashboard(false); }, onTerminClick: function(termin) {
+      `), showDashboard && showAlert && React.createElement(AlertScreen, { stornos: [{id:"st1",name:"Petersen, Lemgo",typ:"PV 10.2 kWp",grund:"Preis zu hoch",restStunden:26},{id:"st2",name:"Klein, Herford",typ:"PV+WP 13.5 kWp",grund:"Finanzierung abgelehnt",restStunden:44}], rueckkehrer: rueckkehrer, onDismiss: function() { setShowAlert(false); } }), showDashboard && !showAlert && React.createElement(DashboardScreen, { onNewAufnahme: function() { setShowDashboard(false); }, onTerminClick: function(termin) {
         var typMap = { "PV": "PV", "WP": "WP", "PV+WP": "PV+WP" };
         var aufTyp = typMap[termin.typ] || "PV";
         var kd = termin.kunde || {};
