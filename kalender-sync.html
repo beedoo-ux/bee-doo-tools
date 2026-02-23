@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo Kalender-Sync Verwaltung</title>
+<script src="config.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0c1222;font-family:'DM Sans',sans-serif;color:#e1e7ef;padding:20px}
+.card{background:#1a2236;border-radius:14px;padding:20px;margin-bottom:16px;border:1px solid #263354}
+h1{color:#F5C500;font-size:22px;margin-bottom:4px}
+.sub{color:#8899aa;font-size:13px;margin-bottom:24px}
+.v-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid #263354}
+.v-row:last-child{border-bottom:none}
+.avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
+.v-name{font-weight:700;font-size:14px}
+.v-id{color:#8899aa;font-size:11px}
+.url-box{background:#0c1222;border-radius:8px;padding:8px 12px;font-size:11px;color:#8899aa;word-break:break-all;margin-top:6px;border:1px solid #263354}
+.btn{padding:8px 16px;border-radius:8px;border:none;font-family:'DM Sans',sans-serif;font-weight:700;font-size:12px;cursor:pointer;transition:all 0.15s}
+.btn-gold{background:#F5C500;color:#0c1222}
+.btn-dark{background:#263354;color:#e1e7ef}
+.btn:hover{opacity:0.85}
+.qr-container{margin-top:10px;text-align:center}
+.qr-container canvas{border-radius:8px}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.toast{position:fixed;top:20px;right:20px;background:#34d399;color:#0c1222;padding:10px 20px;border-radius:10px;font-weight:700;font-size:13px;z-index:9999;opacity:0;transition:opacity 0.3s}
+.toast.show{opacity:1}
+@media(max-width:600px){.v-row{flex-direction:column;align-items:flex-start;gap:8px}.actions{width:100%;display:flex;gap:6px}}
+</style>
+</head><body>
+
+<a href="index.html" style="position:fixed;bottom:18px;left:18px;z-index:999;background:#1a2236;color:#F5C500;border:1.5px solid #F5C500;border-radius:10px;padding:7px 16px;font-size:13px;font-weight:700;text-decoration:none;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px #0008;transition:background 0.15s,color 0.15s" onmouseover="this.style.background='#F5C500';this.style.color='#0c1222'" onmouseout="this.style.background='#1a2236';this.style.color='#F5C500'">← Launcher</a>
+
+<div style="max-width:700px;margin:0 auto">
+  <h1>🗓️ Kalender-Sync Verwaltung</h1>
+  <p class="sub">Jeder Vertriebler bekommt eine persönliche Kalender-URL für sein Handy</p>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span class="status-dot" style="background:#34d399"></span>
+      <span style="font-size:12px;color:#34d399;font-weight:700">Supabase verbunden</span>
+      <span style="font-size:11px;color:#8899aa;margin-left:auto" id="termin-count">Lade...</span>
+    </div>
+    <div style="font-size:12px;color:#8899aa">
+      <strong style="color:#e1e7ef">So funktioniert's:</strong> Jeder Vertriebler abonniert seine URL im Handy-Kalender. 
+      Wenn du in <a href="kalender.html" style="color:#F5C500">kalender.html</a> Termine buchst/änderst, 
+      erscheinen sie automatisch auf dem Handy.
+    </div>
+  </div>
+
+  <div class="card" id="vertriebler-list">
+    <div style="text-align:center;padding:20px;color:#8899aa">🔄 Lade Vertriebler...</div>
+  </div>
+
+  <div class="card" style="background:#0c1222;border:1.5px dashed #263354">
+    <h3 style="font-size:14px;color:#F5C500;margin-bottom:8px">📱 Anleitung für Vertriebler</h3>
+    <div style="font-size:12px;color:#8899aa;line-height:1.6">
+      <strong style="color:#e1e7ef">iPhone:</strong> Einstellungen → Kalender → Accounts → Account hinzufügen → Andere → Kalenderabo hinzufügen → URL einfügen<br>
+      <strong style="color:#e1e7ef">Android:</strong> Google Kalender → ⚙️ Einstellungen → Kalender hinzufügen → Per URL → URL einfügen<br>
+      <strong style="color:#e1e7ef">Oder:</strong> QR-Code scannen → Link öffnen → .ics Datei wird automatisch importiert
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(async function() {
+  const SB = window.BEEDOO_CONFIG?.SB_URL || "https://hqzpemfaljxcysyqssng.supabase.co";
+  const KEY = window.BEEDOO_CONFIG?.SB_SRV || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4";
+  const H = { "apikey": KEY, "Authorization": "Bearer " + KEY };
+  const BASE = location.origin + location.pathname.replace("kalender-sync.html", "");
+
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2500);
+  }
+
+  // Load vertriebler
+  const res = await fetch(SB + "/rest/v1/vertriebler?aktiv=eq.true&select=*&order=name", { headers: H });
+  const vertriebler = await res.json();
+
+  // Load termin counts
+  const tRes = await fetch(SB + "/rest/v1/termine?select=vertrieb_id&datum=gte." + new Date().toISOString().split("T")[0], { headers: H });
+  const termine = await tRes.json();
+  const counts = {};
+  termine.forEach(t => { counts[t.vertrieb_id] = (counts[t.vertrieb_id] || 0) + 1; });
+
+  document.getElementById("termin-count").textContent = termine.length + " aktive Termine";
+
+  // Render
+  const list = document.getElementById("vertriebler-list");
+  list.innerHTML = vertriebler.map(v => {
+    const feedUrl = BASE + "ical-feed.html?token=" + v.ical_token;
+    const cnt = counts[v.id] || 0;
+    return '<div class="v-row">'
+      + '<div class="avatar" style="background:' + v.farbe + '22;border:2px solid ' + v.farbe + ';color:' + v.farbe + '">' + v.id + '</div>'
+      + '<div style="flex:1;min-width:0">'
+      + '<div class="v-name">' + v.name + '</div>'
+      + '<div class="v-id">' + v.id + ' · ' + cnt + ' Termine · <span style="color:' + v.farbe + '">●</span></div>'
+      + '<div class="url-box" id="url-' + v.id + '">' + feedUrl + '</div>'
+      + '</div>'
+      + '<div class="actions" style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">'
+      + '<button class="btn btn-gold" onclick="copyUrl(\'' + v.id + '\')">📋 URL</button>'
+      + '<button class="btn btn-dark" onclick="showQR(\'' + v.id + '\',\'' + feedUrl + '\',\'' + v.name + '\')">QR</button>'
+      + '<a class="btn btn-dark" href="' + feedUrl + '" target="_blank" style="text-decoration:none;text-align:center">🔗</a>'
+      + '</div></div>';
+  }).join("");
+
+  // Copy URL
+  window.copyUrl = function(id) {
+    const url = document.getElementById("url-" + id).textContent;
+    navigator.clipboard.writeText(url).then(() => toast("✅ URL kopiert!"));
+  };
+
+  // QR Code
+  window.showQR = function(id, url, name) {
+    const existing = document.getElementById("qr-" + id);
+    if (existing) { existing.remove(); return; }
+    
+    const row = document.getElementById("url-" + id).parentElement;
+    const div = document.createElement("div");
+    div.id = "qr-" + id;
+    div.className = "qr-container";
+    div.innerHTML = '<div style="padding:12px;background:white;border-radius:10px;display:inline-block;margin-top:8px"><div id="qrcode-' + id + '"></div></div><p style="font-size:10px;color:#8899aa;margin-top:6px">' + name + ' – QR scannen zum Abonnieren</p>';
+    row.appendChild(div);
+    
+    new QRCode(document.getElementById("qrcode-" + id), {
+      text: url, width: 180, height: 180,
+      colorDark: "#0c1222", colorLight: "#ffffff"
+    });
+  };
+})();
+</script>
+</body></html>

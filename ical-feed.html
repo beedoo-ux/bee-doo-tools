@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>bee-doo iCal Feed</title>
+<script src="config.js"></script>
+<script>
+// This page serves iCal feeds for Vertriebler calendar subscriptions
+// URL format: ical-feed.html?token=XXXXX
+
+(async function() {
+  const SB = window.BEEDOO_CONFIG?.SB_URL || "https://hqzpemfaljxcysyqssng.supabase.co";
+  const KEY = window.BEEDOO_CONFIG?.SB_SRV || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4";
+  const H = { "apikey": KEY, "Authorization": "Bearer " + KEY };
+
+  const token = new URLSearchParams(location.search).get("token");
+  if (!token) { document.body.innerText = "Kein Token angegeben"; return; }
+
+  // Find vertriebler by token
+  const vRes = await fetch(SB + "/rest/v1/vertriebler?ical_token=eq." + token + "&aktiv=eq.true&select=id,name", { headers: H });
+  const vList = await vRes.json();
+  if (!vList.length) { document.body.innerText = "Ungültiger Token"; return; }
+  const v = vList[0];
+
+  // Get termine (next 60 days + last 7 days)
+  const today = new Date();
+  const past = new Date(today); past.setDate(past.getDate() - 7);
+  const future = new Date(today); future.setDate(future.getDate() + 60);
+  const fmt = d => d.toISOString().split("T")[0];
+
+  const tRes = await fetch(SB + "/rest/v1/termine?vertrieb_id=eq." + v.id + "&datum=gte." + fmt(past) + "&datum=lte." + fmt(future) + "&status=neq.storniert&select=*&order=datum,zeit_minuten", { headers: H });
+  const termine = await tRes.json();
+
+  // Get blocker
+  const bRes = await fetch(SB + "/rest/v1/blocker?vertrieb_id=eq." + v.id + "&datum=gte." + fmt(past) + "&datum=lte." + fmt(future) + "&select=*&order=datum", { headers: H });
+  const blocker = await bRes.json();
+
+  // Build iCal
+  const CRLF = "\r\n";
+  const pad2 = n => String(n).padStart(2, "0");
+  const mToTime = m => pad2(Math.floor(m/60)) + pad2(m%60) + "00";
+  const dToStr = d => d.replace(/-/g, "");
+  const nowUtc = new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d+/,"");
+
+  let ical = "BEGIN:VCALENDAR" + CRLF
+    + "VERSION:2.0" + CRLF
+    + "PRODID:-//bee-doo GmbH//Vertriebskalender//DE" + CRLF
+    + "CALSCALE:GREGORIAN" + CRLF
+    + "METHOD:PUBLISH" + CRLF
+    + "X-WR-CALNAME:bee-doo " + v.name + CRLF
+    + "X-WR-TIMEZONE:Europe/Berlin" + CRLF
+    + "BEGIN:VTIMEZONE" + CRLF
+    + "TZID:Europe/Berlin" + CRLF
+    + "BEGIN:STANDARD" + CRLF
+    + "DTSTART:19701025T030000" + CRLF
+    + "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU" + CRLF
+    + "TZOFFSETFROM:+0200" + CRLF
+    + "TZOFFSETTO:+0100" + CRLF
+    + "END:STANDARD" + CRLF
+    + "BEGIN:DAYLIGHT" + CRLF
+    + "DTSTART:19700329T020000" + CRLF
+    + "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU" + CRLF
+    + "TZOFFSETFROM:+0100" + CRLF
+    + "TZOFFSETTO:+0200" + CRLF
+    + "END:DAYLIGHT" + CRLF
+    + "END:VTIMEZONE" + CRLF;
+
+  const statusMap = { offen: "TENTATIVE", bestaetigt: "CONFIRMED", auftrag: "CONFIRMED", verpasst: "CANCELLED" };
+  const statusLabel = { offen: "Offen", bestaetigt: "Bestätigt", auftrag: "✅ AUFTRAG", verpasst: "Verpasst" };
+
+  // Termine
+  for (const t of termine) {
+    const endMin = t.zeit_minuten + t.dauer_minuten;
+    const loc = [t.adresse, t.plz, t.ort].filter(Boolean).join(", ");
+    const desc = ["Termin #" + (t.termin_nr || "-"), "Status: " + (statusLabel[t.status] || t.status)];
+    if (t.telefon) desc.push("Tel: " + t.telefon);
+    if (t.notizen) desc.push(t.notizen);
+
+    ical += "BEGIN:VEVENT" + CRLF
+      + "UID:" + t.id + "@bee-doo.de" + CRLF
+      + "DTSTAMP:" + nowUtc + CRLF
+      + "DTSTART;TZID=Europe/Berlin:" + dToStr(t.datum) + "T" + mToTime(t.zeit_minuten) + CRLF
+      + "DTEND;TZID=Europe/Berlin:" + dToStr(t.datum) + "T" + mToTime(endMin) + CRLF
+      + "SUMMARY:🏠 " + (t.kunde || "Termin") + " – Solar-Beratung" + CRLF
+      + (loc ? "LOCATION:" + loc + CRLF : "")
+      + "DESCRIPTION:" + desc.join("\\n") + CRLF
+      + "STATUS:" + (statusMap[t.status] || "TENTATIVE") + CRLF
+      + "LAST-MODIFIED:" + (t.updated_at || t.created_at || "").replace(/[-:]/g,"").replace(/\.\d+\+/,"Z").replace(/\+.*$/,"Z") + CRLF
+      + "BEGIN:VALARM" + CRLF
+      + "TRIGGER:-PT30M" + CRLF
+      + "ACTION:DISPLAY" + CRLF
+      + "DESCRIPTION:In 30 Min: " + (t.kunde || "Termin") + CRLF
+      + "END:VALARM" + CRLF
+      + "END:VEVENT" + CRLF;
+  }
+
+  // Blocker
+  const bIcons = { urlaub: "🏖", krank: "🤒", meeting: "👥", training: "📚", sonstiges: "⏸" };
+  for (const b of blocker) {
+    ical += "BEGIN:VEVENT" + CRLF
+      + "UID:blocker-" + b.id + "@bee-doo.de" + CRLF
+      + "DTSTAMP:" + nowUtc + CRLF;
+    if (b.ganztaegig) {
+      const nextDay = new Date(b.datum); nextDay.setDate(nextDay.getDate() + 1);
+      ical += "DTSTART;VALUE=DATE:" + dToStr(b.datum) + CRLF
+        + "DTEND;VALUE=DATE:" + dToStr(nextDay.toISOString().split("T")[0]) + CRLF;
+    } else {
+      ical += "DTSTART;TZID=Europe/Berlin:" + dToStr(b.datum) + "T" + mToTime(b.zeit_von) + CRLF
+        + "DTEND;TZID=Europe/Berlin:" + dToStr(b.datum) + "T" + mToTime(b.zeit_bis) + CRLF;
+    }
+    ical += "SUMMARY:" + (bIcons[b.typ] || "⏸") + " " + (b.label || b.typ) + CRLF
+      + "END:VEVENT" + CRLF;
+  }
+
+  ical += "END:VCALENDAR" + CRLF;
+
+  // Serve as download
+  const blob = new Blob([ical], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  
+  // Auto-download
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "bee-doo-" + v.id + ".ics";
+  
+  // Show info page
+  document.body.innerHTML = '<div style="font-family:DM Sans,sans-serif;background:#0c1222;color:#e1e7ef;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px">'
+    + '<div style="max-width:400px;text-align:center">'
+    + '<div style="font-size:48px;margin-bottom:16px">🗓️</div>'
+    + '<h1 style="font-size:20px;color:#F5C500;margin-bottom:8px">bee-doo Kalender</h1>'
+    + '<p style="color:#8899aa;margin-bottom:24px">' + v.name + ' · ' + termine.length + ' Termine</p>'
+    + '<a href="' + url + '" download="bee-doo-' + v.id + '.ics" style="display:inline-block;padding:12px 32px;background:#F5C500;color:#0c1222;border-radius:10px;font-weight:700;text-decoration:none;font-size:15px;margin-bottom:12px">📥 Kalender herunterladen</a>'
+    + '<p style="color:#556677;font-size:12px;margin-top:16px">Öffne die .ics Datei → wird automatisch in deinen Kalender importiert</p>'
+    + '<div style="margin-top:24px;padding:16px;background:#1a2236;border-radius:10px;text-align:left">'
+    + '<p style="color:#F5C500;font-size:11px;font-weight:700;margin-bottom:8px">📱 ABO-URL FÜR AUTOMATISCHE SYNC:</p>'
+    + '<p style="color:#8899aa;font-size:10px;word-break:break-all">' + location.href + '</p>'
+    + '<p style="color:#556677;font-size:10px;margin-top:8px">Diese URL im Handy-Kalender als Abo hinzufügen → Updates kommen automatisch</p>'
+    + '</div></div></div>';
+})();
+</script>
+</head><body style="background:#0c1222;color:#e1e7ef;font-family:DM Sans,sans-serif">
+<div style="display:flex;align-items:center;justify-content:center;min-height:100vh">
+<p>🔄 Lade Kalender-Feed...</p>
+</div>
+</body></html>
