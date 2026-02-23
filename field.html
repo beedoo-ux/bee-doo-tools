@@ -2615,18 +2615,15 @@ function StepFotos({ data, setData }) {
             var compressed = await compressImage(file, 1600, 0.75);
             var blobUrl = URL.createObjectURL(compressed);
 
-            // If photo has a specific key from the uploader, use it; otherwise fill next empty pflicht slot
+            // Use the exact photo_key from external upload (fotoHAK → HAK slot, fotoZaehler → Zähler slot)
             var targetKey = photo.photo_key;
-            if (!targetKey || data[targetKey]) {
-              // Find next empty pflicht slot
-              var pflichtKeys = ["fotoZaehler","fotoHAK","fotoPotential","fotoNeuerZS","fotoKabelwegInnen","fotoKabelwegWRZS","fotoKabelwegHAKZS","fotoKabelwegAussen","fotoAufstellortWR","fotoZSgeschlossen","fotoZSgeoeffnet","fotoDachboden"];
-              targetKey = pflichtKeys.find(function(k) { return !data[k]; });
-            }
             if (targetKey) {
+              // Direct match: external key maps 1:1 to internal slot
               u(targetKey, blobUrl);
               u(targetKey + "_file", compressed);
               u(targetKey + "_gd", "phone");
               triggerGDriveUpload(compressed, targetKey, photo.photo_label || targetKey, data, u);
+              console.log("[Phone-Sync] ✓ " + photo.photo_label + " → " + targetKey);
             }
           } catch(e) { console.warn("[Phone-Sync] Download error:", e); }
         }
