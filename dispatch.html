@@ -277,6 +277,7 @@ function DispatchApp() {
   const [view, setView] = useState('week'); // week | month | map | capacity
   const [modal, setModal] = useState(null);
   const [monteurFilter, setMonteurFilter] = useState('all');
+  const [alertFilter, setAlertFilter] = useState(null); // null | 'monteur_fehlt' | 'engel_fehlt' | 'beide_da' | 'ungeplant'
 
   const weekDays = useMemo(() => getWeekDays(baseDate), [baseDate]);
 
@@ -286,16 +287,18 @@ function DispatchApp() {
     const add = (k, v) => { slots[k] = [...(slots[k]||[]), v]; };
     projekte.forEach(p => {
       if(p.dcTechId && p.dcDate) {
-        add(`${p.dcTechId}_${p.dcDate}`, { proj:p, phase:'dc' });
-        // 2-Tage DC
+        // For 2-day DC, mark the span instead of creating separate dc_ext entry
+        const span = (p.dcDuration >= 2) ? 2 : 1;
+        add(`${p.dcTechId}_${p.dcDate}`, { proj:p, phase:'dc', span });
+        // Also mark the second day as occupied (for capacity/conflict checks) but flag as spanned
         if(p.dcDuration >= 2) {
           const day2 = nextWorkday(p.dcDate);
-          add(`${p.dcTechId}_${day2}`, { proj:p, phase:'dc_ext' });
+          add(`${p.dcTechId}_${day2}`, { proj:p, phase:'dc_spanned', span:0 });
         }
       }
-      (p.dcExtraDates||[]).forEach(d => add(`${p.dcTechId}_${d}`, { proj:p, phase:'dc_ext' }));
-      if(p.acTechId && p.acDate) add(`${p.acTechId}_${p.acDate}`, { proj:p, phase:'ac' });
-      (p.acExtraDates||[]).forEach(d => add(`${p.acTechId}_${d}`, { proj:p, phase:'ac_ext' }));
+      (p.dcExtraDates||[]).forEach(d => add(`${p.dcTechId}_${d}`, { proj:p, phase:'dc_ext', span:1 }));
+      if(p.acTechId && p.acDate) add(`${p.acTechId}_${p.acDate}`, { proj:p, phase:'ac', span:1 });
+      (p.acExtraDates||[]).forEach(d => add(`${p.acTechId}_${d}`, { proj:p, phase:'ac_ext', span:1 }));
     });
     return slots;
   }, [projekte]);
@@ -342,21 +345,21 @@ function DispatchApp() {
   // Alerts
   const alerts = useMemo(() => {
     const a = [];
-    const engelFehlt = projekte.filter(p => p.baustelleStatus==='engel_fehlt').length;
-    const monteurFehlt = projekte.filter(p => p.baustelleStatus==='monteur_nicht_gestartet'||p.baustelleStatus==='engel_vor_ort').length;
-    const beideDa = projekte.filter(p => p.baustelleStatus==='beide_da').length;
-    if(monteurFehlt>0) a.push({ type:'red', msg:`🚨 ${monteurFehlt} Montage(n) NICHT gestartet!` });
-    if(engelFehlt>0) a.push({ type:'orange', msg:`⚠ ${engelFehlt} Baustelle(n) OHNE Bauengel!` });
-    if(beideDa>0) a.push({ type:'green', msg:`✅ ${beideDa} Baustelle(n) laufen planmäßig` });
+    const monteurFehltList = projekte.filter(p => p.baustelleStatus==='monteur_nicht_gestartet'||p.baustelleStatus==='engel_vor_ort');
+    const engelFehltList = projekte.filter(p => p.baustelleStatus==='engel_fehlt');
+    const beideDaList = projekte.filter(p => p.baustelleStatus==='beide_da');
+    if(monteurFehltList.length>0) a.push({ type:'red', key:'monteur_fehlt', projects:monteurFehltList, msg:`🚨 ${monteurFehltList.length} Montage(n) NICHT gestartet!` });
+    if(engelFehltList.length>0) a.push({ type:'orange', key:'engel_fehlt', projects:engelFehltList, msg:`⚠ ${engelFehltList.length} Baustelle(n) OHNE Bauengel!` });
+    if(beideDaList.length>0) a.push({ type:'green', key:'beide_da', projects:beideDaList, msg:`✅ ${beideDaList.length} Baustelle(n) laufen planmäßig` });
     const up = unplanned.length;
-    if(up>0) a.push({ type:'dim', msg:`⚡ ${up} Projekte ungeplant` });
+    if(up>0) a.push({ type:'dim', key:'ungeplant', projects:unplanned, msg:`⚡ ${up} Projekte ungeplant` });
     // Wetter-Warnung
     weekDays.forEach(wd => {
       const ds = fmtDate(wd);
       const w = getWeather(ds);
       if(w.warn) {
         const dach = projekte.filter(p => (p.type==='pv_komplett'||p.type==='pv_dach') && (p.dcDate===ds||(p.dcExtraDates||[]).includes(ds)) && p.dcTechId);
-        if(dach.length>0) a.push({ type:'yellow', msg:`${w.icon} ${fmtDay(wd)}: ${w.rain}% Regen – ${dach.length} Dachmontage(n)` });
+        if(dach.length>0) a.push({ type:'yellow', key:`wetter_${ds}`, projects:dach, msg:`${w.icon} ${fmtDay(wd)}: ${w.rain}% Regen – ${dach.length} Dachmontage(n)` });
       }
     });
     return a;
@@ -421,10 +424,51 @@ function DispatchApp() {
           <span style={{color:C.red, fontSize:10, fontWeight:800, letterSpacing:'0.06em'}}>ALERTS</span>
           {alerts.map((a,i) => {
             const col = a.type==='red'?C.red : a.type==='orange'?C.orange : a.type==='green'?C.green : a.type==='yellow'?C.yellow : C.dim;
-            return <span key={i} style={{background:col+'12', color:col, border:`1px solid ${col}44`, borderRadius:4, padding:'1px 8px', fontSize:11}}>{a.msg}</span>;
+            const isActive = alertFilter === a.key;
+            return <span key={i} onClick={()=>setAlertFilter(isActive ? null : a.key)} style={{
+              background:isActive ? col+'30' : col+'12', color:col, border:`1px solid ${isActive ? col : col+'44'}`,
+              borderRadius:4, padding:'1px 8px', fontSize:11, cursor:'pointer', fontWeight:isActive?700:400,
+              outline: isActive ? `1px solid ${col}` : 'none',
+            }}>{a.msg}</span>;
           })}
+          {alertFilter && <span onClick={()=>setAlertFilter(null)} style={{fontSize:10, color:C.muted, cursor:'pointer', marginLeft:4}}>✕ Filter zurücksetzen</span>}
         </div>
       )}
+
+      {/* ─── ALERT DETAIL PANEL ───────────────────────────────────────── */}
+      {alertFilter && (() => {
+        const alert = alerts.find(a => a.key === alertFilter);
+        if(!alert) return null;
+        const col = alert.type==='red'?C.red : alert.type==='orange'?C.orange : alert.type==='green'?C.green : alert.type==='yellow'?C.yellow : C.dim;
+        return (
+          <div style={{background:col+'08', borderBottom:`1px solid ${col}33`, padding:'8px 14px', flexShrink:0, maxHeight:180, overflowY:'auto'}}>
+            <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+              {alert.projects.map(p => {
+                const pt = PROJECT_TYPES[p.type];
+                const bs = p.baustelleStatus ? BSTATUS[p.baustelleStatus] : null;
+                const dcTech = MONTEURE.find(m => m.id === p.dcTechId);
+                return (
+                  <div key={p.id} onClick={()=>{setAlertFilter(null); setModal({type:'detail',proj:p});}} style={{
+                    background:C.panel, border:`1px solid ${col}44`, borderLeft:`3px solid ${col}`,
+                    borderRadius:7, padding:'8px 12px', cursor:'pointer', minWidth:220, flex:'0 0 auto'
+                  }}>
+                    <div style={{display:'flex', justifyContent:'space-between', marginBottom:3}}>
+                      <span style={{fontSize:10, color:C.dim, fontWeight:600}}>{p.id}</span>
+                      <span style={{fontSize:10, color:pt.color, fontWeight:700}}>{pt.icon} {pt.label}</span>
+                    </div>
+                    <div style={{fontSize:13, fontWeight:700, color:C.text}}>{p.customer}</div>
+                    <div style={{fontSize:11, color:C.dim}}>{p.plz} {p.city} · {p.address}</div>
+                    {dcTech && <div style={{fontSize:10, color:C.dim, marginTop:3}}>👷 {dcTech.name}</div>}
+                    {bs && <div style={{fontSize:10, color:bs.col, fontWeight:700, marginTop:3}}>{bs.label}</div>}
+                    {p.montageStartedAt && <div style={{fontSize:10, color:C.green, marginTop:1}}>▶ {fmtTime(p.montageStartedAt)}</div>}
+                    {p.engelArrivedAt && <div style={{fontSize:10, color:C.teal, marginTop:1}}>🕊️ {fmtTime(p.engelArrivedAt)}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ─── MAIN LAYOUT ──────────────────────────────────────────────── */}
       <div style={{flex:1, display:'flex', overflow:'hidden'}}>
@@ -580,25 +624,51 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
       <SectionHeader label="👷 Monteure" count={techs.length} colTemplate={colTemplate}/>
 
       {/* Monteure Rows */}
-      {techs.map(tech => (
-        <div key={tech.id} style={{display:'grid', gridTemplateColumns:colTemplate}}>
-          <PersonCell who={tech}/>
-          {weekDays.map(wd => {
-            const ds = fmtDate(wd);
-            const key = `${tech.id}_${ds}`;
-            const items = techSlots[key] || [];
-            const full = items.length >= tech.cap;
-            return (
-              <div key={ds} style={{background:C.panel, borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`, padding:'3px 3px', minHeight:80, position:'relative'}}>
-                {items.map(({proj, phase}) => (
-                  <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)}/>
-                ))}
-                {full && <div style={{fontSize:9, color:C.red, textAlign:'center', fontWeight:700}}>● VOLL</div>}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+      {techs.map(tech => {
+        // Pre-compute which days are "spanned over" by a 2-day card starting on previous day
+        const spannedDays = new Set();
+        weekDays.forEach((wd, idx) => {
+          const ds = fmtDate(wd);
+          const items = techSlots[`${tech.id}_${ds}`] || [];
+          items.forEach(item => {
+            if(item.phase === 'dc_spanned') spannedDays.add(ds);
+          });
+        });
+
+        return (
+          <div key={tech.id} style={{display:'grid', gridTemplateColumns:colTemplate}}>
+            <PersonCell who={tech}/>
+            {weekDays.map((wd, dayIdx) => {
+              const ds = fmtDate(wd);
+              const key = `${tech.id}_${ds}`;
+              const allItems = techSlots[key] || [];
+              // Filter out spanned placeholders for rendering
+              const items = allItems.filter(it => it.phase !== 'dc_spanned');
+              const isSpannedOver = spannedDays.has(ds) && items.length === 0;
+              const full = allItems.length >= tech.cap;
+
+              // If this day is completely covered by a span from previous day, hide the cell
+              if(isSpannedOver) return null;
+
+              // Check if any item spans 2 days
+              const hasSpan2 = items.some(it => it.span === 2);
+
+              return (
+                <div key={ds} style={{
+                  background:C.panel, borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`,
+                  padding:'3px 3px', minHeight:80, position:'relative',
+                  gridColumn: hasSpan2 ? 'span 2' : undefined,
+                }}>
+                  {items.map(({proj, phase, span: itemSpan}) => (
+                    <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)} isSpan2={itemSpan===2}/>
+                  ))}
+                  {full && <div style={{fontSize:9, color:C.red, textAlign:'center', fontWeight:700}}>● VOLL</div>}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
 
       {/* Bauengel Section Header */}
       <SectionHeader label="🕊️ Bauengel" count={engel.length} colTemplate={colTemplate} color={C.teal}/>
@@ -636,7 +706,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROJECT CARD (in Wochenansicht)
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProjectCard({ proj, phase, dataAttr, onClick }) {
+function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2 }) {
   const pt = PROJECT_TYPES[proj.type];
   const isExt = phase.includes('ext');
   const phaseCol = isExt ? C.orange : phase==='dc' ? C.dc : phase==='ac' ? C.ac : C.teal;
@@ -670,6 +740,7 @@ function ProjectCard({ proj, phase, dataAttr, onClick }) {
         <span style={{fontSize:9, color:pt.color, fontWeight:600}}>{pt.icon} {pt.label}</span>
         {proj.kwp > 0 && <span style={{fontSize:8, color:C.orange, fontWeight:700}}>{proj.kwp}kWp</span>}
         <span style={{fontSize:8, color:C.muted}}>{proj.id}</span>
+        {isSpan2 && <span style={{fontSize:8, color:C.orange, background:C.orange+'18', borderRadius:3, padding:'0 4px', fontWeight:800}}>2 TAGE</span>}
         {proj.fotoCount > 0 && <span style={{fontSize:8, color:C.blue}}>📷{proj.fotoCount}</span>}
         <span style={{marginLeft:'auto', background:phaseCol+'22', color:phaseCol, borderRadius:3, padding:'0 4px', fontSize:8, fontWeight:800}}>{phaseLabel}</span>
       </div>
