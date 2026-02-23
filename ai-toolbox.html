@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#0c1222"/>
+<title>bee-doo · KI Toolbox</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body style="margin:0;background:#0c1222">
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+/* ═══ bee-doo AI TOOLBOX ═══ */
+const Y="#FDE154",DK="#0c1222",C1="#151d30",C2="#1c2640",BD="#263354",TX="#e1e7ef",DM="#5c6b8a",
+  BL="#60A5FA",GN="#34D399",RD="#F87171",OR="#FB923C",PP="#A78BFA",CY="#22D3EE",PK="#F472B6";
+
+const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+"M":n>=1e3?(n/1e3).toFixed(0)+"k":n.toFixed(0);
+
+/* ═══ DEMO DATA ═══ */
+const NAMES=["Gerhard Hergerdt","Sarah Karmazin","Tobias Endert","Kathrin Schuriemmer","Werner Cusumano","Fabian Wichmann","Carolina Beer","Stephan Schneller","Julia Gleinhauf","Alexander Brengelmann","Anja Karmazin","Reinhard Schmitz","Eva Klein","Klaus Gau","Natalie Lambert","Robert Wichmann","Christoph Hergerdt","Michel Morgen","Helga Ferkau","Jakob Mueller"];
+const SRCS=["Eigenvertrieb","Enpal","Enpal-WP","MvPP","Omega","SAOD","Empfehlung","Eigenleads"];
+const ORTS=["Bielefeld","Osnabrück","Münster","Paderborn","Hagen","Essen","Dortmund","Gütersloh","Minden","Herford"];
+const BERATER=["Kadir Danyildiz","Miguel Schader","Gino Ulitzka","Carlos Eichler","Fabian Hindenberg","Calogero Iannuzzo","Pascal Schellenberg","Dimitri van Eeuwen","Martin Bott","Klaus Vollmer"];
+const STR=["Herforder Str.","Meisenweg","Bahnhofstr.","Hauptstr.","Detmolder Str.","Finkenkr.","Heeper Str.","Am Stadtholz","Kirchweg","Lerchenweg"];
+const ri=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+const r=a=>a[Math.floor(Math.random()*a.length)];
+
+const genLeads=(n=30)=>Array.from({length:n},(_,i)=>{
+  const kwp=ri(5,25),src=r(SRCS),ort=r(ORTS),age=ri(0,45);
+  return{id:i+1,name:r(NAMES),nid:40200+i,src,kwp,mod:Math.round(kwp*1.8),eur:kwp*ri(1100,1600),
+    tel:"0"+ri(151,179)+" "+ri(10000000,99999999),str:r(STR)+" "+ri(1,120),plz:""+ri(30000,49999),ort,
+    berater:r(BERATER),age,stage:r(["Angebot erstellt","Hold","Auftrag","Vertrag","Finanzierung","Bonitaet","AC Board","Storniert"]),
+    created:new Date(Date.now()-age*86400000).toISOString().slice(0,10),
+    zahl:r(["Finanzierung","Barzahler"]),dach:r(["Süd","Ost-West","Süd-West","Flachdach"]),
+    notizen:r(["","Kunde hat Fragen zum Speicher","Dach Ost-West, Gaube links","Warte auf Nachbar-Genehmigung","Finanzierung über Volksbank","Termin nur nachmittags möglich","Rückruf nächste Woche","Nachbar hat auch Interesse"]),
+    email:r(NAMES).toLowerCase().replace(/ /g,".")+"@"+r(["web.de","gmx.de","gmail.com","mail.de"]),
+    conv_prob:Math.min(95,Math.max(5,ri(10,90)-(src==="Eigenleads"?20:src==="Empfehlung"?-15:0)-(age>14?15:0)+(kwp>15?10:0))),
+  }
+});
+
+const LEADS=genLeads(30);
+
+/* ═══ COMPONENTS ═══ */
+const Tab=({active,label,icon,onClick,color})=><button onClick={onClick} style={{padding:"10px 18px",borderRadius:8,border:active?`2px solid ${color||Y}`:`1px solid ${BD}`,background:active?`${(color||Y)}15`:C1,color:active?(color||Y):DM,fontWeight:active?700:500,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .2s"}}>{icon&&<span style={{fontSize:16}}>{icon}</span>}{label}</button>;
+
+const Card=({children,style})=><div style={{background:C1,borderRadius:10,border:`1px solid ${BD}`,padding:"16px 18px",marginBottom:8,...style}}>{children}</div>;
+
+const Score=({value,max=100,color=GN})=>{const pct=Math.round(value/max*100);return <div style={{display:"flex",alignItems:"center",gap:10,width:"100%"}}><div style={{flex:1,height:8,borderRadius:4,background:`${DM}30`}}><div style={{width:pct+"%",height:"100%",borderRadius:4,background:color,transition:"width .6s ease"}}/></div><span style={{fontSize:13,fontWeight:700,color,minWidth:36,textAlign:"right"}}>{value}</span></div>};
+
+const Btn=({children,onClick,color=Y,small,disabled})=><button disabled={disabled} onClick={onClick} style={{padding:small?"6px 14px":"10px 20px",borderRadius:8,border:"none",background:disabled?DM:color,color:disabled?BD:DK,fontWeight:700,fontSize:small?12:14,cursor:disabled?"default":"pointer",opacity:disabled?.5:1}}>{children}</button>;
+
+/* ═══ 1. LEAD SCORING ═══ */
+function LeadScoring(){
+  const[leads]=useState(()=>LEADS.map(l=>({...l,score:Math.min(98,Math.max(8,
+    (l.src==="Empfehlung"?25:l.src==="Eigenvertrieb"?18:l.src==="Enpal"?15:l.src==="MvPP"?12:10)+
+    (l.kwp>15?15:l.kwp>10?10:5)+
+    (l.age<3?20:l.age<7?15:l.age<14?8:0)+
+    (l.zahl==="Barzahler"?10:5)+
+    (l.dach==="Süd"?12:l.dach==="Süd-West"?8:4)+
+    ri(-5,10)
+  ))})).sort((a,b)=>b.score-a.score));
+  const[exp,setExp]=useState(null);
+  const sc=v=>v>=80?GN:v>=60?BL:v>=40?OR:RD;
+  return <div>
+    <div style={{marginBottom:16,padding:"12px 16px",borderRadius:8,background:`${BL}10`,border:`1px solid ${BL}20`}}>
+      <div style={{fontSize:14,color:BL,fontWeight:600,marginBottom:4}}>🧠 Lead-Scoring Algorithmus</div>
+      <div style={{fontSize:12,color:DM}}>Quelle (25p) + Anlagengröße (15p) + Alter (20p) + Zahlungsart (10p) + Dachausrichtung (12p) + Zufall → Score 0-98</div>
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+      <div style={{padding:"6px 14px",borderRadius:6,background:`${GN}15`,color:GN,fontSize:12,fontWeight:700}}>🟢 80+ Hot ({leads.filter(l=>l.score>=80).length})</div>
+      <div style={{padding:"6px 14px",borderRadius:6,background:`${BL}15`,color:BL,fontSize:12,fontWeight:700}}>🔵 60-79 Warm ({leads.filter(l=>l.score>=60&&l.score<80).length})</div>
+      <div style={{padding:"6px 14px",borderRadius:6,background:`${OR}15`,color:OR,fontSize:12,fontWeight:700}}>🟠 40-59 Kalt ({leads.filter(l=>l.score>=40&&l.score<60).length})</div>
+      <div style={{padding:"6px 14px",borderRadius:6,background:`${RD}15`,color:RD,fontSize:12,fontWeight:700}}>🔴 &lt;40 Eis ({leads.filter(l=>l.score<40).length})</div>
+    </div>
+    {leads.map(l=><Card key={l.id} style={{cursor:"pointer",border:exp===l.id?`1px solid ${sc(l.score)}`:`1px solid ${BD}`}} onClick={()=>setExp(exp===l.id?null:l.id)}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div style={{fontWeight:700,fontSize:15,color:TX}}>{l.name}</div>
+        <div style={{fontSize:22,fontWeight:800,color:sc(l.score)}}>{l.score}</div>
+      </div>
+      <Score value={l.score} color={sc(l.score)}/>
+      <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap",fontSize:11}}>
+        <span style={{color:DM}}>#{l.nid}</span>
+        <span style={{color:sc(l.score),fontWeight:600,padding:"1px 6px",borderRadius:4,background:`${sc(l.score)}12`}}>{l.src}</span>
+        <span style={{color:Y,fontWeight:700}}>{l.kwp}kWp</span>
+        <span style={{color:DM}}>{l.ort}</span>
+        <span style={{color:l.age>14?RD:l.age>7?OR:GN,fontWeight:600}}>{l.age}d alt</span>
+        <span style={{color:DM}}>{l.zahl}</span>
+      </div>
+      {exp===l.id&&<div style={{marginTop:12,padding:"10px 14px",borderRadius:8,background:`${DM}10`,border:`1px solid ${BD}`}}>
+        <div style={{fontSize:13,fontWeight:700,color:TX,marginBottom:8}}>Score-Aufschlüsselung</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:12}}>
+          <div style={{color:DM}}>Quelle ({l.src})</div><div style={{color:TX,fontWeight:600}}>+{l.src==="Empfehlung"?25:l.src==="Eigenvertrieb"?18:l.src==="Enpal"?15:l.src==="MvPP"?12:10}</div>
+          <div style={{color:DM}}>Anlage ({l.kwp}kWp)</div><div style={{color:TX,fontWeight:600}}>+{l.kwp>15?15:l.kwp>10?10:5}</div>
+          <div style={{color:DM}}>Alter ({l.age}d)</div><div style={{color:TX,fontWeight:600}}>+{l.age<3?20:l.age<7?15:l.age<14?8:0}</div>
+          <div style={{color:DM}}>Zahlung ({l.zahl})</div><div style={{color:TX,fontWeight:600}}>+{l.zahl==="Barzahler"?10:5}</div>
+          <div style={{color:DM}}>Dach ({l.dach})</div><div style={{color:TX,fontWeight:600}}>+{l.dach==="Süd"?12:l.dach==="Süd-West"?8:4}</div>
+        </div>
+        <div style={{marginTop:8,fontSize:12,color:BL}}>📞 {l.tel} · ✉ {l.email}</div>
+        <div style={{fontSize:12,color:DM,marginTop:4}}>{l.str}, {l.plz} {l.ort} · Berater: {l.berater}</div>
+        {l.notizen&&<div style={{marginTop:6,fontSize:12,color:PP,fontStyle:"italic"}}>💬 {l.notizen}</div>}
+      </div>}
+    </Card>)}
+  </div>
+}
+
+/* ═══ 2. STORNO-VORHERSAGE ═══ */
+function StornoPredict(){
+  const[leads]=useState(()=>LEADS.map(l=>{
+    let risk=ri(5,30);
+    if(l.age>21)risk+=25;if(l.age>14)risk+=15;
+    if(l.src==="Eigenleads")risk+=15;if(l.src==="MvPP")risk+=10;
+    if(l.zahl==="Finanzierung")risk+=8;
+    if(l.stage==="Hold")risk+=20;if(l.stage==="Bonitaet")risk+=12;
+    if(!l.notizen)risk+=10;
+    risk=Math.min(95,Math.max(5,risk));
+    return{...l,stornoRisk:risk,reasons:[
+      l.age>21?"⏰ Über 21 Tage in Phase":null,
+      l.age>14?"⏰ Über 14 Tage in Phase":null,
+      l.src==="Eigenleads"?"📉 Quelle: Eigenleads (niedrige Qualität)":null,
+      l.stage==="Hold"?"🛑 Liegt auf Hold":null,
+      l.stage==="Bonitaet"?"⚠️ Bonität noch offen":null,
+      l.zahl==="Finanzierung"?"💰 Finanzierung (Ablehnungsrisiko)":null,
+      !l.notizen?"📝 Keine Notizen (wenig Engagement)":null,
+    ].filter(Boolean)}
+  }).sort((a,b)=>b.stornoRisk-a.stornoRisk));
+  const[show,setShow]=useState("high");
+  const filtered=show==="high"?leads.filter(l=>l.stornoRisk>=60):show==="mid"?leads.filter(l=>l.stornoRisk>=30&&l.stornoRisk<60):leads;
+  const sc=v=>v>=60?RD:v>=30?OR:GN;
+  return <div>
+    <div style={{marginBottom:16,padding:"12px 16px",borderRadius:8,background:`${RD}10`,border:`1px solid ${RD}20`}}>
+      <div style={{fontSize:14,color:RD,fontWeight:600,marginBottom:4}}>⚠️ Storno-Frühwarnsystem</div>
+      <div style={{fontSize:12,color:DM}}>Analysiert: Verweildauer, Leadquelle, Finanzierungsart, Engagement, Phase → Storno-Wahrscheinlichkeit</div>
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:12}}>
+      {[["high","🔴 Hohes Risiko",RD],["mid","🟠 Mittleres",OR],["all","Alle",DM]].map(([k,l,c])=><button key={k} onClick={()=>setShow(k)} style={{padding:"6px 14px",borderRadius:6,background:show===k?`${c}20`:C1,color:show===k?c:DM,border:`1px solid ${show===k?c:BD}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>{l}</button>)}
+    </div>
+    {filtered.map(l=><Card key={l.id}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div><span style={{fontWeight:700,fontSize:15,color:TX}}>{l.name}</span><span style={{color:DM,fontSize:12,marginLeft:8}}>#{l.nid} · {l.stage}</span></div>
+        <div style={{fontSize:20,fontWeight:800,color:sc(l.stornoRisk)}}>{l.stornoRisk}%</div>
+      </div>
+      <Score value={l.stornoRisk} color={sc(l.stornoRisk)}/>
+      <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:3}}>
+        {l.reasons.map((r,i)=><div key={i} style={{fontSize:12,color:OR}}>{r}</div>)}
+      </div>
+      <div style={{marginTop:8,display:"flex",gap:6}}>
+        <Btn small color={BL}>📞 Jetzt anrufen</Btn>
+        <Btn small color={GN}>📧 Nachfass-Mail</Btn>
+      </div>
+    </Card>)}
+  </div>
+}
+
+/* ═══ 3. FOTO-OCR SIMULATION ═══ */
+function FotoOCR(){
+  const[result,setResult]=useState(null);
+  const[loading,setLoading]=useState(false);
+  const demos=[
+    {type:"Zählerschrank",img:"⚡",data:{apz:"Vorhanden – 4 freie Plätze",zaehler:"Zweirichtungszähler (eHZ)",zustand:"Gut – kein Austausch nötig",plombe:"Intakt",sls:"35A vorhanden",fi:"30mA FI vorhanden",vde:"VDE 0100/0105 konform",notiz:"Zählerschrank Baujahr ca. 2015, ausreichend dimensioniert für PV-Anlage bis 15kWp"}},
+    {type:"Dachfoto",img:"🏠",data:{ausrichtung:"Süd-West (ca. 210°)",neigung:"ca. 35°",ziegel:"Frankfurter Pfanne (Beton)",zustand:"Gut – keine sichtbaren Schäden",verschattung:"Minimal – Baum Südost ab 16 Uhr",flaeche:"ca. 48m² nutzbar",gauben:"1 Gaube mittig – muss umplant werden",notiz:"Ideale Dachfläche für 8-10kWp, Gaube reduziert um ca. 4 Module"}},
+    {type:"Lieferschein",img:"📦",data:{lieferant:"BayWa r.e. Solar",material:"24x JA Solar JAM54S30-410 (9.84kWp)",wechselrichter:"SMA Sunny Tripower 10.0",speicher:"BYD HVS 10.2",montagesystem:"K2 SingleRail",status:"Vollständig geliefert",datum:"18.02.2026",notiz:"Alles komplett, Montage kann starten"}},
+  ];
+  const simulate=(demo)=>{setLoading(true);setResult(null);setTimeout(()=>{setResult(demo);setLoading(false)},1500)};
+  return <div>
+    <div style={{marginBottom:16,padding:"12px 16px",borderRadius:8,background:`${CY}10`,border:`1px solid ${CY}20`}}>
+      <div style={{fontSize:14,color:CY,fontWeight:600,marginBottom:4}}>📸 Foto-OCR & Bildanalyse</div>
+      <div style={{fontSize:12,color:DM}}>Fotografiere Zählerschrank, Dach oder Lieferschein → KI erkennt automatisch alle relevanten Daten</div>
+    </div>
+    <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+      {demos.map(d=><button key={d.type} onClick={()=>simulate(d)} style={{flex:"1 1 150px",padding:"20px 16px",borderRadius:10,background:C1,border:`1px solid ${BD}`,cursor:"pointer",textAlign:"center"}}>
+        <div style={{fontSize:36,marginBottom:6}}>{d.img}</div>
+        <div style={{fontSize:13,fontWeight:700,color:TX}}>{d.type}</div>
+        <div style={{fontSize:11,color:DM,marginTop:2}}>Klick zum Simulieren</div>
+      </button>)}
+    </div>
+    {loading&&<Card style={{textAlign:"center",padding:30}}>
+      <div style={{fontSize:28,marginBottom:10,animation:"spin 1s linear infinite"}}>🔄</div>
+      <div style={{fontSize:14,color:CY,fontWeight:600}}>KI analysiert Foto...</div>
+      <div style={{fontSize:12,color:DM,marginTop:4}}>Texterkennung + Bildanalyse + Klassifizierung</div>
+    </Card>}
+    {result&&<Card style={{border:`1px solid ${CY}30`}}>
+      <div style={{fontSize:16,fontWeight:700,color:CY,marginBottom:12}}>{result.img} {result.type} – Analyse-Ergebnis</div>
+      <div style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:8}}>
+        {Object.entries(result.data).map(([k,v])=><React.Fragment key={k}>
+          <div style={{fontSize:12,color:DM,fontWeight:700,textTransform:"capitalize"}}>{k.replace(/([A-Z])/g," $1")}</div>
+          <div style={{fontSize:13,color:k==="notiz"?PP:TX,fontWeight:k==="notiz"?400:600}}>{v}</div>
+        </React.Fragment>)}
+      </div>
+      <div style={{marginTop:12,display:"flex",gap:8}}>
+        <Btn small color={GN}>✅ Übernehmen</Btn>
+        <Btn small color={OR}>✏️ Korrigieren</Btn>
+        <Btn small color={BL}>📄 PDF Export</Btn>
+      </div>
+    </Card>}
+  </div>
+}
+
+/* ═══ 4. ROUTE / TERMIN-OPTIMIZER ═══ */
+function RouteOptimizer(){
+  const[berater]=useState(r(BERATER));
+  const[termine]=useState(()=>{
+    const t=[];const orts=["Bielefeld","Osnabrück","Paderborn","Herford","Gütersloh"];
+    orts.forEach((ort,i)=>{t.push({id:i+1,name:r(NAMES),ort,str:r(STR)+" "+ri(1,99),plz:""+ri(30000,49999),
+      zeit:["09:00","10:30","13:00","15:00","16:30"][i],kwp:ri(6,20),
+      fahrt:ri(12,45),dist:ri(5,35)})});
+    return t;
+  });
+  const[nearbyLeads]=useState(()=>LEADS.slice(0,5).map(l=>({...l,distToRoute:ri(1,8),scoreBoost:ri(5,15)})));
+  const totalFahrt=termine.reduce((s,t)=>s+t.fahrt,0);
+  const optFahrt=Math.round(totalFahrt*0.65);
+  return <div>
+    <div style={{marginBottom:16,padding:"12px 16px",borderRadius:8,background:`${GN}10`,border:`1px solid ${GN}20`}}>
+      <div style={{fontSize:14,color:GN,fontWeight:600,marginBottom:4}}>🗺️ Intelligente Termin- & Routenplanung</div>
+      <div style={{fontSize:12,color:DM}}>KI optimiert Fahrtstrecken, schlägt Leads auf der Route vor, berechnet Zeitfenster</div>
+    </div>
+    <Card style={{border:`1px solid ${Y}20`}}>
+      <div style={{fontSize:14,fontWeight:700,color:TX,marginBottom:8}}>📅 Morgen – {berater}</div>
+      <div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:12,color:DM,marginBottom:12}}>
+        <span>{termine.length} Termine</span>
+        <span style={{color:RD}}>Aktuell: {totalFahrt} Min Fahrzeit</span>
+        <span style={{color:GN}}>Optimiert: {optFahrt} Min (−{totalFahrt-optFahrt} Min)</span>
+      </div>
+      {termine.map((t,i)=><div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",marginBottom:4,borderRadius:8,background:i===0?`${GN}08`:C2}}>
+        <div style={{width:50,textAlign:"center"}}><div style={{fontSize:15,fontWeight:800,color:Y}}>{t.zeit}</div></div>
+        <div style={{width:3,height:40,background:i<termine.length-1?BD:"transparent",borderRadius:2}}/>
+        <div style={{flex:1}}>
+          <div style={{fontSize:14,fontWeight:600,color:TX}}>{t.name}</div>
+          <div style={{fontSize:11,color:DM}}>{t.str}, {t.plz} {t.ort} · {t.kwp}kWp</div>
+        </div>
+        <div style={{textAlign:"right",fontSize:11}}>
+          <div style={{color:DM}}>{t.dist}km</div>
+          <div style={{color:t.fahrt>30?OR:GN}}>{t.fahrt}′ Fahrt</div>
+        </div>
+      </div>)}
+    </Card>
+    <Card style={{marginTop:10,border:`1px solid ${BL}20`}}>
+      <div style={{fontSize:14,fontWeight:700,color:BL,marginBottom:10}}>💡 Leads auf deiner Route</div>
+      <div style={{fontSize:12,color:DM,marginBottom:10}}>Diese Leads liegen auf deiner Strecke – ein kurzer Stopp lohnt sich!</div>
+      {nearbyLeads.map(l=><div key={l.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",marginBottom:4,borderRadius:6,background:`${BL}06`,border:`1px solid ${BL}12`}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:600,color:TX}}>{l.name}</div>
+          <div style={{fontSize:11,color:DM}}>{l.ort} · {l.kwp}kWp · {l.age}d alt · {l.src}</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:12,fontWeight:700,color:BL}}>{l.distToRoute}km entfernt</div>
+          <div style={{fontSize:10,color:GN}}>+{l.scoreBoost} Score Bonus</div>
+        </div>
+      </div>)}
+    </Card>
+  </div>
+}
+
+/* ═══ 5. MAIL-GENERATOR ═══ */
+function MailGenerator(){
+  const[sel,setSel]=useState(null);
+  const[mailType,setMailType]=useState("angebot");
+  const[generated,setGenerated]=useState(null);
+  const[loading,setLoading]=useState(false);
+  const templates={
+    angebot:{subject:"Ihr individuelles Solarangebot – {kwp}kWp für Ihr Zuhause",
+      body:`Sehr geehrte/r {name},
+
+vielen Dank für das freundliche Gespräch am {date}. Wie besprochen habe ich Ihnen ein individuelles Angebot für Ihre Solaranlage zusammengestellt:
+
+📊 Ihre Anlage im Überblick:
+• Leistung: {kwp} kWp ({mod} Module)
+• Dachausrichtung: {dach}
+• Geschätzte Jahresproduktion: ca. {prod} kWh
+• Ihre jährliche Ersparnis: ca. {saving} €
+• Amortisation: ca. {amort} Jahre
+
+💰 Investition: {eur} € ({zahl})
+{finanz}
+
+Die aktuelle Einspeisevergütung von 8,1 Ct/kWh ist nur noch bis {evuDate} garantiert – je früher Sie starten, desto besser die Konditionen.
+
+Haben Sie Fragen? Ich bin jederzeit für Sie erreichbar.
+
+Mit sonnigen Grüßen,
+{berater}
+bee-doo GmbH | ☎ {beraterTel}`},
+    nachfass:{subject:"Kurze Rückfrage zu Ihrem Solarangebot",
+      body:`Hallo {name},
+
+ich wollte mich kurz melden – haben Sie unser Angebot vom {date} erhalten und konnten es sich in Ruhe anschauen?
+
+Falls noch Fragen offen sind, stehe ich Ihnen gerne zur Verfügung. Viele unserer Kunden in {ort} haben sich für eine ähnliche Anlage entschieden und sind begeistert.
+
+Ein kurzer Rückruf genügt: {beraterTel}
+
+Beste Grüße,
+{berater}`},
+    storno:{subject:"Schade – aber die Tür steht offen",
+      body:`Hallo {name},
+
+ich habe gehört, dass Sie Ihre Entscheidung noch einmal überdenken möchten. Das ist völlig in Ordnung!
+
+Darf ich fragen, was der ausschlaggebende Grund war? Vielleicht kann ich noch offene Punkte klären:
+
+• Preis? → Wir haben flexible Finanzierungsmöglichkeiten
+• Timing? → Die Anlage kann auch später installiert werden
+• Technische Bedenken? → Gerne komme ich nochmal vorbei
+
+Ihr Angebot über {kwp}kWp bleibt 4 Wochen gültig. Melden Sie sich einfach, wenn Sie es sich anders überlegen.
+
+Herzliche Grüße,
+{berater}`},
+  };
+  const gen=(lead,type)=>{
+    setLoading(true);
+    setTimeout(()=>{
+      const t=templates[type];
+      const prod=Math.round(lead.kwp*950);
+      const saving=Math.round(prod*0.30);
+      const fill=s=>s.replace(/{name}/g,lead.name).replace(/{kwp}/g,lead.kwp).replace(/{mod}/g,lead.mod)
+        .replace(/{dach}/g,lead.dach).replace(/{eur}/g,fmt(lead.eur)).replace(/{zahl}/g,lead.zahl)
+        .replace(/{prod}/g,prod).replace(/{saving}/g,saving).replace(/{amort}/g,Math.round(lead.eur/(saving)))
+        .replace(/{ort}/g,lead.ort).replace(/{berater}/g,lead.berater).replace(/{beraterTel}/g,"0521 "+ri(1000000,9999999))
+        .replace(/{date}/g,lead.created).replace(/{evuDate}/g,"31.03.2026")
+        .replace(/{finanz}/g,lead.zahl==="Finanzierung"?"Ab nur "+Math.round(lead.eur/180)+"€/Monat bei 180 Monaten Laufzeit.":"");
+      setGenerated({subject:fill(t.subject),body:fill(t.body),lead});
+      setLoading(false);
+    },800);
+  };
+  return <div>
+    <div style={{marginBottom:16,padding:"12px 16px",borderRadius:8,background:`${PP}10`,border:`1px solid ${PP}20`}}>
+      <div style={{fontSize:14,color:PP,fontWeight:600,marginBottom:4}}>✉️ KI-Mail-Generator</div>
+      <div style={{fontSize:12,color:DM}}>Personalisierte Mails auf Knopfdruck – Angebot, Nachfass, Storno-Rückgewinnung</div>
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:12}}>
+      {[["angebot","📊 Angebot"],["nachfass","📞 Nachfass"],["storno","🔄 Rückgewinnung"]].map(([k,l])=>
+        <button key={k} onClick={()=>setMailType(k)} style={{padding:"6px 14px",borderRadius:6,background:mailType===k?`${PP}20`:C1,color:mailType===k?PP:DM,border:`1px solid ${mailType===k?PP:BD}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>{l}</button>
+      )}
+    </div>
+    {!generated&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
+      {LEADS.slice(0,12).map(l=><Card key={l.id} style={{cursor:"pointer",padding:"12px 14px"}} onClick={()=>gen(l,mailType)}>
+        <div style={{fontSize:13,fontWeight:700,color:TX}}>{l.name}</div>
+        <div style={{fontSize:11,color:DM}}>#{l.nid} · {l.src} · {l.kwp}kWp</div>
+        <div style={{fontSize:11,color:l.stage==="Storniert"?RD:BL,marginTop:2}}>{l.stage} · {l.age}d</div>
+      </Card>)}
+    </div>}
+    {loading&&<Card style={{textAlign:"center",padding:30}}><div style={{fontSize:14,color:PP}}>✨ Generiere personalisierte Mail...</div></Card>}
+    {generated&&<div>
+      <Card style={{border:`1px solid ${PP}30`}}>
+        <div style={{fontSize:11,color:DM,marginBottom:4}}>An: {generated.lead.email}</div>
+        <div style={{fontSize:14,fontWeight:700,color:TX,marginBottom:12,padding:"8px 12px",background:`${PP}08`,borderRadius:6}}>{generated.subject}</div>
+        <pre style={{fontSize:13,color:TX,lineHeight:1.6,whiteSpace:"pre-wrap",fontFamily:"inherit",margin:0}}>{generated.body}</pre>
+        <div style={{marginTop:16,display:"flex",gap:8}}>
+          <Btn color={GN}>📤 Über Brevo senden</Btn>
+          <Btn color={BL} small>📋 Kopieren</Btn>
+          <Btn color={OR} small onClick={()=>setGenerated(null)}>🔄 Andere Mail</Btn>
+        </div>
+      </Card>
+    </div>}
+  </div>
+}
+
+/* ═══ 6. CALL-ANALYSE ═══ */
+function CallAnalyse(){
+  const[calls]=useState(()=>BERATER.slice(0,8).map((b,i)=>({
+    id:i,name:b,calls:ri(15,45),avgDur:ri(180,480),conversion:ri(8,35),
+    score:ri(45,95),einwaende:{preis:ri(2,12),timing:ri(1,8),partner:ri(0,5),wettbewerb:ri(0,4),technik:ri(0,3)},
+    stimmung:ri(50,95),redeanteil:ri(40,75),
+    topSkill:r(["Einwandbehandlung","Abschlusstechnik","Bedarfsanalyse","Rapport-Aufbau","Fragetechnik"]),
+    weakSpot:r(["Preisverhandlung","Dringlichkeit erzeugen","Einwand 'zu teuer'","Follow-Up Vereinbarung","Partner einbeziehen"]),
+  })).sort((a,b)=>b.score-a.score));
+  const[sel,setSel]=useState(null);
+  return <div>
+    <div style={{marginBottom:16,padding:"12px 16px",borderRadius:8,background:`${PK}10`,border:`1px solid ${PK}20`}}>
+      <div style={{fontSize:14,color:PK,fontWeight:600,marginBottom:4}}>🎙️ Call-Center Analyse & Coaching</div>
+      <div style={{fontSize:12,color:DM}}>Gespräche transkribieren → Einwände kategorisieren → Berater-Score → Coaching-Empfehlungen</div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
+      {calls.map(c=><Card key={c.id} style={{cursor:"pointer",border:sel===c.id?`1px solid ${PK}`:`1px solid ${BD}`}} onClick={()=>setSel(sel===c.id?null:c.id)}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+          <div style={{fontWeight:700,fontSize:15,color:TX}}>{c.name}</div>
+          <div style={{fontSize:22,fontWeight:800,color:c.score>=80?GN:c.score>=60?BL:OR}}>{c.score}</div>
+        </div>
+        <Score value={c.score} color={c.score>=80?GN:c.score>=60?BL:OR}/>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:DM,marginTop:8}}>
+          <span>📞 {c.calls} Calls</span>
+          <span>⏱ Ø{Math.round(c.avgDur/60)}min</span>
+          <span style={{color:c.conversion>=20?GN:OR}}>🎯 {c.conversion}% Conv.</span>
+        </div>
+        {sel===c.id&&<div style={{marginTop:12,borderTop:`1px solid ${BD}`,paddingTop:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+            <div style={{padding:"8px 10px",borderRadius:6,background:`${GN}08`,border:`1px solid ${GN}15`}}>
+              <div style={{fontSize:10,color:GN,fontWeight:700}}>💪 STÄRKE</div>
+              <div style={{fontSize:12,color:TX,marginTop:2}}>{c.topSkill}</div>
+            </div>
+            <div style={{padding:"8px 10px",borderRadius:6,background:`${OR}08`,border:`1px solid ${OR}15`}}>
+              <div style={{fontSize:10,color:OR,fontWeight:700}}>📈 TRAINIEREN</div>
+              <div style={{fontSize:12,color:TX,marginTop:2}}>{c.weakSpot}</div>
+            </div>
+          </div>
+          <div style={{fontSize:12,fontWeight:700,color:DM,marginBottom:6}}>Einwand-Verteilung</div>
+          {Object.entries(c.einwaende).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+            <span style={{fontSize:11,color:DM,width:90,textTransform:"capitalize"}}>{k}</span>
+            <div style={{flex:1,height:6,borderRadius:3,background:`${DM}20`}}><div style={{width:Math.min(100,v*8)+"%",height:"100%",borderRadius:3,background:PP}}/></div>
+            <span style={{fontSize:10,color:PP,fontWeight:700,width:20}}>{v}</span>
+          </div>)}
+          <div style={{marginTop:10,display:"flex",gap:6}}>
+            <Btn small color={PK}>🎯 Training zuweisen</Btn>
+            <Btn small color={BL}>📊 Detail-Report</Btn>
+          </div>
+        </div>}
+      </Card>)}
+    </div>
+  </div>
+}
+
+/* ═══ MAIN APP ═══ */
+function App(){
+  const[tab,setTab]=useState("score");
+  const tabs=[
+    {id:"score",label:"Lead-Scoring",icon:"🧠",color:GN},
+    {id:"storno",label:"Storno-Warnung",icon:"⚠️",color:RD},
+    {id:"ocr",label:"Foto-OCR",icon:"📸",color:CY},
+    {id:"route",label:"Routen-KI",icon:"🗺️",color:GN},
+    {id:"mail",label:"Mail-Generator",icon:"✉️",color:PP},
+    {id:"call",label:"Call-Analyse",icon:"🎙️",color:PK},
+  ];
+  return <div style={{minHeight:"100vh",background:DK,color:TX,fontFamily:"'DM Sans',system-ui,sans-serif",display:"flex",flexDirection:"column"}}>
+    <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0;scrollbar-width:thin;scrollbar-color:${BD} transparent}
+    ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${BD};border-radius:3px}
+    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    `}</style>
+    {/* Header */}
+    <div style={{padding:"12px 16px",borderBottom:`1px solid ${BD}`,background:C1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <a href="launcher.html" style={{color:DM,textDecoration:"none",fontSize:13}}>← Launcher</a>
+        <span style={{fontSize:18,fontWeight:800,color:Y}}>bee-doo</span>
+        <span style={{fontSize:14,fontWeight:600,color:TX}}>KI Toolbox</span>
+      </div>
+      <div style={{fontSize:11,color:DM}}>6 KI-Module · Demo-Modus</div>
+    </div>
+    {/* Tabs */}
+    <div style={{padding:"10px 16px",borderBottom:`1px solid ${BD}`,display:"flex",gap:8,overflowX:"auto",flexShrink:0}}>
+      {tabs.map(t=><Tab key={t.id} active={tab===t.id} label={t.label} icon={t.icon} color={t.color} onClick={()=>setTab(t.id)}/>)}
+    </div>
+    {/* Content */}
+    <div style={{flex:1,overflow:"auto",padding:16,maxWidth:900,width:"100%",margin:"0 auto"}}>
+      {tab==="score"&&<LeadScoring/>}
+      {tab==="storno"&&<StornoPredict/>}
+      {tab==="ocr"&&<FotoOCR/>}
+      {tab==="route"&&<RouteOptimizer/>}
+      {tab==="mail"&&<MailGenerator/>}
+      {tab==="call"&&<CallAnalyse/>}
+    </div>
+  </div>
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
