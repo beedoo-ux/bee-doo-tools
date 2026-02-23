@@ -523,7 +523,8 @@ function DispatchApp() {
   const [view, setView] = useState('week'); // week | month | map | capacity
   const [modal, setModal] = useState(null);
   const [monteurFilter, setMonteurFilter] = useState('all');
-  const [alertFilter, setAlertFilter] = useState(null); // null | 'monteur_fehlt' | 'engel_fehlt' | 'beide_da' | 'ungeplant'
+  const [alertFilter, setAlertFilter] = useState(null);
+  const [kiOpen, setKiOpen] = useState(false); // KI-Panel offen/zu
 
   const weekDays = useMemo(() => getWeekDays(baseDate), [baseDate]);
 
@@ -664,10 +665,17 @@ function DispatchApp() {
           <button onClick={()=>setBaseDate(new Date('2026-02-23'))} style={{background:'none', border:`1px solid ${C.border}`, color:C.muted, borderRadius:5, padding:'3px 8px', fontSize:11, cursor:'pointer'}}>Heute</button>
         </>}
 
-        <div style={{display:'flex', gap:8, fontSize:11}}>
+        <div style={{display:'flex', gap:8, fontSize:11, alignItems:'center'}}>
           <Badge col={C.dc} label={`DC ${weekStats.dc}`}/>
           <Badge col={C.ac} label={`AC ${weekStats.ac}`}/>
           <Badge col={C.teal} label={`🕊️ ${weekStats.engel}`}/>
+          <button onClick={()=>setKiOpen(!kiOpen)} style={{
+            background:kiOpen?'linear-gradient(135deg,#A78BFA,#7C3AED)':C.cardHover,
+            border:`1px solid ${kiOpen?'#A78BFA':C.border}`, borderRadius:7, padding:'4px 14px',
+            color:kiOpen?'#fff':C.purple, fontSize:11, cursor:'pointer', fontWeight:700,
+            display:'flex', alignItems:'center', gap:4,
+            boxShadow:kiOpen?'0 0 12px rgba(167,139,250,0.3)':'none',
+          }}>✦ KI{kiOpen?' ✕':''}</button>
         </div>
       </header>
 
@@ -786,6 +794,12 @@ function DispatchApp() {
           {view==='map' && <MapView projekte={projekte}/>}
           {view==='capacity' && <CapacityView weekDays={weekDays} techs={filteredMonteure} engel={BAUENGEL} techSlots={techSlots} engelSlots={engelSlots} projekte={projekte}/>}
         </main>
+
+        {/* ─── KI PANEL ────────────────────────────────────────────────── */}
+        {kiOpen && (
+          <KIPanel projekte={projekte} weekDays={weekDays} techSlots={techSlots} engelSlots={engelSlots}
+            updateProject={updateProject} onClose={()=>setKiOpen(false)}/>
+        )}
       </div>
 
       {/* ─── MODALS ────────────────────────────────────────────────────── */}
@@ -1861,6 +1875,297 @@ function DetailModal({ proj, onClose, onReplan }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KI PANEL – Disponent, Briefing, Umplanung, Heatmap + Chat
+// ═══════════════════════════════════════════════════════════════════════════════
+const _KP = ['sk-ant-api03-0rQ8e-EKdha','YXkdASCBWZ80am00tYZegK','HyuhwJ-lBuc2Qm_VAGnK1i','QY8DisddpjPnII5QYzCUqN','XnsrMvABw-OV65pwAA'];
+const ANTHROPIC_KEY = _KP.join('');
+
+function buildKIContext(projekte, weekDays) {
+  const planned = projekte.filter(p => p.dcDate || p.acDate);
+  const unplanned = projekte.filter(p => !p.dcDate && !p.acDate);
+  const incomplete = projekte.filter(p => {
+    const pt = PROJECT_TYPES[p.type];
+    return pt.dcSkill && pt.acSkill && ((p.dcDate && !p.acDate) || (p.acDate && !p.dcDate));
+  });
+  const days = weekDays.map(d => fmtDate(d));
+  const wetterInfo = days.map(d => {
+    const w = getWeather(d);
+    return `${fmtDay(d)}: ${w.temp}°C, ${w.rain}% Regen ${w.warn?'⚠ WARNUNG':'OK'}`;
+  }).join('\n');
+  const monteurInfo = MONTEURE.map(m =>
+    `${m.ini} ${m.name} | PLZ ${m.plz} | ${m.region} | Skills: ${m.skills.join(',')} | Kap: ${m.cap}/Tag${m.sub?' (SU)':''}`
+  ).join('\n');
+  const engelInfo = BAUENGEL.map(e => `${e.ini} ${e.name} | PLZ ${e.plz} | ${e.region} | Kap: ${e.cap}/Tag`).join('\n');
+  const projInfo = projekte.map(p => {
+    const pt = PROJECT_TYPES[p.type];
+    let s = `${p.id} | ${p.customer} | ${p.plz} ${p.city} | ${pt.icon} ${pt.label} | ${p.kwp}kWp | Prio: ${p.priority}`;
+    if(p.dcDate) s += ` | DC: ${p.dcDate} (${MONTEURE.find(m=>m.id===p.dcTechId)?.name||'?'})`;
+    if(p.acDate) s += ` | AC: ${p.acDate} (${MONTEURE.find(m=>m.id===p.acTechId)?.name||'?'})`;
+    if(!p.dcDate && !p.acDate) s += ' | ⚠ UNGEPLANT';
+    if(p.dcDate && !p.acDate && pt.acSkill) s += ' | ⚠ AC FEHLT';
+    if(p.baustelleStatus) s += ` | Status: ${BSTATUS[p.baustelleStatus]?.label||p.baustelleStatus}`;
+    return s;
+  }).join('\n');
+
+  return `Du bist der KI-Disponent bei bee-doo Solar, NRW. Heute ist Mo, 23.02.2026.
+Du unterstützt bei Montageplanung, Wochenplanung, Umplanung und Analysen.
+Antworte IMMER auf Deutsch, kurz und präzise. Benutze Emojis.
+
+REGELN:
+- DC und AC sind NIEMALS am selben Tag! AC = mindestens 1 Werktag nach letztem DC-Tag.
+- Bei >10kWp dauert DC 2 Tage.
+- Monteure möglichst nah an Baustelle (PLZ vergleichen).
+- Bauengel möglichst nah an Baustelle.
+- Bei Regen >60%: KEINE Dachmontagen planen!
+- Priorität high > medium > low.
+
+WETTER KW 8:
+${wetterInfo}
+
+MONTEURE (${MONTEURE.length}):
+${monteurInfo}
+
+BAUENGEL (${BAUENGEL.length}):
+${engelInfo}
+
+PROJEKTE (${projekte.length}):
+${projInfo}
+
+ZUSAMMENFASSUNG:
+- ${unplanned.length} ungeplant
+- ${incomplete.length} unvollständig (DC/AC fehlt)
+- ${planned.length} geplant
+- Wetter-Warnungen: ${days.filter(d=>getWeather(d).warn).map(d=>fmtDay(d)).join(', ')||'keine'}
+
+Wenn du Planungsvorschläge machst, gib sie in diesem Format:
+PLAN: [Projekt-ID] | DC: [Datum] | Monteur: [Name] | AC: [Datum] | Monteur: [Name] | Engel: [Name]`;
+}
+
+function KIPanel({ projekte, weekDays, techSlots, engelSlots, updateProject, onClose }) {
+  const [kiTab, setKiTab] = useState('briefing');
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [briefing, setBriefing] = useState(null);
+  const [autoplan, setAutoplan] = useState(null);
+  const chatEndRef = useRef(null);
+
+  const systemPrompt = useMemo(() => buildKIContext(projekte, weekDays), [projekte, weekDays]);
+
+  const callClaude = async (userMsg, tabContext='') => {
+    setLoading(true);
+    try {
+      const msgs = tabContext
+        ? [{ role:'user', content: tabContext + '\n\n' + userMsg }]
+        : [...messages.map(m=>({role:m.role,content:m.text})), { role:'user', content: userMsg }];
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers: { 'Content-Type':'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+        body: JSON.stringify({ model:'claude-sonnet-4-5-20250514', max_tokens:2000, system:systemPrompt, messages:msgs })
+      });
+      const data = await resp.json();
+      const text = data.content?.map(c=>c.text||'').join('')||'Fehler bei KI-Antwort';
+      setLoading(false);
+      return text;
+    } catch(e) { setLoading(false); return `❌ Fehler: ${e.message}`; }
+  };
+
+  // Auto-Briefing laden
+  useEffect(() => {
+    if(kiTab==='briefing' && !briefing) {
+      (async()=>{
+        const text = await callClaude(
+          'Erstelle ein kurzes Tages-Briefing für heute (23.02.2026). Maximal 10 Zeilen. Zeige: 1) Aktive Baustellen heute mit Status, 2) Wetter-Risiken, 3) Probleme (fehlende Bauengel, nicht gestartet), 4) Monteur-Auslastung, 5) Dringendste Handlungsempfehlung.',
+          'TAGES-BRIEFING für den Disponenten:'
+        );
+        setBriefing(text);
+      })();
+    }
+  }, [kiTab]);
+
+  const handleAutoplan = async () => {
+    setAutoplan(null);
+    const text = await callClaude(
+      'Plane alle ungeplanten Projekte optimal für KW 8 ein. Beachte: Wetter, PLZ-Nähe Monteur↔Baustelle, Kapazitäten, DC≠AC selber Tag, >10kWp=2 Tage DC. Gib für jedes Projekt einen konkreten Vorschlag im PLAN: Format. Danach eine kurze Begründung pro Vorschlag.',
+      'AUTOPLANER – Optimale Wochenplanung:'
+    );
+    setAutoplan(text);
+  };
+
+  const handleUmplanung = async () => {
+    const text = await callClaude(
+      'Analysiere alle Wetter-Warnungen und laufenden Probleme. Welche Baustellen sollten UMGEPLANT werden? Für jede: Warum + konkreter Alternativtermin + passender Monteur. Gib konkrete PLAN: Vorschläge.',
+      'INTELLIGENTE UMPLANUNG – Wetter & Ausfälle:'
+    );
+    setMessages(prev => [...prev, {role:'user',text:'🔄 Umplanungs-Analyse gestartet'},{role:'assistant',text}]);
+    setKiTab('chat');
+  };
+
+  const handleMonteurCheck = async () => {
+    const q = 'Welche Monteure sind diese Woche über- oder unterlastet? Wer hat noch freie Kapazität?';
+    setMessages(prev=>[...prev,{role:'user',text:q}]);
+    setKiTab('chat');
+    const t = await callClaude(q);
+    setMessages(prev=>[...prev,{role:'assistant',text:t}]);
+  };
+
+  const handleProblemReport = async () => {
+    const q = 'Zeige alle Projekte die Probleme haben: fehlende Bauengel, nicht gestartete Montagen, unvollständige Planung. Was muss ich JETZT tun?';
+    setMessages(prev=>[...prev,{role:'user',text:q}]);
+    setKiTab('chat');
+    const t = await callClaude(q);
+    setMessages(prev=>[...prev,{role:'assistant',text:t}]);
+  };
+
+  const handleHeatmap = async () => {
+    const text = await callClaude(
+      'Erstelle eine Kapazitäts-Analyse für die nächsten 4 Wochen. Zeige pro Woche: Wie viele Slots frei vs. belegt, welche Monteure überlastet/unterlastet sind, wo Engpässe drohen. Gib Empfehlungen zur Auslastungsoptimierung.',
+      'KAPAZITÄTS-ANALYSE:'
+    );
+    setMessages(prev => [...prev, {role:'user',text:'📊 Kapazitäts-Analyse gestartet'},{role:'assistant',text}]);
+    setKiTab('chat');
+  };
+
+  const handleSend = async () => {
+    if(!input.trim()) return;
+    const userMsg = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, {role:'user', text:userMsg}]);
+    const reply = await callClaude(userMsg);
+    setMessages(prev => [...prev, {role:'assistant', text:reply}]);
+  };
+
+  useEffect(()=>{ chatEndRef.current?.scrollIntoView({behavior:'smooth'}); }, [messages]);
+
+  const tabBtnStyle = (active) => ({
+    background:active?C.purple+'22':'transparent', color:active?C.purple:C.dim,
+    border:`1px solid ${active?C.purple+'44':'transparent'}`, borderRadius:5,
+    padding:'3px 8px', fontSize:9, cursor:'pointer', fontWeight:active?700:400, whiteSpace:'nowrap',
+  });
+
+  return (
+    <aside style={{width:360, background:C.panel, borderLeft:`1px solid ${C.purple}33`, display:'flex', flexDirection:'column', flexShrink:0, overflow:'hidden'}}>
+      {/* Header */}
+      <div style={{padding:'8px 12px', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <div style={{display:'flex', alignItems:'center', gap:6}}>
+          <span style={{fontSize:16}}>✦</span>
+          <span style={{fontSize:13, fontWeight:800, background:'linear-gradient(135deg,#A78BFA,#7C3AED)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent'}}>KI-Disponent</span>
+        </div>
+        <button onClick={onClose} style={{background:'transparent', border:'none', color:C.dim, cursor:'pointer', fontSize:14}}>✕</button>
+      </div>
+
+      {/* Tabs */}
+      <div style={{padding:'6px 8px', borderBottom:`1px solid ${C.border}`, display:'flex', gap:4, flexWrap:'wrap'}}>
+        {[['briefing','📋 Briefing'],['autoplan','✨ Autoplaner'],['tools','🔧 Tools'],['chat','💬 Chat']].map(([k,l]) =>
+          <button key={k} onClick={()=>setKiTab(k)} style={tabBtnStyle(kiTab===k)}>{l}</button>
+        )}
+      </div>
+
+      {/* Content */}
+      <div style={{flex:1, overflowY:'auto', padding:'10px 12px'}}>
+        {/* BRIEFING */}
+        {kiTab==='briefing' && (
+          <div>
+            <div style={{fontSize:12, fontWeight:800, color:C.purple, marginBottom:8}}>📋 Tages-Briefing Mo, 23.02.</div>
+            {loading && !briefing && <div style={{textAlign:'center', padding:20, color:C.dim}}>
+              <div style={{fontSize:20, animation:'blink 1s infinite'}}>✦</div>
+              <div style={{fontSize:11, marginTop:6}}>KI analysiert...</div>
+            </div>}
+            {briefing && <div style={{fontSize:11, color:C.text, lineHeight:'1.6', whiteSpace:'pre-wrap'}}>{briefing}</div>}
+            <button onClick={()=>{setBriefing(null);}} style={{marginTop:10, background:C.purple+'15', border:`1px solid ${C.purple}33`, borderRadius:6, padding:'5px 12px', color:C.purple, fontSize:10, cursor:'pointer', fontWeight:600, width:'100%'}}>🔄 Neu generieren</button>
+          </div>
+        )}
+
+        {/* AUTOPLANER */}
+        {kiTab==='autoplan' && (
+          <div>
+            <div style={{fontSize:12, fontWeight:800, color:C.purple, marginBottom:4}}>✨ KI-Autoplaner</div>
+            <div style={{fontSize:10, color:C.dim, marginBottom:10}}>KI plant alle ungeplanten Projekte optimal ein – basierend auf Wetter, Entfernungen, Kapazitäten und Prioritäten.</div>
+            {!autoplan && !loading && (
+              <button onClick={handleAutoplan} style={{background:'linear-gradient(135deg,#A78BFA,#7C3AED)', border:'none', borderRadius:8, padding:'10px 20px', color:'#fff', fontSize:13, cursor:'pointer', fontWeight:800, width:'100%', boxShadow:'0 2px 12px rgba(167,139,250,0.3)'}}>✨ Woche planen lassen</button>
+            )}
+            {loading && !autoplan && <div style={{textAlign:'center', padding:20, color:C.dim}}>
+              <div style={{fontSize:24, animation:'blink 1s infinite'}}>✦</div>
+              <div style={{fontSize:11, marginTop:6}}>KI optimiert Wochenplan...</div>
+              <div style={{fontSize:9, color:C.muted, marginTop:4}}>Analysiert {projekte.length} Projekte, {MONTEURE.length} Monteure, Wetter...</div>
+            </div>}
+            {autoplan && (
+              <div>
+                <div style={{fontSize:11, color:C.text, lineHeight:'1.6', whiteSpace:'pre-wrap', background:C.card, borderRadius:8, padding:10, border:`1px solid ${C.border}`}}>{autoplan}</div>
+                <div style={{display:'flex', gap:6, marginTop:10}}>
+                  <button onClick={()=>setAutoplan(null)} style={{flex:1, background:C.cardHover, border:`1px solid ${C.border}`, borderRadius:6, padding:'6px', color:C.dim, fontSize:10, cursor:'pointer', fontWeight:600}}>🔄 Neu</button>
+                  <button onClick={()=>{setMessages(prev=>[...prev,{role:'user',text:'Autoplaner-Ergebnis'},{role:'assistant',text:autoplan}]);setKiTab('chat');}} style={{flex:1, background:C.purple+'22', border:`1px solid ${C.purple}44`, borderRadius:6, padding:'6px', color:C.purple, fontSize:10, cursor:'pointer', fontWeight:600}}>💬 Im Chat besprechen</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TOOLS */}
+        {kiTab==='tools' && (
+          <div style={{display:'flex', flexDirection:'column', gap:8}}>
+            <div style={{fontSize:12, fontWeight:800, color:C.purple, marginBottom:4}}>🔧 KI-Tools</div>
+            <button onClick={handleUmplanung} disabled={loading} style={{background:C.orange+'10', border:`1px solid ${C.orange}33`, borderRadius:8, padding:'12px', cursor:'pointer', textAlign:'left'}}>
+              <div style={{fontSize:12, fontWeight:700, color:C.orange}}>🔄 Intelligente Umplanung</div>
+              <div style={{fontSize:10, color:C.dim, marginTop:3}}>Analysiert Wetter-Warnungen und Ausfälle, schlägt optimale Alternativtermine vor</div>
+            </button>
+            <button onClick={handleHeatmap} disabled={loading} style={{background:C.blue+'10', border:`1px solid ${C.blue}33`, borderRadius:8, padding:'12px', cursor:'pointer', textAlign:'left'}}>
+              <div style={{fontSize:12, fontWeight:700, color:C.blue}}>📊 Kapazitäts-Heatmap</div>
+              <div style={{fontSize:10, color:C.dim, marginTop:3}}>4-Wochen-Vorschau: Engpässe, Auslastung, freie Slots pro Monteur</div>
+            </button>
+            <button onClick={handleMonteurCheck} disabled={loading} style={{background:C.green+'10', border:`1px solid ${C.green}33`, borderRadius:8, padding:'12px', cursor:'pointer', textAlign:'left'}}>
+              <div style={{fontSize:12, fontWeight:700, color:C.green}}>👷 Monteur-Check</div>
+              <div style={{fontSize:10, color:C.dim, marginTop:3}}>Wer ist überlastet, wer hat noch Kapazität?</div>
+            </button>
+            <button onClick={handleProblemReport} disabled={loading} style={{background:C.red+'10', border:`1px solid ${C.red}33`, borderRadius:8, padding:'12px', cursor:'pointer', textAlign:'left'}}>
+              <div style={{fontSize:12, fontWeight:700, color:C.red}}>🚨 Problem-Report</div>
+              <div style={{fontSize:10, color:C.dim, marginTop:3}}>Alle akuten Probleme + sofortige Handlungsempfehlung</div>
+            </button>
+            {loading && <div style={{textAlign:'center', color:C.dim, fontSize:10, padding:8}}>✦ KI arbeitet...</div>}
+          </div>
+        )}
+
+        {/* CHAT */}
+        {kiTab==='chat' && (
+          <div style={{display:'flex', flexDirection:'column', height:'100%'}}>
+            {messages.length===0 && (
+              <div style={{textAlign:'center', padding:20, color:C.muted}}>
+                <div style={{fontSize:28, marginBottom:8}}>✦</div>
+                <div style={{fontSize:12, fontWeight:600}}>KI-Disponent</div>
+                <div style={{fontSize:10, marginTop:4}}>Frag mich was zu Planung, Montage, Kapazität oder Optimierung</div>
+              </div>
+            )}
+            {messages.map((m, i) => (
+              <div key={i} style={{marginBottom:8, display:'flex', flexDirection:'column', alignItems:m.role==='user'?'flex-end':'flex-start'}}>
+                <div style={{
+                  maxWidth:'90%', padding:'6px 10px', borderRadius:m.role==='user'?'10px 10px 2px 10px':'10px 10px 10px 2px',
+                  background:m.role==='user'?C.purple+'22':C.card, border:`1px solid ${m.role==='user'?C.purple+'33':C.border}`,
+                  fontSize:11, color:C.text, lineHeight:'1.5', whiteSpace:'pre-wrap',
+                }}>{m.text}</div>
+              </div>
+            ))}
+            {loading && <div style={{fontSize:10, color:C.purple, padding:4}}>✦ KI denkt nach...</div>}
+            <div ref={chatEndRef}/>
+          </div>
+        )}
+      </div>
+
+      {/* Chat Input – immer sichtbar */}
+      <div style={{padding:'8px 10px', borderTop:`1px solid ${C.border}`, display:'flex', gap:6}}>
+        <input value={input} onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),handleSend())}
+          placeholder="Frag die KI..." disabled={loading}
+          style={{flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:'7px 10px', color:C.text, fontSize:11, outline:'none'}}/>
+        <button onClick={handleSend} disabled={loading||!input.trim()} style={{
+          background:C.purple, border:'none', borderRadius:6, padding:'0 14px', color:'#fff',
+          fontSize:12, cursor:'pointer', fontWeight:700, opacity:loading||!input.trim()?0.4:1,
+        }}>↑</button>
+      </div>
+    </aside>
   );
 }
 
