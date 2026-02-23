@@ -227,6 +227,7 @@ function DispatchApp() {
   const [view, setView] = useState('week'); // week | month | map | capacity
   const [modal, setModal] = useState(null);
   const [monteurFilter, setMonteurFilter] = useState('all');
+  const [selectedProjekt, setSelectedProjekt] = useState(null);
 
   const weekDays = useMemo(() => getWeekDays(baseDate), [baseDate]);
 
@@ -349,6 +350,15 @@ function DispatchApp() {
           <button onClick={()=>setBaseDate(new Date('2026-02-23'))} style={{background:'none', border:`1px solid ${C.border}`, color:C.muted, borderRadius:5, padding:'3px 8px', fontSize:11, cursor:'pointer'}}>Heute</button>
         </>}
 
+        {view==='month' && <>
+          <div style={{display:'flex', alignItems:'center', gap:3, background:C.cardHover, borderRadius:7, padding:'2px 2px', border:`1px solid ${C.border}`}}>
+            <SmBtn onClick={()=>setBaseDate(d=>{const n=new Date(d);n.setMonth(n.getMonth()-1);return n})}>‹</SmBtn>
+            <span style={{fontSize:12, fontWeight:700, minWidth:90, textAlign:'center'}}>{baseDate.toLocaleDateString('de-DE',{month:'long', year:'numeric'})}</span>
+            <SmBtn onClick={()=>setBaseDate(d=>{const n=new Date(d);n.setMonth(n.getMonth()+1);return n})}>›</SmBtn>
+          </div>
+          <button onClick={()=>setBaseDate(new Date('2026-02-23'))} style={{background:'none', border:`1px solid ${C.border}`, color:C.muted, borderRadius:5, padding:'3px 8px', fontSize:11, cursor:'pointer'}}>Heute</button>
+        </>}
+
         <div style={{display:'flex', gap:8, fontSize:11}}>
           <Badge col={C.dc} label={`DC ${weekStats.dc}`}/>
           <Badge col={C.ac} label={`AC ${weekStats.ac}`}/>
@@ -385,21 +395,33 @@ function DispatchApp() {
               const pt = PROJECT_TYPES[p.type];
               const kwpInfo = p.kwp > 0 ? ` · ${p.kwp} kWp` : '';
               const bigDC = p.kwp > 10;
+              const isSelected = selectedProjekt === p.id;
               return (
-                <div key={p.id} onClick={()=>setModal({type:'plan',proj:p})} style={{
-                  background:C.cardHover, border:`1px solid ${p.priority==='high'?C.red:p.priority==='medium'?C.yellow:C.border}`,
-                  borderLeft:`3px solid ${p.priority==='high'?C.red:p.priority==='medium'?C.yellow:C.green}`,
-                  borderRadius:7, padding:'7px 9px', marginBottom:4, cursor:'pointer'
+                <div key={p.id} onClick={()=>setSelectedProjekt(isSelected ? null : p.id)} style={{
+                  background: isSelected ? C.brand+'18' : C.cardHover,
+                  border:`1px solid ${isSelected ? C.brand : p.priority==='high'?C.red:p.priority==='medium'?C.yellow:C.border}`,
+                  borderLeft:`3px solid ${isSelected ? C.brand : p.priority==='high'?C.red:p.priority==='medium'?C.yellow:C.green}`,
+                  borderRadius:7, padding:'7px 9px', marginBottom:4, cursor:'pointer',
+                  outline: isSelected ? `2px solid ${C.brand}` : 'none',
+                  outlineOffset: 1,
+                  transition: 'all 0.15s ease',
                 }}>
                   <div style={{display:'flex', justifyContent:'space-between', marginBottom:2}}>
-                    <span style={{fontSize:10, color:C.muted, fontWeight:600}}>{p.id}</span>
+                    <span style={{fontSize:10, color: isSelected ? C.brand : C.muted, fontWeight:600}}>{p.id}</span>
                     <span style={{fontSize:10, color:pt.color, background:pt.color+'15', borderRadius:3, padding:'0 4px', fontWeight:700}}>
                       {pt.icon} {pt.label}{kwpInfo}
                     </span>
                   </div>
-                  <div style={{fontSize:12, fontWeight:700, color:C.text}}>{p.customer}</div>
+                  <div style={{fontSize:12, fontWeight:700, color: isSelected ? C.brand : C.text}}>{p.customer}</div>
                   <div style={{fontSize:11, color:C.dim}}>{p.plz} {p.city} · {p.address}</div>
+                  {p.notes && <div style={{fontSize:9, color:C.muted, marginTop:2}}>📋 {p.notes}</div>}
                   {bigDC && <div style={{fontSize:9, color:C.orange, fontWeight:700, marginTop:3}}>⚡ {p.kwp}kWp → DC 2 Tage</div>}
+                  {p.status==='dc_planned' && <div style={{fontSize:9, color:C.yellow, fontWeight:700, marginTop:3}}>⏳ DC geplant – AC fehlt</div>}
+                  {isSelected && (
+                    <div style={{marginTop:6, padding:'4px 0', borderTop:`1px solid ${C.brand}33`, fontSize:10, color:C.brand, fontWeight:600, textAlign:'center'}}>
+                      ✓ Ausgewählt für Terminierung
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -421,7 +443,8 @@ function DispatchApp() {
         <main style={{flex:1, overflow:'auto'}}>
           {view==='week' && <WeekView weekDays={weekDays} techs={filteredMonteure} engel={BAUENGEL}
             techSlots={techSlots} engelSlots={engelSlots} projekte={projekte}
-            onCell={p => setModal({type:'plan', proj:p})} updateProject={updateProject}/>}
+            updateProject={updateProject}/>}
+          {view==='month' && <MonthView baseDate={baseDate} projekte={projekte} techs={filteredMonteure} engel={BAUENGEL}/>}
           {view==='map' && <MapView projekte={projekte}/>}
           {view==='capacity' && <CapacityView weekDays={weekDays} techs={filteredMonteure} engel={BAUENGEL} techSlots={techSlots} engelSlots={engelSlots} projekte={projekte}/>}
         </main>
@@ -433,7 +456,7 @@ function DispatchApp() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // WEEK VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, onCell, updateProject }) {
+function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, updateProject }) {
   const colTemplate = '160px repeat(5,1fr)';
 
   // DC→AC Verbindungslinien zeichnen
@@ -519,7 +542,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, onC
             return (
               <div key={ds} style={{background:C.panel, borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`, padding:'3px 3px', minHeight:80, position:'relative'}}>
                 {items.map(({proj, phase}) => (
-                  <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} onClick={()=>onCell(proj)} dataAttr={`${proj.id}-${phase.replace('_ext','')}`}/>
+                  <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`}/>
                 ))}
                 {full && <div style={{fontSize:9, color:C.red, textAlign:'center', fontWeight:700}}>● VOLL</div>}
               </div>
@@ -542,13 +565,14 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, onC
             return (
               <div key={ds} style={{background:C.teal+'04', borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`, padding:'3px 3px', minHeight:60, position:'relative'}}>
                 {items.map(proj => (
-                  <div key={proj.id} onClick={()=>onCell(proj)} style={{
+                  <div key={proj.id} style={{
                     background:C.teal+'10', border:`1px solid ${C.teal}44`, borderLeft:`3px solid ${C.teal}`,
-                    borderRadius:5, padding:'4px 6px', marginBottom:3, cursor:'pointer'
+                    borderRadius:5, padding:'4px 6px', marginBottom:3, userSelect:'none'
                   }}>
                     <div style={{fontSize:10, fontWeight:700, color:C.teal}}>🕊️ QS</div>
                     <div style={{fontSize:11, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{proj.customer}</div>
                     <div style={{fontSize:9, color:C.muted}}>{proj.plz} · {proj.id}</div>
+                    <div style={{fontSize:9, color:C.dim}}>{proj.city} · {proj.address}</div>
                   </div>
                 ))}
               </div>
@@ -563,7 +587,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, onC
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROJECT CARD (in Wochenansicht)
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProjectCard({ proj, phase, onClick, dataAttr }) {
+function ProjectCard({ proj, phase, dataAttr }) {
   const pt = PROJECT_TYPES[proj.type];
   const isExt = phase.includes('ext');
   const phaseCol = isExt ? C.orange : phase==='dc' ? C.dc : phase==='ac' ? C.ac : C.teal;
@@ -576,25 +600,31 @@ function ProjectCard({ proj, phase, onClick, dataAttr }) {
   let cardAnimation = null;
   if(bs?.animation) cardAnimation = `${bs.animation} 1.2s ease-in-out infinite`;
 
+  // Monteur finden
+  const techId = phase.startsWith('dc') ? proj.dcTechId : proj.acTechId;
+  const tech = MONTEURE.find(m => m.id === techId);
+
   return (
-    <div data-proj={dataAttr} onClick={onClick} style={{
+    <div data-proj={dataAttr} style={{
       background:C.cardHover, border:`1px solid ${bs ? bs.col+'66' : phaseCol+'44'}`,
       borderLeft:`3px solid ${bs ? bs.col : phaseCol}`,
-      borderRadius:5, padding:'3px 5px', marginBottom:3, cursor:'pointer', userSelect:'none', position:'relative',
+      borderRadius:5, padding:'4px 6px', marginBottom:3, userSelect:'none', position:'relative',
       animation: cardAnimation,
     }}>
       {/* Kundenname (VOLL) + PLZ */}
       <div style={{fontSize:11, fontWeight:700, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
         {proj.customer}
       </div>
-      <div style={{display:'flex', gap:4, alignItems:'center', marginTop:1}}>
-        <span style={{fontSize:9, color:C.dim}}>{proj.plz}</span>
-        <span style={{fontSize:8, color:C.muted}}>·</span>
+      <div style={{fontSize:10, color:C.dim, marginTop:1}}>{proj.plz} {proj.city}</div>
+      <div style={{fontSize:9, color:C.muted, marginTop:1}}>{proj.address}</div>
+      <div style={{display:'flex', gap:4, alignItems:'center', marginTop:2, flexWrap:'wrap'}}>
+        <span style={{fontSize:9, color:pt.color, fontWeight:600}}>{pt.icon} {pt.label}</span>
+        {proj.kwp > 0 && <span style={{fontSize:8, color:C.orange, fontWeight:700}}>{proj.kwp}kWp</span>}
         <span style={{fontSize:8, color:C.muted}}>{proj.id}</span>
-        {proj.kwp > 10 && <span style={{fontSize:8, color:C.orange, fontWeight:700}}>{proj.kwp}kWp</span>}
         {proj.fotoCount > 0 && <span style={{fontSize:8, color:C.blue}}>📷{proj.fotoCount}</span>}
         <span style={{marginLeft:'auto', background:phaseCol+'22', color:phaseCol, borderRadius:3, padding:'0 4px', fontSize:8, fontWeight:800}}>{phaseLabel}</span>
       </div>
+      {proj.notes && <div style={{fontSize:8, color:C.muted, marginTop:2}}>📋 {proj.notes}</div>}
 
       {/* Baustellen-Status Badge(s) */}
       {bs && (
@@ -642,6 +672,127 @@ function StatusBadge({ col, label, blink }) {
       animation: blink ? `blink 0.8s ease-in-out infinite` : undefined,
     }}>
       <span style={{fontSize:8, color:col, fontWeight:700}}>{label}</span>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MONTH VIEW
+// ═══════════════════════════════════════════════════════════════════════════════
+function MonthView({ baseDate, projekte, techs, engel }) {
+  const year = baseDate.getFullYear();
+  const month = baseDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startDow = (firstDay.getDay() + 6) % 7; // Mo=0
+  const daysInMonth = lastDay.getDate();
+
+  // Build calendar grid cells
+  const calendarCells = [];
+  for(let i = 0; i < startDow; i++) calendarCells.push(null);
+  for(let d = 1; d <= daysInMonth; d++) calendarCells.push(d);
+  while(calendarCells.length % 7 !== 0) calendarCells.push(null);
+
+  // Group projects by date
+  const projectsByDate = useMemo(() => {
+    const byDate = {};
+    projekte.forEach(p => {
+      if(p.dcDate) {
+        const key = p.dcDate;
+        byDate[key] = [...(byDate[key]||[]), { proj:p, phase:'dc' }];
+        if(p.dcDuration >= 2) {
+          const day2 = nextWorkday(p.dcDate);
+          byDate[day2] = [...(byDate[day2]||[]), { proj:p, phase:'dc_ext' }];
+        }
+      }
+      if(p.acDate) {
+        const key = p.acDate;
+        byDate[key] = [...(byDate[key]||[]), { proj:p, phase:'ac' }];
+      }
+    });
+    return byDate;
+  }, [projekte]);
+
+  const today = '2026-02-23';
+  const dayNames = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+
+  return (
+    <div style={{padding:12, overflow:'auto', height:'100%'}}>
+      {/* Day headers */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2, marginBottom:4}}>
+        {dayNames.map(d => (
+          <div key={d} style={{textAlign:'center', fontSize:11, fontWeight:700, color:C.dim, padding:'6px 0',
+            background: (d==='Sa'||d==='So') ? C.red+'08' : 'transparent', borderRadius:4
+          }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2}}>
+        {calendarCells.map((day, idx) => {
+          if(day === null) return <div key={`empty-${idx}`} style={{background:C.panel+'40', borderRadius:6, minHeight:90}}/>;
+
+          const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+          const items = projectsByDate[dateStr] || [];
+          const isToday = dateStr === today;
+          const isWeekend = idx % 7 >= 5;
+          const weatherInfo = getWeather(dateStr);
+
+          return (
+            <div key={dateStr} style={{
+              background: isToday ? C.brand+'12' : isWeekend ? C.red+'06' : C.panel,
+              border: `1px solid ${isToday ? C.brand+'55' : C.border}`,
+              borderRadius:6, minHeight:90, padding:'4px 5px', position:'relative',
+              overflow:'hidden',
+            }}>
+              {/* Day number + weather */}
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3}}>
+                <span style={{
+                  fontSize:13, fontWeight: isToday ? 800 : 600,
+                  color: isToday ? C.brand : isWeekend ? C.red+'88' : C.text,
+                  background: isToday ? C.brand+'22' : 'transparent',
+                  borderRadius: isToday ? 4 : 0,
+                  padding: isToday ? '0 5px' : 0,
+                }}>{day}</span>
+                {!isWeekend && weatherInfo && (
+                  <span style={{fontSize:10, color:C.muted}}>{weatherInfo.icon}</span>
+                )}
+              </div>
+
+              {/* Projects */}
+              {items.slice(0,4).map(({proj, phase}) => {
+                const pt = PROJECT_TYPES[proj.type];
+                const phaseCol = phase==='dc'||phase==='dc_ext' ? C.dc : C.ac;
+                const bs = proj.baustelleStatus ? BSTATUS[proj.baustelleStatus] : null;
+                return (
+                  <div key={`${proj.id}-${phase}`} style={{
+                    background: bs ? bs.col+'12' : phaseCol+'10',
+                    borderLeft:`2px solid ${bs ? bs.col : phaseCol}`,
+                    borderRadius:3, padding:'2px 4px', marginBottom:2, fontSize:9,
+                    animation: bs?.animation ? `${bs.animation} 1.2s ease-in-out infinite` : undefined,
+                  }}>
+                    <div style={{fontWeight:700, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{proj.customer}</div>
+                    <div style={{display:'flex', gap:3, color:C.muted, alignItems:'center'}}>
+                      <span style={{color:pt.color}}>{pt.icon}</span>
+                      <span>{phase.replace('_ext','+').toUpperCase()}</span>
+                      {proj.kwp > 0 && <span>{proj.kwp}kWp</span>}
+                      <span>{proj.plz}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {items.length > 4 && (
+                <div style={{fontSize:9, color:C.muted, textAlign:'center', fontWeight:600}}>+{items.length - 4} weitere</div>
+              )}
+
+              {/* Count badge */}
+              {items.length > 0 && (
+                <div style={{position:'absolute', top:3, right:4, background:C.brand+'22', color:C.brand, borderRadius:4, padding:'0 4px', fontSize:9, fontWeight:800}}>{items.length}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
