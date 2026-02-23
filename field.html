@@ -565,61 +565,94 @@ const AUFNAHME_TYPEN = [
 ];
 
 function AlertScreen({ stornos, rueckkehrer, onDismiss }) {
-  const [pulse, setPulse] = useState(true);
   const [countdown, setCountdown] = useState(10);
+  const [tried, setTried] = useState(0);
+  const [shakeMsg, setShakeMsg] = useState("");
+  const countdownRef = React.useRef(10);
+
   useEffect(() => {
-    const t = setInterval(() => { setCountdown(function(c) { return c > 0 ? c - 1 : 0; }); }, 1000);
+    const t = setInterval(() => {
+      countdownRef.current = countdownRef.current - 1;
+      setCountdown(countdownRef.current);
+      if (countdownRef.current <= 0) { clearInterval(t); onDismiss(); }
+    }, 1000);
     return () => clearInterval(t);
   }, []);
+
   var totalItems = (stornos ? stornos.length : 0) + (rueckkehrer ? rueckkehrer.length : 0);
   if (totalItems === 0) { onDismiss(); return null; }
-  return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 30000, background: "radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.15) 0%, #0A0E1A 70%)", fontFamily: font, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20, overflow: "auto" }},
-    /* Animated warning icon */
-    React.createElement("div", { style: { fontSize: 64, marginBottom: 16, animation: "pulse 1s infinite" }}, "\u26A0\uFE0F"),
-    React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#ef4444", textAlign: "center", marginBottom: 6, animation: "pulse 1.5s infinite" }}, "ACHTUNG \u2014 OFFENE AUFGABEN!"),
-    React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 28 }}, totalItems + " Kunden brauchen deine Aufmerksamkeit"),
+
+  var msgs = [
+    "\u274C Das kannst du nicht wegklicken! Bearbeite deine offenen F\xE4lle!",
+    "\u274C Netter Versuch! +10 Sekunden. K\xFCmmere dich um deine Kunden!",
+    "\u274C Schon wieder? +10 Sekunden! Diese Kunden brauchen dich JETZT!",
+    "\u274C Du kommst hier nicht raus! Lies dir die F\xE4lle durch!",
+    "\u274C Aufgeben? Niemals! +10 Sekunden. Deine Kunden warten!"
+  ];
+
+  function handleTrySkip() {
+    countdownRef.current = countdownRef.current + 10;
+    setCountdown(countdownRef.current);
+    setShakeMsg(msgs[tried % msgs.length]);
+    setTried(function(t) { return t + 1; });
+    setTimeout(function() { setShakeMsg(""); }, 4000);
+  }
+
+  return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 30000, background: "radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.2) 0%, #0A0E1A 70%)", fontFamily: font, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "32px 20px", overflow: "auto" }},
+    React.createElement("style", null, "@keyframes alertPulse3{0%,100%{box-shadow:0 0 0 rgba(239,68,68,0);}50%{box-shadow:0 0 60px rgba(239,68,68,0.5);}} @keyframes shake{0%,100%{transform:translateX(0);}10%,30%,50%,70%,90%{transform:translateX(-4px);}20%,40%,60%,80%{transform:translateX(4px);}} @keyframes borderFlash{0%,100%{border-color:rgba(239,68,68,0.3);}50%{border-color:rgba(239,68,68,0.8);}}"),
+
+    /* Header */
+    React.createElement("div", { style: { textAlign: "center", marginBottom: 24, marginTop: 20 }},
+      React.createElement("div", { style: { fontSize: 56, marginBottom: 12, animation: "alertPulse3 1.5s infinite" }}, "\uD83D\uDEA8"),
+      React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#ef4444", textTransform: "uppercase", letterSpacing: 2, animation: "alertPulse3 2s infinite" }}, "ACHTUNG \u2014 SOFORT BEARBEITEN!"),
+      React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", marginTop: 8 }}, totalItems + " offene F\xE4lle warten auf dich")),
 
     /* Storno items */
-    stornos && stornos.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 500, marginBottom: 20 }},
-      React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#f97316", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}, "\uD83D\uDD25 STORNO-RETTER", React.createElement("span", { style: { background: "#f97316", color: "#fff", borderRadius: 10, padding: "2px 8px", fontSize: 10 }}, stornos.length)),
+    stornos && stornos.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 520, marginBottom: 20 }},
+      React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: "#f97316", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}, "\uD83D\uDD25 STORNO-RETTER ", React.createElement("span", { style: { background: "#f97316", color: "#fff", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 800 }}, stornos.length)),
       stornos.map(function(st, i) {
         var pct = Math.max(0, Math.round((st.restStunden / 48) * 100));
         var barColor = pct > 50 ? "#f97316" : pct > 25 ? "#ef4444" : "#dc2626";
-        return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginBottom: 8, borderRadius: 14, background: "rgba(249,115,22,0.08)", border: "2px solid rgba(249,115,22,0.4)", animation: "pulseRedBorder 2s infinite" }},
+        return React.createElement("div", { key: "st" + i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", marginBottom: 8, borderRadius: 14, background: "rgba(249,115,22,0.08)", border: "2px solid rgba(249,115,22,0.4)", animation: "borderFlash 2s infinite", animationDelay: (i * 0.5) + "s" }},
           React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }},
-            React.createElement("div", { style: { fontSize: 24 }}, "\uD83D\uDD25"),
+            React.createElement("div", { style: { fontSize: 28 }}, "\uD83D\uDD25"),
             React.createElement("div", null,
-              React.createElement("div", { style: { fontSize: 15, fontWeight: 700 }}, st.name),
-              React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)" }}, st.grund + " \xB7 " + st.typ))),
+              React.createElement("div", { style: { fontSize: 16, fontWeight: 700 }}, st.name),
+              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.55)" }}, st.grund + " \xB7 " + st.typ))),
           React.createElement("div", { style: { textAlign: "right" }},
-            React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: barColor, animation: "pulse 1s infinite" }}, st.restStunden + " Std."),
-            React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.4)" }}, "verbleibend")));
+            React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: barColor }}, st.restStunden + " Std."),
+            React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.45)" }}, "verbleibend")));
       })),
 
     /* Rückkehrer items */
-    rueckkehrer && rueckkehrer.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 500, marginBottom: 24 }},
-      React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#ef4444", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}, "\uD83D\uDEA8 R\xDCCKKEHRER AUS MONTAGE", React.createElement("span", { style: { background: "#ef4444", color: "#fff", borderRadius: 10, padding: "2px 8px", fontSize: 10 }}, rueckkehrer.length)),
+    rueckkehrer && rueckkehrer.length > 0 && React.createElement("div", { style: { width: "100%", maxWidth: 520, marginBottom: 24 }},
+      React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: "#ef4444", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}, "\uD83D\uDEA8 R\xDCCKKEHRER AUS MONTAGE ", React.createElement("span", { style: { background: "#ef4444", color: "#fff", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 800 }}, rueckkehrer.length)),
       rueckkehrer.map(function(rk, i) {
-        return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginBottom: 8, borderRadius: 14, background: "rgba(239,68,68,0.06)", border: "2px solid rgba(239,68,68,0.35)", animation: "pulseRedBorder 2s infinite" }},
+        return React.createElement("div", { key: "rk" + i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", marginBottom: 8, borderRadius: 14, background: "rgba(239,68,68,0.06)", border: "2px solid rgba(239,68,68,0.35)", animation: "borderFlash 2s infinite", animationDelay: ((stornos ? stornos.length : 0) * 0.5 + i * 0.5) + "s" }},
           React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 }},
-            React.createElement("div", { style: { fontSize: 24 }}, "\u26A0\uFE0F"),
+            React.createElement("div", { style: { fontSize: 28 }}, "\u26A0\uFE0F"),
             React.createElement("div", null,
-              React.createElement("div", { style: { fontSize: 15, fontWeight: 700 }}, rk.name),
-              React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)" }}, rk.grund + " \xB7 " + rk.typ))),
-          React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: "#ef4444" }}, rk.tage + "T \u2192"));
+              React.createElement("div", { style: { fontSize: 16, fontWeight: 700 }}, rk.name),
+              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.55)" }}, rk.grund + " \xB7 " + rk.typ))),
+          React.createElement("div", { style: { fontSize: 17, fontWeight: 800, color: "#ef4444" }}, rk.tage + " Tage \u2192"));
       })),
 
-    /* Countdown + Skip */
-    React.createElement("div", { style: { textAlign: "center" }},
-      React.createElement("div", { style: { width: 56, height: 56, borderRadius: "50%", border: "3px solid rgba(239,68,68,0.4)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: 22, fontWeight: 900, color: "#ef4444" }}, countdown > 0 ? countdown : "\u2713"),
-      React.createElement("button", { onClick: onDismiss, style: { padding: "12px 32px", borderRadius: 12, border: countdown > 0 ? "1.5px solid rgba(255,255,255,0.1)" : "none", background: countdown > 0 ? "transparent" : "linear-gradient(135deg, #ef4444, #dc2626)", color: countdown > 0 ? "rgba(255,255,255,0.4)" : "#fff", fontSize: 14, fontWeight: 700, fontFamily: font, cursor: "pointer", transition: "all 0.3s" }}, countdown > 0 ? "\xFCberspringen (" + countdown + "s)" : "\u2192 Zum Dashboard")));
+    /* Warning message when tried to skip */
+    shakeMsg && React.createElement("div", { style: { width: "100%", maxWidth: 520, padding: "14px 18px", borderRadius: 12, background: "rgba(239,68,68,0.15)", border: "2px solid rgba(239,68,68,0.6)", marginBottom: 16, textAlign: "center", animation: "shake 0.5s ease" }},
+      React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#ef4444" }}, shakeMsg)),
+
+    /* Countdown + Button */
+    React.createElement("div", { style: { textAlign: "center", marginTop: 8 }},
+      React.createElement("div", { style: { width: 64, height: 64, borderRadius: "50%", border: "3px solid rgba(239,68,68,0.5)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 24, fontWeight: 900, color: "#ef4444", background: "rgba(239,68,68,0.08)" }}, countdown > 0 ? countdown : "\u2713"),
+      React.createElement("button", { onClick: handleTrySkip, style: { padding: "14px 40px", borderRadius: 12, border: "2px solid rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.08)", color: "#ef4444", fontSize: 15, fontWeight: 800, fontFamily: font, cursor: "pointer", transition: "all 0.3s" }}, "\u2192 Zum Dashboard"),
+      tried > 0 && React.createElement("div", { style: { fontSize: 11, color: "rgba(239,68,68,0.6)", marginTop: 8, fontWeight: 700 }}, "Versuch " + tried + " \u2014 +" + (tried * 10) + "s hinzugef\xFCgt"),
+      React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 6 }}, "Automatisch weiter in " + countdown + " Sek.")));
 }
+
 
 function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkehrerClick, onRueckkehrerErledigt }) {
   const [clk, setClk] = useState(new Date());
   const [selectedRK, setSelectedRK] = useState(null);
-  const [alertVisible, setAlertVisible] = useState(true);
-  useEffect(function() { var t = setTimeout(function() { setAlertVisible(false); }, 10000); return function() { clearTimeout(t); }; }, []);
   const [rkNotes, setRkNotes] = useState({});
   const [selectedStorno, setSelectedStorno] = useState(null);
   const [rettungNotiz, setRettungNotiz] = useState("");
@@ -713,27 +746,6 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
   const ts = clk.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
   const cs = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "18px 20px" };
   const ls = { fontSize: 10, color: "rgba(255,255,255,0.45)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 };
-  return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 10000, background: "#0A0E1A", fontFamily: font, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 }},
-      React.createElement("style", null, "@keyframes alertPulse { 0%,100%{ box-shadow: 0 0 0px rgba(239,68,68,0); } 50%{ box-shadow: 0 0 40px rgba(239,68,68,0.4); }} @keyframes alertBlink { 0%,100%{ opacity:1; } 50%{ opacity:0.4; }}"),
-      React.createElement("div", { style: { animation: "alertBlink 1s infinite", fontSize: 48, marginBottom: 16 }}, "\u{1F6A8}"),
-      React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#ef4444", textTransform: "uppercase", letterSpacing: 2, marginBottom: 6, animation: "alertBlink 1.5s infinite" }}, "ACHTUNG \u2014 SOFORT BEARBEITEN"),
-      React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 28 }}, alertItems.length + " offene F\xE4lle warten auf dich"),
-      React.createElement("div", { style: { width: "100%", maxWidth: 500 }},
-        alertItems.map(function(item, i) {
-          var isStorno = item.type === "storno";
-          return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", marginBottom: 10, borderRadius: 14, background: isStorno ? "rgba(249,115,22,0.08)" : "rgba(239,68,68,0.08)", border: "1.5px solid " + (isStorno ? "rgba(249,115,22,0.3)" : "rgba(239,68,68,0.3)"), animation: "alertPulse 2s infinite", animationDelay: (i * 0.3) + "s" }},
-            React.createElement("div", { style: { width: 44, height: 44, borderRadius: 12, background: isStorno ? "rgba(249,115,22,0.15)" : "rgba(239,68,68,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}, isStorno ? "\uD83D\uDD25" : "\u26A0\uFE0F"),
-            React.createElement("div", { style: { flex: 1 }},
-              React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }},
-                React.createElement("span", { style: { fontSize: 8, fontWeight: 800, padding: "2px 8px", borderRadius: 4, background: item.color, color: "#fff", textTransform: "uppercase" }}, isStorno ? "STORNO" : "R\xDCCKKEHRER"),
-                React.createElement("span", { style: { fontSize: 14, fontWeight: 700, color: "#fff" }}, item.name)),
-              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.55)" }}, item.detail)),
-            React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: item.color, whiteSpace: "nowrap" }}, item.zeit));
-        })),
-      React.createElement("div", { style: { marginTop: 32, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }},
-        React.createElement("button", { onClick: function() { setAlertPhase("dashboard"); }, style: { padding: "14px 40px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff", fontSize: 15, fontWeight: 800, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 20px rgba(239,68,68,0.4)", animation: "alertPulse 2s infinite" }}, "\u2705 Verstanden \u2014 zum Dashboard"),
-        React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.3)" }}, "Automatisch in 10 Sek.")));
-  }
   return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 10000, background: "radial-gradient(ellipse at 30% 20%, rgba(232,212,77,0.06) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(96,165,250,0.04) 0%, transparent 50%), #0A0E1A", fontFamily: font, color: "#fff", overflow: "auto", padding: 0 }},
     /* ── HEADER mit Name + Wetter ── */
     React.createElement("div", { style: { padding: "28px 32px 16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }},
@@ -1020,44 +1032,9 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
             React.createElement("button", { onClick: function() { setShowManualConfirm(false); }, style: { flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", fontSize: 13, fontFamily: font, cursor: "pointer" }}, "Abbrechen"),
             React.createElement("button", { onClick: function() { setShowManualConfirm(false); onNewAufnahme(); }, style: { flex: 2, padding: "12px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #FDE154, #E8CC3D)", color: "#0A0E1A", fontSize: 13, fontWeight: 800, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 16px rgba(253,225,84,0.25)" }}, "\u26A1 Ja, manuell starten"))))),
 
-    /* ── ALERT OVERLAY: Storno + Rückkehrer (10s) ── */
-    alertVisible && React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 30000, background: "rgba(5,8,15,0.97)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 28, fontFamily: font }},
-      React.createElement("style", null, "@keyframes alertPulse2 { 0%,100%{ box-shadow: 0 0 0px rgba(239,68,68,0); } 50%{ box-shadow: 0 0 40px rgba(239,68,68,0.35); }} @keyframes alertBlink2 { 0%,100%{ opacity:1; } 50%{ opacity:0.3; }} @keyframes alertCountdown { from{width:100%} to{width:0%} }"),
-      React.createElement("div", { style: { animation: "alertBlink2 1s infinite", fontSize: 52, marginBottom: 12 }}, "\u{1F6A8}"),
-      React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#ef4444", textTransform: "uppercase", letterSpacing: 3, marginBottom: 4, textAlign: "center", animation: "alertBlink2 1.5s infinite" }}, "ACHTUNG"),
-      React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#ef4444", letterSpacing: 1, marginBottom: 24, textAlign: "center" }}, "SOFORT BEARBEITEN!"),
-      React.createElement("div", { style: { width: "100%", maxWidth: 480 }},
-        /* Stornos */
-        stornos.map(function(st, i) {
-          return React.createElement("div", { key: "s"+i, style: { display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", marginBottom: 10, borderRadius: 14, background: "rgba(249,115,22,0.1)", border: "1.5px solid rgba(249,115,22,0.35)", animation: "alertPulse2 2s infinite", animationDelay: (i * 0.3) + "s" }},
-            React.createElement("div", { style: { width: 46, height: 46, borderRadius: 12, background: "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}, "\uD83D\uDD25"),
-            React.createElement("div", { style: { flex: 1 }},
-              React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }},
-                React.createElement("span", { style: { fontSize: 9, fontWeight: 800, padding: "2px 8px", borderRadius: 4, background: "#f97316", color: "#fff", textTransform: "uppercase", letterSpacing: 0.5 }}, "STORNO"),
-                React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#fff" }}, st.name)),
-              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.6)" }}, st.grund + " \xB7 " + st.typ)),
-            React.createElement("div", { style: { textAlign: "right" }},
-              React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: "#f97316" }}, st.restStunden + " Std."),
-              React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.4)" }}, "verbleibend")));
-        }),
-        /* Rückkehrer */
-        (rueckkehrer || []).map(function(rk, i) {
-          return React.createElement("div", { key: "r"+i, style: { display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", marginBottom: 10, borderRadius: 14, background: "rgba(239,68,68,0.08)", border: "1.5px solid rgba(239,68,68,0.3)", animation: "alertPulse2 2s infinite", animationDelay: ((stornos.length + i) * 0.3) + "s" }},
-            React.createElement("div", { style: { width: 46, height: 46, borderRadius: 12, background: "rgba(239,68,68,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}, "\u26A0\uFE0F"),
-            React.createElement("div", { style: { flex: 1 }},
-              React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }},
-                React.createElement("span", { style: { fontSize: 9, fontWeight: 800, padding: "2px 8px", borderRadius: 4, background: "#ef4444", color: "#fff", textTransform: "uppercase", letterSpacing: 0.5 }}, "R\xDCCKKEHRER"),
-                React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#fff" }}, rk.name)),
-              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.6)" }}, rk.grund + " \xB7 " + rk.typ)),
-            React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#ef4444" }}, rk.tage + "T \u2192"));
-        })),
-      React.createElement("div", { style: { marginTop: 28, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }},
-        React.createElement("button", { onClick: function() { setAlertVisible(false); }, style: { padding: "16px 48px", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff", fontSize: 16, fontWeight: 900, fontFamily: font, cursor: "pointer", boxShadow: "0 4px 24px rgba(239,68,68,0.5)", animation: "alertPulse2 2s infinite", letterSpacing: 0.5 }}, "\u2705 Verstanden \u2014 zum Dashboard"),
-        React.createElement("div", { style: { width: 200, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden", marginTop: 4 }},
-          React.createElement("div", { style: { height: "100%", background: "#ef4444", borderRadius: 2, animation: "alertCountdown 10s linear forwards" }})),
-        React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 2 }}, "Automatisch in 10 Sekunden"))),
 
     React.createElement("div", { style: { textAlign: "center", padding: "16px 0 24px", fontSize: 10, color: "rgba(255,255,255,0.12)" }}, "v2.0 \xB7 bee-doo FIELD \xB7 Bielefeld \xB7 \uD83D\uDC1D"))));
+}
 function StartScreen({ onStart }) {
   const [hovered, setHovered] = useState(null);
   const [fadeOut, setFadeOut] = useState(false);
