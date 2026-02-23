@@ -569,6 +569,15 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
     { zeit: "14:00", name: "Schmidt, Gütersloh", typ: "PV+WP", status: "offen", kunde: { anrede: "Herr", vorname: "Martin", nachname: "Schmidt", strasse: "Berliner Str.", hausnr: "7a", plz: "33330", ort: "Gütersloh", telefon: "05241 5556677", mobil: "0152 12345678", email: "m.schmidt@gmail.com" }},
     { zeit: "16:30", name: "Braun, Paderborn", typ: "PV", status: "bestätigt", kunde: { anrede: "Herr", vorname: "Klaus", nachname: "Braun", strasse: "Warburger Str.", hausnr: "55", plz: "33098", ort: "Paderborn", telefon: "05251 4443322", mobil: "0163 87654321", email: "k.braun@t-online.de" }},
   ];
+  // Aktuellen Termin ermitteln (Zeitfenster zwischen diesem und nächstem Termin)
+  const currentTerminIdx = (() => {
+    const now = clk.getHours() * 60 + clk.getMinutes();
+    for (let i = termine.length - 1; i >= 0; i--) {
+      const [h, m] = termine[i].zeit.split(":").map(Number);
+      if (now >= h * 60 + m) return i;
+    }
+    return -1;
+  })();
   const stats = { heute: 2, woche: 8, monat: 31, quote: 72 };
   const letzte = [
     { name: "Schneider", ort: "Herford", typ: "PV", kwp: "9.8", zeit: "Gestern 16:20" },
@@ -598,12 +607,18 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
           React.createElement("div", { style: { fontSize: 28, fontWeight: 800, color: s.c }}, s.v)))),
       React.createElement("div", { style: cs },
         React.createElement("div", { style: ls }, "\uD83D\uDCC5 Heutige Termine"),
-        ...termine.map((t, i) => React.createElement("div", { key: i, onClick: function() { if(onTerminClick && t.kunde) onTerminClick(t); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 6px", borderBottom: i < termine.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", cursor: t.kunde ? "pointer" : "default", borderRadius: 8, margin: "0 -6px", transition: "background 0.15s" }, onMouseEnter: function(e) { if(t.kunde) e.currentTarget.style.background = "rgba(253,225,84,0.06)"; }, onMouseLeave: function(e) { e.currentTarget.style.background = "transparent"; } },
-          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#FDE154", minWidth: 48 }}, t.zeit),
-          React.createElement("div", { style: { flex: 1 }},
-            React.createElement("div", { style: { fontSize: 13, fontWeight: 600 }}, t.name),
-            React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)" }}, t.typ)),
-          React.createElement("div", { style: { fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: t.status === "best\xE4tigt" ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.1)", color: t.status === "best\xE4tigt" ? "#34D399" : "#FDE154" }}, t.status.toUpperCase()), t.kunde && React.createElement("span", { style: { fontSize: 14, color: "rgba(253,225,84,0.4)", marginLeft: 4 }}, "\u203A")))),
+        ...termine.map(function(t, i) {
+          var isCurrent = i === currentTerminIdx;
+          return React.createElement("div", { key: i, onClick: function() { if(onTerminClick && t.kunde) onTerminClick(t); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 6px", borderBottom: i < termine.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", cursor: t.kunde ? "pointer" : "default", borderRadius: 8, margin: "0 -6px", background: isCurrent ? "rgba(52,211,153,0.08)" : "transparent", border: isCurrent ? "1.5px solid rgba(52,211,153,0.3)" : "1.5px solid transparent", animation: isCurrent ? "pulseGreen 2s infinite" : "none" }, onMouseEnter: function(e) { if(t.kunde) e.currentTarget.style.background = isCurrent ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.06)"; }, onMouseLeave: function(e) { e.currentTarget.style.background = isCurrent ? "rgba(52,211,153,0.08)" : "transparent"; } },
+            isCurrent && React.createElement("div", { style: { width: 6, height: 6, borderRadius: "50%", background: "#34D399", boxShadow: "0 0 8px rgba(52,211,153,0.6)", animation: "pulse 1.5s infinite", flexShrink: 0 } }),
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#FDE154", minWidth: 48 } }, t.zeit),
+            React.createElement("div", { style: { flex: 1 } },
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, t.name),
+              React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)" } }, t.typ)),
+            React.createElement("div", { style: { fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: isCurrent ? "rgba(52,211,153,0.2)" : t.status === "best\xE4tigt" ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.1)", color: isCurrent ? "#34D399" : t.status === "best\xE4tigt" ? "#34D399" : "#FDE154" } }, isCurrent ? "JETZT" : t.status.toUpperCase()),
+            t.kunde && React.createElement("span", { style: { fontSize: 14, color: isCurrent ? "rgba(52,211,153,0.6)" : "rgba(253,225,84,0.4)", marginLeft: 4 } }, "\u203A")
+          );
+        })),
       React.createElement("div", { style: cs },
         React.createElement("div", { style: ls }, "\uD83D\uDD70 Letzte Aufnahmen"),
         ...letzte.map((l, i) => React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < letzte.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }},
@@ -6535,6 +6550,7 @@ function BeedooField() {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
         @keyframes pulseRed { 0%,100% { box-shadow: 0 0 0px rgba(239,68,68,0); } 50% { box-shadow: 0 0 16px rgba(239,68,68,0.4); } }
+        @keyframes pulseGreen { 0%,100% { box-shadow: 0 0 0px rgba(52,211,153,0); } 50% { box-shadow: 0 0 12px rgba(52,211,153,0.3); } }
         @keyframes minionBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
         @keyframes minionWobble { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(2deg); } 75% { transform: rotate(-2deg); } }
       `), showDashboard && React.createElement(DashboardScreen, { onNewAufnahme: function() { setShowDashboard(false); }, onTerminClick: function(termin) {
