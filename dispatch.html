@@ -38,8 +38,8 @@ const { useState, useEffect, useMemo, useCallback, useRef } = React;
 // ─── COLORS ─────────────────────────────────────────────────────────────────
 const C = {
   brand: '#F5C500', bg: '#0B0D12', panel: '#0F1118', card: '#14171F',
-  cardHover: '#1A1D28', border: '#232738', text: '#E4E5EB', dim: '#6E7490',
-  muted: '#3A3F55', green: '#22c55e', yellow: '#FBBF24', red: '#F87171',
+  cardHover: '#1A1D28', border: '#232738', text: '#E4E5EB', dim: '#9BA1B8',
+  muted: '#6B7194', green: '#22c55e', yellow: '#FBBF24', red: '#F87171',
   blue: '#60A5FA', purple: '#A78BFA', teal: '#2DD4BF', pink: '#F472B6',
   orange: '#FF8C42', dc: '#FBBF24', ac: '#60A5FA',
 };
@@ -227,7 +227,6 @@ function DispatchApp() {
   const [view, setView] = useState('week'); // week | month | map | capacity
   const [modal, setModal] = useState(null);
   const [monteurFilter, setMonteurFilter] = useState('all');
-  const [selectedProjekt, setSelectedProjekt] = useState(null);
 
   const weekDays = useMemo(() => getWeekDays(baseDate), [baseDate]);
 
@@ -395,33 +394,25 @@ function DispatchApp() {
               const pt = PROJECT_TYPES[p.type];
               const kwpInfo = p.kwp > 0 ? ` · ${p.kwp} kWp` : '';
               const bigDC = p.kwp > 10;
-              const isSelected = selectedProjekt === p.id;
               return (
-                <div key={p.id} onClick={()=>setSelectedProjekt(isSelected ? null : p.id)} style={{
-                  background: isSelected ? C.brand+'18' : C.cardHover,
-                  border:`1px solid ${isSelected ? C.brand : p.priority==='high'?C.red:p.priority==='medium'?C.yellow:C.border}`,
-                  borderLeft:`3px solid ${isSelected ? C.brand : p.priority==='high'?C.red:p.priority==='medium'?C.yellow:C.green}`,
+                <div key={p.id} onClick={()=>setModal({type:'plan',proj:p})} style={{
+                  background: C.cardHover,
+                  border:`1px solid ${p.priority==='high'?C.red:p.priority==='medium'?C.yellow:C.border}`,
+                  borderLeft:`3px solid ${p.priority==='high'?C.red:p.priority==='medium'?C.yellow:C.green}`,
                   borderRadius:7, padding:'7px 9px', marginBottom:4, cursor:'pointer',
-                  outline: isSelected ? `2px solid ${C.brand}` : 'none',
-                  outlineOffset: 1,
                   transition: 'all 0.15s ease',
                 }}>
                   <div style={{display:'flex', justifyContent:'space-between', marginBottom:2}}>
-                    <span style={{fontSize:10, color: isSelected ? C.brand : C.muted, fontWeight:600}}>{p.id}</span>
+                    <span style={{fontSize:10, color:C.dim, fontWeight:600}}>{p.id}</span>
                     <span style={{fontSize:10, color:pt.color, background:pt.color+'15', borderRadius:3, padding:'0 4px', fontWeight:700}}>
                       {pt.icon} {pt.label}{kwpInfo}
                     </span>
                   </div>
-                  <div style={{fontSize:12, fontWeight:700, color: isSelected ? C.brand : C.text}}>{p.customer}</div>
+                  <div style={{fontSize:12, fontWeight:700, color:C.text}}>{p.customer}</div>
                   <div style={{fontSize:11, color:C.dim}}>{p.plz} {p.city} · {p.address}</div>
                   {p.notes && <div style={{fontSize:9, color:C.muted, marginTop:2}}>📋 {p.notes}</div>}
                   {bigDC && <div style={{fontSize:9, color:C.orange, fontWeight:700, marginTop:3}}>⚡ {p.kwp}kWp → DC 2 Tage</div>}
                   {p.status==='dc_planned' && <div style={{fontSize:9, color:C.yellow, fontWeight:700, marginTop:3}}>⏳ DC geplant – AC fehlt</div>}
-                  {isSelected && (
-                    <div style={{marginTop:6, padding:'4px 0', borderTop:`1px solid ${C.brand}33`, fontSize:10, color:C.brand, fontWeight:600, textAlign:'center'}}>
-                      ✓ Ausgewählt für Terminierung
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -443,12 +434,20 @@ function DispatchApp() {
         <main style={{flex:1, overflow:'auto'}}>
           {view==='week' && <WeekView weekDays={weekDays} techs={filteredMonteure} engel={BAUENGEL}
             techSlots={techSlots} engelSlots={engelSlots} projekte={projekte}
-            updateProject={updateProject}/>}
-          {view==='month' && <MonthView baseDate={baseDate} projekte={projekte} techs={filteredMonteure} engel={BAUENGEL}/>}
+            updateProject={updateProject} onCardClick={p => setModal({type:'detail',proj:p})}/>}
+          {view==='month' && <MonthView baseDate={baseDate} projekte={projekte} techs={filteredMonteure} engel={BAUENGEL} onCardClick={p => setModal({type:'detail',proj:p})}/>}
           {view==='map' && <MapView projekte={projekte}/>}
           {view==='capacity' && <CapacityView weekDays={weekDays} techs={filteredMonteure} engel={BAUENGEL} techSlots={techSlots} engelSlots={engelSlots} projekte={projekte}/>}
         </main>
       </div>
+
+      {/* ─── MODALS ────────────────────────────────────────────────────── */}
+      {modal && modal.type==='plan' && (
+        <PlanModal proj={modal.proj} onClose={()=>setModal(null)} updateProject={updateProject} monteure={MONTEURE} engel={BAUENGEL}/>
+      )}
+      {modal && modal.type==='detail' && (
+        <DetailModal proj={modal.proj} onClose={()=>setModal(null)}/>
+      )}
     </div>
   );
 }
@@ -456,7 +455,7 @@ function DispatchApp() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // WEEK VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, updateProject }) {
+function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, updateProject, onCardClick }) {
   const colTemplate = '160px repeat(5,1fr)';
 
   // DC→AC Verbindungslinien zeichnen
@@ -542,7 +541,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
             return (
               <div key={ds} style={{background:C.panel, borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`, padding:'3px 3px', minHeight:80, position:'relative'}}>
                 {items.map(({proj, phase}) => (
-                  <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`}/>
+                  <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)}/>
                 ))}
                 {full && <div style={{fontSize:9, color:C.red, textAlign:'center', fontWeight:700}}>● VOLL</div>}
               </div>
@@ -565,13 +564,13 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
             return (
               <div key={ds} style={{background:C.teal+'04', borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`, padding:'3px 3px', minHeight:60, position:'relative'}}>
                 {items.map(proj => (
-                  <div key={proj.id} style={{
+                  <div key={proj.id} onClick={()=>onCardClick(proj)} style={{
                     background:C.teal+'10', border:`1px solid ${C.teal}44`, borderLeft:`3px solid ${C.teal}`,
-                    borderRadius:5, padding:'4px 6px', marginBottom:3, userSelect:'none'
+                    borderRadius:5, padding:'4px 6px', marginBottom:3, cursor:'pointer'
                   }}>
                     <div style={{fontSize:10, fontWeight:700, color:C.teal}}>🕊️ QS</div>
                     <div style={{fontSize:11, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{proj.customer}</div>
-                    <div style={{fontSize:9, color:C.muted}}>{proj.plz} · {proj.id}</div>
+                    <div style={{fontSize:9, color:C.dim}}>{proj.plz} · {proj.id}</div>
                     <div style={{fontSize:9, color:C.dim}}>{proj.city} · {proj.address}</div>
                   </div>
                 ))}
@@ -587,7 +586,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROJECT CARD (in Wochenansicht)
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProjectCard({ proj, phase, dataAttr }) {
+function ProjectCard({ proj, phase, dataAttr, onClick }) {
   const pt = PROJECT_TYPES[proj.type];
   const isExt = phase.includes('ext');
   const phaseCol = isExt ? C.orange : phase==='dc' ? C.dc : phase==='ac' ? C.ac : C.teal;
@@ -605,10 +604,10 @@ function ProjectCard({ proj, phase, dataAttr }) {
   const tech = MONTEURE.find(m => m.id === techId);
 
   return (
-    <div data-proj={dataAttr} style={{
+    <div data-proj={dataAttr} onClick={onClick} style={{
       background:C.cardHover, border:`1px solid ${bs ? bs.col+'66' : phaseCol+'44'}`,
       borderLeft:`3px solid ${bs ? bs.col : phaseCol}`,
-      borderRadius:5, padding:'4px 6px', marginBottom:3, userSelect:'none', position:'relative',
+      borderRadius:5, padding:'4px 6px', marginBottom:3, cursor:'pointer', position:'relative',
       animation: cardAnimation,
     }}>
       {/* Kundenname (VOLL) + PLZ */}
@@ -679,7 +678,7 @@ function StatusBadge({ col, label, blink }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // MONTH VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function MonthView({ baseDate, projekte, techs, engel }) {
+function MonthView({ baseDate, projekte, techs, engel, onCardClick }) {
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
   const firstDay = new Date(year, month, 1);
@@ -765,14 +764,14 @@ function MonthView({ baseDate, projekte, techs, engel }) {
                 const phaseCol = phase==='dc'||phase==='dc_ext' ? C.dc : C.ac;
                 const bs = proj.baustelleStatus ? BSTATUS[proj.baustelleStatus] : null;
                 return (
-                  <div key={`${proj.id}-${phase}`} style={{
+                  <div key={`${proj.id}-${phase}`} onClick={()=>onCardClick(proj)} style={{
                     background: bs ? bs.col+'12' : phaseCol+'10',
                     borderLeft:`2px solid ${bs ? bs.col : phaseCol}`,
-                    borderRadius:3, padding:'2px 4px', marginBottom:2, fontSize:9,
+                    borderRadius:3, padding:'2px 4px', marginBottom:2, fontSize:9, cursor:'pointer',
                     animation: bs?.animation ? `${bs.animation} 1.2s ease-in-out infinite` : undefined,
                   }}>
                     <div style={{fontWeight:700, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{proj.customer}</div>
-                    <div style={{display:'flex', gap:3, color:C.muted, alignItems:'center'}}>
+                    <div style={{display:'flex', gap:3, color:C.dim, alignItems:'center'}}>
                       <span style={{color:pt.color}}>{pt.icon}</span>
                       <span>{phase.replace('_ext','+').toUpperCase()}</span>
                       {proj.kwp > 0 && <span>{proj.kwp}kWp</span>}
@@ -1017,6 +1016,236 @@ function ProgressBar({ pct, color }) {
   return (
     <div style={{height:4, background:C.cardHover, borderRadius:2, overflow:'hidden'}}>
       <div style={{height:'100%', background:col, width:`${Math.min(pct,100)}%`, borderRadius:2, transition:'width 0.4s'}}/>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PLAN MODAL (Sidebar-Klick → Terminierung)
+// ═══════════════════════════════════════════════════════════════════════════════
+function PlanModal({ proj, onClose, updateProject, monteure, engel }) {
+  const pt = PROJECT_TYPES[proj.type];
+  const [dcDate, setDcDate] = useState(proj.dcDate || '');
+  const [acDate, setAcDate] = useState(proj.acDate || '');
+  const [dcTechId, setDcTechId] = useState(proj.dcTechId || '');
+  const [acTechId, setAcTechId] = useState(proj.acTechId || '');
+  const [engelId, setEngelId] = useState(proj.engelId || '');
+
+  const dcSkill = pt.dcSkill;
+  const acSkill = pt.acSkill;
+  const dcMonteure = dcSkill ? monteure.filter(m => m.skills.includes(dcSkill)) : [];
+  const acMonteure = acSkill ? monteure.filter(m => m.skills.includes(acSkill)) : [];
+
+  const handleSave = () => {
+    const changes = {};
+    if(dcDate) changes.dcDate = dcDate;
+    if(dcTechId) changes.dcTechId = Number(dcTechId);
+    if(acDate) changes.acDate = acDate;
+    if(acTechId) changes.acTechId = Number(acTechId);
+    if(engelId) changes.engelId = Number(engelId);
+    updateProject(proj.id, changes);
+    onClose();
+  };
+
+  const inputStyle = {width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:'8px 10px', color:C.text, fontSize:13, outline:'none'};
+  const selectStyle = {...inputStyle, cursor:'pointer'};
+  const labelStyle = {fontSize:11, color:C.dim, fontWeight:600, marginBottom:4, display:'block'};
+
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', backdropFilter:'blur(4px)'}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.panel, border:`1px solid ${C.border}`, borderRadius:14, width:440, maxHeight:'85vh', overflow:'auto', padding:0}}>
+        {/* Header */}
+        <div style={{padding:'16px 20px', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+          <div>
+            <div style={{fontSize:10, color:pt.color, fontWeight:700, marginBottom:2}}>{pt.icon} {pt.label} {proj.kwp > 0 ? `· ${proj.kwp} kWp` : ''}</div>
+            <div style={{fontSize:18, fontWeight:800, color:C.text}}>{proj.customer}</div>
+            <div style={{fontSize:12, color:C.dim, marginTop:2}}>{proj.plz} {proj.city} · {proj.address}</div>
+          </div>
+          <button onClick={onClose} style={{background:C.cardHover, border:`1px solid ${C.border}`, borderRadius:8, width:32, height:32, cursor:'pointer', color:C.dim, fontSize:16, display:'flex', alignItems:'center', justifyContent:'center'}}>✕</button>
+        </div>
+
+        {/* Info */}
+        <div style={{padding:'12px 20px', borderBottom:`1px solid ${C.border}`, display:'flex', gap:8, flexWrap:'wrap'}}>
+          <Badge col={pt.color} label={`${proj.id}`}/>
+          {proj.notes && <Badge col={C.dim} label={`📋 ${proj.notes}`}/>}
+          {proj.kwp > 10 && <Badge col={C.orange} label={`⚡ ${proj.kwp}kWp → DC 2 Tage`}/>}
+          {proj.priority==='high' && <Badge col={C.red} label="🔴 Hohe Priorität"/>}
+          {proj.priority==='medium' && <Badge col={C.yellow} label="🟡 Mittel"/>}
+        </div>
+
+        {/* Form */}
+        <div style={{padding:'16px 20px', display:'flex', flexDirection:'column', gap:14}}>
+          {pt.dcSkill && <>
+            <div style={{background:C.dc+'08', border:`1px solid ${C.dc}22`, borderRadius:8, padding:12}}>
+              <div style={{fontSize:12, fontWeight:700, color:C.dc, marginBottom:10}}>⚡ DC – {pt.dcTag || 'Dachmontage'}</div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                <div>
+                  <label style={labelStyle}>Datum</label>
+                  <input type="date" value={dcDate} onChange={e=>setDcDate(e.target.value)} style={inputStyle}/>
+                </div>
+                <div>
+                  <label style={labelStyle}>Monteur</label>
+                  <select value={dcTechId} onChange={e=>setDcTechId(e.target.value)} style={selectStyle}>
+                    <option value="">– Wählen –</option>
+                    {dcMonteure.map(m => <option key={m.id} value={m.id}>{m.ini} · {m.name}{m.sub?' (SU)':''}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </>}
+
+          {pt.acSkill && <>
+            <div style={{background:C.ac+'08', border:`1px solid ${C.ac}22`, borderRadius:8, padding:12}}>
+              <div style={{fontSize:12, fontWeight:700, color:C.ac, marginBottom:10}}>🔌 AC – {pt.acTag || 'Elektro + IBN'}</div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                <div>
+                  <label style={labelStyle}>Datum</label>
+                  <input type="date" value={acDate} onChange={e=>setAcDate(e.target.value)} style={inputStyle}/>
+                </div>
+                <div>
+                  <label style={labelStyle}>Monteur</label>
+                  <select value={acTechId} onChange={e=>setAcTechId(e.target.value)} style={selectStyle}>
+                    <option value="">– Wählen –</option>
+                    {acMonteure.map(m => <option key={m.id} value={m.id}>{m.ini} · {m.name}{m.sub?' (SU)':''}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </>}
+
+          <div style={{background:C.teal+'08', border:`1px solid ${C.teal}22`, borderRadius:8, padding:12}}>
+            <div style={{fontSize:12, fontWeight:700, color:C.teal, marginBottom:10}}>🕊️ Bauengel</div>
+            <select value={engelId} onChange={e=>setEngelId(e.target.value)} style={selectStyle}>
+              <option value="">– Kein Bauengel –</option>
+              {engel.map(e => <option key={e.id} value={e.id}>{e.ini} · {e.name} ({e.region})</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{padding:'12px 20px 16px', display:'flex', gap:8, justifyContent:'flex-end'}}>
+          <button onClick={onClose} style={{background:C.cardHover, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 20px', color:C.dim, fontSize:13, cursor:'pointer', fontWeight:600}}>Abbrechen</button>
+          <button onClick={handleSave} style={{background:C.brand, border:'none', borderRadius:8, padding:'8px 24px', color:C.bg, fontSize:13, cursor:'pointer', fontWeight:800}}>💾 Einplanen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DETAIL MODAL (Kalender-Klick → Datensatz anzeigen)
+// ═══════════════════════════════════════════════════════════════════════════════
+function DetailModal({ proj, onClose }) {
+  const pt = PROJECT_TYPES[proj.type];
+  const bs = proj.baustelleStatus ? BSTATUS[proj.baustelleStatus] : null;
+  const dcTech = MONTEURE.find(m => m.id === proj.dcTechId);
+  const acTech = MONTEURE.find(m => m.id === proj.acTechId);
+  const engelPerson = BAUENGEL.find(e => e.id === proj.engelId);
+
+  const Row = ({label, value, color}) => value ? (
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:`1px solid ${C.border}30`}}>
+      <span style={{fontSize:12, color:C.dim}}>{label}</span>
+      <span style={{fontSize:13, fontWeight:600, color:color||C.text}}>{value}</span>
+    </div>
+  ) : null;
+
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', backdropFilter:'blur(4px)'}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.panel, border:`1px solid ${C.border}`, borderRadius:14, width:440, maxHeight:'85vh', overflow:'auto'}}>
+        {/* Header */}
+        <div style={{padding:'16px 20px', borderBottom:`1px solid ${C.border}`, position:'relative'}}>
+          {bs && (
+            <div style={{marginBottom:8, display:'inline-flex', background:bs.col+'18', border:`1px solid ${bs.col}44`, borderRadius:6, padding:'3px 10px', alignItems:'center', gap:4}}>
+              <span style={{fontSize:11, fontWeight:700, color:bs.col}}>{bs.label}</span>
+            </div>
+          )}
+          <div style={{fontSize:10, color:pt.color, fontWeight:700, marginBottom:2}}>{pt.icon} {pt.label} {proj.kwp > 0 ? `· ${proj.kwp} kWp` : ''}</div>
+          <div style={{fontSize:20, fontWeight:800, color:C.text}}>{proj.customer}</div>
+          <div style={{fontSize:13, color:C.dim, marginTop:4}}>{proj.plz} {proj.city}</div>
+          <div style={{fontSize:13, color:C.dim}}>{proj.address}</div>
+          <button onClick={onClose} style={{position:'absolute', top:14, right:14, background:C.cardHover, border:`1px solid ${C.border}`, borderRadius:8, width:32, height:32, cursor:'pointer', color:C.dim, fontSize:16, display:'flex', alignItems:'center', justifyContent:'center'}}>✕</button>
+        </div>
+
+        {/* Details */}
+        <div style={{padding:'10px 20px'}}>
+          <Row label="Projekt-ID" value={proj.id}/>
+          <Row label="Typ" value={`${pt.icon} ${pt.label}`} color={pt.color}/>
+          {proj.kwp > 0 && <Row label="Leistung" value={`${proj.kwp} kWp`} color={C.orange}/>}
+          {proj.notes && <Row label="Dachtyp" value={proj.notes}/>}
+          <Row label="Priorität" value={proj.priority==='high'?'🔴 Hoch':proj.priority==='medium'?'🟡 Mittel':'🟢 Normal'} color={proj.priority==='high'?C.red:proj.priority==='medium'?C.yellow:C.green}/>
+          <Row label="Status" value={proj.status==='fully_planned'?'✅ Vollständig geplant':proj.status==='dc_planned'?'⏳ DC geplant':'⚠ Ungeplant'} color={proj.status==='fully_planned'?C.green:proj.status==='dc_planned'?C.yellow:C.red}/>
+        </div>
+
+        {/* Planung */}
+        <div style={{padding:'4px 20px 10px'}}>
+          {(proj.dcDate || proj.acDate) && (
+            <div style={{fontSize:11, fontWeight:700, color:C.dim, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.06em'}}>Planung</div>
+          )}
+
+          {proj.dcDate && (
+            <div style={{background:C.dc+'08', border:`1px solid ${C.dc}22`, borderRadius:8, padding:'10px 12px', marginBottom:8}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <span style={{fontSize:12, fontWeight:700, color:C.dc}}>⚡ DC – {pt.dcTag || 'Dachmontage'}</span>
+                <span style={{fontSize:13, fontWeight:700, color:C.text}}>{fmtDay(proj.dcDate)}</span>
+              </div>
+              {dcTech && (
+                <div style={{display:'flex', alignItems:'center', gap:6, marginTop:6}}>
+                  <Avatar ini={dcTech.ini} col={dcTech.color} size={22}/>
+                  <span style={{fontSize:12, color:C.text}}>{dcTech.name}</span>
+                  {dcTech.sub && <span style={{fontSize:9, color:C.muted, background:C.muted+'22', borderRadius:3, padding:'1px 4px'}}>SU</span>}
+                </div>
+              )}
+              {proj.dcDuration >= 2 && <div style={{fontSize:10, color:C.orange, fontWeight:600, marginTop:4}}>⚡ 2-Tage Montage</div>}
+              {proj.montageStartedAt && <div style={{fontSize:10, color:C.green, marginTop:4}}>▶ Gestartet um {fmtTime(proj.montageStartedAt)}</div>}
+            </div>
+          )}
+
+          {proj.acDate && (
+            <div style={{background:C.ac+'08', border:`1px solid ${C.ac}22`, borderRadius:8, padding:'10px 12px', marginBottom:8}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <span style={{fontSize:12, fontWeight:700, color:C.ac}}>🔌 AC – {pt.acTag || 'Elektro + IBN'}</span>
+                <span style={{fontSize:13, fontWeight:700, color:C.text}}>{fmtDay(proj.acDate)}</span>
+              </div>
+              {acTech && (
+                <div style={{display:'flex', alignItems:'center', gap:6, marginTop:6}}>
+                  <Avatar ini={acTech.ini} col={acTech.color} size={22}/>
+                  <span style={{fontSize:12, color:C.text}}>{acTech.name}</span>
+                  {acTech.sub && <span style={{fontSize:9, color:C.muted, background:C.muted+'22', borderRadius:3, padding:'1px 4px'}}>SU</span>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {engelPerson && (
+            <div style={{background:C.teal+'08', border:`1px solid ${C.teal}22`, borderRadius:8, padding:'10px 12px', marginBottom:8}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <span style={{fontSize:12, fontWeight:700, color:C.teal}}>🕊️ Bauengel</span>
+              </div>
+              <div style={{display:'flex', alignItems:'center', gap:6, marginTop:6}}>
+                <Avatar ini={engelPerson.ini} col={C.teal} size={22}/>
+                <span style={{fontSize:12, color:C.text}}>{engelPerson.name}</span>
+                <span style={{fontSize:10, color:C.dim}}>{engelPerson.region}</span>
+              </div>
+              {proj.engelArrivedAt && <div style={{fontSize:10, color:C.teal, marginTop:4}}>🕊️ Angekommen um {fmtTime(proj.engelArrivedAt)}</div>}
+            </div>
+          )}
+        </div>
+
+        {/* Fotos + Aktualisierung */}
+        {(proj.fotoCount > 0 || proj.letzteAktualisierung) && (
+          <div style={{padding:'6px 20px 16px'}}>
+            <div style={{display:'flex', gap:10}}>
+              {proj.fotoCount > 0 && <Badge col={C.blue} label={`📷 ${proj.fotoCount} Fotos`}/>}
+              {proj.letzteAktualisierung && <Badge col={C.dim} label={`🕐 ${fmtTime(proj.letzteAktualisierung)}`}/>}
+            </div>
+          </div>
+        )}
+
+        {/* Close */}
+        <div style={{padding:'8px 20px 16px', display:'flex', justifyContent:'center'}}>
+          <button onClick={onClose} style={{background:C.cardHover, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 32px', color:C.text, fontSize:13, cursor:'pointer', fontWeight:600}}>Schließen</button>
+        </div>
+      </div>
     </div>
   );
 }
