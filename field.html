@@ -602,7 +602,7 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
           React.createElement("div", { style: { flex: 1 }},
             React.createElement("div", { style: { fontSize: 13, fontWeight: 600 }}, t.name),
             React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.35)" }}, t.typ)),
-          React.createElement("div", { style: { fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: t.status === "best\xE4tigt" ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.1)", color: t.status === "best\xE4tigt" ? "#34D399" : "#FDE154" }}, t.status.toUpperCase())))),
+          React.createElement("div", { style: { fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: t.status === "best\xE4tigt" ? "rgba(52,211,153,0.15)" : "rgba(253,225,84,0.1)", color: t.status === "best\xE4tigt" ? "#34D399" : "#FDE154" }}, t.status.toUpperCase()), t.kunde && React.createElement("span", { style: { fontSize: 14, color: "rgba(253,225,84,0.4)", marginLeft: 4 }}, "\u203A"))),
       React.createElement("div", { style: cs },
         React.createElement("div", { style: ls }, "\uD83D\uDD70 Letzte Aufnahmen"),
         ...letzte.map((l, i) => React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < letzte.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }},
@@ -2580,6 +2580,65 @@ function StepFotos({ data, setData }) {
   const [gDriveConnected, setGDriveConnected] = useState(!!gDriveState.token);
   const [qrScanning, setQrScanning] = useState(false);
   const [qrResult, setQrResult] = useState(data._qrResults || []);
+  const [phoneSync, setPhoneSync] = useState({ active: false, count: 0, lastCheck: null });
+  const phonePollRef = React.useRef(null);
+
+  // ── Polling for external phone photos ──
+  useEffect(() => {
+    if (!data._phoneJobId || !data._phoneJobActive) return;
+    setPhoneSync({ active: true, count: 0, lastCheck: null });
+    var knownPaths = {};
+    var SB_URL = "https://hqzpemfaljxcysyqssng.supabase.co";
+    var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+
+    var poll = async function() {
+      try {
+        var resp = await fetch(SB_URL + "/rest/v1/field_photos?job_id=eq." + encodeURIComponent(data._phoneJobId) + "&order=created_at.asc", {
+          headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY }
+        });
+        var rows = await resp.json();
+        var newPhotos = rows.filter(function(r) { return !knownPaths[r.storage_path]; });
+        
+        for (var i = 0; i < newPhotos.length; i++) {
+          var photo = newPhotos[i];
+          knownPaths[photo.storage_path] = true;
+
+          // Download from Supabase Storage
+          try {
+            var imgResp = await fetch(SB_URL + "/storage/v1/object/public/field-photos/" + photo.storage_path, {
+              headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY }
+            });
+            var blob = await imgResp.blob();
+            var file = new File([blob], photo.photo_key + ".jpg", { type: "image/jpeg" });
+            
+            // Compress
+            var compressed = await compressImage(file, 1600, 0.75);
+            var blobUrl = URL.createObjectURL(compressed);
+
+            // If photo has a specific key from the uploader, use it; otherwise fill next empty pflicht slot
+            var targetKey = photo.photo_key;
+            if (!targetKey || data[targetKey]) {
+              // Find next empty pflicht slot
+              var pflichtKeys = ["fotoZaehler","fotoHAK","fotoPotential","fotoNeuerZS","fotoKabelwegInnen","fotoKabelwegWRZS","fotoKabelwegHAKZS","fotoKabelwegAussen","fotoAufstellortWR","fotoZSgeschlossen","fotoZSgeoeffnet","fotoDachboden"];
+              targetKey = pflichtKeys.find(function(k) { return !data[k]; });
+            }
+            if (targetKey) {
+              u(targetKey, blobUrl);
+              u(targetKey + "_file", compressed);
+              u(targetKey + "_gd", "phone");
+              triggerGDriveUpload(compressed, targetKey, photo.photo_label || targetKey, data, u);
+            }
+          } catch(e) { console.warn("[Phone-Sync] Download error:", e); }
+        }
+        
+        setPhoneSync(function(ps) { return { active: true, count: rows.length, lastCheck: new Date() }; });
+      } catch(e) { console.warn("[Phone-Sync] Poll error:", e); }
+    };
+
+    poll();
+    phonePollRef.current = setInterval(poll, 4000);
+    return function() { if (phonePollRef.current) clearInterval(phonePollRef.current); };
+  }, [data._phoneJobId, data._phoneJobActive]);
   const qrVideoRef = React.useRef(null);
   const qrStreamRef = React.useRef(null);
 
@@ -2938,6 +2997,9 @@ function StepFotos({ data, setData }) {
       ),
       React.createElement("button", { onClick: function() {
         var jobTs = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+        u("_phoneJobId", jobTs);
+        u("_phoneJobActive", true);
+        u("_phonePhotosReceived", 0);
         var kundenName = encodeURIComponent([data.vorname, data.nachname].filter(Boolean).join(" ") || "Kunde");
         var addr = encodeURIComponent([data.strasse, data.hausnummer, data.plz, data.ort].filter(Boolean).join(" ") || "");
         var berater = encodeURIComponent(data._beraterName || "");
@@ -2984,7 +3046,15 @@ function StepFotos({ data, setData }) {
         background: T.accentGlow,
         color: BRAND.yellow,
         fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: font
-      }}, "QR erzeugen")
+      }}, "QR erzeugen"),
+      data._phoneJobActive && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginLeft: 8 }},
+        React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: phoneSync.active ? "#34D399" : T.textDim, animation: phoneSync.active ? "pulse 1.5s infinite" : "none" }}),
+        React.createElement("span", { style: { fontSize: 10, color: phoneSync.count > 0 ? "#34D399" : T.textDim, fontWeight: 600 }}, phoneSync.count > 0 ? phoneSync.count + " empfangen" : "wartet\u2026")
+      )
+    ),
+    data._phoneJobActive && React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, padding: "8px 0" }},
+      React.createElement("div", { style: { fontSize: 10, color: T.textDim }}, "\uD83D\uDCF1 Live-Sync aktiv \u00B7 Job: " + (data._phoneJobId || "").slice(0,6)),
+      React.createElement("button", { onClick: function() { u("_phoneJobActive", false); u("_phoneJobId", null); }, style: { fontSize: 10, color: T.red, background: "none", border: "none", cursor: "pointer", fontFamily: font, textDecoration: "underline" }}, "Sync beenden")
     )
   ), /* @__PURE__ */ React.createElement(Section, { title: "Pflichtfotos", icon: "\u26A0\uFE0F", accent: T.red }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 12 } }, pflicht.map((p) => /* @__PURE__ */ React.createElement(
     PhotoTile,
