@@ -334,8 +334,32 @@ function App() {
     const abr = abrechnungen();
     const totProv = abr.reduce((s,a) => s+a.total, 0);
     const totAuftr = abr.reduce((s,a) => s+a.cnt, 0);
-    const nHGB = abr.filter(a=>a.typ==='HGB'&&a.cnt>0).length;
-    const nAng = abr.filter(a=>a.typ==='Angestellt'&&a.cnt>0).length;
+    const totPaid = abr.reduce((s,a) => s+a.paidCnt, 0);
+    const nHGB = abr.filter(a=>a.typ==='HGB'&&(a.cnt>0||a.paidCnt>0)).length;
+    const nAng = abr.filter(a=>a.typ==='Angestellt'&&(a.cnt>0||a.paidCnt>0)).length;
+    // Bereits ausgezahlt schätzen (Paid haben eigene Staffel-Berechnung nicht, approximieren)
+    const totBereitsAusgezahlt = abr.reduce((s,a) => {
+        let paidProv = 0;
+        a.bereitsAusgezahlt.forEach(r => {
+            paidProv += a.perA; // gleiche Staffel
+        });
+        return s + paidProv;
+    }, 0);
+
+    function exportCSV() {
+        const rows = [['Vertriebler','Typ','Anlagen auszahlungsf.','Anlagen ausgezahlt','Anlagen storniert','Staffel/Anlage','Staffel Gesamt','Speichererw.','Eigenlead','Empfehlung','Stufenbonus','Team-Bonus','Gesamt auszuzahlen']];
+        abr.filter(a=>a.cnt>0||a.paidCnt>0||a.storCnt>0).forEach(a => {
+            rows.push([a.name,a.typ,a.cnt,a.paidCnt,a.storCnt,a.perA,a.staffGes,a.spB,a.elB,a.emB,a.zeroBonus,a.teamBonus,a.total]);
+        });
+        const csvStr = rows.map(r => r.map(c => typeof c==='string'&&c.includes(',')?'"'+c+'"':c).join(';')).join('\n');
+        const blob = new Blob(['\uFEFF'+csvStr], {type:'text/csv;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'abrechnung_'+selMonth+'.csv';
+        link.click();
+        URL.revokeObjectURL(url);
+    }
 
     if (selVT) {
         const det = abr.find(a=>a.name===selVT);
@@ -533,11 +557,28 @@ function App() {
                 </div>
             )}
 
-            <div className="grid-stats" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:24}}>
-                <Stat label="Gesamt Provision" value={euro(totProv)} hl />
-                <Stat label="Aufträge" value={totAuftr} />
+            <div className="grid-stats" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12,marginBottom:16}}>
+                <Stat label="Noch auszuzahlen" value={euro(totProv)} hl />
+                <Stat label="Bereits ausgezahlt" value={euro(totBereitsAusgezahlt)} />
+                <Stat label="Auszahlungsfähig" value={totAuftr} />
+                <Stat label="Ausgezahlt" value={totPaid} />
                 <Stat label="HGB aktiv" value={nHGB} />
-                <Stat label="Angestellte aktiv" value={nAng} />
+                <Stat label="Angestellt aktiv" value={nAng} />
+            </div>
+
+            <div style={{display:'flex',gap:12,marginBottom:20,flexWrap:'wrap',alignItems:'center'}}>
+                <button onClick={exportCSV} style={{padding:'8px 16px',borderRadius:8,border:'1px solid #2a2d3a',background:'#1a1b25',color:'#8b95a5',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'DM Sans',transition:'all 0.2s'}}
+                    onMouseOver={e=>{e.currentTarget.style.borderColor='#F5C500';e.currentTarget.style.color='#F5C500';}}
+                    onMouseOut={e=>{e.currentTarget.style.borderColor='#2a2d3a';e.currentTarget.style.color='#8b95a5';}}>
+                    📥 CSV Export ({monthLabel(selMonth)})
+                </button>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',fontSize:11,color:'#6b7280'}}>
+                    <span style={{padding:'4px 10px',borderRadius:6,background:'rgba(252,129,129,0.08)',border:'1px solid rgba(252,129,129,0.2)',color:'#fc8181'}}>⭐ Christoph Held: 3.000€/Anlage + 200€×Team (ab Jan)</span>
+                    <span style={{padding:'4px 10px',borderRadius:6,background:'rgba(252,129,129,0.08)',border:'1px solid rgba(252,129,129,0.2)',color:'#fc8181'}}>⭐ Tayfun: 2.700€ + 300€×Team (ab Jan)</span>
+                    <span style={{padding:'4px 10px',borderRadius:6,background:'rgba(252,129,129,0.08)',border:'1px solid rgba(252,129,129,0.2)',color:'#fc8181'}}>⭐ Stefan Hensel: 2.800€, kein Eigenlead</span>
+                    <span style={{padding:'4px 10px',borderRadius:6,background:'rgba(72,187,120,0.08)',border:'1px solid rgba(72,187,120,0.2)',color:'#48bb78'}}>🚀 HGB Staffel: 1-7→1.400€ | 8+→1.700€</span>
+                    <span style={{padding:'4px 10px',borderRadius:6,background:'rgba(99,179,237,0.08)',border:'1px solid rgba(99,179,237,0.2)',color:'#63b3ed'}}>📊 Stufenbonus: 10→+2.000€ | 15→+3.000€</span>
+                </div>
             </div>
 
             <div className="grid-vt" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:12}}>
