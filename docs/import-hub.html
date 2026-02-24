@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bee-doo | Daten-Import Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        :root {
+            --accent: #F5C500;
+            --accent-dim: rgba(245, 197, 0, 0.15);
+            --accent-glow: rgba(245, 197, 0, 0.3);
+            --bg: #0a0a0f;
+            --bg-card: #12131a;
+            --bg-card-hover: #181924;
+            --bg-elevated: #1a1b25;
+            --border: rgba(255,255,255,0.06);
+            --border-accent: rgba(245, 197, 0, 0.25);
+            --text: #e2e4ea;
+            --text-dim: #8b95a5;
+            --text-bright: #ffffff;
+            --success: #22c55e;
+            --success-dim: rgba(34, 197, 94, 0.15);
+            --error: #ef4444;
+            --error-dim: rgba(239, 68, 68, 0.15);
+            --warning: #f59e0b;
+            --warning-dim: rgba(245, 158, 11, 0.15);
+            --info: #3b82f6;
+            --info-dim: rgba(59, 130, 246, 0.15);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        @keyframes progress {
+            from { width: 0; }
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        .slide-up { animation: slideUp 0.5s ease-out; }
+
+        /* Header */
+        .header {
+            padding: 20px 32px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(180deg, rgba(245,197,0,0.03) 0%, transparent 100%);
+        }
+        .header-left { display: flex; align-items: center; gap: 16px; }
+        .header .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: -0.5px;
+        }
+        .header .logo span { color: var(--text-dim); font-weight: 400; }
+        .header .subtitle {
+            font-size: 13px;
+            color: var(--text-dim);
+            padding-left: 16px;
+            border-left: 1px solid var(--border);
+        }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .back-link {
+            font-size: 13px;
+            color: var(--text-dim);
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+        .back-link:hover {
+            color: var(--accent);
+            border-color: var(--border-accent);
+            background: var(--accent-dim);
+        }
+
+        /* Main Layout */
+        .main { max-width: 1400px; margin: 0 auto; padding: 32px; }
+
+        /* Stats Row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.2s;
+        }
+        .stat-card:hover {
+            border-color: var(--border-accent);
+            transform: translateY(-1px);
+        }
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-bright);
+        }
+        .stat-sub {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        /* Import Cards Grid */
+        .import-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .import-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 24px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .import-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: var(--accent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .import-card:hover::before { opacity: 1; }
+        .import-card:hover {
+            border-color: var(--border-accent);
+            background: var(--bg-card-hover);
+        }
+        .import-card.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 30px rgba(245, 197, 0, 0.05);
+        }
+        .import-card.active::before { opacity: 1; }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .card-title-area { display: flex; align-items: center; gap: 12px; }
+        .card-icon {
+            width: 40px; height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        .card-icon.leads { background: var(--info-dim); }
+        .card-icon.appointments { background: var(--success-dim); }
+        .card-icon.provisions { background: var(--warning-dim); }
+        .card-icon.closed { background: var(--error-dim); }
+
+        .card-title { font-size: 16px; font-weight: 600; color: var(--text-bright); }
+        .card-desc { font-size: 13px; color: var(--text-dim); }
+
+        .card-badge {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+        .badge-ready { background: var(--success-dim); color: var(--success); }
+        .badge-empty { background: rgba(255,255,255,0.05); color: var(--text-dim); }
+        .badge-importing { background: var(--accent-dim); color: var(--accent); }
+        .badge-done { background: var(--success-dim); color: var(--success); }
+        .badge-error { background: var(--error-dim); color: var(--error); }
+
+        /* Drop Zone */
+        .drop-zone {
+            border: 2px dashed rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 12px;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+        .drop-zone-text {
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+        .drop-zone-text strong { color: var(--accent); }
+        .drop-zone input { display: none; }
+
+        /* File Info */
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+        .file-icon { font-size: 20px; }
+        .file-details { flex: 1; }
+        .file-name { font-size: 13px; font-weight: 500; color: var(--text-bright); }
+        .file-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+        .file-remove {
+            background: none; border: none; color: var(--text-dim);
+            cursor: pointer; padding: 4px; font-size: 16px;
+            transition: color 0.2s;
+        }
+        .file-remove:hover { color: var(--error); }
+
+        /* Progress */
+        .progress-bar {
+            height: 4px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 2px;
+            margin-top: 16px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #ffd84d);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 6px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: #000;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #ffd84d;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(245, 197, 0, 0.3);
+        }
+        .btn-primary:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .btn-outline {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .btn-outline:hover {
+            border-color: var(--border-accent);
+            color: var(--accent);
+        }
+        .btn-danger {
+            background: var(--error-dim);
+            color: var(--error);
+            border: 1px solid rgba(239,68,68,0.2);
+        }
+        .btn-danger:hover {
+            background: rgba(239,68,68,0.25);
+        }
+
+        .action-bar {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        /* Import Log */
+        .log-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 24px;
+        }
+        .log-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-bright);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .log-entries { display: flex; flex-direction: column; gap: 8px; }
+        .log-entry {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            font-size: 13px;
+        }
+        .log-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .log-dot.success { background: var(--success); }
+        .log-dot.error { background: var(--error); }
+        .log-dot.pending { background: var(--text-dim); }
+        .log-time { color: var(--text-dim); font-size: 11px; min-width: 60px; }
+        .log-msg { color: var(--text); flex: 1; }
+        .log-count { color: var(--accent); font-weight: 600; }
+
+        .log-empty {
+            text-align: center;
+            padding: 32px;
+            color: var(--text-dim);
+            font-size: 13px;
+        }
+
+        /* Result Summary */
+        .result-summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .result-item {
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .result-item.new { background: var(--success-dim); }
+        .result-item.updated { background: var(--info-dim); }
+        .result-item.errors { background: var(--error-dim); }
+        .result-num { font-size: 20px; font-weight: 700; }
+        .result-item.new .result-num { color: var(--success); }
+        .result-item.updated .result-num { color: var(--info); }
+        .result-item.errors .result-num { color: var(--error); }
+        .result-label { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+        /* Spinner */
+        .spinner {
+            width: 16px; height: 16px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: inline-block;
+        }
+
+        /* Setup Banner */
+        .setup-banner {
+            background: linear-gradient(135deg, rgba(245, 197, 0, 0.08), rgba(245, 197, 0, 0.02));
+            border: 1px solid var(--border-accent);
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .setup-icon { font-size: 24px; }
+        .setup-text { flex: 1; }
+        .setup-text h3 { font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+        .setup-text p { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main { padding: 16px; }
+            .stats-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .import-grid { grid-template-columns: 1fr; }
+            .header { padding: 16px; flex-wrap: wrap; gap: 8px; }
+            .header .subtitle { display: none; }
+            .stat-value { font-size: 22px; }
+            .result-summary { grid-template-columns: 1fr; }
+            .action-bar { flex-direction: column; }
+        }
+        @media (max-width: 480px) {
+            .stats-row { grid-template-columns: 1fr; }
+            .card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // ─── CONFIG ──────────────────────────────────────────────────────
+        const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+        const BATCH_SIZE = 50; // Rows per upsert batch
+
+        const sb = (table) => `${SUPABASE_URL}/rest/v1/${table}`;
+        const headers = (extra = {}) => ({
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation',
+            ...extra
+        });
+
+        // ─── CSV Parser ──────────────────────────────────────────────────
+        function parseCSV(text) {
+            const lines = [];
+            let current = '';
+            let inQuote = false;
+            
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (ch === '"') {
+                    if (inQuote && text[i+1] === '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuote = !inQuote;
+                    }
+                } else if ((ch === '\n' || ch === '\r') && !inQuote) {
+                    if (current.length > 0 || lines.length > 0) {
+                        lines.push(current);
+                        current = '';
+                    }
+                    if (ch === '\r' && text[i+1] === '\n') i++;
+                } else {
+                    current += ch;
+                }
+            }
+            if (current.length > 0) lines.push(current);
+
+            const splitRow = (line) => {
+                const cells = [];
+                let cell = '';
+                let inQ = false;
+                for (let i = 0; i < line.length; i++) {
+                    const c = line[i];
+                    if (c === '"') {
+                        if (inQ && line[i+1] === '"') { cell += '"'; i++; }
+                        else inQ = !inQ;
+                    } else if (c === ',' && !inQ) {
+                        cells.push(cell.trim());
+                        cell = '';
+                    } else {
+                        cell += c;
+                    }
+                }
+                cells.push(cell.trim());
+                return cells;
+            };
+
+            if (lines.length === 0) return [];
+            const headerLine = lines[0].replace(/^\uFEFF/, '');
+            const headerCells = splitRow(headerLine);
+            
+            return lines.slice(1).map(line => {
+                const cells = splitRow(line);
+                const obj = {};
+                headerCells.forEach((h, i) => {
+                    obj[h] = cells[i] || '';
+                });
+                return obj;
+            });
+        }
+
+        // ─── CSV to DB Mapping ───────────────────────────────────────────
+        function mapLeadRow(row) {
+            const parseIntSafe = (v) => { const n = parseInt(v); return isNaN(n) ? 0 : n; };
+            return {
+                lead_id: parseInt(row['Lead ID']),
+                leadstatus: row['Leadstatus'] || null,
+                mitarbeiter: row['Mitarbeiter/Berater'] || null,
+                indikator: row['Indikator'] || null,
+                letzter_bearbeitungsstatus: row['LetzterBearbeitungsstatus'] || null,
+                projektstatus: row['Projektstatus'] || null,
+                anrede: row['Anrede'] || null,
+                vorname: row['Vorname'] || null,
+                nachname: row['Nachname'] || null,
+                name: row['Name'] || null,
+                firma: row['Firma'] || null,
+                strasse: row['Strasse'] || null,
+                hausnummer: row['Hausnummer'] || null,
+                plz: row['PLZ'] || null,
+                ort: row['Ort'] || null,
+                telefon: row['Telefon'] || null,
+                mobil: row['Mobil'] || null,
+                email: row['E-Mail'] || null,
+                quelle: row['Quelle'] || null,
+                projekt: row['Projekt'] || null,
+                gruppe: row['Gruppe'] || null,
+                anmerkung: row['Anmerkung'] || null,
+                tags: row['Tags'] || null,
+                erreichbarkeit: row['Erreichbarkeit'] || null,
+                nicht_erreicht: parseIntSafe(row['Nicht erreicht']?.replace(/[^0-9]/g, '')),
+                rueckruf: row['Rückruf'] || null,
+                importiert: row['Importiert'] || null,
+                verifizierung: row['Verifizierung'] || null,
+                aktive_wiedervorlagen: parseIntSafe(row['Aktive Wiedervorlagen']),
+                mvpp_name: row['MVPP-Name'] || null,
+                mvpp_id: row['MVPP-ID'] || null,
+                qualitaetscall: row['Qualitätscall'] || null,
+                qualitaetscall_notizen: row['Qualitätscall Notizen'] || null,
+                externe_lead_id: row['externeLeadID'] || null,
+                externe_lead_id_2: row['externeLeadID 2'] || null,
+                externe_lead_id_3: row['externeLeadID 3'] || null,
+                zuweisungsstatus: row['Zuweisungsstatus'] || null,
+                qcells_zahlungsstatus: row['Q-CellsZahlungsstatus'] || null,
+                qcells_fortschritt: row['Q-CellsFortschritt'] || null,
+                lieferdatum: row['Lieferdatum'] || null,
+                auftragsbestaetigung: row['Auftragsbestätigung'] || null,
+                slots_verfuegbar: row['Slots verfügbar'] || null,
+                importierte_medien: parseIntSafe(row['ImportierteMedien']),
+                datum_qualifiziert: row['Datum Qualifiziert'] || null,
+                datum_abgeschlossen: row['Datumabgeschlossen'] || null,
+                datum_importiert: row['Datumimportiert'] || null,
+            };
+        }
+
+        function mapAppointmentRow(row, csvQuelle) {
+            return {
+                termin_id: parseInt(row['TerminID']),
+                lead_id: parseInt(row['LEADID']) || null,
+                extern_id: row['EXTERNID'] || null,
+                csv_quelle: csvQuelle,
+                leadquelle: row['Leadquelle'] || null,
+                mvpp_name: row['MVPP - NAME'] || null,
+                mvpp_id: row['MVPP - ID'] || null,
+                leadkunde: row['Leadkunde'] || null,
+                leadadresse: row['Leadadresse'] || null,
+                terminiert_von: row['Terminiertvon'] || null,
+                terminiert_an_name: row['Terminiert anName'] || null,
+                terminiert_an_email: row['Terminiert anE-Mail'] || null,
+                terminstatus: row['Terminstatus'] || null,
+                aktueller_status: row['AktuellerStatus'] || null,
+                angebotsstatus: row['Angebotsstatus'] || null,
+                angebot_angenommen: row['Angebot angenommen'] || null,
+                provisionsstatus: row['Provisionsstatus'] || null,
+                terminausfall_begruendung: row['TerminausfallBegründung'] || null,
+                abschlussstatus: row['Abschlussstatus'] || null,
+                abschlussbemerkung: row['Abschlussbemerkung'] || null,
+                bestaetigt_durch: row['Bestätigt Durch'] || null,
+                indikator: row['Indikator'] || null,
+                datum_terminerstellung: row['DatumTerminerstellung'] || null,
+                datum_termin_beginn: row['DatumTermin Beginn'] || null,
+                datum_termin_ende: row['DatumTermin Ende'] || null,
+                datum_abgeschlossen: row['DatumAbgeschlossen'] || null,
+                datum_bestaetigt_partner: row['DatumBestätigt Partner'] || null,
+                datum_bestaetigt_kunde: row['DatumBestätigt Kunde'] || null,
+            };
+        }
+
+        function mapProvisionRow(row) {
+            return {
+                an_nr: parseInt(row['AN Nr.']),
+                lead_id: parseInt(row['Lead ID']) || null,
+                auftragsstatus: row['Auftragsstatus'] || null,
+                typ: row['Typ'] || null,
+                speichererweiterung: row['Speichererweiterung'] || null,
+                dokumentstatus: row['Dokumentstatus'] || null,
+                beedoo_fortschritt: row['BeeDooFortschritt'] || null,
+                workflow_history: row['WorkflowHistory'] || null,
+                ablehnung_freigabe_grund: row['Ablehnung FreigabeGrund'] || null,
+                angebot_erstellt_von: row['Angebot erstellt von'] || null,
+                kundenberater: row['Kundenberater'] || null,
+                vp_nummer: row['VP Nummer'] || null,
+                mvpp_id: row['MVPP-ID'] || null,
+                mvpp_name: row['MVPP-Name'] || null,
+                termine_agenten: row['Termine Agenten'] || null,
+                termine_berater: row['Termine Berater'] || null,
+                kunde: row['Kunde'] || null,
+                kunde_plz: row['Kunde PLZ'] || null,
+                kundennummer: row['Kundennummer'] || null,
+                quelle: row['Quelle'] || null,
+                an_wert_netto: row['AN-WertNetto'] || null,
+                auszahlungsrelevant: row['Auszahlungsrelevant'] || null,
+                ausgezahlt_am: row['Ausgezahlt am'] || null,
+                efs_prozent: row['EFS %'] || null,
+                finanzierung_gewuenscht: row['Finanzierung gewünscht'] || null,
+                angebot_kwp: row['Angebot KWP'] || null,
+                angebot_module: row['Angebot Module'] || null,
+                angebot_solarmodule: row['Angebot Solarmodule'] || null,
+                angebot_batteriekapazitaet: row['Angebot Batteriekapazität Gesamt'] || null,
+                metrify: row['Metrify'] || null,
+                lieferdatum: row['Lieferdatum'] || null,
+                auftragsbestaetigung: row['Auftragsbestätigung'] || null,
+                datum_erstellt: row['DatumErstellt'] || null,
+                datum_an_kunde_gesendet: row['DatumAn Kunde gesendet'] || null,
+                datum_gelesen: row['DatumGelesen'] || null,
+                datum_angenommen: row['DatumAngenommen'] || null,
+                zeit_vergangen: row['Zeit vergangennach Kundenbenachrichtigung'] || null,
+            };
+        }
+
+        // ─── Supabase Upsert ──────────────────────────────────────────────
+        async function upsertBatch(table, rows, conflictCol, onProgress) {
+            let inserted = 0, updated = 0, errors = 0;
+            const errorDetails = [];
+
+            for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+                const batch = rows.slice(i, i + BATCH_SIZE);
+                try {
+                    const res = await fetch(sb(table), {
+                        method: 'POST',
+                        headers: headers({
+                            'Prefer': 'resolution=merge-duplicates,return=representation'
+                        }),
+                        body: JSON.stringify(batch)
+                    });
+
+                    if (!res.ok) {
+                        const err = await res.text();
+                        errors += batch.length;
+                        errorDetails.push({ batch: Math.floor(i/BATCH_SIZE)+1, error: err });
+                    } else {
+                        const data = await res.json();
+                        // Count: if id is new (created_at == updated_at) = new, else updated
+                        data.forEach(r => {
+                            if (r.created_at === r.updated_at) inserted++;
+                            else updated++;
+                        });
+                    }
+                } catch(e) {
+                    errors += batch.length;
+                    errorDetails.push({ batch: Math.floor(i/BATCH_SIZE)+1, error: e.message });
+                }
+                onProgress && onProgress(Math.min(i + BATCH_SIZE, rows.length), rows.length);
+            }
+
+            return { inserted, updated, errors, errorDetails };
+        }
+
+        // ─── File Type Detection ─────────────────────────────────────────
+        function detectCSVType(headerKeys) {
+            const h = headerKeys.join(',').toLowerCase();
+            if (h.includes('lead id') && h.includes('leadstatus') && h.includes('mvpp-name')) return 'leads';
+            if (h.includes('terminid') && h.includes('leadid') && h.includes('abschlussstatus')) {
+                // Distinguish created vs closed by checking for data patterns
+                return 'appointments'; // Will be further split
+            }
+            if (h.includes('an nr.') && h.includes('auftragsstatus') && h.includes('an-wertnetto')) return 'provisions';
+            return 'unknown';
+        }
+
+        function detectAppointmentSubtype(filename) {
+            const fn = filename.toLowerCase();
+            if (fn.includes('closed')) return 'closed';
+            if (fn.includes('created')) return 'created';
+            return 'created'; // default
+        }
+
+        // ─── COMPONENTS ──────────────────────────────────────────────────
+        const CSV_TYPES = [
+            { key: 'leads', label: 'Leads Incoming', icon: '📋', desc: 'Eingehende Leads mit Kontaktdaten & Status', color: 'leads', table: 'import_leads', conflict: 'lead_id' },
+            { key: 'appointments_created', label: 'Termine (Erstellt)', icon: '📅', desc: 'Alle erstellten Termine inkl. offener', color: 'appointments', table: 'import_appointments', conflict: 'termin_id,csv_quelle' },
+            { key: 'appointments_closed', label: 'Termine (Abgeschlossen)', icon: '✅', desc: 'Abgeschlossene & ausgefallene Termine', color: 'closed', table: 'import_appointments', conflict: 'termin_id,csv_quelle' },
+            { key: 'provisions', label: 'Provisionsrelevant', icon: '💰', desc: 'Aufträge mit Workflow, Finanzen & Montage', color: 'provisions', table: 'import_provisions', conflict: 'an_nr' },
+        ];
+
+        function App() {
+            const [files, setFiles] = useState({});
+            const [importing, setImporting] = useState(null);
+            const [progress, setProgress] = useState({});
+            const [results, setResults] = useState({});
+            const [logs, setLogs] = useState([]);
+            const [dbCounts, setDbCounts] = useState({ leads: 0, appointments: 0, provisions: 0, logs: 0 });
+            const [tablesExist, setTablesExist] = useState(null);
+
+            // Check if tables exist
+            useEffect(() => {
+                checkTables();
+            }, []);
+
+            const checkTables = async () => {
+                try {
+                    const checks = await Promise.all([
+                        fetch(sb('import_leads') + '?select=id&limit=1', { headers: headers() }),
+                        fetch(sb('import_appointments') + '?select=id&limit=1', { headers: headers() }),
+                        fetch(sb('import_provisions') + '?select=id&limit=1', { headers: headers() }),
+                        fetch(sb('import_logs') + '?select=id&limit=1', { headers: headers() }),
+                    ]);
+                    const allOk = checks.every(r => r.ok);
+                    setTablesExist(allOk);
+                    if (allOk) loadCounts();
+                } catch {
+                    setTablesExist(false);
+                }
+            };
+
+            const loadCounts = async () => {
+                try {
+                    const countFetch = async (table) => {
+                        const res = await fetch(sb(table) + '?select=id&limit=0', {
+                            headers: { ...headers(), 'Prefer': 'count=exact' }
+                        });
+                        const range = res.headers.get('content-range');
+                        return range ? parseInt(range.split('/')[1]) || 0 : 0;
+                    };
+                    const [leads, appointments, provisions, logCount] = await Promise.all([
+                        countFetch('import_leads'),
+                        countFetch('import_appointments'),
+                        countFetch('import_provisions'),
+                        countFetch('import_logs'),
+                    ]);
+                    setDbCounts({ leads, appointments, provisions, logs: logCount });
+                } catch(e) {
+                    console.error('Count error:', e);
+                }
+            };
+
+            const addLog = (msg, status = 'success') => {
+                setLogs(prev => [{
+                    time: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    msg, status, id: Date.now()
+                }, ...prev].slice(0, 50));
+            };
+
+            const handleFile = (csvType, file) => {
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const text = e.target.result;
+                    const rows = parseCSV(text);
+                    setFiles(prev => ({
+                        ...prev,
+                        [csvType]: { file, rows, rowCount: rows.length, name: file.name, size: file.size }
+                    }));
+                    addLog(`${file.name} geladen: ${rows.length.toLocaleString('de-DE')} Zeilen`, 'success');
+                };
+                reader.readAsText(file, 'UTF-8');
+            };
+
+            const removeFile = (csvType) => {
+                setFiles(prev => {
+                    const next = { ...prev };
+                    delete next[csvType];
+                    return next;
+                });
+                setResults(prev => {
+                    const next = { ...prev };
+                    delete next[csvType];
+                    return next;
+                });
+            };
+
+            const importSingle = async (csvTypeKey) => {
+                const csvType = CSV_TYPES.find(t => t.key === csvTypeKey);
+                const fileData = files[csvTypeKey];
+                if (!fileData || !csvType) return;
+
+                setImporting(csvTypeKey);
+                setProgress(prev => ({ ...prev, [csvTypeKey]: { current: 0, total: fileData.rowCount } }));
+                addLog(`Import gestartet: ${csvType.label} (${fileData.rowCount.toLocaleString('de-DE')} Zeilen)`, 'pending');
+
+                const batchId = crypto.randomUUID();
+
+                try {
+                    let mappedRows;
+                    if (csvTypeKey === 'leads') {
+                        mappedRows = fileData.rows.map(mapLeadRow).filter(r => !isNaN(r.lead_id));
+                    } else if (csvTypeKey === 'appointments_created') {
+                        mappedRows = fileData.rows.map(r => mapAppointmentRow(r, 'created')).filter(r => !isNaN(r.termin_id));
+                    } else if (csvTypeKey === 'appointments_closed') {
+                        mappedRows = fileData.rows.map(r => mapAppointmentRow(r, 'closed')).filter(r => !isNaN(r.termin_id));
+                    } else if (csvTypeKey === 'provisions') {
+                        mappedRows = fileData.rows.map(mapProvisionRow).filter(r => !isNaN(r.an_nr));
+                    }
+
+                    // Add batch_id
+                    mappedRows = mappedRows.map(r => ({ ...r, import_batch_id: batchId }));
+
+                    const result = await upsertBatch(
+                        csvType.table,
+                        mappedRows,
+                        csvType.conflict,
+                        (current, total) => setProgress(prev => ({ ...prev, [csvTypeKey]: { current, total } }))
+                    );
+
+                    setResults(prev => ({ ...prev, [csvTypeKey]: result }));
+                    addLog(`✓ ${csvType.label}: ${result.inserted} neu, ${result.updated} aktualisiert${result.errors > 0 ? `, ${result.errors} Fehler` : ''}`, result.errors > 0 ? 'error' : 'success');
+
+                    // Log to import_logs
+                    await fetch(sb('import_logs'), {
+                        method: 'POST',
+                        headers: headers(),
+                        body: JSON.stringify({
+                            batch_id: batchId,
+                            csv_typ: csvTypeKey,
+                            dateiname: fileData.name,
+                            zeilen_gesamt: fileData.rowCount,
+                            zeilen_neu: result.inserted,
+                            zeilen_aktualisiert: result.updated,
+                            zeilen_fehler: result.errors,
+                            fehler_details: result.errorDetails.length > 0 ? result.errorDetails : null,
+                            finished_at: new Date().toISOString()
+                        })
+                    });
+
+                    loadCounts();
+                } catch(e) {
+                    addLog(`✗ ${csvType.label}: ${e.message}`, 'error');
+                    setResults(prev => ({ ...prev, [csvTypeKey]: { inserted: 0, updated: 0, errors: fileData.rowCount, errorDetails: [{ error: e.message }] } }));
+                }
+                setImporting(null);
+            };
+
+            const importAll = async () => {
+                const order = ['leads', 'appointments_created', 'appointments_closed', 'provisions'];
+                for (const key of order) {
+                    if (files[key]) {
+                        await importSingle(key);
+                    }
+                }
+            };
+
+            const clearAllData = async () => {
+                if (!confirm('⚠️ Alle Import-Daten löschen? (import_leads, import_appointments, import_provisions, import_logs)')) return;
+                addLog('Lösche alle Daten...', 'pending');
+                try {
+                    for (const t of ['import_leads', 'import_appointments', 'import_provisions', 'import_logs']) {
+                        await fetch(sb(t) + '?id=gte.0', {
+                            method: 'DELETE',
+                            headers: headers({ 'Prefer': 'return=minimal' })
+                        });
+                    }
+                    // Also delete UUID-based import_logs
+                    await fetch(sb('import_logs') + '?batch_id=neq.00000000-0000-0000-0000-000000000000', {
+                        method: 'DELETE',
+                        headers: headers({ 'Prefer': 'return=minimal' })
+                    });
+                    addLog('✓ Alle Daten gelöscht', 'success');
+                    setResults({});
+                    loadCounts();
+                } catch(e) {
+                    addLog(`✗ Fehler beim Löschen: ${e.message}`, 'error');
+                }
+            };
+
+            const fileCount = Object.keys(files).length;
+            const hasResults = Object.keys(results).length > 0;
+
+            return (
+                <React.Fragment>
+                    <div className="header">
+                        <div className="header-left">
+                            <div className="logo">bee-doo <span>| Daten-Import Hub</span></div>
+                            <div className="subtitle">CSV → Supabase mit Duplikat-Erkennung</div>
+                        </div>
+                        <div className="header-right">
+                            <a href="https://bee-doo-tools.vercel.app/" className="back-link">← Toolbox</a>
+                        </div>
+                    </div>
+
+                    <div className="main">
+                        {tablesExist === false && (
+                            <div className="setup-banner slide-up">
+                                <div className="setup-icon">⚠️</div>
+                                <div className="setup-text">
+                                    <h3>Tabellen noch nicht erstellt</h3>
+                                    <p>Bitte führe das SQL-Schema im Supabase SQL Editor aus, bevor du Daten importierst. Die Tabellen import_leads, import_appointments, import_provisions und import_logs müssen zuerst angelegt werden.</p>
+                                </div>
+                                <a href="https://supabase.com/dashboard/project/hqzpemfaljxcysyqssng/sql/new" target="_blank" className="btn btn-primary" style={{whiteSpace: 'nowrap'}}>SQL Editor öffnen →</a>
+                            </div>
+                        )}
+
+                        {/* Stats */}
+                        <div className="stats-row fade-in">
+                            <div className="stat-card">
+                                <div className="stat-label">Leads in DB</div>
+                                <div className="stat-value">{dbCounts.leads.toLocaleString('de-DE')}</div>
+                                <div className="stat-sub">import_leads</div>
+                            </div>
+                            <div className="stat-card">
+                                <div className="stat-label">Termine in DB</div>
+                                <div className="stat-value">{dbCounts.appointments.toLocaleString('de-DE')}</div>
+                                <div className="stat-sub">import_appointments</div>
+                            </div>
+                            <div className="stat-card">
+                                <div className="stat-label">Aufträge in DB</div>
+                                <div className="stat-value">{dbCounts.provisions.toLocaleString('de-DE')}</div>
+                                <div className="stat-sub">import_provisions</div>
+                            </div>
+                            <div className="stat-card">
+                                <div className="stat-label">Imports</div>
+                                <div className="stat-value">{dbCounts.logs}</div>
+                                <div className="stat-sub">import_logs</div>
+                            </div>
+                        </div>
+
+                        {/* Import Cards */}
+                        <div className="import-grid">
+                            {CSV_TYPES.map(csvType => (
+                                <ImportCard
+                                    key={csvType.key}
+                                    csvType={csvType}
+                                    fileData={files[csvType.key]}
+                                    isImporting={importing === csvType.key}
+                                    progressData={progress[csvType.key]}
+                                    result={results[csvType.key]}
+                                    onFile={(f) => handleFile(csvType.key, f)}
+                                    onRemove={() => removeFile(csvType.key)}
+                                    onImport={() => importSingle(csvType.key)}
+                                    tablesExist={tablesExist}
+                                />
+                            ))}
+                        </div>
+
+                        {/* Action Bar */}
+                        <div className="action-bar">
+                            <button
+                                className="btn btn-primary"
+                                disabled={fileCount === 0 || importing !== null || !tablesExist}
+                                onClick={importAll}
+                            >
+                                {importing ? <React.Fragment><span className="spinner" /> Importiert...</React.Fragment> : <React.Fragment>🚀 Alle importieren ({fileCount} Dateien)</React.Fragment>}
+                            </button>
+                            <button className="btn btn-outline" onClick={loadCounts}>
+                                🔄 Zähler aktualisieren
+                            </button>
+                            <button className="btn btn-danger" onClick={clearAllData} disabled={importing !== null}>
+                                🗑 Alle Daten löschen
+                            </button>
+                        </div>
+
+                        {/* Log */}
+                        <div className="log-section" style={{ marginTop: 24 }}>
+                            <div className="log-title">📊 Import-Log</div>
+                            {logs.length === 0 ? (
+                                <div className="log-empty">Noch keine Aktivität. Lade CSV-Dateien hoch, um den Import zu starten.</div>
+                            ) : (
+                                <div className="log-entries">
+                                    {logs.map(log => (
+                                        <div key={log.id} className="log-entry fade-in">
+                                            <div className={`log-dot ${log.status}`} />
+                                            <div className="log-time">{log.time}</div>
+                                            <div className="log-msg">{log.msg}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </React.Fragment>
+            );
+        }
+
+        function ImportCard({ csvType, fileData, isImporting, progressData, result, onFile, onRemove, onImport, tablesExist }) {
+            const dropRef = useRef(null);
+            const inputRef = useRef(null);
+            const [dragover, setDragover] = useState(false);
+
+            const handleDrop = (e) => {
+                e.preventDefault();
+                setDragover(false);
+                const f = e.dataTransfer.files[0];
+                if (f && f.name.endsWith('.csv')) onFile(f);
+            };
+
+            const getBadge = () => {
+                if (isImporting) return <span className="card-badge badge-importing"><span className="spinner" style={{width:10,height:10,borderWidth:1.5,marginRight:4}}/> Importiert</span>;
+                if (result && result.errors > 0 && result.inserted === 0) return <span className="card-badge badge-error">Fehler</span>;
+                if (result) return <span className="card-badge badge-done">✓ Fertig</span>;
+                if (fileData) return <span className="card-badge badge-ready">Bereit</span>;
+                return <span className="card-badge badge-empty">Keine Datei</span>;
+            };
+
+            const pct = progressData ? Math.round((progressData.current / progressData.total) * 100) : 0;
+
+            return (
+                <div className={`import-card ${fileData ? 'active' : ''}`}>
+                    <div className="card-header">
+                        <div className="card-title-area">
+                            <div className={`card-icon ${csvType.color}`}>{csvType.icon}</div>
+                            <div>
+                                <div className="card-title">{csvType.label}</div>
+                                <div className="card-desc">{csvType.desc}</div>
+                            </div>
+                        </div>
+                        {getBadge()}
+                    </div>
+
+                    {!fileData ? (
+                        <div
+                            className={`drop-zone ${dragover ? 'dragover' : ''}`}
+                            onDragOver={(e) => { e.preventDefault(); setDragover(true); }}
+                            onDragLeave={() => setDragover(false)}
+                            onDrop={handleDrop}
+                            onClick={() => inputRef.current?.click()}
+                        >
+                            <div className="drop-zone-text">
+                                CSV hierher ziehen oder <strong>klicken</strong>
+                            </div>
+                            <input
+                                ref={inputRef}
+                                type="file"
+                                accept=".csv"
+                                onChange={(e) => onFile(e.target.files[0])}
+                            />
+                        </div>
+                    ) : (
+                        <React.Fragment>
+                            <div className="file-info">
+                                <div className="file-icon">📄</div>
+                                <div className="file-details">
+                                    <div className="file-name">{fileData.name}</div>
+                                    <div className="file-meta">
+                                        {fileData.rowCount.toLocaleString('de-DE')} Zeilen · {(fileData.size / 1024).toFixed(0)} KB
+                                    </div>
+                                </div>
+                                {!isImporting && (
+                                    <button className="file-remove" onClick={onRemove}>✕</button>
+                                )}
+                            </div>
+
+                            {isImporting && progressData && (
+                                <React.Fragment>
+                                    <div className="progress-bar">
+                                        <div className="progress-fill" style={{ width: `${pct}%` }} />
+                                    </div>
+                                    <div className="progress-text">
+                                        <span>{progressData.current.toLocaleString('de-DE')} / {progressData.total.toLocaleString('de-DE')}</span>
+                                        <span>{pct}%</span>
+                                    </div>
+                                </React.Fragment>
+                            )}
+
+                            {result && (
+                                <div className="result-summary">
+                                    <div className="result-item new">
+                                        <div className="result-num">{result.inserted.toLocaleString('de-DE')}</div>
+                                        <div className="result-label">Neu</div>
+                                    </div>
+                                    <div className="result-item updated">
+                                        <div className="result-num">{result.updated.toLocaleString('de-DE')}</div>
+                                        <div className="result-label">Aktualisiert</div>
+                                    </div>
+                                    <div className="result-item errors">
+                                        <div className="result-num">{result.errors.toLocaleString('de-DE')}</div>
+                                        <div className="result-label">Fehler</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!isImporting && !result && (
+                                <button
+                                    className="btn btn-primary"
+                                    style={{ width: '100%', marginTop: 12, justifyContent: 'center' }}
+                                    onClick={onImport}
+                                    disabled={!tablesExist}
+                                >
+                                    ⚡ Jetzt importieren
+                                </button>
+                            )}
+                        </React.Fragment>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
