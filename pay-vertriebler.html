@@ -148,7 +148,12 @@ function calcProv(auftr, name) {
         else if (q === 'Empfehlung') emB += BONI.Empfehlung[typ];
     });
     const boniGes = spB + elB + emB;
-    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, total: staffGes + boniGes, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, totalCnt: auftr.length, ab8: cnt >= st.schwelle };
+    let zeroBonus = 0;
+    if (typ === 'HGB') {
+        if (cnt >= 15) zeroBonus = 5000;
+        else if (cnt >= 10) zeroBonus = 2000;
+    }
+    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, total: staffGes + boniGes + zeroBonus, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, totalCnt: auftr.length, ab8: cnt >= st.schwelle };
 }
 
 function App() {
@@ -264,8 +269,9 @@ function App() {
                         {det.spB > 0 && <BonusLine label="Speichererweiterung" val={det.spB} color="#a78bfa"/>}
                         {det.elB > 0 && <BonusLine label="Eigenlead" val={det.elB} color="#48bb78"/>}
                         {det.emB > 0 && <BonusLine label="Empfehlung" val={det.emB} color="#63b3ed"/>}
-                        {det.boniGes === 0 && <div style={{fontSize:13,color:'#4a5568'}}>Keine Boni</div>}
-                        <div style={{fontSize:20,fontWeight:700,color:'#fff',marginTop:8}}>{euro(det.boniGes)}</div>
+                        {det.zeroBonus > 0 && <BonusLine label={det.cnt>=15?'Zero-Bonus (10+15)':'Zero-Bonus (10)'} val={det.zeroBonus} color="#f6ad55"/>}
+                        {det.boniGes === 0 && det.zeroBonus === 0 && <div style={{fontSize:13,color:'#4a5568'}}>Keine Boni</div>}
+                        <div style={{fontSize:20,fontWeight:700,color:'#fff',marginTop:8}}>{euro(det.boniGes + det.zeroBonus)}</div>
                     </div>
                 </div>
 
@@ -401,6 +407,7 @@ function VTCard({d,idx,onClick}) {
                 {d.spB>0 && <MTag label="Speicher" val={'+'+euro(d.spB)} c="#a78bfa"/>}
                 {d.elB>0 && <MTag label="Eigenlead" val={'+'+euro(d.elB)} c="#48bb78"/>}
                 {d.emB>0 && <MTag label="Empfehlung" val={'+'+euro(d.emB)} c="#63b3ed"/>}
+                {d.zeroBonus>0 && <MTag label="Zero" val={'+'+euro(d.zeroBonus)} c="#f6ad55"/>}
             </div>
         </div>
     );
