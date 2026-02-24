@@ -124,12 +124,13 @@ function euro(n) {
     return n.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0}) + ' €';
 }
 
-function calcProv(auftr, name, selectedMonth, allCsv) {
+function calcProv(auftr, name, selectedMonth, allCsv, exclANs) {
     const typ = VT_TYPEN[name]; if (!typ) return null;
     const provRelevant = auftr.filter(a => 
         (a['Auszahlungsrelevant']||'').trim() === 'Ja' && 
         (a['Auftragsstatus']||'').trim() !== 'Storniert' &&
-        !(a['Ausgezahlt am']||'').trim()
+        !(a['Ausgezahlt am']||'').trim() &&
+        !(exclANs && exclANs.has((a['AN Nr.']||'').trim()))
     );
     const storniert = auftr.filter(a => (a['Auftragsstatus']||'').trim() === 'Storniert');
     const bereitsAusgezahlt = auftr.filter(a => 
@@ -180,6 +181,7 @@ function calcProv(auftr, name, selectedMonth, allCsv) {
         // Alle positiven Sales aller Vertriebler im aktuellen Monat
         let curSales = 0;
         allCsv.forEach(r => {
+            if (exclANs && exclANs.has(r['AN Nr.']?.trim())) return;
             if ((r['Auszahlungsrelevant']||'').trim() === 'Ja' && (r['Auftragsstatus']||'').trim() !== 'Storniert') {
                 if (monthKey(r['DatumErstellt']) === selectedMonth) curSales++;
             }
@@ -198,6 +200,7 @@ function App() {
     const [selVT, setSelVT] = React.useState(null);
     const [search, setSearch] = React.useState('');
     const [showDups, setShowDups] = React.useState(false);
+    const [excludedANs, setExcludedANs] = React.useState(new Set());
 
     function onFile(e) {
         const f = e.target.files[0]; if (!f) return;
@@ -266,7 +269,7 @@ function App() {
         d.forEach(r => { const n = r['Kundenberater']?.trim(); if (!n) return; if (!grp[n]) grp[n]=[]; grp[n].push(r); });
         const res = [];
         Object.keys(VT_TYPEN).forEach(n => {
-            const p = calcProv(grp[n]||[], n, selMonth, csv);
+            const p = calcProv(grp[n]||[], n, selMonth, csv, excludedANs);
             if (p) res.push({ name:n, ...p });
         });
         return res.filter(r => {
@@ -360,10 +363,11 @@ function App() {
                                     const isNR = (a['Auszahlungsrelevant']||'').trim() !== 'Ja';
                                     const isPaid = !!(a['Ausgezahlt am']||'').trim();
                                     const isDup = dupANSet.has(a['AN Nr.']);
-                                    const dimmed = isStor || isNR || isPaid;
+                                    const isExcluded = excludedANs.has((a['AN Nr.']||'').trim());
+                                    const dimmed = isStor || isNR || isPaid || isExcluded;
                                     return (
-                                    <tr key={i} style={{borderBottom:'1px solid #0f1015',opacity:dimmed?0.4:1,borderLeft:isDup?'3px solid #f59e0b':'3px solid transparent'}}>
-                                        <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#F5C500',fontWeight:600}}>{isDup&&'⚠️ '}{a['AN Nr.']}</td>
+                                    <tr key={i} style={{borderBottom:'1px solid #0f1015',opacity:dimmed?0.4:1,borderLeft:isDup&&!isExcluded?'3px solid #f59e0b':isExcluded?'3px solid #e53e3e':'3px solid transparent'}}>
+                                        <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#F5C500',fontWeight:600}}>{isDup&&!isExcluded&&'⚠️ '}{isExcluded&&'❌ '}{a['AN Nr.']}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#c8cfd8'}}>{a['Kunde']||'-'}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#c8cfd8',whiteSpace:'nowrap'}}>{a['Angebot KWP'] ? a['Angebot KWP'].trim()+' kWp' : '-'}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#fff',fontWeight:500,textDecoration:isStor?'line-through':'none'}}>{euro(nettoNum(a['AN-WertNetto']))}</td>
@@ -424,43 +428,71 @@ function App() {
             </div>
 
             {duplicates.length > 0 && (
-                <div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:12,padding:'14px 20px',marginBottom:20,cursor:'pointer'}}
-                    onClick={()=>setShowDups(!showDups)}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:12,padding:'14px 20px',marginBottom:20}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setShowDups(!showDups)}>
                         <div style={{display:'flex',alignItems:'center',gap:10}}>
                             <span style={{fontSize:18}}>⚠️</span>
-                            <span style={{fontSize:14,fontWeight:600,color:'#f59e0b'}}>{duplicates.length} mögliche Duplikate gefunden</span>
-                            <span style={{fontSize:12,color:'#8b95a5'}}>Gleicher Kunde + gleiche kWp + gleiche PLZ</span>
+                            <span style={{fontSize:14,fontWeight:600,color:'#f59e0b'}}>{duplicates.length} mögliche Duplikate</span>
+                            <span style={{fontSize:12,color:'#8b95a5'}}>{excludedANs.size > 0 ? `(${excludedANs.size} aussortiert)` : 'Bitte prüfen!'}</span>
                         </div>
-                        <span style={{fontSize:12,color:'#f59e0b',fontWeight:500}}>{showDups?'▲ Ausblenden':'▼ Anzeigen'}</span>
+                        <span style={{fontSize:12,color:'#f59e0b',fontWeight:500}}>{showDups?'▲ Ausblenden':'▼ Prüfen'}</span>
                     </div>
                     {showDups && (
-                        <div onClick={e=>e.stopPropagation()} style={{marginTop:16}}>
-                            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
-                                <thead><tr style={{borderBottom:'1px solid rgba(245,158,11,0.2)'}}>
-                                    {['Kunde','PLZ','kWp','AN-Nummern','Netto','VT','Status','AZ','Erstellt'].map(h=>(
-                                        <th key={h} style={{padding:'8px 10px',textAlign:'left',color:'#f59e0b',fontWeight:500,fontSize:12,whiteSpace:'nowrap'}}>{h}</th>
-                                    ))}
-                                </tr></thead>
-                                <tbody>
-                                    {duplicates.map((dup,di) => 
-                                        dup.auftraege.map((a,ai) => (
-                                            <tr key={di+'-'+ai} style={{borderBottom:'1px solid rgba(245,158,11,0.1)',background:ai===0&&di>0?'rgba(245,158,11,0.04)':'transparent',borderTop:ai===0&&di>0?'2px solid rgba(245,158,11,0.2)':'none'}}>
-                                                {ai===0 && <td rowSpan={dup.auftraege.length} style={{padding:'8px 10px',color:'#f59e0b',fontWeight:600,verticalAlign:'top'}}>{dup.kunde}</td>}
-                                                {ai===0 && <td rowSpan={dup.auftraege.length} style={{padding:'8px 10px',color:'#c8cfd8',verticalAlign:'top'}}>{dup.plz}</td>}
-                                                {ai===0 && <td rowSpan={dup.auftraege.length} style={{padding:'8px 10px',color:'#c8cfd8',verticalAlign:'top'}}>{dup.kwp}</td>}
-                                                <td style={{padding:'8px 10px',color:'#F5C500',fontWeight:600}}>{a['AN Nr.']}</td>
-                                                <td style={{padding:'8px 10px',color:'#fff'}}>{euro(nettoNum(a['AN-WertNetto']))}</td>
-                                                <td style={{padding:'8px 10px',color:'#c8cfd8'}}>{(a['Kundenberater']||'').trim()}</td>
-                                                <td style={{padding:'8px 10px',color:'#8b95a5',fontSize:12}}>{(a['Auftragsstatus']||'').trim()}</td>
-                                                <td style={{padding:'8px 10px'}}><span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:(a['Auszahlungsrelevant']||'').trim()!=='Ja'?'rgba(229,62,62,0.15)':'rgba(72,187,120,0.15)',color:(a['Auszahlungsrelevant']||'').trim()!=='Ja'?'#e53e3e':'#48bb78',fontWeight:500}}>{(a['Auszahlungsrelevant']||'').trim()||'Nein'}</span></td>
-                                                <td style={{padding:'8px 10px',color:'#8b95a5',whiteSpace:'nowrap'}}>{a['DatumErstellt']}</td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                            <div style={{marginTop:12,fontSize:12,color:'#8b95a5',fontStyle:'italic'}}>⚡ Bitte prüfen ob doppelte Aufträge. Duplikate werden in den Abrechnungen mit ⚠️ markiert.</div>
+                        <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:16}}>
+                            {duplicates.map((dup,di) => (
+                                <div key={di} style={{background:'rgba(0,0,0,0.3)',borderRadius:10,padding:16,border:'1px solid rgba(245,158,11,0.15)'}}>
+                                    <div style={{fontSize:14,fontWeight:700,color:'#f59e0b',marginBottom:12}}>{dup.kunde} <span style={{fontSize:12,fontWeight:400,color:'#8b95a5'}}>| PLZ {dup.plz} | {dup.kwp} kWp</span></div>
+                                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:12}}>
+                                        {dup.auftraege.map((a,ai) => {
+                                            const an = (a['AN Nr.']||'').trim();
+                                            const isExcl = excludedANs.has(an);
+                                            const isKept = dup.auftraege.some((other,oi) => oi !== ai && excludedANs.has((other['AN Nr.']||'').trim())) && !isExcl;
+                                            const bd = (a['BeeDooFortschritt']||'').trim();
+                                            const tb = (a['Termine Berater']||'').trim();
+                                            // Extract last meaningful status from Termine Berater
+                                            const tbShort = tb.replace(/Termintyp:/g, '\n🔹').replace(/Termin erstellt:/g, '📅').replace(/Abgeschlossen am/g, '✅').substring(0, 200);
+                                            return (
+                                                <div key={ai} style={{
+                                                    background: isExcl ? 'rgba(229,62,62,0.08)' : isKept ? 'rgba(72,187,120,0.08)' : '#12131a',
+                                                    border: isExcl ? '2px solid rgba(229,62,62,0.4)' : isKept ? '2px solid rgba(72,187,120,0.4)' : '1px solid #2a2d3a',
+                                                    borderRadius: 10, padding: 14, opacity: isExcl ? 0.5 : 1, position: 'relative'
+                                                }}>
+                                                    {isExcl && <div style={{position:'absolute',top:8,right:12,fontSize:11,fontWeight:600,color:'#e53e3e',background:'rgba(229,62,62,0.15)',padding:'2px 8px',borderRadius:4}}>❌ Entfernt</div>}
+                                                    {isKept && <div style={{position:'absolute',top:8,right:12,fontSize:11,fontWeight:600,color:'#48bb78',background:'rgba(72,187,120,0.15)',padding:'2px 8px',borderRadius:4}}>✅ Behalten</div>}
+                                                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                                                        <span style={{fontSize:16,fontWeight:700,color:'#F5C500'}}>AN {an}</span>
+                                                        <span style={{fontSize:14,fontWeight:600,color:'#fff'}}>{euro(nettoNum(a['AN-WertNetto']))}</span>
+                                                    </div>
+                                                    <div style={{fontSize:12,color:'#8b95a5',marginBottom:4}}>Erstellt: {a['DatumErstellt']} | Status: {(a['Auftragsstatus']||'').trim()}</div>
+                                                    <div style={{fontSize:12,color:'#8b95a5',marginBottom:8}}>VT: {(a['Kundenberater']||'').trim()} | AZ: {(a['Auszahlungsrelevant']||'').trim()}</div>
+                                                    <div style={{background:'rgba(255,255,255,0.04)',borderRadius:6,padding:'8px 10px',marginBottom:8}}>
+                                                        <div style={{fontSize:11,color:'#6b7280',marginBottom:4,fontWeight:600}}>BeeDoo Fortschritt</div>
+                                                        <div style={{fontSize:13,color:bd.includes('Doppelte')?'#f59e0b':bd.includes('Storniert')?'#e53e3e':'#c8cfd8',fontWeight:600}}>{bd || '–'}</div>
+                                                    </div>
+                                                    <div style={{background:'rgba(255,255,255,0.04)',borderRadius:6,padding:'8px 10px',marginBottom:10}}>
+                                                        <div style={{fontSize:11,color:'#6b7280',marginBottom:4,fontWeight:600}}>Termine Berater</div>
+                                                        <div style={{fontSize:11,color:'#8b95a5',lineHeight:1.5,maxHeight:80,overflow:'auto'}}>{tbShort || '–'}</div>
+                                                    </div>
+                                                    <div style={{display:'flex',gap:8}}>
+                                                        {!isExcl && !isKept && (
+                                                            <button onClick={() => {const s = new Set(excludedANs); s.add(an); setExcludedANs(s);}}
+                                                                style={{flex:1,padding:'8px',borderRadius:6,border:'1px solid rgba(229,62,62,0.4)',background:'rgba(229,62,62,0.1)',color:'#e53e3e',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans'}}>
+                                                                ❌ Entfernen
+                                                            </button>
+                                                        )}
+                                                        {isExcl && (
+                                                            <button onClick={() => {const s = new Set(excludedANs); s.delete(an); setExcludedANs(s);}}
+                                                                style={{flex:1,padding:'8px',borderRadius:6,border:'1px solid rgba(245,158,11,0.4)',background:'rgba(245,158,11,0.1)',color:'#f59e0b',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans'}}>
+                                                                ↩️ Wiederherstellen
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
