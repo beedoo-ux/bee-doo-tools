@@ -226,7 +226,19 @@ const VGROUPS=[{label:"Vertrieb",keys:["angebot_erstellt","hold","ac_board_manue
 const MFILTERS=[{id:"stau",label:"🔴 >14d",fn:c=>(c.days_in_stage||0)>14},{id:"warn",label:"🟡 >7d",fn:c=>(c.days_in_stage||0)>7},{id:"nach",label:"🔧 Nacharb.",fn:c=>c.stage_key?.includes("nach")},{id:"hold",label:"⏸ Hold",fn:c=>c.phase==="hold"},{id:"mont",label:"👷 Monteur",fn:c=>!!c.monteur_name},{id:"heute",label:"📅 Heute",fn:c=>c.is_today}];
 const isStorno=k=>k&&(k.includes("storniert")||k.includes("abgebrochen"));
 const SPECIAL_KEYS=["storniert","dc_storniert","dc_abgebrochen","ac_storniert","ac_abgebrochen","hold","dc_hold","ac_hold","dc_klaerung","ac_klaerung","tech_nicht_machbar"];
-const CSS=`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');*{margin:0;padding:0;box-sizing:border-box}body,#root{font-family:'DM Sans',sans-serif;background:${DK};color:${TX}}::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:${BD};border-radius:3px}::-webkit-scrollbar-track{background:transparent}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes cardBlink{0%,100%{background:${C1};border-color:${RD}90}50%{background:${RD}12;border-color:${RD}}}@keyframes rowBlink{0%,100%{background:${RD}08}50%{background:${RD}18}}@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}.fi{animation:fi .2s ease both}.cd{transition:box-shadow .15s,transform .15s}.cd:hover{box-shadow:0 4px 16px rgba(0,0,0,.4);transform:translateY(-1px)}.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}@keyframes toastIn{from{opacity:0;transform:translateX(100%)}to{opacity:1;transform:translateX(0)}}@keyframes toastOut{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(100%)}}input:focus,textarea:focus,select:focus{outline:2px solid ${B}40}`;
+const CSS=`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');*{margin:0;padding:0;box-sizing:border-box}body,#root{font-family:'DM Sans',sans-serif;background:${DK};color:${TX}}::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:${BD};border-radius:3px}::-webkit-scrollbar-track{background:transparent}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes cardBlink{0%,100%{background:${C1};border-color:${RD}90}50%{background:${RD}12;border-color:${RD}}}@keyframes rowBlink{0%,100%{background:${RD}08}50%{background:${RD}18}}@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}.fi{animation:fi .2s ease both}.cd{transition:box-shadow .15s,transform .15s}.cd:hover{box-shadow:0 4px 16px rgba(0,0,0,.4);transform:translateY(-1px)}.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}@keyframes toastIn{from{opacity:0;transform:translateX(100%)}to{opacity:1;transform:translateX(0)}}@keyframes toastOut{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(100%)}}input:focus,textarea:focus,select:focus{outline:2px solid ${B}40}
+@keyframes podiumRise{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes crownBounce{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-6px) rotate(3deg)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes barGrow{from{width:0}to{width:var(--bar-w)}}
+@keyframes confetti{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(-80px) rotate(360deg);opacity:0}}
+@keyframes saleFlash{0%{box-shadow:0 0 0 0 rgba(52,211,153,0.6)}70%{box-shadow:0 0 0 16px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+.podium-card{animation:podiumRise .5s ease both}.podium-card:nth-child(1){animation-delay:.1s}.podium-card:nth-child(2){animation-delay:0s}.podium-card:nth-child(3){animation-delay:.2s}
+.crown-bounce{animation:crownBounce 2s ease-in-out infinite}
+.bar-grow{animation:barGrow .8s ease both}
+.sale-flash{animation:saleFlash .6s ease}
+.shimmer-gold{background:linear-gradient(90deg,${B}00,${B}40,${B}00);background-size:200% 100%;animation:shimmer 2s ease infinite}
+`;
 
 /* ═══ DEMO DATA ═══ */
 const ri=(a,b)=>a+Math.floor(Math.random()*(b-a+1));const r=a=>a[Math.floor(Math.random()*a.length)];
@@ -468,7 +480,7 @@ function App(){
   },[dashCards]);
 
   // Berater ranking (admin)
-  const ranking=useMemo(()=>{if(role!=="admin")return[];return berList.map(b=>{const bc=vCards.filter(c=>c.berater_name===b&&!isStorno(c.stage_key));const prov=bc.filter(c=>c.project_id&&vMontStatus[c.project_id]?.prov);const stuck=bc.filter(c=>(c.days_in_stage||0)>=7);const pipe=bc.reduce((s,c)=>s+(Number(c.eur)||0),0);const provE=prov.reduce((s,c)=>s+(Number(c.eur)||0),0);return{name:b,total:bc.length,pipe,prov:prov.length,provE,stuck:stuck.length,storno:vCards.filter(c=>c.berater_name===b&&isStorno(c.stage_key)).length}}).sort((a,b)=>b.provE-a.provE)},[berList,vCards,vMontStatus,role]);
+  const ranking=useMemo(()=>{if(role!=="admin")return[];const now=new Date();const weekAgo=new Date(now);weekAgo.setDate(weekAgo.getDate()-7);const monthAgo=new Date(now);monthAgo.setDate(monthAgo.getDate()-30);return berList.map(b=>{const bc=vCards.filter(c=>c.berater_name===b&&!isStorno(c.stage_key));const prov=bc.filter(c=>c.project_id&&vMontStatus[c.project_id]?.prov);const stuck=bc.filter(c=>(c.days_in_stage||0)>=7);const pipe=bc.reduce((s,c)=>s+(Number(c.eur)||0),0);const provE=prov.reduce((s,c)=>s+(Number(c.eur)||0),0);const auftraege=bc.filter(c=>["auftrag","vertrag","finanzierung"].includes(c.stage_key));const weekDeals=auftraege.filter(c=>(c.days_in_stage||0)<=7).length;const monthDeals=auftraege.length;const convRate=bc.length>0?Math.round((auftraege.length/bc.length)*100):0;const streak=Math.min(weekDeals,7);const avgDeal=auftraege.length>0?Math.round(auftraege.reduce((s,c)=>s+(Number(c.eur)||0),0)/auftraege.length):0;const badges=[];if(provE>=100000)badges.push({icon:"💎",label:"100k+ Provision"});if(monthDeals>=10)badges.push({icon:"🔥",label:"10+ Deals/Monat"});if(convRate>=30)badges.push({icon:"🎯",label:"30%+ Conversion"});if(stuck.length===0&&bc.length>5)badges.push({icon:"⚡",label:"Null Stau"});if(weekDeals>=3)badges.push({icon:"🚀",label:"3+ Deals/Woche"});return{name:b,total:bc.length,pipe,prov:prov.length,provE,stuck:stuck.length,storno:vCards.filter(c=>c.berater_name===b&&isStorno(c.stage_key)).length,weekDeals,monthDeals,convRate,streak,avgDeal,badges}}).sort((a,b)=>b.provE-a.provE)},[berList,vCards,vMontStatus,role]);
 
   // Monteur utilization
   const montUtil=useMemo(()=>{const lk={};mCards.forEach(c=>{if(!c.monteur_name)return;if(!lk[c.monteur_name])lk[c.monteur_name]={name:c.monteur_name,active:0,total:0};lk[c.monteur_name].total++;if(c.phase==="active")lk[c.monteur_name].active++});return Object.values(lk).sort((a,b)=>b.active-a.active)},[mCards]);
@@ -702,22 +714,70 @@ function App(){
           </div>}
 
           {/* ── RANKING VIEW ── */}
-          {dashSub==="rank"&&role==="admin"&&<div style={{background:C1,borderRadius:10,border:`1px solid ${BD}`,overflow:"hidden"}}>
-            <div style={{padding:"8px 12px",borderBottom:`1px solid ${BD}`}}><span style={{fontWeight:700,fontSize:12}}>Berater Ranking</span></div>
-            <div style={{overflowX:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
-                <thead><tr style={{borderBottom:`1px solid ${BD}`}}>{["#","Berater","Auftr.","Pipeline","💰Prov","Prov €","⏰ Stuck","❌ Storno"].map((h,i)=><th key={i} style={{padding:"6px 8px",textAlign:i>1?"right":"left",color:DM,fontWeight:700,fontSize:8,textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
-                <tbody>{ranking.map((b,i)=><tr key={b.name} onClick={()=>{setDashBer(b.name);setDashSub("list")}} style={{borderBottom:`1px solid ${BD}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=C2} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <td style={{padding:"6px 8px",fontWeight:800,color:i<3?B:DM}}>{i+1}</td>
-                  <td style={{padding:"6px 8px",fontWeight:600}}>{b.name}</td>
-                  <td style={{padding:"6px 8px",textAlign:"right"}}>{b.total}</td>
-                  <td style={{padding:"6px 8px",textAlign:"right",color:B,fontWeight:600}}>{fmt(b.pipe)}</td>
-                  <td style={{padding:"6px 8px",textAlign:"right",color:GN,fontWeight:700}}>{b.prov}</td>
-                  <td style={{padding:"6px 8px",textAlign:"right",color:GN}}>{fmt(b.provE)}</td>
-                  <td style={{padding:"6px 8px",textAlign:"right",color:b.stuck>3?RD:b.stuck>0?OR:GN,fontWeight:600}}>{b.stuck}</td>
-                  <td style={{padding:"6px 8px",textAlign:"right",color:b.storno>0?RD:GY}}>{b.storno}</td>
-                </tr>)}</tbody>
-              </table>
+          {dashSub==="rank"&&role==="admin"&&<div style={{display:"flex",flexDirection:"column",gap:mob?10:8}}>
+            {/* ── PODIUM TOP 3 ── */}
+            {ranking.length>=3&&<div style={{background:`linear-gradient(180deg,${C1},${DK})`,borderRadius:14,border:`1px solid ${BD}`,padding:mob?"20px 12px":"16px 12px",textAlign:"center"}}>
+              <div style={{fontSize:mob?11:9,fontWeight:700,color:DM,textTransform:"uppercase",letterSpacing:2,marginBottom:mob?16:12}}>🏆 Leaderboard</div>
+              <div style={{display:"flex",justifyContent:"center",alignItems:mob?"flex-end":"flex-end",gap:mob?8:6}}>
+                {[1,0,2].map(idx=>{const b=ranking[idx];if(!b)return null;const isFirst=idx===0;const medals=["🥇","🥈","🥉"];const heights=[mob?120:100,mob?150:130,mob?100:85];const colors=[B,"#C0C0C0","#CD7F32"];
+                return <div key={b.name} className="podium-card" style={{display:"flex",flexDirection:"column",alignItems:"center",width:mob?110:90}}>
+                  {isFirst&&<div className="crown-bounce" style={{fontSize:mob?28:22,marginBottom:4}}>👑</div>}
+                  <div style={{width:mob?56:44,height:mob?56:44,borderRadius:"50%",background:`linear-gradient(135deg,${colors[idx]}40,${colors[idx]}15)`,border:`2.5px solid ${colors[idx]}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:mob?16:13,fontWeight:900,color:colors[idx],marginBottom:6}}>{b.name.split(" ").map(n=>n[0]).join("")}</div>
+                  <div style={{fontSize:mob?12:10,fontWeight:700,color:TX,marginBottom:2,maxWidth:mob?110:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.name.split(" ")[0]}</div>
+                  <div style={{fontSize:mob?13:11,fontWeight:900,color:GN}}>{fmt(b.provE)} €</div>
+                  <div style={{fontSize:mob?10:8,color:DM,marginBottom:6}}>{b.prov} Provisionen</div>
+                  <div style={{width:"100%",height:heights[idx===1?0:idx===0?1:2],background:`linear-gradient(180deg,${colors[idx]}25,${colors[idx]}08)`,borderRadius:"8px 8px 0 0",border:`1px solid ${colors[idx]}30`,borderBottom:"none",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:2}}>
+                    <span style={{fontSize:mob?28:22,fontWeight:900,color:colors[idx]}}>{medals[idx]}</span>
+                    <span style={{fontSize:mob?10:8,fontWeight:700,color:colors[idx]}}>{b.weekDeals} diese Woche</span>
+                  </div>
+                </div>})}
+              </div>
+            </div>}
+
+            {/* ── PERFORMANCE BARS ── */}
+            <div style={{background:C1,borderRadius:12,border:`1px solid ${BD}`,padding:mob?"14px":"10px",overflow:"hidden"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:mob?12:8}}>
+                <span style={{fontWeight:700,fontSize:mob?13:11}}>Performance</span>
+                <span style={{fontSize:mob?10:8,color:DM}}>sortiert nach Provision</span>
+              </div>
+              {ranking.map((b,i)=>{const maxProv=ranking[0]?.provE||1;const pct=Math.round((b.provE/maxProv)*100);const barColor=i===0?B:i===1?"#C0C0C0":i===2?"#CD7F32":BL;
+              return <div key={b.name} onClick={()=>{setDashBer(b.name);setDashSub("list")}} style={{display:"flex",alignItems:"center",gap:mob?10:8,padding:mob?"8px 0":"5px 0",borderBottom:i<ranking.length-1?`1px solid ${BD}40`:"none",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=C2+"60"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{width:mob?22:18,fontSize:mob?12:10,fontWeight:800,color:i<3?B:DM,textAlign:"center"}}>{i+1}</span>
+                <div style={{width:mob?36:28,height:mob?36:28,borderRadius:"50%",background:`${barColor}20`,border:`1.5px solid ${barColor}60`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:mob?10:8,fontWeight:800,color:barColor,flexShrink:0}}>{b.name.split(" ").map(n=>n[0]).join("")}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:3}}>
+                    <span style={{fontSize:mob?12:10,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.name}</span>
+                    <span style={{fontSize:mob?11:9,fontWeight:800,color:GN,flexShrink:0,marginLeft:4}}>{fmt(b.provE)} €</span>
+                  </div>
+                  <div style={{height:mob?8:6,background:`${BD}60`,borderRadius:4,overflow:"hidden",position:"relative"}}>
+                    <div className="bar-grow" style={{"--bar-w":pct+"%",width:pct+"%",height:"100%",borderRadius:4,background:`linear-gradient(90deg,${barColor}90,${barColor}50)`,position:"relative"}}>
+                      {i===0&&<div className="shimmer-gold" style={{position:"absolute",inset:0,borderRadius:4}}/>}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:mob?8:6,marginTop:3,flexWrap:"wrap"}}>
+                    <span style={{fontSize:mob?9:7,color:DM}}>{b.total} Aufträge</span>
+                    <span style={{fontSize:mob?9:7,color:b.convRate>=25?GN:b.convRate>=15?OR:RD}}>{b.convRate}% Conv.</span>
+                    <span style={{fontSize:mob?9:7,color:BL}}>Ø {fmt(b.avgDeal)} €</span>
+                    {b.streak>=3&&<span style={{fontSize:mob?9:7,color:OR}}>🔥 {b.streak}d Streak</span>}
+                    {b.stuck>0&&<span style={{fontSize:mob?9:7,color:RD}}>⏰ {b.stuck} Stuck</span>}
+                    {b.badges.map((bg,bi)=><span key={bi} style={{fontSize:mob?9:7}} title={bg.label}>{bg.icon}</span>)}
+                  </div>
+                </div>
+              </div>})}
+            </div>
+
+            {/* ── ACHIEVEMENTS ── */}
+            <div style={{background:C1,borderRadius:12,border:`1px solid ${BD}`,padding:mob?"14px":"10px"}}>
+              <div style={{fontWeight:700,fontSize:mob?13:11,marginBottom:mob?10:6}}>🏅 Achievements</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:mob?6:4}}>
+                {ranking.filter(b=>b.badges.length>0).flatMap(b=>b.badges.map(bg=>({...bg,who:b.name.split(" ")[0]}))).map((a,i)=>
+                  <div key={i} style={{background:`${B}10`,border:`1px solid ${B}25`,borderRadius:8,padding:mob?"6px 10px":"4px 8px",display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{fontSize:mob?14:12}}>{a.icon}</span>
+                    <div><div style={{fontSize:mob?10:8,fontWeight:700,color:B}}>{a.who}</div><div style={{fontSize:mob?8:7,color:DM}}>{a.label}</div></div>
+                  </div>
+                )}
+                {ranking.filter(b=>b.badges.length>0).length===0&&<span style={{fontSize:mob?10:9,color:DM}}>Noch keine Achievements erreicht</span>}
+              </div>
             </div>
           </div>}
 
