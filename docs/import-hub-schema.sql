@@ -66,11 +66,10 @@ CREATE TABLE import_leads (
 -- 2. APPOINTMENTS (Created + Closed = ~2.288 Datensätze)
 CREATE TABLE import_appointments (
   id BIGSERIAL PRIMARY KEY,
-  termin_id INTEGER NOT NULL,
+  termin_id INTEGER UNIQUE NOT NULL,
   lead_id INTEGER,
   extern_id TEXT,
-  csv_quelle TEXT NOT NULL,
-  UNIQUE(termin_id, csv_quelle),
+  csv_quelle TEXT,
   leadquelle TEXT,
   mvpp_name TEXT,
   mvpp_id TEXT,
