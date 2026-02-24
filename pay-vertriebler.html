@@ -142,8 +142,10 @@ function calcProv(auftr, name) {
     provRelevant.forEach(a => {
         if (a['Speichererweiterung']?.trim()) spB += BONI.Speichererweiterung[typ];
         const q = (a['Quelle']||'').trim();
-        if (q === 'Eigenlead') elB += BONI.Eigenlead[typ];
-        if (q === 'Empfehlung') emB += BONI.Empfehlung[typ];
+        const mvpp = (a['MVPP-Name']||'').trim();
+        const isEigenlead = q === 'Eigenlead' || (name === 'Gino Ulitzka' && mvpp.includes('Christian Neukirch'));
+        if (isEigenlead) elB += BONI.Eigenlead[typ];
+        else if (q === 'Empfehlung') emB += BONI.Empfehlung[typ];
     });
     const boniGes = spB + elB + emB;
     return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, total: staffGes + boniGes, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, totalCnt: auftr.length, ab8: cnt >= st.schwelle };
@@ -286,7 +288,7 @@ function App() {
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#F5C500',fontWeight:600}}>{a['AN Nr.']}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#c8cfd8'}}>{a['Kunde']||'-'}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#fff',fontWeight:500,textDecoration:isStor?'line-through':'none'}}>{euro(nettoNum(a['AN-WertNetto']))}</td>
-                                        <td style={{padding:'8px 10px'}}><QTag q={a['Quelle']?.trim()}/></td>
+                                        <td style={{padding:'8px 10px'}}><QTag q={a['Quelle']?.trim()} mvpp={a['MVPP-Name']?.trim()} vt={det.name}/></td>
                                         <td style={{padding:'8px 10px',color:a['Speichererweiterung']?.trim()?'#a78bfa':'#3a3d4a'}}>{a['Speichererweiterung']?.trim()?'✓':'-'}</td>
                                         <td style={{padding:'8px 10px',color:isStor?'#e53e3e':'#8b95a5',fontSize:12,fontWeight:isStor?600:400}}>{a['Auftragsstatus']?.trim()}</td>
                                         <td style={{padding:'8px 10px'}}><span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:isNR?'rgba(229,62,62,0.15)':'rgba(72,187,120,0.15)',color:isNR?'#e53e3e':'#48bb78',fontWeight:500}}>{isNR?'Nein':'Ja'}</span></td>
@@ -420,10 +422,12 @@ function BonusLine({label,val,color}) {
     </div>;
 }
 
-function QTag({q}) {
+function QTag({q, mvpp, vt}) {
+    const isEL = q === 'Eigenlead' || (vt === 'Gino Ulitzka' && mvpp && mvpp.includes('Christian Neukirch'));
+    const display = isEL ? 'Eigenlead' : (q || '-');
     const cs = { Eigenlead:{bg:'rgba(72,187,120,0.15)',c:'#48bb78'}, Empfehlung:{bg:'rgba(99,179,237,0.15)',c:'#63b3ed'} };
-    const s = cs[q] || {bg:'rgba(255,255,255,0.04)',c:'#6b7280'};
-    return <span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:s.bg,color:s.c,fontWeight:500}}>{q||'-'}</span>;
+    const s = cs[display] || {bg:'rgba(255,255,255,0.04)',c:'#6b7280'};
+    return <span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:s.bg,color:s.c,fontWeight:500}}>{display}</span>;
 }
 
 const cardStyle = {background:'#12131a',borderRadius:12,padding:20,border:'1px solid #1e1f2a'};
