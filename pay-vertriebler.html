@@ -128,9 +128,15 @@ function calcProv(auftr, name, selectedMonth, allCsv) {
     const typ = VT_TYPEN[name]; if (!typ) return null;
     const provRelevant = auftr.filter(a => 
         (a['Auszahlungsrelevant']||'').trim() === 'Ja' && 
-        (a['Auftragsstatus']||'').trim() !== 'Storniert'
+        (a['Auftragsstatus']||'').trim() !== 'Storniert' &&
+        !(a['Ausgezahlt am']||'').trim()
     );
     const storniert = auftr.filter(a => (a['Auftragsstatus']||'').trim() === 'Storniert');
+    const bereitsAusgezahlt = auftr.filter(a => 
+        (a['Auszahlungsrelevant']||'').trim() === 'Ja' && 
+        (a['Auftragsstatus']||'').trim() !== 'Storniert' &&
+        (a['Ausgezahlt am']||'').trim()
+    );
     const nichtRelevant = auftr.filter(a => 
         (a['Auszahlungsrelevant']||'').trim() !== 'Ja' && 
         (a['Auftragsstatus']||'').trim() !== 'Storniert'
@@ -187,8 +193,8 @@ function calcProv(auftr, name, selectedMonth, allCsv) {
         teamPrevMonth = prevKey;
         teamPrevCnt = prevSales;
     }
-    const paid = auftr.filter(a => (a['Ausgezahlt am']||'').trim());
-    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, teamPrevMonth, teamPrevCnt, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, paidCnt: paid.length, totalCnt: auftr.length, ab8: name !== 'Christoph Held' && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && cnt >= st.schwelle, isSonder: name === 'Christoph Held' || (name === 'Tayfun Süleymaniye' && isJan26Plus) };
+    const paid = bereitsAusgezahlt;
+    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, teamPrevMonth, teamPrevCnt, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, bereitsAusgezahlt, storCnt: storniert.length, nrCnt: nichtRelevant.length, paidCnt: paid.length, totalCnt: auftr.length, ab8: name !== 'Christoph Held' && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && cnt >= st.schwelle, isSonder: name === 'Christoph Held' || (name === 'Tayfun Süleymaniye' && isJan26Plus) };
 }
 
 function App() {
@@ -310,7 +316,7 @@ function App() {
                 </div>
 
                 <div style={cardStyle}>
-                    <div style={{fontSize:13,color:'#6b7280',marginBottom:14,fontWeight:500}}>📋 Aufträge ({det.cnt} provisionsrelevant{det.paidCnt>0?` · ${det.paidCnt} ausgezahlt`:''}{det.storCnt>0?` · ${det.storCnt} storniert`:''}{det.nrCnt>0?` · ${det.nrCnt} nicht relevant`:''})</div>
+                    <div style={{fontSize:13,color:'#6b7280',marginBottom:14,fontWeight:500}}>📋 Aufträge ({det.cnt} offen{det.paidCnt>0?` · ${det.paidCnt} ausgezahlt`:''}{det.storCnt>0?` · ${det.storCnt} storniert`:''}{det.nrCnt>0?` · ${det.nrCnt} nicht relevant`:''})</div>
                     <div style={{overflowX:'auto'}}>
                         <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
                             <thead><tr style={{borderBottom:'1px solid #1e1f2a'}}>
@@ -322,7 +328,8 @@ function App() {
                                 {det.auftr.map((a,i)=>{
                                     const isStor = (a['Auftragsstatus']||'').trim() === 'Storniert';
                                     const isNR = (a['Auszahlungsrelevant']||'').trim() !== 'Ja';
-                                    const dimmed = isStor || isNR;
+                                    const isPaid = !!(a['Ausgezahlt am']||'').trim();
+                                    const dimmed = isStor || isNR || isPaid;
                                     return (
                                     <tr key={i} style={{borderBottom:'1px solid #0f1015',opacity:dimmed?0.4:1}}>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#F5C500',fontWeight:600}}>{a['AN Nr.']}</td>
@@ -432,7 +439,7 @@ function VTCard({d,idx,onClick}) {
                 </div>
                 <div style={{textAlign:'right'}}>
                     <div style={{fontSize:20,fontWeight:700,color:'#F5C500'}}>{euro(d.total)}</div>
-                    <div style={{fontSize:12,color:'#6b7280'}}>{d.totalCnt} Anlagen: {d.cnt} positiv{d.paidCnt>0?`, ${d.paidCnt} ausgez.`:''}{d.storCnt>0?`, ${d.storCnt} storn.`:''}{d.nrCnt>0?`, ${d.nrCnt} n. rel.`:''}</div>
+                    <div style={{fontSize:12,color:'#6b7280'}}>{d.totalCnt} Anlagen: {d.cnt} offen{d.paidCnt>0?`, ${d.paidCnt} ausgez.`:''}{d.storCnt>0?`, ${d.storCnt} storn.`:''}{d.nrCnt>0?`, ${d.nrCnt} n. rel.`:''}</div>
                 </div>
             </div>
             <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
