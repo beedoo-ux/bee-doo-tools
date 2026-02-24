@@ -15,6 +15,7 @@
   ::-webkit-scrollbar-thumb { background: rgba(245,197,0,0.3); border-radius: 4px; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+  @keyframes coinGlow { 0%,100% { box-shadow: 0 0 10px rgba(255,215,0,0.3); } 50% { box-shadow: 0 0 25px rgba(255,215,0,0.6); } }
   @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
   .ani { animation: fadeUp 0.4s ease both; }
   .pulse { animation: pulse 2s ease infinite; }
@@ -41,61 +42,114 @@ const getPraemie = (n) => n <= 0 ? 0 : n === 1 ? 700 : n === 2 ? 800 : n === 3 ?
 const getTotalPraemie = (sales) => { let sum = 0; for (let i = 1; i <= sales; i++) sum += getPraemie(i); return sum; };
 const getNextStufe = (sales) => ({ current: getPraemie(sales || 1), next: getPraemie((sales || 0) + 1), nr: (sales || 0) + 1 });
 
-// ─── Tier Progress Component ───
-const TierProgress = ({ sales, compact }) => {
+// ─── Tier Progress Component – Super Mario Style 🪙 ───
+const TierProgress = ({ sales, compact, pipelineLeads }) => {
   const total = getTotalPraemie(sales);
   const next = getNextStufe(sales);
-  const tiers = [700, 800, 900, 1000];
+  const pipelineCount = pipelineLeads || 0;
+  const pipelinePotential = (() => { let sum = 0; for (let i = 1; i <= pipelineCount; i++) sum += getPraemie(sales + i); return sum; })();
 
   if (compact) return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: `${B.y}08`, border: `1px solid ${B.y}15` }}>
-      <span style={{ fontSize: 12 }}>🏆</span>
+      <span style={{ fontSize: 14 }}>🪙</span>
       <span style={{ fontSize: 11, fontWeight: 700, color: B.y }}>{total.toLocaleString("de-DE")}€</span>
-      <span style={{ fontSize: 10, color: B.sec }}>·</span>
-      <span style={{ fontSize: 10, color: B.sec }}>Nächste: <strong style={{ color: B.green }}>{next.next.toLocaleString("de-DE")}€</strong></span>
+      {pipelineCount > 0 && <span style={{ fontSize: 10, color: B.green }}>+{pipelineCount} in Pipeline</span>}
     </div>
   );
 
+  const coins = [
+    { nr: 1, betrag: 700, label: "1-UP" },
+    { nr: 2, betrag: 800, label: "STAR" },
+    { nr: 3, betrag: 900, label: "FIRE" },
+    { nr: 4, betrag: 1000, label: "∞ GOLD" },
+  ];
+
   return (
-    <div style={{ padding: "14px 16px", borderRadius: 12, background: `linear-gradient(135deg, ${B.y}08, ${B.green}05)`, border: `1.5px solid ${B.y}20` }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: B.dim, textTransform: "uppercase", letterSpacing: 1.2 }}>🏆 Prämien-Stufen</div>
-        <div style={{ fontSize: 13, fontWeight: 900, color: B.y }}>{total.toLocaleString("de-DE")}€ verdient</div>
-      </div>
-      <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
-        {tiers.map((t, i) => {
-          const done = sales > i;
-          const current = sales === i;
-          return (
-            <div key={i} style={{ flex: 1, position: "relative" }}>
-              <div style={{
-                height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
-                background: done ? `${B.green}25` : current ? `${B.y}15` : `${B.dim}10`,
-                border: `1.5px solid ${done ? B.green : current ? B.y : B.dim}${done ? "50" : current ? "40" : "20"}`,
-                transition: "all 0.3s"
-              }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: done ? B.green : current ? B.y : B.dim }}>
-                  {done ? "✓" : ""} {t}€
-                </span>
-              </div>
-              <div style={{ textAlign: "center", fontSize: 8, color: done ? B.green : B.dim, fontWeight: 600, marginTop: 3 }}>
-                {i < 3 ? `${i + 1}. Sale` : "4.+"}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {sales < 4 && (
-        <div style={{ fontSize: 11, color: B.sec, textAlign: "center", padding: "6px 0", borderTop: `1px solid ${B.bd}`, marginTop: 4 }}>
-          Nächster Sale → <strong style={{ color: B.y }}>{next.next.toLocaleString("de-DE")}€</strong> Prämie
-          {sales < 3 && <span> · Noch {3 - sales} bis zur 1.000€-Stufe!</span>}
+    <div style={{ borderRadius: 16, overflow: "hidden", border: `2px solid ${B.y}30`, background: `linear-gradient(180deg, #0a1628 0%, #111927 50%, #0d1424 100%)` }}>
+      {/* Header – Score Display */}
+      <div style={{ padding: "16px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div style={{ fontSize: 9, fontWeight: 800, color: B.dim, textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 }}>🪙 COINS GESAMMELT</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span className="coin-total" style={{ fontSize: 36, fontWeight: 900, color: B.y, fontFamily: "'DM Sans', monospace", letterSpacing: -1, textShadow: "0 0 20px rgba(245,197,0,0.3)" }}>{total.toLocaleString("de-DE")}€</span>
+          </div>
         </div>
-      )}
-      {sales >= 4 && (
-        <div style={{ fontSize: 11, color: B.green, textAlign: "center", padding: "6px 0", borderTop: `1px solid ${B.bd}`, marginTop: 4, fontWeight: 700 }}>
-          🎉 Maximalstufe erreicht – jeder weitere Sale = 1.000€!
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 9, fontWeight: 800, color: B.dim, textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 }}>LEVEL</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: sales >= 4 ? B.green : B.y, textShadow: `0 0 15px ${sales >= 4 ? B.green : B.y}40` }}>{sales >= 4 ? "MAX" : sales}</div>
         </div>
-      )}
+      </div>
+
+      {/* Coin Track – Mario Style */}
+      <div style={{ padding: "0 20px 16px", position: "relative" }}>
+        {/* Track line */}
+        <div style={{ position: "absolute", top: 28, left: 40, right: 40, height: 3, background: B.bd, borderRadius: 2 }}>
+          <div style={{ width: `${Math.min((sales / 4) * 100, 100)}%`, height: "100%", background: `linear-gradient(90deg, ${B.y}, ${B.green})`, borderRadius: 2, transition: "width 0.8s ease", boxShadow: `0 0 10px ${B.y}50` }} />
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", position: "relative", zIndex: 1 }}>
+          {coins.map((c, i) => {
+            const collected = sales > i;
+            const current = sales === i;
+            const isMax = i === 3;
+            return (
+              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 72 }}>
+                {/* Coin */}
+                <div style={{
+                  width: 52, height: 52, borderRadius: "50%",
+                  background: collected ? `linear-gradient(135deg, #FFD700, #FFA500)` : current ? `linear-gradient(135deg, ${B.y}40, ${B.y}20)` : `${B.dim}15`,
+                  border: `3px solid ${collected ? "#FFD700" : current ? B.y : B.dim}${collected ? "" : "40"}`,
+                  display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column",
+                  boxShadow: collected ? "0 4px 20px rgba(255,215,0,0.4), inset 0 -3px 6px rgba(0,0,0,0.2)" : current ? `0 0 20px ${B.y}30` : "none",
+                  animation: collected ? "none" : current ? "pulse 2s ease infinite" : "none",
+                  transition: "all 0.5s ease", position: "relative"
+                }}>
+                  {collected && <span style={{ fontSize: 20 }}>🪙</span>}
+                  {!collected && !current && <span style={{ fontSize: 16, opacity: 0.3 }}>🪙</span>}
+                  {current && <span style={{ fontSize: 22, filter: "brightness(1.2)" }}>✨</span>}
+                  {collected && <div style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: B.green, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 900, color: "#fff", border: "2px solid #0a1628" }}>✓</div>}
+                </div>
+                {/* Amount */}
+                <div style={{ marginTop: 8, textAlign: "center" }}>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: collected ? B.green : current ? B.y : B.dim }}>{c.betrag.toLocaleString("de-DE")}€</div>
+                  <div style={{ fontSize: 8, fontWeight: 800, color: collected ? `${B.green}90` : current ? `${B.y}70` : `${B.dim}60`, textTransform: "uppercase", letterSpacing: 1, marginTop: 1 }}>
+                    {isMax ? "∞ JE SALE" : c.label}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Next Coin Info + Pipeline */}
+      <div style={{ padding: "12px 20px 16px", borderTop: `1px solid ${B.bd}`, display: "flex", gap: 10 }}>
+        {/* Next Reward */}
+        <div style={{ flex: 1, padding: "10px 14px", borderRadius: 10, background: `${B.y}08`, border: `1px solid ${B.y}15` }}>
+          <div style={{ fontSize: 8, fontWeight: 800, color: B.dim, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>{sales >= 4 ? "🔥 MAX LEVEL" : "NÄCHSTE MÜNZE"}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 18 }}>{sales >= 4 ? "🏆" : "🪙"}</span>
+            <span style={{ fontSize: 20, fontWeight: 900, color: B.y }}>{next.next.toLocaleString("de-DE")}€</span>
+          </div>
+          {sales < 4 && <div style={{ fontSize: 10, color: B.sec, marginTop: 2 }}>Sale #{next.nr} bringt's!</div>}
+          {sales >= 4 && <div style={{ fontSize: 10, color: B.green, marginTop: 2, fontWeight: 700 }}>Jeder Sale = 1.000€! 🔥</div>}
+        </div>
+
+        {/* Pipeline Potential */}
+        <div style={{ flex: 1, padding: "10px 14px", borderRadius: 10, background: `${B.green}08`, border: `1px solid ${B.green}15` }}>
+          <div style={{ fontSize: 8, fontWeight: 800, color: B.dim, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>🎯 IN DER PIPELINE</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 18 }}>💎</span>
+            <span style={{ fontSize: 20, fontWeight: 900, color: B.green }}>{pipelineCount}</span>
+            <span style={{ fontSize: 12, color: B.sec }}>Leads</span>
+          </div>
+          {pipelineCount > 0 ? (
+            <div style={{ fontSize: 10, color: B.green, marginTop: 2, fontWeight: 600 }}>= bis zu {pipelinePotential.toLocaleString("de-DE")}€ 💰</div>
+          ) : (
+            <div style={{ fontSize: 10, color: B.dim, marginTop: 2 }}>Noch keine offenen Leads</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
@@ -439,7 +493,7 @@ function App() {
 
           {/* Tier Progress */}
           <div className="ani" style={{ marginBottom: 16 }}>
-            <TierProgress sales={salesCount} />
+            <TierProgress sales={salesCount} pipelineLeads={pendingCount} />
           </div>
 
           {/* Pipeline Overview */}
@@ -564,7 +618,7 @@ function App() {
 
                 {/* Tier Progress per Promoter */}
                 <div style={{ marginBottom: 12 }}>
-                  <TierProgress sales={wSales} />
+                  <TierProgress sales={wSales} pipelineLeads={wPending} />
                 </div>
 
                 {/* Share Stats */}
