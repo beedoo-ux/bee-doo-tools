@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#0c1222">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="bee-doo Scout">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/icon-192x192.png">
 <title>bee-doo Scout Solar</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -289,6 +292,26 @@
     .house-score { font-size: 18px; }
   }
 </style>
+
+<!-- PWA Service Worker + GPS + Kamera -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      console.log('[PWA] SW registriert:', reg.scope);
+      if ('PushManager' in window) { Notification.requestPermission(); }
+    } catch (e) { console.error('[PWA] SW Fehler:', e); }
+  });
+}
+if (navigator.geolocation) {
+  navigator.geolocation.watchPosition(
+    (p) => sessionStorage.setItem('bee-doo-gps', JSON.stringify({lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy,ts:Date.now()})),
+    (e) => console.warn('[GPS]',e.message),
+    {enableHighAccuracy:true,maximumAge:10000,timeout:15000}
+  );
+}
+</script>
 </head>
 <body>
 
