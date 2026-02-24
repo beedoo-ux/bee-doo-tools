@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>bee-doo · Daten-Import</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#root{height:100%;min-height:100%}
+body{background:#0A0A0B;color:#F0F0F4;font-family:'DM Sans',sans-serif}
+button,select,input,textarea{color:inherit;font-family:inherit}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:#111113}
+::-webkit-scrollbar-thumb{background:#2A2A33;border-radius:4px}
+.back{position:fixed;top:9px;left:10px;z-index:999;background:#16161A;border:1px solid #2A2A33;color:#8A8A9A;padding:5px 12px;border-radius:7px;font-size:11px;cursor:pointer;text-decoration:none;transition:all .15s}
+.back:hover{border-color:#F5C500;color:#F5C500}
+.inp{width:100%;background:#111113;border:1px solid #2A2A33;border-radius:6px;padding:7px 10px;font-size:12px;outline:none;transition:border-color .15s;color:#F0F0F4}
+.inp:focus{border-color:#F5C50050}
+.inp:disabled{opacity:.4;cursor:not-allowed}
+select.inp{cursor:pointer}
+select.inp option{background:#111113;color:#F0F0F4}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.fade{animation:fadeIn .2s ease}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin .7s linear infinite;display:inline-block}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.pulse{animation:pulse 1.5s ease infinite}
+@keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+.slide{animation:slideIn .2s ease}
+</style>
+</head>
+<body>
+<a href="index.html" class="back">← Launcher</a>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo,useCallback,useEffect,useRef}=React;
+
+// ── DESIGN TOKENS ─────────────────────────────────────────────────
+const C={
+  bg:"#0A0A0B",sur:"#111113",card:"#16161A",b:"#1E1E24",bl:"#2A2A33",
+  Y:"#F5C500",YD:"#F5C50015",YM:"#F5C50040",
+  tx:"#F0F0F4",ts:"#8A8A9A",tm:"#4A4A5A",txr:"#c0c4cc",
+  G:"#34D399",GD:"#34D39915",R:"#F87171",RD:"#F8717115",
+  O:"#FBBF24",OD:"#FBBF2415",B:"#60A5FA",BD:"#60A5FA15",
+  P:"#A78BFA",PD:"#A78BFA15",W:"#F0F0F4"
+};
+
+// ── SUPABASE ──────────────────────────────────────────────────────
+const SB_URL="https://hqzpemfaljxcysyqssng.supabase.co";
+const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const SB_H={"apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY,"Content-Type":"application/json","Prefer":"return=representation"};
+
+const sb={
+  get:async(t,p="")=>{const r=await fetch(`${SB_URL}/rest/v1/${t}${p}`,{headers:SB_H});if(!r.ok){const e=await r.text();throw new Error(e)}return r.json()},
+  post:async(t,body)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:"POST",headers:{...SB_H,"Prefer":"return=representation,resolution=merge-duplicates"},body:JSON.stringify(body)});if(!r.ok){const e=await r.text();throw new Error(e)}return r.json()},
+  upsert:async(t,body)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:"POST",headers:{...SB_H,"Prefer":"return=representation,resolution=merge-duplicates"},body:JSON.stringify(body)});if(!r.ok){const e=await r.text();throw new Error(e)}return r.json()},
+  check:async(t)=>{try{const r=await fetch(`${SB_URL}/rest/v1/${t}?limit=0`,{headers:SB_H});return r.ok}catch{return false}}
+};
+
+// ── HELPERS ────────────────────────────────────────────────────────
+const eur=n=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"}).format(+n||0);
+const fmtDate=d=>d?new Date(d).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"}):"–";
+const uid=()=>crypto.randomUUID?.()??("id_"+Date.now()+"_"+Math.random().toString(36).slice(2,8));
+
+// ── KNOWN TARGET TABLES ───────────────────────────────────────────
+// Tables our platform uses with their schemas
+const TARGET_TABLES={
+  vertriebler:{
+    label:"Vertriebler",icon:"💼",color:C.G,
+    columns:{
+      id:{type:"text",required:true,desc:"Kürzel (z.B. AK, DV)"},
+      name:{type:"text",required:true,desc:"Vollständiger Name"},
+      farbe:{type:"text",desc:"Hex-Farbe (z.B. #4f8ef7)"},
+      email:{type:"text",desc:"E-Mail"},
+      telefon:{type:"text",desc:"Telefon"},
+      aktiv:{type:"boolean",desc:"Aktiv?",default:true}
+    }
+  },
+  termine:{
+    label:"Termine",icon:"📅",color:C.B,
+    columns:{
+      id:{type:"uuid",auto:true,desc:"Auto-ID"},
+      vertrieb_id:{type:"text",required:true,desc:"Vertriebler-Kürzel"},
+      datum:{type:"date",required:true,desc:"Datum (YYYY-MM-DD)"},
+      zeit_minuten:{type:"number",desc:"Uhrzeit in Minuten (z.B. 540 = 9:00)"},
+      dauer_minuten:{type:"number",desc:"Dauer in Minuten",default:120},
+      status:{type:"text",desc:"offen/bestätigt/abgesagt",default:"offen"},
+      kunde:{type:"text",desc:"Kundenname"},
+      adresse:{type:"text",desc:"Straße + Hausnummer"},
+      plz:{type:"text",desc:"PLZ"},
+      ort:{type:"text",desc:"Ort"},
+      telefon:{type:"text",desc:"Telefonnummer"},
+      notizen:{type:"text",desc:"Notizen"},
+      termin_nr:{type:"text",desc:"Termin-Nummer"}
+    }
+  },
+  provisions_regeln:{
+    label:"Provisionsregeln",icon:"💰",color:C.Y,
+    columns:{
+      id:{type:"uuid",auto:true,desc:"Auto-ID"},
+      modell_name:{type:"text",required:true,desc:"Name des Modells"},
+      mitarbeiter_typ:{type:"text",required:true,desc:"z.B. hgb_scouter, angestellt_vertriebler"},
+      staffel_schwelle:{type:"number",desc:"Ab wieviel Sales Staffel gilt"},
+      basis_betrag_sale:{type:"number",desc:"Basis € pro Sale"},
+      staffel_betrag_sale:{type:"number",desc:"Staffel € pro Sale"},
+      rueckwirkend:{type:"boolean",desc:"Staffel rückwirkend?"},
+      betrag_lead:{type:"number",desc:"€ pro Lead"},
+      betrag_termin_sf:{type:"number",desc:"€ pro Termin SF"},
+      betrag_eigenlead:{type:"number",desc:"€ pro Eigenlead"},
+      betrag_empfehlung:{type:"number",desc:"€ pro Empfehlung"},
+      betrag_speicher:{type:"number",desc:"€ pro Speichererweiterung"},
+      betrag_sondereinsatz:{type:"number",desc:"€ Sondereinsatz"},
+      zahlungsausloeser:{type:"text",desc:"Wann wird gezahlt"},
+      aktiv:{type:"boolean",desc:"Regel aktiv?",default:true}
+    }
+  },
+  customers:{
+    label:"Kunden",icon:"👤",color:C.P,
+    columns:{
+      id:{type:"uuid",auto:true,desc:"Auto-ID"},
+      name:{type:"text",required:true,desc:"Kundenname"},
+      strasse:{type:"text",desc:"Straße"},
+      hausnummer:{type:"text",desc:"Hausnummer"},
+      plz:{type:"text",desc:"PLZ"},
+      ort:{type:"text",desc:"Ort"},
+      telefon:{type:"text",desc:"Telefon"},
+      email:{type:"text",desc:"E-Mail"},
+      vertriebler_id:{type:"text",desc:"Zugewiesener Vertriebler"},
+      status:{type:"text",desc:"Status (lead/termin/angebot/auftrag)"},
+      kwp:{type:"number",desc:"Anlagengröße kWp"},
+      speicher:{type:"boolean",desc:"Speicher?"},
+      notizen:{type:"text",desc:"Notizen"},
+      erstellt_am:{type:"timestamp",auto:true,desc:"Erstelldatum"}
+    }
+  },
+  projects:{
+    label:"Projekte / Aufträge",icon:"📋",color:C.O,
+    columns:{
+      id:{type:"uuid",auto:true,desc:"Auto-ID"},
+      auftrag_nr:{type:"text",desc:"Auftragsnummer"},
+      customer_id:{type:"text",desc:"Kunden-ID"},
+      kunde_name:{type:"text",desc:"Kundenname"},
+      vertriebler_id:{type:"text",desc:"Vertriebler-Kürzel"},
+      scouter_id:{type:"text",desc:"Scouter-Kürzel"},
+      auftrags_datum:{type:"date",desc:"Auftragsdatum"},
+      status:{type:"text",desc:"Status (angebot/auftrag/montage/fertig/storniert)"},
+      kwp:{type:"number",desc:"Anlagengröße kWp"},
+      speicher_kwh:{type:"number",desc:"Speichergröße kWh"},
+      angebotssumme:{type:"number",desc:"Angebotssumme €"},
+      anzahlung:{type:"number",desc:"Anzahlung €"},
+      zahlungsstatus:{type:"text",desc:"offen/anzahlung_eingegangen/bezahlt/storniert"},
+      lead_quelle:{type:"text",desc:"sale_basis/eigenlead/empfehlung"},
+      speichererweiterung:{type:"boolean",desc:"Speichererweiterung?"},
+      termin_stattgefunden:{type:"boolean",desc:"Termin stattgefunden?"},
+      dc_datum:{type:"date",desc:"DC-Montage Datum"},
+      ac_datum:{type:"date",desc:"AC-Montage Datum"},
+      monteur_dc:{type:"text",desc:"Monteur DC"},
+      monteur_ac:{type:"text",desc:"Monteur AC"},
+      plz:{type:"text",desc:"PLZ"},
+      ort:{type:"text",desc:"Ort"},
+      notizen:{type:"text",desc:"Notizen"},
+      erstellt_am:{type:"timestamp",auto:true,desc:"Erstelldatum"}
+    }
+  },
+  arbeitszeiten:{
+    label:"Arbeitszeiten",icon:"⏱",color:C.B,
+    columns:{
+      id:{type:"uuid",auto:true,desc:"Auto-ID"},
+      mitarbeiter_id:{type:"text",required:true,desc:"Mitarbeiter-Kürzel"},
+      datum:{type:"date",required:true,desc:"Datum"},
+      start_zeit:{type:"text",desc:"Startzeit (HH:MM)"},
+      end_zeit:{type:"text",desc:"Endzeit (HH:MM)"},
+      pause_minuten:{type:"number",desc:"Pause in Minuten"},
+      typ:{type:"text",desc:"arbeit/krank/urlaub/feiertag"},
+      notizen:{type:"text",desc:"Notizen"}
+    }
+  }
+};
+
+// ── BADGE ──────────────────────────────────────────────────────────
+function Badge({label,color,small}){
+  return <span style={{background:color+"20",color,border:`1px solid ${color}40`,borderRadius:4,padding:small?"1px 5px":"2px 7px",fontSize:small?9:10,fontWeight:700,whiteSpace:"nowrap"}}>{label}</span>;
+}
+
+// ── TOAST ──────────────────────────────────────────────────────────
+function Toast({msg}){
+  if(!msg) return null;
+  return <div style={{position:"fixed",bottom:24,right:24,background:msg.c||C.G,color:"#000",padding:"10px 18px",borderRadius:8,fontWeight:700,fontSize:13,zIndex:9999,animation:"fadeIn .2s ease",maxWidth:400}}>{msg.t}</div>;
+}
+
+// ── DATE NORMALIZER ───────────────────────────────────────────────
+function normalizeDate(val){
+  if(!val) return null;
+  const s=String(val).trim();
+  // DD.MM.YYYY or DD.MM.YY
+  const dotMatch=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if(dotMatch){
+    const [_,d,m,y]=dotMatch;
+    const year=y.length===2?"20"+y:y;
+    return `${year}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+  }
+  // DD/MM/YYYY
+  const slashMatch=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if(slashMatch){
+    const [_,d,m,y]=slashMatch;
+    const year=y.length===2?"20"+y:y;
+    return `${year}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+  }
+  // YYYY-MM-DD already
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  return s;
+}
+
+function normalizeBoolean(val){
+  const s=String(val).toLowerCase().trim();
+  return ["ja","yes","true","1","x","✓","wahr"].includes(s);
+}
+
+function normalizeNumber(val){
+  if(val===null||val===undefined||val==="") return null;
+  // German number: 1.234,56 → 1234.56
+  let s=String(val).trim().replace(/\s/g,"");
+  if(s.includes(",")&&s.includes(".")){
+    s=s.replace(/\./g,"").replace(",",".");
+  } else if(s.includes(",")){
+    s=s.replace(",",".");
+  }
+  const n=parseFloat(s);
+  return isNaN(n)?null:n;
+}
+
+function normalizeTime(val){
+  if(!val) return null;
+  const s=String(val).trim();
+  const m=s.match(/^(\d{1,2})[:\.](\d{2})$/);
+  if(m) return parseInt(m[1])*60+parseInt(m[2]);
+  const n=parseInt(s);
+  return isNaN(n)?null:n;
+}
+
+// ── IMPORT SESSION ────────────────────────────────────────────────
+// Each CSV upload creates an import session with: file, headers, rows, mapping, target table
+
+// ── STEP INDICATOR ────────────────────────────────────────────────
+function Steps({current,steps}){
+  return(
+    <div style={{display:"flex",gap:2,marginBottom:28}}>
+      {steps.map((s,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:2}}>
+          <div style={{
+            padding:"8px 16px",borderRadius:7,fontSize:12,fontWeight:700,
+            background:i===current?C.Y:i<current?C.GD:C.card,
+            color:i===current?"#000":i<current?C.G:C.ts,
+            border:`1px solid ${i===current?C.Y:i<current?C.G+"40":C.bl}`,
+            transition:"all .2s"
+          }}>
+            {i<current?"✓ ":""}{s}
+          </div>
+          {i<steps.length-1&&<div style={{color:C.tm,fontSize:14,margin:"0 2px"}}>›</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── COLUMN MAPPING CARD ───────────────────────────────────────────
+function MappingCard({csvCol,csvSamples,targetTable,mapping,onMap}){
+  const tbl=TARGET_TABLES[targetTable];
+  if(!tbl) return null;
+  const targetCols=Object.entries(tbl.columns).filter(([k,v])=>!v.auto);
+  const currentTarget=mapping[csvCol]||"";
+  const matchedTarget=targetCols.find(([k])=>k===currentTarget);
+
+  return(
+    <div className="slide" style={{background:C.card,border:`1px solid ${currentTarget?C.G+"40":C.bl}`,borderRadius:10,padding:14,transition:"border-color .2s"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800,fontSize:13,color:currentTarget?C.G:C.tx}}>{csvCol}</div>
+          <div style={{fontSize:10,color:C.ts,marginTop:2}}>
+            Beispiele: {csvSamples.slice(0,3).map((s,i)=><span key={i} style={{background:C.sur,padding:"1px 5px",borderRadius:3,marginRight:3,fontSize:10}}>{String(s).slice(0,30)||"–"}</span>)}
+          </div>
+        </div>
+        <div style={{fontSize:18,color:currentTarget?C.G:C.tm}}>→</div>
+        <div style={{minWidth:200}}>
+          <select className="inp" value={currentTarget} onChange={e=>onMap(csvCol,e.target.value)}
+            style={{borderColor:currentTarget?C.G+"60":C.bl,fontWeight:currentTarget?700:400,color:currentTarget?C.G:C.ts}}>
+            <option value="">– überspringen –</option>
+            {targetCols.map(([k,v])=>(
+              <option key={k} value={k}>{k} {v.required?"*":""} ({v.desc})</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {matchedTarget&&(
+        <div style={{fontSize:10,color:C.ts,paddingLeft:2}}>
+          → <b style={{color:matchedTarget[1].required?C.O:C.txr}}>{matchedTarget[0]}</b>: {matchedTarget[1].desc}
+          {matchedTarget[1].required&&<Badge label="Pflicht" color={C.O} small/>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── DATA PREVIEW TABLE ────────────────────────────────────────────
+function DataPreview({rows,mapping,targetTable,maxRows=10}){
+  const tbl=TARGET_TABLES[targetTable];
+  if(!tbl) return null;
+  const mappedCols=Object.entries(mapping).filter(([csv,target])=>target);
+  if(mappedCols.length===0) return <div style={{color:C.ts,fontSize:12,padding:20,textAlign:"center"}}>Keine Spalten zugeordnet</div>;
+
+  const preview=rows.slice(0,maxRows);
+
+  return(
+    <div style={{overflowX:"auto",borderRadius:10,border:`1px solid ${C.bl}`}}>
+      <table style={{width:"100%",borderCollapse:"collapse",minWidth:mappedCols.length*140}}>
+        <thead>
+          <tr style={{background:C.sur}}>
+            <th style={{padding:"8px 10px",fontSize:10,color:C.tm,fontWeight:700,textAlign:"left",width:40}}>#</th>
+            {mappedCols.map(([csv,target])=>(
+              <th key={csv} style={{padding:"8px 10px",fontSize:10,fontWeight:700,textAlign:"left"}}>
+                <div style={{color:C.G}}>{target}</div>
+                <div style={{color:C.tm,fontWeight:400,fontSize:9}}>← {csv}</div>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {preview.map((row,i)=>(
+            <tr key={i} style={{borderBottom:`1px solid ${C.bl}`,background:i%2===0?C.card:"transparent"}}>
+              <td style={{padding:"6px 10px",fontSize:10,color:C.tm}}>{i+1}</td>
+              {mappedCols.map(([csv,target])=>{
+                const val=row[csv];
+                const colDef=tbl.columns[target];
+                let display=String(val??"");
+                let color=C.txr;
+                // Validate
+                if(colDef?.required && (!val || String(val).trim()==="")){
+                  color=C.R; display=display||"⚠ LEER";
+                }
+                if(colDef?.type==="number" && val && normalizeNumber(val)===null){
+                  color=C.O; display+=" ⚠";
+                }
+                if(colDef?.type==="date" && val){
+                  const norm=normalizeDate(val);
+                  if(norm && norm!==String(val).trim()){display=norm;color=C.B}
+                }
+                return <td key={csv} style={{padding:"6px 10px",fontSize:11,color,maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{display.slice(0,50)}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length>maxRows&&<div style={{padding:"6px 12px",fontSize:10,color:C.ts,background:C.sur,textAlign:"center"}}>... und {rows.length-maxRows} weitere Zeilen</div>}
+    </div>
+  );
+}
+
+// ── VALIDATION SUMMARY ────────────────────────────────────────────
+function ValidationSummary({rows,mapping,targetTable}){
+  const tbl=TARGET_TABLES[targetTable];
+  if(!tbl) return null;
+  const mappedCols=Object.entries(mapping).filter(([c,t])=>t);
+  const requiredTargets=Object.entries(tbl.columns).filter(([k,v])=>v.required&&!v.auto).map(([k])=>k);
+  const mappedTargets=mappedCols.map(([c,t])=>t);
+
+  const missingRequired=requiredTargets.filter(r=>!mappedTargets.includes(r));
+  let errors=0,warnings=0;
+
+  rows.forEach(row=>{
+    mappedCols.forEach(([csv,target])=>{
+      const v=row[csv];
+      const def=tbl.columns[target];
+      if(def?.required&&(!v||String(v).trim()==="")) errors++;
+      if(def?.type==="number"&&v&&normalizeNumber(v)===null) warnings++;
+    });
+  });
+
+  return(
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:16}}>
+      <div style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:8,padding:12}}>
+        <div style={{fontSize:10,color:C.ts,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Zeilen</div>
+        <div style={{fontSize:20,fontWeight:900,color:C.B}}>{rows.length}</div>
+      </div>
+      <div style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:8,padding:12}}>
+        <div style={{fontSize:10,color:C.ts,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Gemappte Spalten</div>
+        <div style={{fontSize:20,fontWeight:900,color:C.G}}>{mappedCols.length}</div>
+      </div>
+      <div style={{background:C.card,border:`1px solid ${missingRequired.length>0?C.R+"40":C.bl}`,borderRadius:8,padding:12}}>
+        <div style={{fontSize:10,color:C.ts,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Fehlende Pflichtfelder</div>
+        <div style={{fontSize:20,fontWeight:900,color:missingRequired.length>0?C.R:C.G}}>{missingRequired.length>0?missingRequired.join(", "):"✓ Alle OK"}</div>
+      </div>
+      <div style={{background:C.card,border:`1px solid ${errors>0?C.R+"40":C.bl}`,borderRadius:8,padding:12}}>
+        <div style={{fontSize:10,color:C.ts,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Fehler / Warnungen</div>
+        <div style={{fontSize:20,fontWeight:900,color:errors>0?C.R:warnings>0?C.O:C.G}}>{errors>0?`${errors} Fehler`:warnings>0?`${warnings} Warnungen`:"✓ Sauber"}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── IMPORT SESSION COMPONENT ──────────────────────────────────────
+function ImportSession({session,onUpdate,onRemove,allSessions}){
+  const {id,fileName,headers,rows,targetTable,mapping,step,importResult}=session;
+  const upd=(k,v)=>onUpdate(id,{...session,[k]:v});
+  const fileRef=useRef();
+
+  // Auto-suggest mapping based on column name similarity
+  const autoMap=useCallback(()=>{
+    if(!targetTable) return;
+    const tbl=TARGET_TABLES[targetTable];
+    if(!tbl) return;
+    const newMap={};
+    headers.forEach(h=>{
+      const hLow=h.toLowerCase().replace(/[_\-\s]/g,"");
+      // Try exact match first
+      const exact=Object.keys(tbl.columns).find(k=>k.toLowerCase().replace(/[_\-]/g,"")===hLow);
+      if(exact&&!tbl.columns[exact].auto){newMap[h]=exact;return}
+      // Fuzzy match
+      const fuzzy=Object.entries(tbl.columns).find(([k,v])=>{
+        if(v.auto) return false;
+        const kLow=k.toLowerCase().replace(/[_\-]/g,"");
+        // Contains match
+        return hLow.includes(kLow)||kLow.includes(hLow)||
+          // Common aliases
+          (hLow.includes("nr")&&k.includes("nr"))||
+          (hLow.includes("datum")&&v.type==="date")||
+          (hLow.includes("date")&&v.type==="date")||
+          (hLow.includes("preis")&&v.type==="number"&&k.includes("betrag"))||
+          (hLow.includes("kunde")&&k.includes("kunde"))||
+          (hLow.includes("customer")&&k.includes("kunde"))||
+          (hLow.includes("vertrieb")&&k.includes("vertriebler"))||
+          (hLow.includes("scout")&&k.includes("scouter"))||
+          (hLow.includes("vb")&&k.includes("vertriebler"))||
+          (hLow.includes("plz")&&k==="plz")||
+          (hLow.includes("ort")&&k==="ort")||
+          (hLow.includes("strasse")&&k.includes("strasse"))||
+          (hLow.includes("straße")&&k.includes("strasse"))||
+          (hLow.includes("tel")&&k.includes("telefon"))||
+          (hLow.includes("mail")&&k.includes("email"))||
+          (hLow.includes("kwp")&&k==="kwp")||
+          (hLow.includes("speicher")&&k.includes("speicher"))||
+          (hLow.includes("status")&&k==="status")||
+          (hLow.includes("notiz")&&k.includes("notiz"));
+      });
+      if(fuzzy) newMap[h]=fuzzy[0];
+    });
+    upd("mapping",newMap);
+  },[targetTable,headers]);
+
+  // When target table changes, auto-map
+  useEffect(()=>{
+    if(targetTable&&headers.length>0&&Object.keys(mapping).length===0) autoMap();
+  },[targetTable]);
+
+  // Transform rows based on mapping
+  const transformRows=useCallback(()=>{
+    if(!targetTable) return [];
+    const tbl=TARGET_TABLES[targetTable];
+    const mappedCols=Object.entries(mapping).filter(([c,t])=>t);
+    return rows.map(row=>{
+      const out={};
+      mappedCols.forEach(([csv,target])=>{
+        const def=tbl.columns[target];
+        let val=row[csv];
+        if(def){
+          switch(def.type){
+            case "date": val=normalizeDate(val); break;
+            case "number": val=normalizeNumber(val); break;
+            case "boolean": val=normalizeBoolean(val); break;
+            case "uuid": if(!val) val=uid(); break;
+          }
+        }
+        if(val!==null&&val!==undefined&&val!=="") out[target]=val;
+      });
+      // Add auto fields
+      Object.entries(tbl.columns).forEach(([k,v])=>{
+        if(v.auto&&v.type==="uuid"&&!out[k]) out[k]=uid();
+        if(v.default!==undefined&&(out[k]===undefined||out[k]===null)) out[k]=v.default;
+      });
+      return out;
+    }).filter(r=>Object.keys(r).length>0);
+  },[rows,mapping,targetTable]);
+
+  const STEPS=["📂 Datei & Ziel","🔗 Spalten-Mapping","👁 Vorschau & Validierung","🚀 Import"];
+
+  return(
+    <div style={{background:C.sur,border:`1px solid ${C.bl}`,borderRadius:12,padding:20,marginBottom:16}} className="fade">
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+        <div style={{background:targetTable?TARGET_TABLES[targetTable]?.color+"20":C.YD,borderRadius:8,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
+          {targetTable?TARGET_TABLES[targetTable]?.icon:"📂"}
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800,fontSize:15}}>{fileName||"Neue CSV-Datei"}</div>
+          <div style={{fontSize:11,color:C.ts}}>
+            {targetTable?<><Badge label={TARGET_TABLES[targetTable]?.label} color={TARGET_TABLES[targetTable]?.color}/> · </>:null}
+            {rows.length>0?`${rows.length} Zeilen · ${headers.length} Spalten`:"Noch keine Datei geladen"}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          {step>0&&<button onClick={()=>upd("step",step-1)} style={{background:C.card,color:C.ts,border:`1px solid ${C.bl}`,borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>← Zurück</button>}
+          <button onClick={()=>onRemove(id)} style={{background:C.RD,color:C.R,border:`1px solid ${C.R}40`,borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>✕</button>
+        </div>
+      </div>
+
+      {/* Mini Steps */}
+      <Steps current={step} steps={STEPS}/>
+
+      {/* ── STEP 0: FILE & TARGET ── */}
+      {step===0&&<div className="fade">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          {/* File Upload */}
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.ts,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>CSV-Datei</div>
+            <div
+              onClick={()=>fileRef.current?.click()}
+              onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor=C.Y}}
+              onDragLeave={e=>e.currentTarget.style.borderColor=C.bl}
+              onDrop={e=>{
+                e.preventDefault();
+                e.currentTarget.style.borderColor=C.bl;
+                const f=e.dataTransfer.files[0];
+                if(f) parseFile(f);
+              }}
+              style={{border:`2px dashed ${rows.length>0?C.G+"60":C.bl}`,borderRadius:10,padding:rows.length>0?"16px":"32px",textAlign:"center",cursor:"pointer",transition:"all .2s",background:rows.length>0?C.GD:"transparent"}}>
+              {rows.length>0?(
+                <div>
+                  <div style={{fontSize:24,marginBottom:6}}>✓</div>
+                  <div style={{fontWeight:700,fontSize:13,color:C.G}}>{fileName}</div>
+                  <div style={{fontSize:11,color:C.ts,marginTop:4}}>{rows.length} Zeilen · {headers.length} Spalten</div>
+                  <div style={{fontSize:10,color:C.ts,marginTop:6}}>Klicken um andere Datei zu wählen</div>
+                </div>
+              ):(
+                <div>
+                  <div style={{fontSize:28,marginBottom:8,opacity:.5}}>📂</div>
+                  <div style={{fontWeight:700,fontSize:13,color:C.ts}}>CSV-Datei hierher ziehen</div>
+                  <div style={{fontSize:11,color:C.tm,marginTop:4}}>oder klicken zum Auswählen</div>
+                </div>
+              )}
+              <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" style={{display:"none"}} onChange={e=>{
+                const f=e.target.files[0]; if(f) parseFile(f);
+              }}/>
+            </div>
+          </div>
+
+          {/* Target Table */}
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.ts,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Ziel-Tabelle</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {Object.entries(TARGET_TABLES).map(([key,tbl])=>(
+                <button key={key} onClick={()=>upd("targetTable",key)}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderRadius:8,
+                    background:targetTable===key?tbl.color+"15":"transparent",
+                    border:`1px solid ${targetTable===key?tbl.color+"50":C.bl}`,
+                    cursor:"pointer",transition:"all .15s",textAlign:"left"}}>
+                  <span style={{fontSize:18}}>{tbl.icon}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:12,color:targetTable===key?tbl.color:C.txr}}>{tbl.label}</div>
+                    <div style={{fontSize:10,color:C.ts}}>{Object.keys(tbl.columns).length} Felder</div>
+                  </div>
+                  {targetTable===key&&<span style={{color:tbl.color,fontSize:14}}>✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Column Preview */}
+        {headers.length>0&&(
+          <div style={{marginTop:16,background:C.card,border:`1px solid ${C.bl}`,borderRadius:8,padding:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.ts,marginBottom:8}}>Erkannte Spalten:</div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+              {headers.map(h=><Badge key={h} label={h} color={C.B}/>)}
+            </div>
+          </div>
+        )}
+
+        <div style={{textAlign:"right",marginTop:16}}>
+          <button disabled={!targetTable||rows.length===0} onClick={()=>{autoMap();upd("step",1)}}
+            style={{background:!targetTable||rows.length===0?C.tm:C.Y,color:"#000",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:800,fontSize:13,cursor:!targetTable||rows.length===0?"not-allowed":"pointer",opacity:!targetTable||rows.length===0?.4:1}}>
+            Weiter → Spalten-Mapping
+          </button>
+        </div>
+      </div>}
+
+      {/* ── STEP 1: COLUMN MAPPING ── */}
+      {step===1&&<div className="fade">
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+          <div style={{flex:1,fontSize:12,color:C.ts}}>Ordne die CSV-Spalten den Datenbank-Feldern zu. Nicht benötigte Spalten einfach auf "überspringen" lassen.</div>
+          <button onClick={autoMap} style={{background:C.BD,color:C.B,border:`1px solid ${C.B}40`,borderRadius:6,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>🔮 Auto-Mapping</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {headers.map(h=>(
+            <MappingCard key={h} csvCol={h} csvSamples={rows.slice(0,3).map(r=>r[h])} targetTable={targetTable} mapping={mapping} onMap={(col,target)=>{
+              const newMap={...mapping};
+              if(target) newMap[col]=target; else delete newMap[col];
+              upd("mapping",newMap);
+            }}/>
+          ))}
+        </div>
+        <div style={{textAlign:"right",marginTop:16}}>
+          <button onClick={()=>upd("step",2)} disabled={Object.values(mapping).filter(v=>v).length===0}
+            style={{background:Object.values(mapping).filter(v=>v).length===0?C.tm:C.Y,color:"#000",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:800,fontSize:13,cursor:"pointer",opacity:Object.values(mapping).filter(v=>v).length===0?.4:1}}>
+            Weiter → Vorschau
+          </button>
+        </div>
+      </div>}
+
+      {/* ── STEP 2: PREVIEW & VALIDATION ── */}
+      {step===2&&<div className="fade">
+        <ValidationSummary rows={rows} mapping={mapping} targetTable={targetTable}/>
+        <DataPreview rows={rows} mapping={mapping} targetTable={targetTable} maxRows={15}/>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:16}}>
+          <button onClick={()=>upd("step",1)} style={{background:C.card,color:C.ts,border:`1px solid ${C.bl}`,borderRadius:8,padding:"10px 20px",fontWeight:700,fontSize:13,cursor:"pointer"}}>← Mapping anpassen</button>
+          <button onClick={()=>upd("step",3)}
+            style={{background:C.Y,color:"#000",border:"none",borderRadius:8,padding:"10px 28px",fontWeight:800,fontSize:14,cursor:"pointer"}}>
+            🚀 Import starten
+          </button>
+        </div>
+      </div>}
+
+      {/* ── STEP 3: IMPORT ── */}
+      {step===3&&<div className="fade">
+        <ImportExecutor session={session} transformRows={transformRows} onResult={r=>onUpdate(id,{...session,importResult:r})}/>
+      </div>}
+    </div>
+  );
+
+  function parseFile(file){
+    Papa.parse(file,{
+      header:true,skipEmptyLines:true,encoding:"UTF-8",
+      complete:res=>{
+        const hdrs=res.meta?.fields||[];
+        onUpdate(id,{...session,fileName:file.name,headers:hdrs,rows:res.data,mapping:{},step:0});
+      },
+      error:err=>console.error("Parse error:",err)
+    });
+  }
+}
+
+// ── IMPORT EXECUTOR ───────────────────────────────────────────────
+function ImportExecutor({session,transformRows,onResult}){
+  const [status,setStatus]=useState("ready"); // ready|checking|importing|done|error
+  const [progress,setProgress]=useState(0);
+  const [log,setLog]=useState([]);
+  const [result,setResult]=useState(null);
+
+  const addLog=(msg,type="info")=>setLog(p=>[...p,{msg,type,time:new Date().toLocaleTimeString("de-DE")}]);
+
+  const runImport=async()=>{
+    setStatus("checking");
+    addLog("Prüfe Ziel-Tabelle...","info");
+
+    const table=session.targetTable;
+    const tbl=TARGET_TABLES[table];
+
+    // Check if table exists
+    const exists=await sb.check(table);
+    if(!exists){
+      addLog(`⚠ Tabelle '${table}' existiert nicht oder ist nicht erreichbar`,"warn");
+      addLog("Versuche trotzdem zu importieren...","info");
+    } else {
+      addLog(`✓ Tabelle '${table}' gefunden`,"ok");
+    }
+
+    // Transform data
+    addLog("Transformiere Daten...","info");
+    const transformed=transformRows();
+    addLog(`${transformed.length} Zeilen vorbereitet`,"info");
+
+    if(transformed.length===0){
+      addLog("✕ Keine Daten zum Importieren!","error");
+      setStatus("error");
+      return;
+    }
+
+    setStatus("importing");
+
+    // Import in batches of 50
+    const BATCH=50;
+    let imported=0,errors=0;
+    const errDetails=[];
+
+    for(let i=0;i<transformed.length;i+=BATCH){
+      const batch=transformed.slice(i,i+BATCH);
+      try{
+        await sb.post(table,batch);
+        imported+=batch.length;
+        addLog(`✓ Batch ${Math.floor(i/BATCH)+1}: ${batch.length} Zeilen importiert`,"ok");
+      }catch(err){
+        errors+=batch.length;
+        const errMsg=String(err?.message||err).slice(0,200);
+        addLog(`✕ Batch ${Math.floor(i/BATCH)+1} fehlgeschlagen: ${errMsg}`,"error");
+        errDetails.push(errMsg);
+        // Try single-row import for failed batch
+        for(const row of batch){
+          try{
+            await sb.post(table,[row]);
+            imported++;errors--;
+            addLog(`  ↳ Einzelimport OK`,"ok");
+          }catch(e2){
+            addLog(`  ↳ Zeile fehlgeschlagen: ${String(e2?.message||e2).slice(0,100)}`,"error");
+          }
+        }
+      }
+      setProgress(Math.round(((i+batch.length)/transformed.length)*100));
+    }
+
+    const res={imported,errors,total:transformed.length,errDetails,timestamp:new Date().toISOString()};
+    setResult(res);
+    onResult(res);
+
+    if(errors===0){
+      addLog(`🎉 Import abgeschlossen: ${imported}/${transformed.length} Zeilen erfolgreich!`,"ok");
+      setStatus("done");
+    } else {
+      addLog(`⚠ Import mit Fehlern: ${imported} OK, ${errors} fehlgeschlagen`,"warn");
+      setStatus("done");
+    }
+  };
+
+  return(
+    <div>
+      {status==="ready"&&(
+        <div style={{textAlign:"center",padding:24}}>
+          <div style={{fontSize:36,marginBottom:12}}>🚀</div>
+          <div style={{fontWeight:800,fontSize:16,marginBottom:8}}>Bereit zum Import</div>
+          <div style={{fontSize:12,color:C.ts,marginBottom:16}}>
+            <b style={{color:C.tx}}>{session.rows.length}</b> Zeilen → <Badge label={TARGET_TABLES[session.targetTable]?.label} color={TARGET_TABLES[session.targetTable]?.color}/>
+          </div>
+          <button onClick={runImport} style={{background:C.Y,color:"#000",border:"none",borderRadius:8,padding:"12px 32px",fontWeight:800,fontSize:14,cursor:"pointer"}}>
+            Import jetzt starten
+          </button>
+        </div>
+      )}
+
+      {(status==="checking"||status==="importing")&&(
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <span className="spin" style={{fontSize:18}}>⟳</span>
+            <span style={{fontWeight:700,color:C.Y}}>{status==="checking"?"Prüfe...":"Importiere..."}</span>
+          </div>
+          {status==="importing"&&(
+            <div style={{background:C.card,borderRadius:6,overflow:"hidden",height:8,marginBottom:12}}>
+              <div style={{background:C.Y,height:"100%",borderRadius:6,transition:"width .3s ease",width:progress+"%"}}/>
+            </div>
+          )}
+        </div>
+      )}
+
+      {result&&(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
+          <div style={{background:C.GD,border:`1px solid ${C.G}40`,borderRadius:8,padding:12,textAlign:"center"}}>
+            <div style={{fontSize:10,color:C.ts,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Importiert</div>
+            <div style={{fontSize:22,fontWeight:900,color:C.G}}>{result.imported}</div>
+          </div>
+          <div style={{background:result.errors>0?C.RD:C.GD,border:`1px solid ${result.errors>0?C.R:C.G}40`,borderRadius:8,padding:12,textAlign:"center"}}>
+            <div style={{fontSize:10,color:C.ts,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Fehler</div>
+            <div style={{fontSize:22,fontWeight:900,color:result.errors>0?C.R:C.G}}>{result.errors}</div>
+          </div>
+          <div style={{background:C.BD,border:`1px solid ${C.B}40`,borderRadius:8,padding:12,textAlign:"center"}}>
+            <div style={{fontSize:10,color:C.ts,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Gesamt</div>
+            <div style={{fontSize:22,fontWeight:900,color:C.B}}>{result.total}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Log */}
+      {log.length>0&&(
+        <div style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:8,maxHeight:250,overflowY:"auto",padding:10}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.ts,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Import-Log</div>
+          {log.map((l,i)=>(
+            <div key={i} style={{display:"flex",gap:8,padding:"3px 0",fontSize:11,borderBottom:`1px solid ${C.bl}22`}}>
+              <span style={{color:C.tm,fontSize:10,flexShrink:0,width:55}}>{l.time}</span>
+              <span style={{color:l.type==="ok"?C.G:l.type==="error"?C.R:l.type==="warn"?C.O:C.ts}}>{l.msg}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── IMPORT HISTORY ────────────────────────────────────────────────
+function ImportHistory({sessions}){
+  const completed=sessions.filter(s=>s.importResult);
+  if(completed.length===0) return null;
+  return(
+    <div style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:10,padding:16,marginBottom:20}}>
+      <div style={{fontWeight:800,fontSize:13,marginBottom:12,color:C.ts}}>📜 Import-Historie (diese Sitzung)</div>
+      {completed.map(s=>(
+        <div key={s.id} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",borderBottom:`1px solid ${C.bl}`}}>
+          <span style={{fontSize:16}}>{TARGET_TABLES[s.targetTable]?.icon}</span>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:12}}>{s.fileName}</div>
+            <div style={{fontSize:10,color:C.ts}}>→ {TARGET_TABLES[s.targetTable]?.label} · {fmtDate(s.importResult?.timestamp)}</div>
+          </div>
+          <Badge label={`${s.importResult?.imported}/${s.importResult?.total}`} color={s.importResult?.errors>0?C.O:C.G}/>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── DATABASE STATUS ───────────────────────────────────────────────
+function DbStatus(){
+  const [stats,setStats]=useState({});
+  const [loading,setLoading]=useState(false);
+
+  const loadStats=async()=>{
+    setLoading(true);
+    const s={};
+    for(const [key] of Object.entries(TARGET_TABLES)){
+      try{
+        const data=await sb.get(key,"?select=id&limit=1000");
+        s[key]={exists:true,count:data.length};
+      }catch{
+        s[key]={exists:false,count:0};
+      }
+    }
+    setStats(s);
+    setLoading(false);
+  };
+
+  useEffect(()=>{loadStats()},[]);
+
+  return(
+    <div style={{background:C.card,border:`1px solid ${C.bl}`,borderRadius:10,padding:16,marginBottom:20}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <div style={{fontWeight:800,fontSize:13}}>🗄 Datenbank-Status</div>
+        <button onClick={loadStats} style={{background:C.BD,color:C.B,border:`1px solid ${C.B}40`,borderRadius:6,padding:"4px 10px",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+          {loading?<span className="spin">⟳</span>:"Aktualisieren"}
+        </button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8}}>
+        {Object.entries(TARGET_TABLES).map(([key,tbl])=>{
+          const st=stats[key];
+          return(
+            <div key={key} style={{background:C.sur,border:`1px solid ${st?.exists?C.G+"30":C.R+"30"}`,borderRadius:8,padding:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <span style={{fontSize:14}}>{tbl.icon}</span>
+                <span style={{fontWeight:700,fontSize:11,color:st?.exists?C.txr:C.R}}>{tbl.label}</span>
+              </div>
+              <div style={{fontSize:18,fontWeight:900,color:st?.exists?(st.count>0?tbl.color:C.ts):C.R}}>
+                {st?st.exists?st.count:"✕ fehlt":"..."}
+              </div>
+              <div style={{fontSize:9,color:C.tm}}>{key}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────
+function App(){
+  const [sessions,setSessions]=useState([]);
+  const [msg,setMsg]=useState(null);
+
+  const toast=(t,c=C.G)=>{setMsg({t,c});setTimeout(()=>setMsg(null),3500)};
+
+  const addSession=()=>{
+    setSessions(p=>[...p,{
+      id:uid(),fileName:"",headers:[],rows:[],
+      targetTable:"",mapping:{},step:0,importResult:null
+    }]);
+  };
+
+  const updateSession=(id,data)=>setSessions(p=>p.map(s=>s.id===id?data:s));
+  const removeSession=(id)=>setSessions(p=>p.filter(s=>s.id!==id));
+
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,padding:"60px 20px 40px"}}>
+      <Toast msg={msg}/>
+
+      <div style={{maxWidth:1100,margin:"0 auto"}}>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24,flexWrap:"wrap"}}>
+          <div style={{background:C.Y,borderRadius:10,width:42,height:42,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>📥</div>
+          <div style={{flex:1,minWidth:200}}>
+            <div style={{fontWeight:900,fontSize:22}}>Daten-Import Hub</div>
+            <div style={{fontSize:12,color:C.ts}}>CSV-Dateien in bee-doo Datenbanken importieren · Spalten-Mapping · Validierung</div>
+          </div>
+          <button onClick={addSession}
+            style={{background:C.Y,color:"#000",border:"none",borderRadius:8,padding:"10px 22px",fontWeight:800,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+            + CSV hinzufügen
+          </button>
+        </div>
+
+        {/* DB Status */}
+        <DbStatus/>
+
+        {/* Import History */}
+        <ImportHistory sessions={sessions}/>
+
+        {/* Active Sessions */}
+        {sessions.length===0?(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:48,marginBottom:16,opacity:.3}}>📥</div>
+            <div style={{fontWeight:800,fontSize:18,color:C.ts,marginBottom:8}}>Keine Import-Sitzungen</div>
+            <div style={{fontSize:13,color:C.tm,marginBottom:24,maxWidth:500,margin:"0 auto 24px"}}>
+              Klicke auf <b style={{color:C.Y}}>+ CSV hinzufügen</b> um eine CSV-Datei zu importieren.
+              Du kannst mehrere Dateien gleichzeitig vorbereiten und importieren.
+            </div>
+            <button onClick={addSession}
+              style={{background:C.Y,color:"#000",border:"none",borderRadius:10,padding:"14px 32px",fontWeight:800,fontSize:14,cursor:"pointer"}}>
+              + Erste CSV hinzufügen
+            </button>
+          </div>
+        ):(
+          <div>
+            {sessions.map(s=>(
+              <ImportSession key={s.id} session={s} onUpdate={updateSession} onRemove={removeSession} allSessions={sessions}/>
+            ))}
+            <button onClick={addSession}
+              style={{background:C.card,color:C.ts,border:`1px dashed ${C.bl}`,borderRadius:10,padding:"14px 20px",fontWeight:700,fontSize:13,cursor:"pointer",width:"100%",transition:"all .15s"}}
+              onMouseOver={e=>{e.currentTarget.style.borderColor=C.Y;e.currentTarget.style.color=C.Y}}
+              onMouseOut={e=>{e.currentTarget.style.borderColor=C.bl;e.currentTarget.style.color=C.ts}}>
+              + Weitere CSV hinzufügen
+            </button>
+          </div>
+        )}
+
+        {/* Footer Info */}
+        <div style={{marginTop:32,padding:"16px 20px",background:C.sur,border:`1px solid ${C.bl}`,borderRadius:10,fontSize:11,color:C.ts}}>
+          <div style={{fontWeight:700,marginBottom:6,color:C.txr}}>💡 Hinweise</div>
+          <div style={{lineHeight:1.7}}>
+            • CSV-Dateien werden automatisch geparst (Komma, Semikolon, Tab als Trennzeichen)<br/>
+            • Datumsformate werden automatisch erkannt (DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD)<br/>
+            • Deutsche Zahlenformate (1.234,56) werden automatisch konvertiert<br/>
+            • Mehrere Dateien können gleichzeitig vorbereitet und in verschiedene Tabellen importiert werden<br/>
+            • Der Import erfolgt in Batches von 50 Zeilen mit automatischem Retry bei Fehlern
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
