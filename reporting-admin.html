@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>bee-doo · Reporting Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #06080F; color: #e1e7ef; font-family: 'DM Sans', system-ui, sans-serif; min-height: 100vh; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0D1117; }
+::-webkit-scrollbar-thumb { background: #1B2332; border-radius: 3px; }
+.back-btn { position: fixed; top: 10px; left: 10px; z-index: 9999; background: #1a1d27; border: 1px solid #2a2d3a; color: #94a3b8; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; text-decoration: none; transition: all .15s; }
+.back-btn:hover { border-color: #F5C500; color: #F5C500; }
+
+@media (max-width: 768px) {
+  .grid-4 { grid-template-columns: 1fr 1fr !important; }
+  .header-title { font-size: 20px !important; }
+}
+@media (max-width: 480px) {
+  .grid-4 { grid-template-columns: 1fr !important; }
+  .container { padding: 16px !important; }
+}
+</style>
+</head>
+<body>
+<a href="index.html" class="back-btn">← Launcher</a>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ─── Config ───
+const CFG = window.BEEDOO_CONFIG || {};
+const SB_URL = CFG.SB_URL || 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_ANON = CFG.SB_ANON;
+const SB_SRV = CFG.SB_SRV;
+const sbHeaders = (srv) => ({
+  'apikey': srv ? SB_SRV : SB_ANON,
+  'Authorization': `Bearer ${srv ? SB_SRV : SB_ANON}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=minimal'
+});
+
+// ─── Colors ───
+const C = { bg: '#06080F', card: '#0D1117', border: '#1B2332', amber: '#F5C500', sec: '#8b95a5', text: '#e1e7ef', green: '#22c55e', red: '#ef4444', blue: '#3b82f6' };
+
+// ─── CSV Type Configs ───
+const CSV_TYPES = {
+  leads: {
+    label: 'Leads (Incoming)',
+    icon: '📋',
+    table: 'reporting_leads',
+    color: '#3b82f6',
+    detectCol: 'Lead ID',
+    mapRow: (r) => ({
+      lead_id: parseInt(r['Lead ID']) || null,
+      leadstatus: r['Leadstatus'] || null,
+      mitarbeiter_berater: r['Mitarbeiter/Berater'] || null,
+      indikator: r['Indikator'] || null,
+      letzter_status: r['LetzterBearbeitungsstatus'] || null,
+      anrede: r['Anrede'] || null,
+      vorname: r['Vorname'] || null,
+      nachname: r['Nachname'] || null,
+      plz: r['PLZ'] || null,
+      ort: r['Ort'] || null,
+      quelle: r['Quelle'] || null,
+      mvpp_name: r['MVPP-Name'] || null,
+      mvpp_id: r['MVPP-ID'] || null,
+      tags: r['Tags'] || null,
+      erreichbarkeit: r['Erreichbarkeit'] || null,
+      nicht_erreicht: r['Nicht erreicht'] || null,
+      datum_importiert: parseDate(r['Datumimportiert']),
+      datum_qualifiziert: parseDate(r['Datum Qualifiziert']),
+      datum_abgeschlossen: parseDate(r['Datumabgeschlossen']),
+    })
+  },
+  auftraege: {
+    label: 'Provisionsrelevant',
+    icon: '💰',
+    table: 'reporting_auftraege',
+    color: '#F5C500',
+    detectCol: 'AN Nr.',
+    mapRow: (r) => ({
+      an_nr: r['AN Nr.'] || null,
+      auftragsstatus: r['Auftragsstatus'] || null,
+      typ: r['Typ'] || null,
+      speichererweiterung: r['Speichererweiterung'] || null,
+      dokumentstatus: r['Dokumentstatus'] || null,
+      beedoo_fortschritt: r['BeeDooFortschritt'] || null,
+      angebot_erstellt_von: r['Angebot erstellt von'] || null,
+      lead_id: parseInt(r['Lead ID']) || null,
+      externe_lead_id: r['externe Lead ID'] || null,
+      mvpp_id: r['MVPP-ID'] || null,
+      mvpp_name: r['MVPP-Name'] || null,
+      kunde: r['Kunde'] || null,
+      kunde_plz: r['Kunde PLZ'] || null,
+      kundennummer: r['Kundennummer'] || null,
+      quelle: r['Quelle'] || null,
+      an_wert_netto: r['AN-WertNetto'] || null,
+      an_wert_netto_num: parseNetto(r['AN-WertNetto']),
+      kundenberater: r['Kundenberater'] || null,
+      vp_nummer: r['VP Nummer'] || null,
+      datum_erstellt: parseDate(r['DatumErstellt']),
+      datum_gesendet: parseDate(r['DatumAn Kunde gesendet']),
+      datum_gelesen: parseDate(r['DatumGelesen']),
+      datum_angenommen: parseDate(r['DatumAngenommen']),
+      finanzierung_gewuenscht: r['Finanzierung gewünscht'] || null,
+      angebot_kwp: parseFloat(String(r['Angebot KWP'] || '').replace(',', '.')) || null,
+      angebot_module: parseInt(r['Angebot Module']) || null,
+      angebot_solarmodule: r['Angebot Solarmodule'] || null,
+      angebot_batterie: r['Angebot Batteriekapazität Gesamt'] || null,
+      auszahlungsrelevant: r['Auszahlungsrelevant'] || null,
+      ausgezahlt_am: r['Ausgezahlt am'] || null,
+    })
+  },
+  termine_erstellt: {
+    label: 'Termine Erstellt',
+    icon: '📅',
+    table: 'reporting_termine_erstellt',
+    color: '#22c55e',
+    detectCol: 'TerminID',
+    mapRow: mapTerminRow,
+  },
+  termine_closed: {
+    label: 'Termine Abgeschlossen',
+    icon: '✅',
+    table: 'reporting_termine_closed',
+    color: '#a855f7',
+    detectCol: 'TerminID',
+    mapRow: mapTerminRow,
+  },
+};
+
+function mapTerminRow(r) {
+  return {
+    termin_id: parseInt(r['TerminID']) || null,
+    lead_id: parseInt(r['LEADID']) || null,
+    extern_id: r['EXTERNID'] || null,
+    leadquelle: r['Leadquelle'] || null,
+    mvpp_name: r['MVPP - NAME'] || null,
+    mvpp_id: r['MVPP - ID'] || null,
+    leadkunde: r['Leadkunde'] || null,
+    leadadresse: r['Leadadresse'] || null,
+    terminiert_von: r['Terminiertvon'] || null,
+    terminiert_an_name: r['Terminiert anName'] || null,
+    terminiert_an_email: r['Terminiert anE-Mail'] || null,
+    datum_erstellung: parseDateTime(r['DatumTerminerstellung']),
+    datum_beginn: parseDateTime(r['DatumTermin Beginn']),
+    datum_ende: parseDateTime(r['DatumTermin Ende']),
+    terminstatus: r['Terminstatus'] || null,
+    aktueller_status: r['AktuellerStatus'] || null,
+    angebotsstatus: r['Angebotsstatus'] || null,
+    angebot_angenommen: r['Angebot angenommen'] || null,
+    provisionsstatus: r['Provisionsstatus'] || null,
+    terminausfall_begruendung: r['TerminausfallBegründung'] || null,
+    abschlussstatus: r['Abschlussstatus'] || null,
+    abschlussbemerkung: r['Abschlussbemerkung'] || null,
+    datum_abgeschlossen: parseDateTime(r['DatumAbgeschlossen']),
+    indikator: r['Indikator'] || null,
+    datum_bestaetigt_partner: r['DatumBestätigt Partner'] || null,
+    datum_bestaetigt_kunde: r['DatumBestätigt Kunde'] || null,
+    bestaetigt_durch: r['Bestätigt Durch'] || null,
+  };
+}
+
+function parseDate(s) {
+  if (!s) return null;
+  s = String(s).trim();
+  const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return null;
+}
+
+function parseDateTime(s) {
+  if (!s) return null;
+  s = String(s).trim();
+  const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}T${m[4].padStart(2,'0')}:${m[5]}:00`;
+  return parseDate(s) ? parseDate(s) + 'T00:00:00' : null;
+}
+
+function parseNetto(v) {
+  if (!v) return null;
+  const s = String(v).replace(/\./g, '').replace(',', '.').replace('€', '').trim().split(/\s/)[0];
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+// ─── Detect CSV type automatically ───
+function detectCsvType(headers) {
+  if (headers.includes('Lead ID') && headers.includes('Leadstatus') && headers.includes('Datumimportiert')) return 'leads';
+  if (headers.includes('AN Nr.') && headers.includes('Auftragsstatus')) return 'auftraege';
+  if (headers.includes('TerminID') && headers.includes('DatumAbgeschlossen') && headers.includes('Abschlussstatus')) return 'termine_closed';
+  if (headers.includes('TerminID')) return 'termine_erstellt';
+  return null;
+}
+
+// ─── Supabase batch insert (chunks of 500) ───
+async function batchInsert(table, rows, onProgress) {
+  const CHUNK = 500;
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    const res = await fetch(`${SB_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: sbHeaders(true),
+      body: JSON.stringify(chunk)
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Chunk ${i}-${i+chunk.length}: ${res.status} ${err.slice(0, 200)}`);
+    }
+    inserted += chunk.length;
+    onProgress?.(inserted, rows.length);
+  }
+  return inserted;
+}
+
+// ═══════════════════════════════════════════════════════════
+// COMPONENTS
+// ═══════════════════════════════════════════════════════════
+
+const StatusBadge = ({ status }) => {
+  const colors = { idle: C.sec, parsing: C.blue, ready: C.amber, importing: C.blue, done: C.green, error: C.red };
+  const labels = { idle: 'Warten', parsing: 'Wird gelesen…', ready: 'Bereit', importing: 'Importiert…', done: 'Fertig ✓', error: 'Fehler' };
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, color: colors[status] || C.sec, letterSpacing: '.04em', textTransform: 'uppercase' }}>
+      {labels[status] || status}
+    </span>
+  );
+};
+
+const UploadCard = ({ type, config, onParsed }) => {
+  const [status, setStatus] = useState('idle');
+  const [rows, setRows] = useState(0);
+  const [error, setError] = useState(null);
+  const [progress, setProgress] = useState(0);
+  const [importId, setImportId] = useState(null);
+  const fileRef = useRef();
+
+  const handleFile = (file) => {
+    if (!file) return;
+    setStatus('parsing');
+    setError(null);
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      encoding: 'UTF-8',
+      complete: (result) => {
+        const data = result.data.filter(r => Object.values(r).some(v => v && String(v).trim()));
+        setRows(data.length);
+        setStatus('ready');
+        onParsed(type, data, file.name);
+      },
+      error: (err) => {
+        setError(err.message);
+        setStatus('error');
+      }
+    });
+  };
+
+  const onDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.style.borderColor = config.color;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) handleFile(file);
+  }, []);
+
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#fff'; }}
+      onDragLeave={(e) => { e.currentTarget.style.borderColor = config.color + '40'; }}
+      onDrop={onDrop}
+      onClick={() => fileRef.current?.click()}
+      style={{
+        background: C.card, borderRadius: 14, padding: 24,
+        border: `2px dashed ${status === 'done' ? C.green : status === 'ready' ? config.color : config.color + '40'}`,
+        cursor: 'pointer', transition: 'all .2s', position: 'relative',
+        minHeight: 160, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 8,
+      }}
+    >
+      <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={(e) => handleFile(e.target.files?.[0])} />
+      <div style={{ fontSize: 32 }}>{config.icon}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{config.label}</div>
+      <StatusBadge status={status} />
+      {rows > 0 && <div style={{ fontSize: 13, color: C.sec }}>{rows.toLocaleString('de-DE')} Zeilen</div>}
+      {error && <div style={{ fontSize: 12, color: C.red, maxWidth: 260, textAlign: 'center' }}>{error}</div>}
+      {status === 'idle' && <div style={{ fontSize: 12, color: C.sec, marginTop: 4 }}>CSV hierher ziehen oder klicken</div>}
+    </div>
+  );
+};
+
+const ImportHistory = ({ imports, onDelete, loading }) => {
+  if (!imports?.length) return null;
+  return (
+    <div style={{ background: C.card, borderRadius: 14, padding: 24, border: `1px solid ${C.border}` }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span>📦</span> Import-Verlauf
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {imports.map((imp) => (
+          <div key={imp.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#0a0d14', borderRadius: 10, border: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: C.amber, background: C.amber + '18', padding: '3px 8px', borderRadius: 6 }}>{imp.tabelle}</span>
+              <span style={{ fontSize: 13, color: C.text }}>{imp.dateiname}</span>
+              <span style={{ fontSize: 12, color: C.sec }}>{imp.zeilen?.toLocaleString('de-DE')} Zeilen</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 11, color: C.sec }}>{new Date(imp.importiert_am).toLocaleString('de-DE')}</span>
+              <button onClick={() => onDelete(imp.id)} style={{ background: 'none', border: `1px solid ${C.red}30`, color: C.red, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, transition: 'all .15s' }}
+                onMouseEnter={e => e.target.style.background = C.red + '20'}
+                onMouseLeave={e => e.target.style.background = 'none'}
+              >Löschen</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════════════════════
+
+const App = () => {
+  const [parsedData, setParsedData] = useState({});
+  const [fileNames, setFileNames] = useState({});
+  const [importing, setImporting] = useState(false);
+  const [importLog, setImportLog] = useState([]);
+  const [imports, setImports] = useState([]);
+  const [tablesReady, setTablesReady] = useState(null);
+  const [migrating, setMigrating] = useState(false);
+
+  // Load import history
+  const loadImports = async () => {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/reporting_imports?order=importiert_am.desc&limit=20`, { headers: sbHeaders(false) });
+      if (res.ok) { setImports(await res.json()); setTablesReady(true); }
+      else { setTablesReady(false); }
+    } catch { setTablesReady(false); }
+  };
+
+  useEffect(() => { loadImports(); }, []);
+
+  const handleParsed = (type, data, filename) => {
+    setParsedData(prev => ({ ...prev, [type]: data }));
+    setFileNames(prev => ({ ...prev, [type]: filename }));
+  };
+
+  // Run migration
+  const runMigration = async () => {
+    setMigrating(true);
+    try {
+      const res = await fetch('/api/reporting-migrate', {
+        method: 'POST',
+        headers: { 'x-migrate-token': 'EtQkiOCgyug_ZY8aeY01', 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const failed = data.results.filter(r => !r.ok);
+        if (failed.length) alert(`Migration teilweise fehlgeschlagen:\n${failed.map(f => f.label).join(', ')}`);
+        else alert('✅ Alle Tabellen erfolgreich erstellt!');
+        setTablesReady(true);
+        loadImports();
+      } else alert('Migration fehlgeschlagen');
+    } catch(e) { alert('Migration-Fehler: ' + e.message); }
+    setMigrating(false);
+  };
+
+  // Import all parsed CSVs
+  const startImport = async () => {
+    const types = Object.keys(parsedData);
+    if (!types.length) return alert('Keine CSV-Dateien geladen!');
+
+    setImporting(true);
+    setImportLog([]);
+    const log = (msg) => setImportLog(prev => [...prev, msg]);
+
+    for (const type of types) {
+      const config = CSV_TYPES[type];
+      const data = parsedData[type];
+      const filename = fileNames[type] || 'unknown.csv';
+
+      try {
+        log(`⏳ ${config.label}: ${data.length} Zeilen werden importiert...`);
+
+        // 1. Create import record
+        const impRes = await fetch(`${SB_URL}/rest/v1/reporting_imports`, {
+          method: 'POST',
+          headers: { ...sbHeaders(true), 'Prefer': 'return=representation' },
+          body: JSON.stringify({ tabelle: config.table, dateiname: filename, zeilen: data.length })
+        });
+        if (!impRes.ok) throw new Error('Import-Record fehlgeschlagen: ' + await impRes.text());
+        const [impRecord] = await impRes.json();
+
+        // 2. Map and insert rows
+        const mapped = data.map(r => ({ ...config.mapRow(r), import_id: impRecord.id }));
+        const inserted = await batchInsert(config.table, mapped, (done, total) => {
+          log(`⏳ ${config.label}: ${done}/${total} importiert...`);
+        });
+
+        log(`✅ ${config.label}: ${inserted.toLocaleString('de-DE')} Zeilen erfolgreich importiert`);
+      } catch(e) {
+        log(`❌ ${config.label}: ${e.message}`);
+      }
+    }
+
+    log('─── Import abgeschlossen ───');
+    setImporting(false);
+    setParsedData({});
+    setFileNames({});
+    loadImports();
+  };
+
+  // Delete import batch
+  const deleteImport = async (id) => {
+    if (!confirm('Import-Batch und alle zugehörigen Daten löschen?')) return;
+    const imp = imports.find(i => i.id === id);
+    if (!imp) return;
+    try {
+      // Delete from data table first, then import record
+      await fetch(`${SB_URL}/rest/v1/${imp.tabelle}?import_id=eq.${id}`, { method: 'DELETE', headers: sbHeaders(true) });
+      await fetch(`${SB_URL}/rest/v1/reporting_imports?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders(true) });
+      loadImports();
+    } catch(e) { alert('Lösch-Fehler: ' + e.message); }
+  };
+
+  const readyCount = Object.keys(parsedData).length;
+
+  return (
+    <div className="container" style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 32px', paddingTop: 50 }}>
+      {/* Header */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+          <span style={{ fontSize: 28, fontWeight: 800, color: C.amber }}>🐝 bee-doo</span>
+          <span className="header-title" style={{ fontSize: 28, fontWeight: 800, color: C.text }}>Reporting Admin</span>
+        </div>
+        <div style={{ fontSize: 13, color: C.sec }}>CSV-Daten in Supabase importieren für das Reporting Dashboard</div>
+      </div>
+
+      {/* Migration Banner */}
+      {tablesReady === false && (
+        <div style={{ background: C.amber + '15', border: `1px solid ${C.amber}40`, borderRadius: 12, padding: 18, marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontWeight: 700, color: C.amber, fontSize: 14 }}>⚠️ Tabellen müssen erstellt werden</div>
+            <div style={{ fontSize: 12, color: C.sec, marginTop: 4 }}>Einmalige Migration nötig – erstellt 4 Reporting-Tabellen in Supabase</div>
+          </div>
+          <button onClick={runMigration} disabled={migrating} style={{
+            background: C.amber, color: '#000', fontWeight: 700, border: 'none', padding: '10px 24px', borderRadius: 10, cursor: 'pointer', fontSize: 13, opacity: migrating ? 0.6 : 1
+          }}>{migrating ? 'Erstelle Tabellen…' : 'Tabellen erstellen'}</button>
+        </div>
+      )}
+
+      {/* Upload Cards */}
+      <div className="grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+        {Object.entries(CSV_TYPES).map(([key, cfg]) => (
+          <UploadCard key={key} type={key} config={cfg} onParsed={handleParsed} />
+        ))}
+      </div>
+
+      {/* Import Button */}
+      {readyCount > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+          <button onClick={startImport} disabled={importing} style={{
+            background: importing ? C.blue : C.amber, color: '#000', fontWeight: 800, border: 'none',
+            padding: '14px 40px', borderRadius: 12, cursor: importing ? 'default' : 'pointer',
+            fontSize: 15, transition: 'all .2s', opacity: importing ? 0.7 : 1,
+          }}>
+            {importing ? '⏳ Importiert…' : `🚀 ${readyCount} CSV${readyCount > 1 ? 's' : ''} importieren`}
+          </button>
+          <span style={{ fontSize: 13, color: C.sec }}>
+            {Object.entries(parsedData).map(([k, d]) => `${CSV_TYPES[k].icon} ${d.length}`).join('  ·  ')} Zeilen
+          </span>
+        </div>
+      )}
+
+      {/* Import Log */}
+      {importLog.length > 0 && (
+        <div style={{ background: C.card, borderRadius: 14, padding: 20, border: `1px solid ${C.border}`, marginBottom: 24, maxHeight: 300, overflowY: 'auto' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12 }}>Import-Log</div>
+          {importLog.map((msg, i) => (
+            <div key={i} style={{ fontSize: 12, color: msg.startsWith('✅') ? C.green : msg.startsWith('❌') ? C.red : C.sec, padding: '3px 0', fontFamily: 'monospace' }}>{msg}</div>
+          ))}
+        </div>
+      )}
+
+      {/* Import History */}
+      <ImportHistory imports={imports} onDelete={deleteImport} />
+
+      {/* Stats */}
+      {tablesReady && (
+        <div style={{ marginTop: 24, padding: 16, background: C.card, borderRadius: 12, border: `1px solid ${C.border}` }}>
+          <TableStats />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TableStats = () => {
+  const [stats, setStats] = useState({});
+  
+  useEffect(() => {
+    const tables = ['reporting_leads', 'reporting_auftraege', 'reporting_termine_erstellt', 'reporting_termine_closed'];
+    tables.forEach(async (t) => {
+      try {
+        const res = await fetch(`${SB_URL}/rest/v1/${t}?select=id&limit=1`, {
+          headers: { ...sbHeaders(false), 'Prefer': 'count=exact' }
+        });
+        const count = res.headers.get('content-range')?.split('/')[1] || '?';
+        setStats(prev => ({ ...prev, [t]: count }));
+      } catch { setStats(prev => ({ ...prev, [t]: '?' })); }
+    });
+  }, []);
+
+  return (
+    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: C.sec }}>📊 Datensätze in Supabase:</div>
+      {Object.entries(stats).map(([t, c]) => (
+        <div key={t} style={{ fontSize: 12, color: C.text }}>
+          <span style={{ color: C.sec }}>{t.replace('reporting_', '')}: </span>
+          <span style={{ fontWeight: 700, color: C.amber }}>{c === '?' ? '–' : parseInt(c).toLocaleString('de-DE')}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
