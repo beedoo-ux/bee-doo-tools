@@ -275,11 +275,20 @@ function App() {
     }
 
     const duplicates = React.useMemo(() => findDuplicates(csv), [csv]);
+    const monthDuplicates = React.useMemo(() => {
+        if (!selMonth) return [];
+        return duplicates.filter(dup => 
+            dup.auftraege.some(a => monthKey(a['DatumErstellt']) === selMonth)
+        ).map(dup => ({
+            ...dup,
+            auftraege: dup.auftraege.filter(a => monthKey(a['DatumErstellt']) === selMonth)
+        })).filter(dup => dup.auftraege.length >= 2);
+    }, [duplicates, selMonth]);
     const dupANSet = React.useMemo(() => {
         const s = new Set();
-        duplicates.forEach(d => d.auftraege.forEach(a => s.add(a['AN Nr.'])));
+        monthDuplicates.forEach(d => d.auftraege.forEach(a => s.add(a['AN Nr.'])));
         return s;
-    }, [duplicates]);
+    }, [monthDuplicates]);
 
     function filtered() {
         if (!csv || !selMonth) return [];
@@ -453,19 +462,19 @@ function App() {
                 ))}
             </div>
 
-            {duplicates.length > 0 && (
+            {monthDuplicates.length > 0 && (
                 <div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:12,padding:'14px 20px',marginBottom:20}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setShowDups(!showDups)}>
                         <div style={{display:'flex',alignItems:'center',gap:10}}>
                             <span style={{fontSize:18}}>⚠️</span>
-                            <span style={{fontSize:14,fontWeight:600,color:'#f59e0b'}}>{duplicates.length} mögliche Duplikate</span>
+                            <span style={{fontSize:14,fontWeight:600,color:'#f59e0b'}}>{monthDuplicates.length} mögliche Duplikate</span>
                             <span style={{fontSize:12,color:'#8b95a5'}}>{excludedANs.size > 0 ? `(${excludedANs.size} aussortiert)` : 'Bitte prüfen!'}</span>
                         </div>
                         <span style={{fontSize:12,color:'#f59e0b',fontWeight:500}}>{showDups?'▲ Ausblenden':'▼ Prüfen'}</span>
                     </div>
                     {showDups && (
                         <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:16}}>
-                            {duplicates.map((dup,di) => (
+                            {monthDuplicates.map((dup,di) => (
                                 <div key={di} style={{background:'rgba(0,0,0,0.3)',borderRadius:10,padding:16,border:'1px solid rgba(245,158,11,0.15)'}}>
                                     <div style={{fontSize:14,fontWeight:700,color:'#f59e0b',marginBottom:12}}>{dup.kunde} <span style={{fontSize:12,fontWeight:400,color:'#8b95a5'}}>| PLZ {dup.plz} | {dup.kwp} kWp</span></div>
                                     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:12}}>
@@ -476,7 +485,7 @@ function App() {
                                             const bd = (a['BeeDooFortschritt']||'').trim();
                                             const tb = (a['Termine Berater']||'').trim();
                                             // Extract last meaningful status from Termine Berater
-                                            const tbShort = tb.replace(/Termintyp:/g, '\n🔹').replace(/Termin erstellt:/g, '📅').replace(/Abgeschlossen am/g, '✅').substring(0, 200);
+                                            const tbShort = tb.replace(/Termintyp:/g, '\n🔹').replace(/Termin erstellt:/g, '📅').replace(/Abgeschlossen am/g, '✅');
                                             return (
                                                 <div key={ai} style={{
                                                     background: isExcl ? 'rgba(229,62,62,0.08)' : isKept ? 'rgba(72,187,120,0.08)' : '#12131a',
@@ -497,7 +506,7 @@ function App() {
                                                     </div>
                                                     <div style={{background:'rgba(255,255,255,0.04)',borderRadius:6,padding:'8px 10px',marginBottom:10}}>
                                                         <div style={{fontSize:11,color:'#6b7280',marginBottom:4,fontWeight:600}}>Termine Berater</div>
-                                                        <div style={{fontSize:11,color:'#8b95a5',lineHeight:1.5,maxHeight:80,overflow:'auto'}}>{tbShort || '–'}</div>
+                                                        <div style={{fontSize:11,color:'#8b95a5',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{tbShort || '–'}</div>
                                                     </div>
                                                     <div style={{display:'flex',gap:8}}>
                                                         {!isExcl && !isKept && (
