@@ -171,7 +171,8 @@ function calcProv(auftr, name, selectedMonth) {
     if (name === 'Christoph Held') {
         teamBonus = cnt * 200;
     }
-    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, totalCnt: auftr.length, ab8: name !== 'Christoph Held' && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && cnt >= st.schwelle, isSonder: name === 'Christoph Held' || (name === 'Tayfun Süleymaniye' && isJan26Plus) };
+    const paid = auftr.filter(a => (a['Ausgezahlt am']||'').trim());
+    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, paidCnt: paid.length, totalCnt: auftr.length, ab8: name !== 'Christoph Held' && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && cnt >= st.schwelle, isSonder: name === 'Christoph Held' || (name === 'Tayfun Süleymaniye' && isJan26Plus) };
 }
 
 function App() {
@@ -180,7 +181,6 @@ function App() {
     const [fTyp, setFTyp] = React.useState('Alle');
     const [selVT, setSelVT] = React.useState(null);
     const [search, setSearch] = React.useState('');
-    const [showPaid, setShowPaid] = React.useState(false);
 
     function onFile(e) {
         const f = e.target.files[0]; if (!f) return;
@@ -204,7 +204,6 @@ function App() {
         if (!csv || !selMonth) return [];
         return csv.filter(r => {
             if (monthKey(r['DatumErstellt']) !== selMonth) return false;
-            if (!showPaid && r['Ausgezahlt am']?.trim()) return false;
             if (!VT_TYPEN[r['Kundenberater']?.trim()]) return false;
             return true;
         });
@@ -295,11 +294,11 @@ function App() {
                 </div>
 
                 <div style={cardStyle}>
-                    <div style={{fontSize:13,color:'#6b7280',marginBottom:14,fontWeight:500}}>📋 Aufträge ({det.cnt} provisionsrelevant{det.storCnt>0?` · ${det.storCnt} storniert`:''}{det.nrCnt>0?` · ${det.nrCnt} nicht relevant`:''})</div>
+                    <div style={{fontSize:13,color:'#6b7280',marginBottom:14,fontWeight:500}}>📋 Aufträge ({det.cnt} provisionsrelevant{det.paidCnt>0?` · ${det.paidCnt} ausgezahlt`:''}{det.storCnt>0?` · ${det.storCnt} storniert`:''}{det.nrCnt>0?` · ${det.nrCnt} nicht relevant`:''})</div>
                     <div style={{overflowX:'auto'}}>
                         <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
                             <thead><tr style={{borderBottom:'1px solid #1e1f2a'}}>
-                                {['AN Nr.','Kunde','kWp','Netto','Quelle','Speicher','Status','AZ','Erstellt'].map(h=>(
+                                {['AN Nr.','Kunde','kWp','Netto','Quelle','Speicher','Status','AZ','Ausgezahlt','Erstellt'].map(h=>(
                                     <th key={h} style={{padding:'8px 10px',textAlign:'left',color:'#6b7280',fontWeight:500,whiteSpace:'nowrap'}}>{h}</th>
                                 ))}
                             </tr></thead>
@@ -318,6 +317,7 @@ function App() {
                                         <td style={{padding:'8px 10px',color:a['Speichererweiterung']?.trim()?'#a78bfa':'#3a3d4a'}}>{a['Speichererweiterung']?.trim()?'✓':'-'}</td>
                                         <td style={{padding:'8px 10px',color:isStor?'#e53e3e':'#8b95a5',fontSize:12,fontWeight:isStor?600:400}}>{a['Auftragsstatus']?.trim()}</td>
                                         <td style={{padding:'8px 10px'}}><span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:isNR?'rgba(229,62,62,0.15)':'rgba(72,187,120,0.15)',color:isNR?'#e53e3e':'#48bb78',fontWeight:500}}>{isNR?'Nein':'Ja'}</span></td>
+                                        <td style={{padding:'8px 10px'}}>{a['Ausgezahlt am']?.trim() ? <span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:'rgba(245,197,0,0.15)',color:'#F5C500',fontWeight:500}}>{a['Ausgezahlt am'].trim()}</span> : <span style={{fontSize:11,color:'#4a5568'}}>offen</span>}</td>
                                         <td style={{padding:'8px 10px',color:'#8b95a5',whiteSpace:'nowrap'}}>{a['DatumErstellt']}</td>
                                     </tr>);
                                 })}
@@ -367,10 +367,6 @@ function App() {
                         color:fTyp===t?'#F5C500':'#8b95a5',fontSize:13,fontWeight:500,cursor:'pointer',
                     }}>{t}</button>
                 ))}
-                <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#8b95a5',cursor:'pointer'}}>
-                    <input type="checkbox" checked={showPaid} onChange={e=>setShowPaid(e.target.checked)} style={{accentColor:'#F5C500'}} />
-                    Bereits ausgezahlt
-                </label>
             </div>
 
             <div className="grid-stats" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:24}}>
@@ -420,7 +416,7 @@ function VTCard({d,idx,onClick}) {
                 </div>
                 <div style={{textAlign:'right'}}>
                     <div style={{fontSize:20,fontWeight:700,color:'#F5C500'}}>{euro(d.total)}</div>
-                    <div style={{fontSize:12,color:'#6b7280'}}>{d.totalCnt} Anlagen: {d.cnt} positiv{d.storCnt>0?`, ${d.storCnt} storniert`:''}{d.nrCnt>0?`, ${d.nrCnt} n. rel.`:''}</div>
+                    <div style={{fontSize:12,color:'#6b7280'}}>{d.totalCnt} Anlagen: {d.cnt} positiv{d.paidCnt>0?`, ${d.paidCnt} ausgez.`:''}{d.storCnt>0?`, ${d.storCnt} storn.`:''}{d.nrCnt>0?`, ${d.nrCnt} n. rel.`:''}</div>
                 </div>
             </div>
             <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
