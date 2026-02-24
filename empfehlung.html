@@ -54,6 +54,11 @@ const font = "'DM Sans', sans-serif";
 
 // ═══════════════════════════════════════════
 // Data loaded from Supabase
+
+// ─── Prämien-Staffelung ───
+const PRAEMIEN_STUFEN = [700, 800, 900, 1000];
+const getPraemie = (n) => n <= 0 ? 0 : n === 1 ? 700 : n === 2 ? 800 : n === 3 ? 900 : 1000;
+const getTotalPraemie = (sales) => { let sum = 0; for (let i = 1; i <= sales; i++) sum += getPraemie(i); return sum; };
 // ═══════════════════════════════════════════
 // Data loaded from Supabase (no more mock data)
 
@@ -247,7 +252,7 @@ function TabWerber({ werber, leads }) {
                 <div style={{ fontSize: 9, color: BRAND.textSec }}>Sales</div>
               </div>
               <div style={{ padding: "10px", borderRadius: 10, background: `${BRAND.yellow}08`, border: `1px solid ${BRAND.yellow}15`, textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: 900, color: BRAND.yellow }}>{(w.successful * 200).toLocaleString("de-DE")}€</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: BRAND.yellow }}>{getTotalPraemie(w.successful).toLocaleString("de-DE")}€</div>
                 <div style={{ fontSize: 9, color: BRAND.textSec }}>Verdient</div>
               </div>
             </div>
@@ -451,8 +456,15 @@ function TabSettings({ settings, setSettings }) {
         <Toggle value={settings.programm_aktiv} onChange={v => update("programm_aktiv", v)} />
       </SettingRow>
 
-      <SettingRow label="Prämie pro Sale" desc="Betrag den der Werber bei erfolgreichem Abschluss erhält">
-        <NumInput value={settings.praemie_kunde} onChange={v => update("praemie_kunde", v)} suffix="€" />
+      <SettingRow label="Prämien-Staffelung" desc="Gestaffelte Prämie je nach Anzahl erfolgreicher Empfehlungen">
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {PRAEMIEN_STUFEN.map((b, i) => (
+            <div key={i} style={{ padding: "6px 10px", borderRadius: 8, background: `${BRAND.yellow}10`, border: `1px solid ${BRAND.yellow}25`, textAlign: "center" }}>
+              <div style={{ fontSize: 14, fontWeight: 900, color: BRAND.yellow }}>{b}€</div>
+              <div style={{ fontSize: 8, color: BRAND.textDim }}>{i < 3 ? `${i+1}. Sale` : "4.+"}</div>
+            </div>
+          ))}
+        </div>
       </SettingRow>
 
       <SettingRow label="Auszahlungsart" desc="Wie soll die Prämie ausgezahlt werden?">
@@ -499,7 +511,7 @@ function TabBerater({ berater, setBerater, settings, werber, leads }) {
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Badge text={`${(leads||[]).filter(l => l.berater_zugewiesen === b.berater_name && l.status === "sale").length * (b.custom_praemie || settings.praemie_kunde)}€ Prämien ausgezahlt`} color={BRAND.green} />
+              <Badge text={`${getTotalPraemie((leads||[]).filter(l => l.berater_zugewiesen === b.berater_name && l.status === "sale").length).toLocaleString("de-DE")}€ Prämien`} color={BRAND.green} />
             </div>
           </div>
 
