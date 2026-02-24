@@ -1,1226 +1,426 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>bee-doo | Provisions-Abrechnung</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'DM Sans', sans-serif; background: #0a0e17; color: #c5cdd8; min-height: 100vh; }
-  
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: #151a25; }
-  ::-webkit-scrollbar-thumb { background: #2a3040; border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: #F5C500; }
-
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
-
-  .animate-in { animation: fadeIn 0.4s ease forwards; }
-  .stagger-1 { animation-delay: 0.05s; opacity: 0; }
-  .stagger-2 { animation-delay: 0.1s; opacity: 0; }
-  .stagger-3 { animation-delay: 0.15s; opacity: 0; }
-  .stagger-4 { animation-delay: 0.2s; opacity: 0; }
-
-  /* ===== LAYOUT ===== */
-  .app-container { max-width: 1400px; margin: 0 auto; padding: 24px; }
-  
-  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 16px; }
-  .header-left { display: flex; align-items: center; gap: 14px; }
-  .logo { width: 40px; height: 40px; background: #F5C500; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: #0a0e17; }
-  .header h1 { font-size: 22px; font-weight: 600; color: #fff; }
-  .header h1 span { color: #F5C500; }
-
-  /* ===== UPLOAD ===== */
-  .upload-zone { border: 2px dashed #2a3040; border-radius: 16px; padding: 60px 40px; text-align: center; cursor: pointer; transition: all 0.3s; background: #111620; }
-  .upload-zone:hover { border-color: #F5C500; background: #151a25; }
-  .upload-zone.dragover { border-color: #F5C500; background: #1a1f2a; }
-  .upload-icon { font-size: 48px; margin-bottom: 16px; }
-  .upload-title { font-size: 18px; color: #fff; font-weight: 500; margin-bottom: 8px; }
-  .upload-sub { color: #8b95a5; font-size: 14px; }
-
-  /* ===== CONTROLS ===== */
-  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 24px; }
-  .control-group { display: flex; align-items: center; gap: 8px; }
-  .control-label { font-size: 13px; color: #8b95a5; font-weight: 500; white-space: nowrap; }
-  select, .search-input { background: #151a25; border: 1px solid #2a3040; color: #c5cdd8; padding: 10px 14px; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; transition: border-color 0.2s; }
-  select:focus, .search-input:focus { border-color: #F5C500; }
-  select { cursor: pointer; min-width: 160px; }
-  .search-input { min-width: 220px; }
-
-  .btn { padding: 10px 20px; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all 0.2s; }
-  .btn-primary { background: #F5C500; color: #0a0e17; }
-  .btn-primary:hover { background: #ffd633; transform: translateY(-1px); }
-  .btn-outline { background: transparent; border: 1px solid #2a3040; color: #c5cdd8; }
-  .btn-outline:hover { border-color: #F5C500; color: #F5C500; }
-
-  /* ===== STAT CARDS ===== */
-  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-  .stat-card { background: #111620; border: 1px solid #1e2433; border-radius: 14px; padding: 20px; transition: all 0.3s; }
-  .stat-card:hover { border-color: #2a3040; transform: translateY(-2px); }
-  .stat-label { font-size: 12px; color: #8b95a5; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-  .stat-value { font-size: 26px; font-weight: 700; color: #fff; }
-  .stat-value.gold { color: #F5C500; }
-  .stat-sub { font-size: 12px; color: #8b95a5; margin-top: 4px; }
-
-  /* ===== TABLE ===== */
-  .table-container { background: #111620; border: 1px solid #1e2433; border-radius: 14px; overflow: hidden; }
-  .table-header { padding: 16px 20px; border-bottom: 1px solid #1e2433; display: flex; justify-content: space-between; align-items: center; }
-  .table-title { font-size: 16px; font-weight: 600; color: #fff; }
-  .table-count { font-size: 13px; color: #8b95a5; }
-  
-  .table-scroll { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; min-width: 1050px; }
-  thead th { padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 600; color: #8b95a5; text-transform: uppercase; letter-spacing: 0.5px; background: #0d1119; border-bottom: 1px solid #1e2433; white-space: nowrap; cursor: pointer; user-select: none; transition: color 0.2s; }
-  thead th:hover { color: #F5C500; }
-  thead th.sorted { color: #F5C500; }
-  tbody tr { border-bottom: 1px solid #141921; transition: background 0.15s; }
-  tbody tr:hover { background: #151a25; }
-  tbody td { padding: 14px 16px; font-size: 14px; white-space: nowrap; }
-  
-  .name-cell { display: flex; align-items: center; gap: 10px; }
-  .avatar { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; color: #0a0e17; }
-  .avatar.hgb { background: #F5C500; }
-  .avatar.ang { background: #4ECDC4; }
-  .name-text { font-weight: 500; color: #e0e4ea; }
-  .vp-nummer { font-size: 11px; color: #6b7585; }
-  
-  .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; }
-  .badge-hgb { background: rgba(245,197,0,0.12); color: #F5C500; }
-  .badge-ang { background: rgba(78,205,196,0.12); color: #4ECDC4; }
-  
-  .amount { font-weight: 600; font-variant-numeric: tabular-nums; }
-  .amount.positive { color: #4ECDC4; }
-  .amount.gold { color: #F5C500; }
-
-  /* ===== DETAIL PANEL ===== */
-  .detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; display: flex; justify-content: flex-end; animation: fadeIn 0.2s ease; }
-  .detail-panel { width: 600px; max-width: 95vw; background: #111620; height: 100vh; overflow-y: auto; padding: 28px; animation: slideIn 0.3s ease; border-left: 1px solid #1e2433; }
-  .detail-close { background: #1e2433; border: none; color: #8b95a5; width: 36px; height: 36px; border-radius: 10px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
-  .detail-close:hover { background: #2a3040; color: #fff; }
-  .detail-name { font-size: 22px; font-weight: 700; color: #fff; margin: 16px 0 4px; }
-  .detail-meta { font-size: 13px; color: #8b95a5; margin-bottom: 24px; }
-  
-  .detail-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
-  .detail-stat { background: #0d1119; border-radius: 10px; padding: 14px; }
-  .detail-stat-label { font-size: 11px; color: #8b95a5; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .detail-stat-value { font-size: 20px; font-weight: 700; color: #fff; }
-
-  .detail-section-title { font-size: 14px; font-weight: 600; color: #fff; margin: 20px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #1e2433; }
-  
-  .order-list { display: flex; flex-direction: column; gap: 8px; }
-  .order-item { background: #0d1119; border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
-  .order-left { display: flex; flex-direction: column; gap: 2px; }
-  .order-an { color: #e0e4ea; font-weight: 500; }
-  .order-kunde { color: #8b95a5; font-size: 12px; }
-  .order-badges { display: flex; gap: 6px; margin-top: 4px; }
-  .mini-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; }
-  .mini-badge.eigenlead { background: rgba(245,197,0,0.12); color: #F5C500; }
-  .mini-badge.empfehlung { background: rgba(78,205,196,0.12); color: #4ECDC4; }
-  .mini-badge.speicher { background: rgba(167,139,250,0.12); color: #a78bfa; }
-  .mini-badge.ausgezahlt { background: rgba(74,222,128,0.12); color: #4ade80; }
-  .mini-badge.storniert { background: rgba(248,113,113,0.12); color: #f87171; }
-  .order-amount { font-weight: 600; color: #e0e4ea; text-align: right; }
-
-  /* ===== TABS ===== */
-  .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: #111620; border-radius: 12px; padding: 4px; border: 1px solid #1e2433; }
-  .tab { padding: 10px 20px; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: #8b95a5; transition: all 0.2s; white-space: nowrap; }
-  .tab:hover { color: #c5cdd8; }
-  .tab.active { background: #F5C500; color: #0a0e17; }
-  .tab-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-left: 6px; }
-  .tab.active .tab-badge { background: rgba(10,14,23,0.2); color: #0a0e17; }
-  .tab:not(.active) .tab-badge { background: #1e2433; color: #8b95a5; }
-
-  /* ===== EMPTY STATE ===== */
-  .empty-state { text-align: center; padding: 40px; color: #8b95a5; }
-
-  /* ===== RESPONSIVE ===== */
-  @media (max-width: 1200px) {
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
-  }
-  @media (max-width: 768px) {
-    .app-container { padding: 16px; }
-    .header h1 { font-size: 18px; }
-    .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-    .stat-card { padding: 14px; }
-    .stat-value { font-size: 20px; }
-    .controls { flex-direction: column; align-items: stretch; }
-    .tabs { overflow-x: auto; }
-    .tab { padding: 8px 14px; font-size: 13px; }
-    .control-group { flex-direction: column; align-items: stretch; }
-    select, .search-input { width: 100%; min-width: unset; }
-    .detail-panel { width: 100%; }
-    .detail-stats { grid-template-columns: 1fr; }
-  }
-  @media (max-width: 480px) {
-    .stats-grid { grid-template-columns: 1fr; }
-    .header { flex-direction: column; align-items: flex-start; }
-    .stat-value { font-size: 18px; }
-    table { min-width: 800px; }
-  }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bee-doo | Vertriebler Abrechnung</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: #0a0a0f;
+            color: #c8cfd8;
+            min-height: 100vh;
+        }
+        #root { min-height: 100vh; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #12131a; }
+        ::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #F5C500; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @media (max-width: 768px) {
+            .grid-stats { grid-template-columns: 1fr 1fr !important; }
+            .grid-vt { grid-template-columns: 1fr !important; }
+            .header-row { flex-direction: column; gap: 12px; align-items: flex-start !important; }
+            .filter-row { flex-direction: column; gap: 8px; }
+            .detail-grid { grid-template-columns: 1fr !important; }
+            .detail-header-row { flex-direction: column; gap: 12px; }
+        }
+        @media (max-width: 480px) {
+            .grid-stats { grid-template-columns: 1fr !important; }
+            .app-wrap { padding: 12px !important; }
+            .month-tabs { flex-wrap: wrap; }
+        }
+    </style>
 </head>
 <body>
 <div id="root"></div>
-
 <script type="text/babel">
-const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
-// ===== PROVISIONSREGELN =====
-const VERTRIEBLER_MAP = {
-  'Tayfun Süleymaniye': { typ: 'HGB', vp: '' },
-  'Janik Voß': { typ: 'HGB' },
-  'Martin Bott': { typ: 'HGB' },
-  'Martin Bott (Fachberater)': { typ: 'HGB', alias: 'Martin Bott' },
-  'Philipp-Torben Hannigk': { typ: 'HGB' },
-  'Pascal Schallenberg': { typ: 'HGB' },
-  'Lukas Kirschner': { typ: 'HGB' },
-  'Hartmut Seitz': { typ: 'HGB' },
-  'Farshad Nourouzi': { typ: 'HGB' },
-  'Gino Ulitzka': { typ: 'HGB' },
-  'Maxim Horten': { typ: 'HGB' },
-  'Patrick Kalinowski': { typ: 'HGB' },
-  'Nino Rimmler': { typ: 'HGB' },
-  'Klaus Vollmer': { typ: 'HGB' },
-  'Sebastian Mansour': { typ: 'HGB' },
-  'Andreas Klee': { typ: 'HGB' },
-  'Stefan Hensel': { typ: 'HGB' },
-  'Dimitri van Eeuwen': { typ: 'HGB' },
-  'Richard Winzent': { typ: 'HGB' },
-  'Fabian Hindenberg': { typ: 'HGB' },
-  'Marco Bringmann': { typ: 'HGB' },
-  'Daniel Saweljew': { typ: 'HGB' },
-  'Frank Reddig': { typ: 'HGB' },
-  'Christian Seifert': { typ: 'HGB' },
-  'Christoph Held': { typ: 'HGB' },
-  'Kevin Kraus': { typ: 'HGB' },
-  'Calogero Iannuzzo': { typ: 'HGB' },
-  'Miguel Schader': { typ: 'Angestellt' },
-  'Pascal Meier': { typ: 'Angestellt' },
-  'Nils Horn': { typ: 'Angestellt' },
-  'Jannis Pfeiffer': { typ: 'Angestellt' },
-  'Kadir Danyildiz': { typ: 'Angestellt' },
-  'Maximilian Koch': { typ: 'Angestellt' },
-  'Bernd Krahwinkel': { typ: 'Angestellt' },
-};
-
-const SONDER = {
-  'Martin Bott': { fixedRate: 1700 },
-  'Tayfun Süleymaniye': { rateByDate: { before: '2026-01', rate: 2000, fromRate: 2700 }, noStaffelBonus: true },
-  'Pascal Meier': { fixedRate: 700 },
-  'Christoph Held': { flatPerOrder: 200, noBonuses: true, allOrders: true },
+const VT_TYPEN = {
+    'Tayfun Süleymaniye':'HGB','Janik Voß':'HGB','Martin Bott':'HGB',
+    'Philipp-Torben Hannigk':'HGB','Pascal Schallenberg':'HGB','Lukas Kirschner':'HGB',
+    'Hartmut Seitz':'HGB','Farshad Nourouzi':'HGB','Gino Ulitzka':'HGB',
+    'Maxim Horten':'HGB','Patrick Kalinowski':'HGB','Nino Rimmler':'HGB',
+    'Klaus Vollmer':'HGB','Sebastian Mansour':'HGB','Andreas Klee':'HGB',
+    'Stefan Hensel':'HGB','Dimitri van Eeuwen':'HGB','Richard Winzent':'HGB',
+    'Fabian Hindenberg':'HGB','Marco Bringmann':'HGB','Calogero Iannuzzo':'HGB',
+    'Daniel Saweljew':'HGB','Frank Reddig':'HGB','Christian Seifert':'HGB',
+    'Christoph Held':'HGB','Kevin Kraus':'HGB',
+    'Miguel Schader':'Angestellt','Pascal Meier':'Angestellt','Nils Horn':'Angestellt',
+    'Jannis Pfeiffer':'Angestellt','Kadir Danyildiz':'Angestellt',
+    'Maximilian Koch':'Angestellt','Bernd Krahwinkel':'Angestellt',
 };
 
 const STAFFEL = {
-  'Angestellt': { low: 500, high: 700, threshold: 8 },
-  'HGB': { low: 1400, high: 1700, threshold: 8 },
+    HGB: { basis:1400, ab8:1700, schwelle:8 },
+    Angestellt: { basis:500, ab8:700, schwelle:8 },
 };
 
-const BONUS = {
-  'Angestellt': { speicher: 100, eigenlead: 400, empfehlung: 300 },
-  'HGB': { speicher: 200, eigenlead: 800, empfehlung: 500 },
+const BONI = {
+    Speichererweiterung: { HGB:200, Angestellt:100 },
+    Eigenlead: { HGB:800, Angestellt:400 },
+    Empfehlung: { HGB:500, Angestellt:300 },
 };
 
-const STAFFEL_BONUS = {
-  'HGB': { ten: 2000, fifteen: 3000 },
-  'Angestellt': { ten: 1000, fifteen: 2000 },
-};
-function parseNetto(val) {
-  if (!val) return 0;
-  const cleaned = val.trim().replace(/\s+/g, '').replace(/\./g, '').replace(',', '.');
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num / 100;
-}
-
-function parseDatum(val) {
-  if (!val) return null;
-  const parts = val.trim().split('.');
-  if (parts.length === 3) {
-    return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-  }
-  // ISO format
-  const d = new Date(val.trim());
-  return isNaN(d.getTime()) ? null : d;
-}
-
-function getMonthKey(datum) {
-  const d = parseDatum(datum);
-  if (!d) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function getMonthLabel(key) {
-  if (!key) return '';
-  const [y, m] = key.split('-');
-  const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
-  return `${months[parseInt(m) - 1]} ${y}`;
-}
-
-function formatEuro(val) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
-}
-
-function formatEuroDetailed(val) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-}
-
-function resolveName(name) {
-  const entry = VERTRIEBLER_MAP[name];
-  if (entry && entry.alias) return entry.alias;
-  return name;
-}
-
-function isActive(name) {
-  return VERTRIEBLER_MAP.hasOwnProperty(name);
-}
-
-function getTyp(name) {
-  const resolved = resolveName(name);
-  const entry = VERTRIEBLER_MAP[resolved] || VERTRIEBLER_MAP[name];
-  return entry ? entry.typ : null;
-}
-
-// ===== PROVISION BERECHNEN =====
-function berechneStaffelBonus(name, allOrdersForPerson, selectedMonth) {
-  const typ = getTyp(name);
-  if (!typ) return { total: 0, details: [] };
-  const resolvedName = resolveName(name);
-  const sonder = SONDER[resolvedName];
-  if (sonder && (sonder.noBonuses || sonder.noStaffelBonus)) return { total: 0, details: [] };
-  const bonusRates = STAFFEL_BONUS[typ];
-  
-  // Alle nicht-stornierten Aufträge nach monatAngenommen gruppieren
-  const byMonth = {};
-  allOrdersForPerson.forEach(a => {
-    if (a.status === 'Storniert') return;
-    const m = a.monatAngenommen;
-    if (!m) return;
-    if (!byMonth[m]) byMonth[m] = 0;
-    byMonth[m]++;
-  });
-
-  let total = 0;
-  const details = [];
-  Object.entries(byMonth).forEach(([monat, count]) => {
-    if (selectedMonth !== 'alle' && monat !== selectedMonth) return;
-    let bonus = 0;
-    let stufen = [];
-    if (count >= 15) {
-      bonus = bonusRates.ten + bonusRates.fifteen;
-      stufen = ['10er', '15er'];
-    } else if (count >= 10) {
-      bonus = bonusRates.ten;
-      stufen = ['10er'];
+function csvParse(text) {
+    const lines = []; let cur = '', inQ = false;
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (c === '"') { inQ = !inQ; cur += c; }
+        else if (c === '\n' && !inQ) { lines.push(cur); cur = ''; }
+        else { cur += c; }
     }
-    if (bonus > 0) {
-      details.push({ monat, count, bonus, stufen });
-      total += bonus;
+    if (cur.trim()) lines.push(cur);
+    function split(line) {
+        const f = []; let s = '', q = false;
+        for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            if (c === '"') q = !q;
+            else if (c === ',' && !q) { f.push(s.trim()); s = ''; }
+            else s += c;
+        }
+        f.push(s.trim()); return f;
     }
-  });
-
-  return { total, details };
+    const hdr = split(lines[0].replace(/^\uFEFF/, ''));
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const v = split(lines[i]), row = {};
+        hdr.forEach((h, j) => { row[h] = v[j] || ''; });
+        rows.push(row);
+    }
+    return rows;
 }
 
-function berechneProvision(vertriebler, auftraege, staffelResult, allRawData, monthlyCountsForPerson) {
-  const name = resolveName(vertriebler);
-  const typ = getTyp(vertriebler);
-  if (!typ) return null;
-
-  const sonder = SONDER[name];
-  const staffel = STAFFEL[typ];
-  const bonus = BONUS[typ];
-
-  // Sonderfall: flat per order, alle Vertriebler (z.B. Christoph Held)
-  if (sonder && sonder.flatPerOrder) {
-    const orderPool = sonder.allOrders ? (allRawData || []) : auftraege;
-    const nichtStorniert = orderPool.filter(a => a.status !== 'Storniert' && !a.ausgezahltAm);
-    const anlagenProv = nichtStorniert.length * sonder.flatPerOrder;
-    return {
-      name, typ,
-      anlagenCount: nichtStorniert.length,
-      anlagenProvision: anlagenProv,
-      ratePerAnlage: sonder.flatPerOrder, rateByDate: null, isHighTier: false,
-      speicherCount: 0, speicherBonus: 0,
-      eigenleadCount: 0, eigenleadBonus: 0,
-      empfehlungCount: 0, empfehlungBonus: 0,
-      staffelBonus: 0, staffelDetails: [],
-      gesamt: anlagenProv,
-      auftraege: sonder.allOrders ? nichtStorniert : auftraege,
-    };
-  }
-
-  const anlagenCount = auftraege.length;
-  
-  // Anlagen-Provision: Rate basiert auf GESAMT auszahlungsrelevanter im jeweiligen Monat
-  let anlagenProvision = 0;
-  let rateInfo = { min: Infinity, max: 0 };
-  
-  auftraege.forEach(a => {
-    let rate = 0;
-    if (sonder && sonder.fixedRate) {
-      rate = sonder.fixedRate;
-    } else if (sonder && sonder.rateByDate) {
-      const monat = a.monat || '';
-      rate = monat < sonder.rateByDate.before ? sonder.rateByDate.rate : sonder.rateByDate.fromRate;
-    } else {
-      // Staffel: Zählung ALLER auszahlungsrelevanten (inkl. bezahlter) im Monat
-      const monatKey = a.monat || 'unknown';
-      const totalInMonth = (monthlyCountsForPerson && monthlyCountsForPerson[monatKey]) || anlagenCount;
-      rate = totalInMonth >= staffel.threshold ? staffel.high : staffel.low;
-    }
-    anlagenProvision += rate;
-    if (anlagenCount > 0) {
-      rateInfo.min = Math.min(rateInfo.min, rate);
-      rateInfo.max = Math.max(rateInfo.max, rate);
-    }
-  });
-
-  if (anlagenCount === 0) { rateInfo.min = 0; rateInfo.max = 0; }
-
-  // Boni
-  let speicherBonus = 0, eigenleadBonus = 0, empfehlungBonus = 0;
-  let speicherCount = 0, eigenleadCount = 0, empfehlungCount = 0;
-
-  auftraege.forEach(a => {
-    if (a.speicherAnzahl > 0) { speicherBonus += bonus.speicher * a.speicherAnzahl; speicherCount += a.speicherAnzahl; }
-    const quelle = (a.quelle || '').trim();
-    if (quelle === 'Eigenlead') { eigenleadBonus += bonus.eigenlead; eigenleadCount++; }
-    else if (quelle === 'Empfehlung') { empfehlungBonus += bonus.empfehlung; empfehlungCount++; }
-  });
-
-  const staffelBonusVal = staffelResult ? staffelResult.total : 0;
-  const staffelDetails = staffelResult ? staffelResult.details : [];
-  const gesamt = anlagenProvision + speicherBonus + eigenleadBonus + empfehlungBonus + staffelBonusVal;
-
-  return {
-    name, typ, anlagenCount, anlagenProvision,
-    ratePerAnlage: sonder?.fixedRate || (rateInfo.min === rateInfo.max ? rateInfo.max : null),
-    rateByDate: sonder?.rateByDate || (rateInfo.min !== rateInfo.max && anlagenCount > 0 ? { rate: rateInfo.min, fromRate: rateInfo.max } : null),
-    isHighTier: !sonder && rateInfo.max === (staffel ? staffel.high : 0),
-    speicherCount, speicherBonus,
-    eigenleadCount, eigenleadBonus,
-    empfehlungCount, empfehlungBonus,
-    staffelBonus: staffelBonusVal, staffelDetails,
-    gesamt, auftraege,
-  };
+function nettoNum(v) {
+    if (!v) return 0;
+    const n = parseFloat(v.replace(/\s/g,'').replace(/\./g,'').replace(',','.'));
+    return isNaN(n) ? 0 : n / 100;
 }
 
-// ===== COMPONENTS =====
+function monthKey(ds) {
+    if (!ds) return null;
+    const p = ds.trim().split('.');
+    if (p.length === 3) return p[2] + '-' + p[1].padStart(2,'0');
+    if (ds.includes('-')) { const x = ds.split('-'); return x[0] + '-' + x[1].padStart(2,'0'); }
+    return null;
+}
+
+function monthLabel(k) {
+    const [y,m] = k.split('-');
+    const mn = ['','Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+    return mn[parseInt(m)] + ' ' + y;
+}
+
+function euro(n) {
+    if (typeof n !== 'number' || isNaN(n)) return '0 €';
+    return n.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0}) + ' €';
+}
+
+function calcProv(auftr, name) {
+    const typ = VT_TYPEN[name]; if (!typ) return null;
+    const aktiv = auftr.filter(a => (a['Auftragsstatus']||'').trim() !== 'Storniert');
+    const storniert = auftr.filter(a => (a['Auftragsstatus']||'').trim() === 'Storniert');
+    const st = STAFFEL[typ], cnt = aktiv.length;
+    const perA = cnt >= st.schwelle ? st.ab8 : st.basis;
+    const staffGes = cnt * perA;
+    let spB = 0, elB = 0, emB = 0;
+    aktiv.forEach(a => {
+        if (a['Speichererweiterung']?.trim()) spB += BONI.Speichererweiterung[typ];
+        const q = (a['Quelle']||'').trim();
+        if (q === 'Eigenlead') elB += BONI.Eigenlead[typ];
+        if (q === 'Empfehlung') emB += BONI.Empfehlung[typ];
+    });
+    const boniGes = spB + elB + emB;
+    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, total: staffGes + boniGes, auftr, aktiv, storniert, storCnt: storniert.length, ab8: cnt >= st.schwelle };
+}
+
 function App() {
-  const [rawData, setRawData] = useState(null);
-  const [closedData, setClosedData] = useState(null);
-  const [selectedMonth, setSelectedMonth] = useState('alle');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortCol, setSortCol] = useState('gesamt');
-  const [sortDir, setSortDir] = useState('desc');
-  const [selectedPerson, setSelectedPerson] = useState(null);
-  const [filterTyp, setFilterTyp] = useState('alle');
-  const [activeTab, setActiveTab] = useState('vertriebler');
-  const fileRef = useRef();
-  const closedFileRef = useRef();
+    const [csv, setCsv] = React.useState(null);
+    const [selMonth, setSelMonth] = React.useState(null);
+    const [fTyp, setFTyp] = React.useState('Alle');
+    const [selVT, setSelVT] = React.useState(null);
+    const [search, setSearch] = React.useState('');
+    const [showPaid, setShowPaid] = React.useState(false);
 
-  const AUSFALL_STATUS = new Set(['Kunde nicht da', 'WVL Frau nicht da']);
-
-  // Parse CSV
-  const handleFile = useCallback((file) => {
-    Papa.parse(file, {
-      header: true,
-      encoding: 'UTF-8',
-      skipEmptyLines: true,
-      complete: (result) => {
-        const parsed = result.data.map(row => ({
-          anNr: (row['AN Nr.'] || '').trim(),
-          status: (row['Auftragsstatus'] || '').trim(),
-          auszahlungsrelevant: (row['Auszahlungsrelevant'] || '').trim(),
-          ausgezahltAm: (row['Ausgezahlt am'] || '').trim(),
-          kundenberater: (row['Kundenberater'] || '').trim(),
-          vpNummer: (row['VP Nummer'] || '').trim(),
-          kunde: (row['Kunde'] || '').trim(),
-          kundePlz: (row['Kunde PLZ'] || '').trim(),
-          quelle: (row['Quelle'] || '').trim(),
-          netto: parseNetto(row['AN-WertNetto']),
-          nettoRaw: (row['AN-WertNetto'] || '').trim(),
-          datumErstellt: (row['DatumErstellt'] || '').trim(),
-          datumAngenommen: (row['DatumAngenommen'] || '').trim(),
-          monat: getMonthKey(row['DatumErstellt']),
-          monatAngenommen: getMonthKey(row['DatumAngenommen']),
-          speicher: (row['Speichererweiterung'] || '').trim(),
-          speicherAnzahl: (() => {
-            const s = (row['Speichererweiterung'] || '').trim();
-            if (!s) return 0;
-            const m = s.match(/^(\d+)\s*[xX]/);
-            return m ? parseInt(m[1]) : 1;
-          })(),
-          kwp: (row['Angebot KWP'] || '').trim(),
-          module: (row['Angebot Module'] || '').trim(),
-          mvppName: (row['MVPP-Name'] || '').trim(),
-          agent: (row['Termine Agenten'] || '').trim(),
-        }));
-        setRawData(parsed);
-      }
-    });
-  }, []);
-
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    e.currentTarget.classList.remove('dragover');
-    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-  }, [handleFile]);
-
-  const handleClosedFile = useCallback((file) => {
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (result) => {
-        const parsed = result.data.map(row => ({
-          terminId: (row['TerminID'] || '').trim(),
-          leadId: (row['LEADID'] || '').trim(),
-          mvppName: (row['MVPP - NAME'] || '').trim(),
-          kunde: (row['Leadkunde'] || '').trim(),
-          adresse: (row['Leadadresse'] || '').trim(),
-          datumAbgeschlossen: (row['DatumAbgeschlossen'] || '').trim(),
-          datumBeginn: (row['DatumTermin Beginn'] || '').trim(),
-          monat: getMonthKey(row['DatumAbgeschlossen']),
-          abschlussstatus: (row['Abschlussstatus'] || '').trim(),
-          istAusfall: AUSFALL_STATUS.has((row['Abschlussstatus'] || '').trim()),
-        })).filter(r => r.mvppName && r.mvppName !== '-');
-        setClosedData(parsed);
-      }
-    });
-  }, []);
-
-  // Verfügbare Monate
-  const monate = useMemo(() => {
-    if (!rawData) return [];
-    const set = new Set();
-    rawData.forEach(r => { if (r.monat) set.add(r.monat); });
-    if (closedData) closedData.forEach(r => { if (r.monat) set.add(r.monat); });
-    return [...set].sort().reverse();
-  }, [rawData, closedData]);
-
-  // Auto-select Vormonat (wir rechnen immer den letzten Monat ab)
-  useEffect(() => {
-    if (monate.length && selectedMonth === 'alle') {
-      const now = new Date();
-      const vm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const vormonat = `${vm.getFullYear()}-${String(vm.getMonth() + 1).padStart(2, '0')}`;
-      if (monate.includes(vormonat)) {
-        setSelectedMonth(vormonat);
-      } else if (monate.length > 0) {
-        setSelectedMonth(monate[0]); // neuester verfügbarer
-      }
-    }
-  }, [monate]);
-
-  // Gefilterte Daten - NUR offene (nicht ausgezahlte, auszahlungsrelevante)
-  const filteredOrders = useMemo(() => {
-    if (!rawData) return [];
-    return rawData.filter(r => {
-      if (!isActive(r.kundenberater)) return false;
-      if (selectedMonth !== 'alle' && r.monat !== selectedMonth) return false;
-      // Nur Auszahlungsrelevant=Ja und noch nicht ausgezahlt
-      if (r.auszahlungsrelevant !== 'Ja') return false;
-      if (r.ausgezahltAm) return false;
-      return true;
-    });
-  }, [rawData, selectedMonth]);
-
-  // Alle auszahlungsrelevanten (inkl. bereits bezahlter) für Staffel-Rate-Bestimmung
-  const allRelevantForStaffel = useMemo(() => {
-    if (!rawData) return [];
-    return rawData.filter(r => {
-      if (!isActive(r.kundenberater)) return false;
-      if (r.auszahlungsrelevant !== 'Ja') return false;
-      if (r.status === 'Storniert') return false;
-      return true;
-    });
-  }, [rawData]);
-
-  // Gruppiert nach Vertriebler
-  const provisionen = useMemo(() => {
-    if (!rawData) return [];
-    const grouped = {};
-    filteredOrders.forEach(order => {
-      const name = resolveName(order.kundenberater);
-      if (!grouped[name]) grouped[name] = [];
-      grouped[name].push(order);
-    });
-
-    // Monatliche Zählung ALLER auszahlungsrelevanten pro Vertriebler (für Staffel-Rate)
-    const monthlyCountsByPerson = {};
-    allRelevantForStaffel.forEach(order => {
-      const name = resolveName(order.kundenberater);
-      if (!monthlyCountsByPerson[name]) monthlyCountsByPerson[name] = {};
-      const m = order.monat || 'unknown';
-      monthlyCountsByPerson[name][m] = (monthlyCountsByPerson[name][m] || 0) + 1;
-    });
-
-    // Alle Aufträge aktiver Vertriebler (für Staffel-Bonus Zählung nach DatumAngenommen)
-    const allByPerson = {};
-    rawData.forEach(order => {
-      if (!isActive(order.kundenberater)) return;
-      const name = resolveName(order.kundenberater);
-      if (!allByPerson[name]) allByPerson[name] = [];
-      allByPerson[name].push(order);
-    });
-
-    // Alle offenen Aufträge (monats-gefiltert) für Christoph Held
-    const allFilteredOrders = rawData.filter(r => {
-      if (selectedMonth !== 'alle' && r.monat !== selectedMonth) return false;
-      return true;
-    });
-
-    // Sicherstellen, dass allOrders-Personen immer erscheinen
-    Object.entries(SONDER).forEach(([sonderName]) => {
-      if (SONDER[sonderName].allOrders && !grouped[sonderName]) {
-        grouped[sonderName] = [];
-      }
-    });
-
-    const results = [];
-    Object.entries(grouped).forEach(([name, auftraege]) => {
-      const staffelResult = berechneStaffelBonus(name, allByPerson[name] || [], selectedMonth);
-      const prov = berechneProvision(name, auftraege, staffelResult, allFilteredOrders, monthlyCountsByPerson[name] || {});
-      if (prov) {
-        prov.vpNummer = auftraege[0]?.vpNummer || '';
-        results.push(prov);
-      }
-    });
-
-    // Filter
-    let filtered = results;
-    if (filterTyp !== 'alle') {
-      filtered = filtered.filter(p => p.typ === filterTyp);
-    }
-    if (searchTerm) {
-      const s = searchTerm.toLowerCase();
-      filtered = filtered.filter(p => p.name.toLowerCase().includes(s) || p.vpNummer.includes(s));
+    function onFile(e) {
+        const f = e.target.files[0]; if (!f) return;
+        const r = new FileReader();
+        r.onload = ev => {
+            const rows = csvParse(ev.target.result);
+            setCsv(rows);
+            const ms = months(rows);
+            if (ms.length) setSelMonth(ms[ms.length-1]);
+        };
+        r.readAsText(f,'utf-8');
     }
 
-    // Sort
-    filtered.sort((a, b) => {
-      let va = a[sortCol], vb = b[sortCol];
-      if (typeof va === 'string') va = va.toLowerCase();
-      if (typeof vb === 'string') vb = vb.toLowerCase();
-      if (va < vb) return sortDir === 'asc' ? -1 : 1;
-      if (va > vb) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return filtered;
-  }, [filteredOrders, rawData, allRelevantForStaffel, selectedMonth, filterTyp, searchTerm, sortCol, sortDir]);
-
-  // Totals
-  const totals = useMemo(() => {
-    let gesamt = 0, anlagen = 0, speicher = 0, leads = 0, staffelTotal = 0;
-    provisionen.forEach(p => {
-      gesamt += p.gesamt;
-      anlagen += p.anlagenCount;
-      speicher += p.speicherCount;
-      leads += p.eigenleadCount + p.empfehlungCount;
-      staffelTotal += p.staffelBonus;
-    });
-    return { gesamt, anlagen, speicher, leads, staffelTotal, vertriebler: provisionen.length };
-  }, [provisionen]);
-
-  // ===== SCOUT PROVISIONEN (MVPP-Name) - Termine + Anlagen =====
-  const scoutProvisionen = useMemo(() => {
-    if (!rawData) return [];
-    const scouts = {};
-
-    const ensureScout = (name) => {
-      if (!scouts[name]) scouts[name] = { name, termine: [], anlagen: [], terminCount: 0, anlagenCount: 0, terminProv: 0, anlagenProv: 0 };
-    };
-
-    // 1) Anlagen aus Auftrags-CSV (200€)
-    rawData.forEach(order => {
-      if (!order.mvppName || order.mvppName === '-') return;
-      if (selectedMonth !== 'alle' && order.monat !== selectedMonth) return;
-      if (order.auszahlungsrelevant !== 'Ja') return;
-      if (order.ausgezahltAm) return;
-      ensureScout(order.mvppName);
-      scouts[order.mvppName].anlagen.push(order);
-      scouts[order.mvppName].anlagenCount++;
-      scouts[order.mvppName].anlagenProv += 200;
-    });
-
-    // 2) Termine wahrgenommen (40€, nicht bei Ausfall)
-    if (closedData) {
-      closedData.forEach(termin => {
-        if (selectedMonth !== 'alle' && termin.monat !== selectedMonth) return;
-        if (termin.istAusfall) return;
-        ensureScout(termin.mvppName);
-        scouts[termin.mvppName].termine.push(termin);
-        scouts[termin.mvppName].terminCount++;
-        scouts[termin.mvppName].terminProv += 40;
-      });
+    function months(d) {
+        const s = new Set();
+        d.forEach(r => { const k = monthKey(r['DatumAngenommen']); if (k) s.add(k); });
+        return [...s].sort();
     }
 
-    let results = Object.values(scouts).map(s => ({
-      ...s,
-      provision: s.terminProv + s.anlagenProv,
-    }));
-
-    if (searchTerm) {
-      const s = searchTerm.toLowerCase();
-      results = results.filter(p => p.name.toLowerCase().includes(s));
+    function filtered() {
+        if (!csv || !selMonth) return [];
+        return csv.filter(r => {
+            if (monthKey(r['DatumAngenommen']) !== selMonth) return false;
+            if (r['Auszahlungsrelevant']?.trim() !== 'Ja') return false;
+            if (!showPaid && r['Ausgezahlt am']?.trim()) return false;
+            if (!VT_TYPEN[r['Kundenberater']?.trim()]) return false;
+            return true;
+        });
     }
-    results.sort((a, b) => b.provision - a.provision);
-    return results;
-  }, [rawData, closedData, selectedMonth, searchTerm]);
 
-  const scoutTotals = useMemo(() => {
-    let gesamt = 0, termine = 0, anlagen = 0, terminProv = 0, anlagenProv = 0;
-    scoutProvisionen.forEach(p => { 
-      gesamt += p.provision; termine += p.terminCount; anlagen += p.anlagenCount;
-      terminProv += p.terminProv; anlagenProv += p.anlagenProv;
-    });
-    return { gesamt, termine, anlagen, terminProv, anlagenProv, personen: scoutProvisionen.length };
-  }, [scoutProvisionen]);
-
-  // ===== AGENT PROVISIONEN (Termine Agenten) =====
-  const agentProvisionen = useMemo(() => {
-    if (!rawData) return [];
-    const grouped = {};
-    rawData.forEach(order => {
-      if (!order.agent || order.agent === 'Scouty') return;
-      if (selectedMonth !== 'alle' && order.monat !== selectedMonth) return;
-      if (order.auszahlungsrelevant !== 'Ja') return;
-      if (order.ausgezahltAm) return;
-      if (!grouped[order.agent]) grouped[order.agent] = [];
-      grouped[order.agent].push(order);
-    });
-
-    let results = Object.entries(grouped).map(([name, auftraege]) => ({
-      name,
-      anlagenCount: auftraege.length,
-      provision: auftraege.length * 20,
-      auftraege,
-    }));
-
-    if (searchTerm) {
-      const s = searchTerm.toLowerCase();
-      results = results.filter(p => p.name.toLowerCase().includes(s));
+    function abrechnungen() {
+        const d = filtered(), grp = {};
+        d.forEach(r => { const n = r['Kundenberater']?.trim(); if (!n) return; if (!grp[n]) grp[n]=[]; grp[n].push(r); });
+        const res = [];
+        Object.keys(VT_TYPEN).forEach(n => {
+            const p = calcProv(grp[n]||[], n);
+            if (p) res.push({ name:n, ...p });
+        });
+        return res.filter(r => {
+            if (fTyp !== 'Alle' && r.typ !== fTyp) return false;
+            if (search && !r.name.toLowerCase().includes(search.toLowerCase())) return false;
+            return true;
+        }).sort((a,b) => b.total - a.total);
     }
-    results.sort((a, b) => b.provision - a.provision);
-    return results;
-  }, [rawData, selectedMonth, searchTerm]);
 
-  const agentTotals = useMemo(() => {
-    let gesamt = 0, anlagen = 0;
-    agentProvisionen.forEach(p => { gesamt += p.provision; anlagen += p.anlagenCount; });
-    return { gesamt, anlagen, personen: agentProvisionen.length };
-  }, [agentProvisionen]);
-
-  const handleSort = (col) => {
-    if (sortCol === col) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortCol(col);
-      setSortDir('desc');
-    }
-  };
-
-  const sortArrow = (col) => {
-    if (sortCol !== col) return '';
-    return sortDir === 'asc' ? ' ↑' : ' ↓';
-  };
-
-  // ===== RENDER =====
-  if (!rawData) {
-    return (
-      <div className="app-container">
-        <div className="header">
-          <div className="header-left">
-            <div className="logo">bd</div>
-            <h1><span>Provisions</span>-Abrechnung</h1>
-          </div>
+    if (!csv) return (
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',padding:24}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:'#F5C500',marginBottom:12}}></div>
+            <h1 style={{fontSize:28,fontWeight:700,color:'#fff',marginBottom:8}}>Vertriebler Abrechnung</h1>
+            <p style={{color:'#6b7280',marginBottom:32,fontSize:15}}>CSV-Export hochladen</p>
+            <label style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12,padding:'48px 64px',borderRadius:16,border:'2px dashed #2a2d3a',cursor:'pointer',background:'#12131a',transition:'all 0.3s'}}
+                onMouseOver={e=>{e.currentTarget.style.borderColor='#F5C500';e.currentTarget.style.background='rgba(245,197,0,0.03)';}}
+                onMouseOut={e=>{e.currentTarget.style.borderColor='#2a2d3a';e.currentTarget.style.background='#12131a';}}>
+                <div style={{fontSize:40}}>📊</div>
+                <span style={{color:'#F5C500',fontWeight:600,fontSize:15}}>CSV-Datei auswählen</span>
+                <span style={{color:'#6b7280',fontSize:13}}>Aufträge-Export (.csv)</span>
+                <input type="file" accept=".csv" onChange={onFile} style={{display:'none'}} />
+            </label>
         </div>
-        <div
-          className="upload-zone"
-          onClick={() => fileRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('dragover'); }}
-          onDragLeave={(e) => e.currentTarget.classList.remove('dragover')}
-          onDrop={handleDrop}
-        >
-          <div className="upload-icon">📁</div>
-          <div className="upload-title">Aufträge CSV hochladen</div>
-          <div className="upload-sub">Drag & Drop oder klicken zum Auswählen</div>
-          <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
-        </div>
-      </div>
     );
-  }
 
-  return (
-    <div className="app-container">
-      <div className="header">
-        <div className="header-left">
-          <div className="logo">bd</div>
-          <h1><span>Provisions</span>-Abrechnung</h1>
-        </div>
-        <button className="btn btn-outline" onClick={() => { setRawData(null); setClosedData(null); setSelectedPerson(null); }}>
-          Neue CSV laden
-        </button>
-      </div>
+    const ms = months(csv);
+    const abr = abrechnungen();
+    const totProv = abr.reduce((s,a) => s+a.total, 0);
+    const totAuftr = abr.reduce((s,a) => s+a.cnt, 0);
+    const nHGB = abr.filter(a=>a.typ==='HGB'&&a.cnt>0).length;
+    const nAng = abr.filter(a=>a.typ==='Angestellt'&&a.cnt>0).length;
 
-      {/* Controls */}
-      <div className="controls">
-        <div className="control-group">
-          <span className="control-label">Monat</span>
-          <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}>
-            <option value="alle">Alle Monate</option>
-            {monate.map(m => <option key={m} value={m}>{getMonthLabel(m)}</option>)}
-          </select>
-        </div>
-        {activeTab === 'vertriebler' && (
-        <div className="control-group">
-          <span className="control-label">Typ</span>
-          <select value={filterTyp} onChange={e => setFilterTyp(e.target.value)}>
-            <option value="alle">Alle</option>
-            <option value="HGB">HGB</option>
-            <option value="Angestellt">Angestellt</option>
-          </select>
-        </div>
-        )}
-        <div className="control-group" style={{ flex: 1 }}>
-          <input
-            className="search-input"
-            placeholder="🔍 Suche Name oder VP-Nr..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="tabs">
-        <button className={`tab ${activeTab === 'vertriebler' ? 'active' : ''}`} onClick={() => setActiveTab('vertriebler')}>
-          Vertriebler<span className="tab-badge">{provisionen.length}</span>
-        </button>
-        <button className={`tab ${activeTab === 'scout' ? 'active' : ''}`} onClick={() => setActiveTab('scout')}>
-          Scouter<span className="tab-badge">{scoutProvisionen.length}</span>
-        </button>
-        <button className={`tab ${activeTab === 'agent' ? 'active' : ''}`} onClick={() => setActiveTab('agent')}>
-          Agenten<span className="tab-badge">{agentProvisionen.length}</span>
-        </button>
-      </div>
-
-      {/* ===== VERTRIEBLER TAB ===== */}
-      {activeTab === 'vertriebler' && (<>
-      {/* Stats */}
-      <div className="stats-grid">
-        <div className="stat-card animate-in stagger-1">
-          <div className="stat-label">Gesamt-Provision</div>
-          <div className="stat-value gold">{formatEuro(totals.gesamt)}</div>
-          <div className="stat-sub">{totals.vertriebler} Vertriebler</div>
-        </div>
-        <div className="stat-card animate-in stagger-2">
-          <div className="stat-label">Anlagen</div>
-          <div className="stat-value">{totals.anlagen}</div>
-          <div className="stat-sub">provisionsrelevant</div>
-        </div>
-        <div className="stat-card animate-in stagger-3">
-          <div className="stat-label">Eigenlead / Empf.</div>
-          <div className="stat-value">{totals.leads}</div>
-          <div className="stat-sub">mit Extra-Bonus</div>
-        </div>
-        <div className="stat-card animate-in stagger-4">
-          <div className="stat-label">Staffel-Boni</div>
-          <div className="stat-value" style={{ color: '#ff6b6b' }}>{formatEuro(totals.staffelTotal)}</div>
-          <div className="stat-sub">10er/15er Bonus</div>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="table-container animate-in">
-        <div className="table-header">
-          <div className="table-title">Provisionsübersicht</div>
-          <div className="table-count">{provisionen.length} Vertriebler</div>
-        </div>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th className={sortCol === 'name' ? 'sorted' : ''} onClick={() => handleSort('name')}>Vertriebler{sortArrow('name')}</th>
-                <th className={sortCol === 'typ' ? 'sorted' : ''} onClick={() => handleSort('typ')}>Typ{sortArrow('typ')}</th>
-                <th className={sortCol === 'anlagenCount' ? 'sorted' : ''} onClick={() => handleSort('anlagenCount')}>Anlagen{sortArrow('anlagenCount')}</th>
-                <th className={sortCol === 'ratePerAnlage' ? 'sorted' : ''} onClick={() => handleSort('ratePerAnlage')}>€/Anlage{sortArrow('ratePerAnlage')}</th>
-                <th className={sortCol === 'anlagenProvision' ? 'sorted' : ''} onClick={() => handleSort('anlagenProvision')}>Anlagen-Prov.{sortArrow('anlagenProvision')}</th>
-                <th className={sortCol === 'speicherBonus' ? 'sorted' : ''} onClick={() => handleSort('speicherBonus')}>Speicher{sortArrow('speicherBonus')}</th>
-                <th className={sortCol === 'eigenleadBonus' ? 'sorted' : ''} onClick={() => handleSort('eigenleadBonus')}>Eigenlead{sortArrow('eigenleadBonus')}</th>
-                <th className={sortCol === 'empfehlungBonus' ? 'sorted' : ''} onClick={() => handleSort('empfehlungBonus')}>Empfehlung{sortArrow('empfehlungBonus')}</th>
-                <th className={sortCol === 'staffelBonus' ? 'sorted' : ''} onClick={() => handleSort('staffelBonus')}>Staffel-Bonus{sortArrow('staffelBonus')}</th>
-                <th className={sortCol === 'gesamt' ? 'sorted' : ''} onClick={() => handleSort('gesamt')}>Gesamt{sortArrow('gesamt')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {provisionen.map((p, i) => (
-                <tr key={p.name} onClick={() => setSelectedPerson(p)} style={{ cursor: 'pointer' }}>
-                  <td>
-                    <div className="name-cell">
-                      <div className={`avatar ${p.typ === 'HGB' ? 'hgb' : 'ang'}`}>
-                        {p.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <div>
-                        <div className="name-text">{p.name}</div>
-                        <div className="vp-nummer">{p.vpNummer}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span className={`badge ${p.typ === 'HGB' ? 'badge-hgb' : 'badge-ang'}`}>{p.typ}</span></td>
-                  <td style={{ fontWeight: 600, color: p.isHighTier ? '#F5C500' : '#e0e4ea' }}>
-                    {p.anlagenCount}
-                    {p.isHighTier && <span style={{ fontSize: 10, marginLeft: 4, color: '#F5C500' }}>★</span>}
-                  </td>
-                  <td className="amount">{p.ratePerAnlage ? formatEuro(p.ratePerAnlage) : (p.rateByDate ? `${formatEuro(p.rateByDate.rate)}/${formatEuro(p.rateByDate.fromRate)}` : '–')}</td>
-                  <td className="amount">{formatEuro(p.anlagenProvision)}</td>
-                  <td className="amount" style={{ color: p.speicherBonus ? '#a78bfa' : '#4a5060' }}>{p.speicherBonus ? formatEuro(p.speicherBonus) : '–'}</td>
-                  <td className="amount" style={{ color: p.eigenleadBonus ? '#F5C500' : '#4a5060' }}>{p.eigenleadBonus ? formatEuro(p.eigenleadBonus) : '–'}</td>
-                  <td className="amount" style={{ color: p.empfehlungBonus ? '#4ECDC4' : '#4a5060' }}>{p.empfehlungBonus ? formatEuro(p.empfehlungBonus) : '–'}</td>
-                  <td className="amount" style={{ color: p.staffelBonus ? '#ff6b6b' : '#4a5060' }}>{p.staffelBonus ? formatEuro(p.staffelBonus) : '–'}</td>
-                  <td className="amount gold" style={{ fontSize: 15 }}>{formatEuro(p.gesamt)}</td>
-                </tr>
-              ))}
-              {provisionen.length === 0 && (
-                <tr><td colSpan={10} className="empty-state">Keine Daten für diesen Filter</td></tr>
-              )}
-            </tbody>
-            {provisionen.length > 0 && (
-              <tfoot>
-                <tr style={{ borderTop: '2px solid #F5C500' }}>
-                  <td style={{ fontWeight: 700, color: '#fff', padding: '14px 16px' }}>Summe</td>
-                  <td></td>
-                  <td style={{ fontWeight: 700, color: '#fff' }}>{totals.anlagen}</td>
-                  <td></td>
-                  <td className="amount gold">{formatEuro(provisionen.reduce((s, p) => s + p.anlagenProvision, 0))}</td>
-                  <td className="amount" style={{ color: '#a78bfa', fontWeight: 600 }}>{formatEuro(provisionen.reduce((s, p) => s + p.speicherBonus, 0))}</td>
-                  <td className="amount gold" style={{ fontWeight: 600 }}>{formatEuro(provisionen.reduce((s, p) => s + p.eigenleadBonus, 0))}</td>
-                  <td className="amount" style={{ color: '#4ECDC4', fontWeight: 600 }}>{formatEuro(provisionen.reduce((s, p) => s + p.empfehlungBonus, 0))}</td>
-                  <td className="amount" style={{ color: '#ff6b6b', fontWeight: 600 }}>{formatEuro(totals.staffelTotal)}</td>
-                  <td className="amount gold" style={{ fontWeight: 700, fontSize: 16 }}>{formatEuro(totals.gesamt)}</td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </div>
-
-      </>)}
-
-      {/* ===== SCOUT TAB ===== */}
-      {activeTab === 'scout' && (<>
-      
-      {/* CSV Upload für Termine */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <button className={`btn ${closedData ? 'btn-outline' : ''}`} onClick={() => closedFileRef.current?.click()}
-          style={closedData ? { borderColor: '#22c55e', color: '#22c55e' } : { background: '#1e2433', color: '#8b95a5', border: '1px dashed #333d4f', cursor: 'pointer' }}>
-          {closedData ? `✓ Termine CSV (${closedData.length})` : '📅 Termine Closed CSV laden'}
-        </button>
-        <input ref={closedFileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={e => e.target.files[0] && handleClosedFile(e.target.files[0])} />
-      </div>
-
-      <div className="stats-grid">
-        <div className="stat-card animate-in stagger-1">
-          <div className="stat-label">Scout-Provision Gesamt</div>
-          <div className="stat-value gold">{formatEuro(scoutTotals.gesamt)}</div>
-          <div className="stat-sub">{scoutTotals.personen} Scouter</div>
-        </div>
-        <div className="stat-card animate-in stagger-2">
-          <div className="stat-label">Termine</div>
-          <div className="stat-value">{scoutTotals.termine}</div>
-          <div className="stat-sub">× 40€ = {formatEuro(scoutTotals.terminProv)}</div>
-        </div>
-        <div className="stat-card animate-in stagger-3">
-          <div className="stat-label">Anlagen</div>
-          <div className="stat-value">{scoutTotals.anlagen}</div>
-          <div className="stat-sub">× 200€ = {formatEuro(scoutTotals.anlagenProv)}</div>
-        </div>
-      </div>
-
-      <div className="table-container animate-in">
-        <div className="table-header">
-          <div className="table-title">Scout-Provisionen (MVPP)</div>
-          <div className="table-count">{scoutProvisionen.length} Scouter</div>
-        </div>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Scouter</th>
-                <th style={{ textAlign: 'right' }}>Termine</th>
-                <th style={{ textAlign: 'right' }}>Termin-Prov</th>
-                <th style={{ textAlign: 'right' }}>Anlagen</th>
-                <th style={{ textAlign: 'right' }}>Anlagen-Prov</th>
-                <th style={{ textAlign: 'right' }}>Gesamt</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scoutProvisionen.map(p => (
-                <tr key={p.name} onClick={() => setSelectedPerson({ ...p, typ: 'Scout', gesamt: p.provision, anlagenProvision: p.anlagenProv, speicherBonus: 0, eigenleadBonus: 0, empfehlungBonus: 0, staffelBonus: 0, staffelDetails: [], speicherCount: 0, eigenleadCount: 0, empfehlungCount: 0, ratePerAnlage: null, rateByDate: null, isHighTier: false, auftraege: p.anlagen })} style={{ cursor: 'pointer' }}>
-                  <td>
-                    <div className="name-cell">
-                      <div className="avatar" style={{ background: '#22c55e' }}>{p.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
-                      <div className="name-text">{p.name}</div>
-                    </div>
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{p.terminCount || '–'}</td>
-                  <td className="amount">{p.terminProv ? formatEuro(p.terminProv) : '–'}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{p.anlagenCount || '–'}</td>
-                  <td className="amount">{p.anlagenProv ? formatEuro(p.anlagenProv) : '–'}</td>
-                  <td className="amount gold" style={{ fontSize: 15 }}>{formatEuro(p.provision)}</td>
-                </tr>
-              ))}
-              {scoutProvisionen.length === 0 && <tr><td colSpan={6} className="empty-state">Keine Daten – lade Termine CSV</td></tr>}
-            </tbody>
-            {scoutProvisionen.length > 0 && (
-              <tfoot>
-                <tr style={{ borderTop: '2px solid #F5C500' }}>
-                  <td style={{ fontWeight: 700, color: '#fff', padding: '14px 16px' }}>Summe</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#fff' }}>{scoutTotals.termine}</td>
-                  <td className="amount" style={{ fontWeight: 700, color: '#fff' }}>{formatEuro(scoutTotals.terminProv)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#fff' }}>{scoutTotals.anlagen}</td>
-                  <td className="amount" style={{ fontWeight: 700, color: '#fff' }}>{formatEuro(scoutTotals.anlagenProv)}</td>
-                  <td className="amount gold" style={{ fontWeight: 700, fontSize: 16 }}>{formatEuro(scoutTotals.gesamt)}</td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </div>
-      </>)}
-
-      {/* ===== AGENT TAB ===== */}
-      {activeTab === 'agent' && (<>
-      <div className="stats-grid">
-        <div className="stat-card animate-in stagger-1">
-          <div className="stat-label">Agenten-Provision</div>
-          <div className="stat-value gold">{formatEuro(agentTotals.gesamt)}</div>
-          <div className="stat-sub">{agentTotals.personen} Agenten</div>
-        </div>
-        <div className="stat-card animate-in stagger-2">
-          <div className="stat-label">Aufträge</div>
-          <div className="stat-value">{agentTotals.anlagen}</div>
-          <div className="stat-sub">20€ pro Anlage</div>
-        </div>
-      </div>
-
-      <div className="table-container animate-in">
-        <div className="table-header">
-          <div className="table-title">Agenten-Provisionen</div>
-          <div className="table-count">{agentProvisionen.length} Agenten</div>
-        </div>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Agent</th>
-                <th>Anlagen</th>
-                <th>€/Anlage</th>
-                <th>Provision</th>
-              </tr>
-            </thead>
-            <tbody>
-              {agentProvisionen.map(p => (
-                <tr key={p.name} onClick={() => setSelectedPerson({ ...p, typ: 'Agent', gesamt: p.provision, anlagenProvision: p.provision, speicherBonus: 0, eigenleadBonus: 0, empfehlungBonus: 0, staffelBonus: 0, staffelDetails: [], speicherCount: 0, eigenleadCount: 0, empfehlungCount: 0, ratePerAnlage: 20, rateByDate: null, isHighTier: false })} style={{ cursor: 'pointer' }}>
-                  <td>
-                    <div className="name-cell">
-                      <div className="avatar" style={{ background: '#818cf8' }}>{p.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
-                      <div className="name-text">{p.name}</div>
-                    </div>
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{p.anlagenCount}</td>
-                  <td className="amount">20 €</td>
-                  <td className="amount gold" style={{ fontSize: 15 }}>{formatEuro(p.provision)}</td>
-                </tr>
-              ))}
-              {agentProvisionen.length === 0 && <tr><td colSpan={4} className="empty-state">Keine Daten</td></tr>}
-            </tbody>
-            {agentProvisionen.length > 0 && (
-              <tfoot>
-                <tr style={{ borderTop: '2px solid #F5C500' }}>
-                  <td style={{ fontWeight: 700, color: '#fff', padding: '14px 16px' }}>Summe</td>
-                  <td style={{ fontWeight: 700, color: '#fff' }}>{agentTotals.anlagen}</td>
-                  <td></td>
-                  <td className="amount gold" style={{ fontWeight: 700, fontSize: 16 }}>{formatEuro(agentTotals.gesamt)}</td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </div>
-      </>)}
-
-      {/* Detail Panel */}
-      {selectedPerson && (
-        <div className="detail-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSelectedPerson(null); }}>
-          <div className="detail-panel">
-            <button className="detail-close" onClick={() => setSelectedPerson(null)}>✕</button>
-            <div className="detail-name">{selectedPerson.name}</div>
-            <div className="detail-meta">
-              <span className={`badge ${selectedPerson.typ === 'HGB' ? 'badge-hgb' : selectedPerson.typ === 'Scout' ? '' : selectedPerson.typ === 'Agent' ? '' : 'badge-ang'}`}
-                style={selectedPerson.typ === 'Scout' ? { background: 'rgba(34,197,94,0.12)', color: '#22c55e' } : selectedPerson.typ === 'Agent' ? { background: 'rgba(129,140,248,0.12)', color: '#818cf8' } : {}}>
-                {selectedPerson.typ}
-              </span>
-              {' '}{selectedPerson.vpNummer && <span style={{ color: '#6b7585' }}>VP {selectedPerson.vpNummer}</span>}
-              {SONDER[selectedPerson.name] && <span style={{ marginLeft: 8, color: '#F5C500', fontSize: 12 }}>⚡ Sonderprovision</span>}
-              {SONDER[selectedPerson.name]?.allOrders && <span style={{ marginLeft: 8, color: '#ff6b6b', fontSize: 12 }}>📋 Alle Vertriebler-Aufträge</span>}
+    if (selVT) {
+        const det = abr.find(a=>a.name===selVT);
+        if (!det || (det.cnt === 0 && det.storCnt === 0)) return (
+            <div className="app-wrap" style={{maxWidth:1000,margin:'0 auto',padding:'20px 24px'}}>
+                <button onClick={()=>setSelVT(null)} style={backBtn}>← Zurück</button>
+                <p style={{color:'#6b7280',marginTop:20}}>Keine Aufträge für {selVT} in diesem Monat.</p>
             </div>
-
-            <div className="detail-stats">
-              {selectedPerson.typ === 'Scout' ? (<>
-                <div className="detail-stat">
-                  <div className="detail-stat-label">Termine ({selectedPerson.terminCount || 0}×40€)</div>
-                  <div className="detail-stat-value" style={{ color: '#60a5fa' }}>{formatEuro(selectedPerson.terminProv || 0)}</div>
-                </div>
-                <div className="detail-stat">
-                  <div className="detail-stat-label">Anlagen ({selectedPerson.anlagenCount}×200€)</div>
-                  <div className="detail-stat-value">{formatEuro(selectedPerson.anlagenProv || 0)}</div>
-                </div>
-                <div className="detail-stat">
-                  <div className="detail-stat-label">Gesamt</div>
-                  <div className="detail-stat-value" style={{ color: '#F5C500' }}>{formatEuro(selectedPerson.gesamt)}</div>
-                </div>
-              </>) : (<>
-                <div className="detail-stat">
-                  <div className="detail-stat-label">Anlagen</div>
-                  <div className="detail-stat-value">{selectedPerson.anlagenCount}</div>
-                </div>
-                <div className="detail-stat">
-                  <div className="detail-stat-label">€/Anlage</div>
-                  <div className="detail-stat-value" style={{ color: '#F5C500' }}>
-                    {selectedPerson.ratePerAnlage ? formatEuro(selectedPerson.ratePerAnlage) : (selectedPerson.rateByDate ? `${formatEuro(selectedPerson.rateByDate.rate)} / ${formatEuro(selectedPerson.rateByDate.fromRate)}` : '–')}
-                  </div>
-                </div>
-                <div className="detail-stat">
-                  <div className="detail-stat-label">Anlagen-Provision</div>
-                  <div className="detail-stat-value">{formatEuro(selectedPerson.anlagenProvision)}</div>
-                </div>
-                <div className="detail-stat">
-                  <div className="detail-stat-label">Gesamt</div>
-                  <div className="detail-stat-value" style={{ color: '#F5C500' }}>{formatEuro(selectedPerson.gesamt)}</div>
-                </div>
-                {selectedPerson.staffelBonus > 0 && (
-                  <div className="detail-stat">
-                    <div className="detail-stat-label">Staffel-Bonus</div>
-                    <div className="detail-stat-value" style={{ color: '#ff6b6b' }}>{formatEuro(selectedPerson.staffelBonus)}</div>
-                  </div>
-                )}
-              </>)}
-            </div>
-
-            {/* Scout Breakdown */}
-            {selectedPerson.typ === 'Scout' && (
-              <>
-                {selectedPerson.terminCount > 0 && (
-                  <>
-                    <div className="detail-section-title">Termine ({selectedPerson.terminCount}x × 40€ = {formatEuro(selectedPerson.terminProv)})</div>
-                    <div className="order-list" style={{ maxHeight: 200, overflow: 'auto' }}>
-                      {selectedPerson.termine.map((t, i) => (
-                        <div key={i} className="order-item">
-                          <div className="order-left">
-                            <div className="order-an">Termin {t.terminId}</div>
-                            <div className="order-kunde">{t.kunde} – {t.adresse}</div>
-                            <div className="order-badges">
-                              <span className="mini-badge" style={{ background: 'rgba(96,165,250,0.12)', color: '#60a5fa' }}>{t.abschlussstatus}</span>
+        );
+        return (
+            <div className="app-wrap" style={{maxWidth:1000,margin:'0 auto',padding:'20px 24px'}}>
+                <button onClick={()=>setSelVT(null)} style={backBtn}>← Zurück zur Übersicht</button>
+                <div style={{background:'#12131a',borderRadius:16,padding:24,border:'1px solid #1e1f2a',margin:'16px 0 20px'}}>
+                    <div className="detail-header-row" style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                        <div>
+                            <h2 style={{fontSize:24,fontWeight:700,color:'#fff',marginBottom:6}}>{det.name}</h2>
+                            <div style={{display:'flex',gap:8}}>
+                                <TypeBadge typ={det.typ}/>
+                                <span style={{fontSize:12,color:'#6b7280',padding:'3px 0'}}>{monthLabel(selMonth)}</span>
                             </div>
-                          </div>
-                          <div className="order-amount" style={{ color: '#60a5fa' }}>40 €</div>
                         </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-                {selectedPerson.anlagenCount > 0 && (
-                  <div className="detail-section-title">Anlagen ({selectedPerson.anlagenCount}x × 200€ = {formatEuro(selectedPerson.anlagenProv)})</div>
-                )}
-              </>
-            )}
-
-            {/* Bonus Breakdown (Vertriebler only) */}
-            {selectedPerson.typ !== 'Scout' && selectedPerson.typ !== 'Agent' && (selectedPerson.speicherBonus > 0 || selectedPerson.eigenleadBonus > 0 || selectedPerson.empfehlungBonus > 0) && (
-              <>
-                <div className="detail-section-title">Boni</div>
-                <div className="detail-stats">
-                  {selectedPerson.speicherBonus > 0 && (
-                    <div className="detail-stat">
-                      <div className="detail-stat-label">Speichererw. ({selectedPerson.speicherCount}x)</div>
-                      <div className="detail-stat-value" style={{ color: '#a78bfa' }}>{formatEuro(selectedPerson.speicherBonus)}</div>
-                    </div>
-                  )}
-                  {selectedPerson.eigenleadBonus > 0 && (
-                    <div className="detail-stat">
-                      <div className="detail-stat-label">Eigenlead ({selectedPerson.eigenleadCount}x)</div>
-                      <div className="detail-stat-value" style={{ color: '#F5C500' }}>{formatEuro(selectedPerson.eigenleadBonus)}</div>
-                    </div>
-                  )}
-                  {selectedPerson.empfehlungBonus > 0 && (
-                    <div className="detail-stat">
-                      <div className="detail-stat-label">Empfehlung ({selectedPerson.empfehlungCount}x)</div>
-                      <div className="detail-stat-value" style={{ color: '#4ECDC4' }}>{formatEuro(selectedPerson.empfehlungBonus)}</div>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* Staffel Bonus */}
-            {selectedPerson.typ !== 'Scout' && selectedPerson.typ !== 'Agent' && selectedPerson.staffelDetails.length > 0 && (
-              <>
-                <div className="detail-section-title">Staffel-Bonus (10er/15er)</div>
-                <div className="order-list">
-                  {selectedPerson.staffelDetails.map((d, i) => (
-                    <div key={i} className="order-item">
-                      <div className="order-left">
-                        <div className="order-an" style={{ color: '#ff6b6b' }}>{getMonthLabel(d.monat)}</div>
-                        <div className="order-kunde">{d.count} Aufträge (nach DatumAngenommen, ohne Storno)</div>
-                        <div className="order-badges">
-                          {d.stufen.map(s => (
-                            <span key={s} className="mini-badge" style={{ background: 'rgba(255,107,107,0.12)', color: '#ff6b6b' }}>{s} Staffel</span>
-                          ))}
+                        <div style={{textAlign:'right'}}>
+                            <div style={{fontSize:32,fontWeight:700,color:'#F5C500'}}>{euro(det.total)}</div>
+                            <div style={{fontSize:13,color:'#6b7280'}}>Gesamt-Provision</div>
                         </div>
-                      </div>
-                      <div className="order-amount" style={{ color: '#ff6b6b' }}>{formatEuro(d.bonus)}</div>
                     </div>
-                  ))}
                 </div>
-              </>
-            )}
 
-            {/* Aufträge */}
-            <div className="detail-section-title">Aufträge ({selectedPerson.auftraege.length})</div>
-            <div className="order-list">
-              {selectedPerson.auftraege.map((a, i) => (
-                <div key={i} className="order-item">
-                  <div className="order-left">
-                    <div className="order-an">AN {a.anNr}</div>
-                    <div className="order-kunde">{a.kunde} · {a.kundePlz} · {a.datumErstellt}</div>
-                    <div className="order-badges">
-                      {a.quelle === 'Eigenlead' && <span className="mini-badge eigenlead">Eigenlead</span>}
-                      {a.quelle === 'Empfehlung' && <span className="mini-badge empfehlung">Empfehlung</span>}
-                      {a.speicherAnzahl > 0 && <span className="mini-badge speicher">Speicher ×{a.speicherAnzahl}</span>}
-                      {a.ausgezahltAm && <span className="mini-badge ausgezahlt">Ausgezahlt {a.ausgezahltAm}</span>}
-                      {a.status === 'Storniert' && <span className="mini-badge storniert">Storniert</span>}
+                <div className="detail-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20}}>
+                    <div style={cardStyle}>
+                        <div style={{fontSize:13,color:'#6b7280',marginBottom:12,fontWeight:500}}>📊 Staffel-Provision</div>
+                        <div style={{fontSize:14,color:'#c8cfd8',marginBottom:6}}>{det.cnt} Anlage{det.cnt!==1?'n':''} × {euro(det.perA)}</div>
+                        {det.ab8 && <div style={{fontSize:12,color:'#48bb78',marginBottom:6}}>🚀 Ab 8 Anlagen – rückwirkend {euro(det.perA)}</div>}
+                        <div style={{fontSize:20,fontWeight:700,color:'#fff',marginTop:8}}>{euro(det.staffGes)}</div>
                     </div>
-                  </div>
-                  <div className="order-amount">{formatEuroDetailed(a.netto)}</div>
+                    <div style={cardStyle}>
+                        <div style={{fontSize:13,color:'#6b7280',marginBottom:12,fontWeight:500}}>🎁 Boni</div>
+                        {det.spB > 0 && <BonusLine label="Speichererweiterung" val={det.spB} color="#a78bfa"/>}
+                        {det.elB > 0 && <BonusLine label="Eigenlead" val={det.elB} color="#48bb78"/>}
+                        {det.emB > 0 && <BonusLine label="Empfehlung" val={det.emB} color="#63b3ed"/>}
+                        {det.boniGes === 0 && <div style={{fontSize:13,color:'#4a5568'}}>Keine Boni</div>}
+                        <div style={{fontSize:20,fontWeight:700,color:'#fff',marginTop:8}}>{euro(det.boniGes)}</div>
+                    </div>
                 </div>
-              ))}
+
+                <div style={cardStyle}>
+                    <div style={{fontSize:13,color:'#6b7280',marginBottom:14,fontWeight:500}}>📋 Aufträge ({det.cnt} aktiv{det.storCnt>0?`, ${det.storCnt} storniert`:''})</div>
+                    <div style={{overflowX:'auto'}}>
+                        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                            <thead><tr style={{borderBottom:'1px solid #1e1f2a'}}>
+                                {['AN Nr.','Kunde','Netto','Quelle','Speicher','Status','Angenommen'].map(h=>(
+                                    <th key={h} style={{padding:'8px 10px',textAlign:'left',color:'#6b7280',fontWeight:500,whiteSpace:'nowrap'}}>{h}</th>
+                                ))}
+                            </tr></thead>
+                            <tbody>
+                                {det.auftr.map((a,i)=>{
+                                    const isStor = (a['Auftragsstatus']||'').trim() === 'Storniert';
+                                    return (
+                                    <tr key={i} style={{borderBottom:'1px solid #0f1015',opacity:isStor?0.45:1}}>
+                                        <td style={{padding:'8px 10px',color:isStor?'#6b7280':'#F5C500',fontWeight:600}}>{a['AN Nr.']}</td>
+                                        <td style={{padding:'8px 10px',color:isStor?'#6b7280':'#c8cfd8'}}>{a['Kunde']||'-'}</td>
+                                        <td style={{padding:'8px 10px',color:isStor?'#6b7280':'#fff',fontWeight:500,textDecoration:isStor?'line-through':'none'}}>{euro(nettoNum(a['AN-WertNetto']))}</td>
+                                        <td style={{padding:'8px 10px'}}><QTag q={a['Quelle']?.trim()}/></td>
+                                        <td style={{padding:'8px 10px',color:a['Speichererweiterung']?.trim()?'#a78bfa':'#3a3d4a'}}>{a['Speichererweiterung']?.trim()?'✓':'-'}</td>
+                                        <td style={{padding:'8px 10px',color:isStor?'#e53e3e':'#8b95a5',fontSize:12,fontWeight:isStor?600:400}}>{a['Auftragsstatus']?.trim()}</td>
+                                        <td style={{padding:'8px 10px',color:'#8b95a5',whiteSpace:'nowrap'}}>{a['DatumAngenommen']}</td>
+                                    </tr>);
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-          </div>
+        );
+    }
+
+    return (
+        <div className="app-wrap" style={{maxWidth:1400,margin:'0 auto',padding:'20px 24px'}}>
+            <div className="header-row" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24}}>
+                <div>
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
+                        <div style={{width:8,height:8,borderRadius:'50%',background:'#F5C500'}}></div>
+                        <span style={{color:'#6b7280',fontSize:13,fontWeight:500,letterSpacing:1}}>BEE-DOO</span>
+                    </div>
+                    <h1 style={{fontSize:26,fontWeight:700,color:'#fff'}}>Vertriebler Abrechnung</h1>
+                </div>
+                <label style={{cursor:'pointer',background:'#1a1b25',border:'1px solid #2a2d3a',borderRadius:8,padding:'8px 16px',fontSize:13,color:'#8b95a5',transition:'border-color 0.2s'}}
+                    onMouseOver={e=>e.currentTarget.style.borderColor='#F5C500'}
+                    onMouseOut={e=>e.currentTarget.style.borderColor='#2a2d3a'}>
+                    📁 Neue CSV laden
+                    <input type="file" accept=".csv" onChange={onFile} style={{display:'none'}} />
+                </label>
+            </div>
+
+            <div className="month-tabs" style={{display:'flex',gap:4,marginBottom:20,overflowX:'auto',paddingBottom:4}}>
+                {ms.map(m=>(
+                    <button key={m} onClick={()=>setSelMonth(m)} style={{
+                        padding:'8px 16px',borderRadius:8,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'DM Sans',
+                        background:selMonth===m?'#F5C500':'#1a1b25',color:selMonth===m?'#0a0a0f':'#8b95a5',transition:'all 0.2s',whiteSpace:'nowrap',
+                    }}>{monthLabel(m)}</button>
+                ))}
+            </div>
+
+            <div className="filter-row" style={{display:'flex',gap:12,marginBottom:20,alignItems:'center',flexWrap:'wrap'}}>
+                <input type="text" placeholder="🔍 Vertriebler suchen..." value={search} onChange={e=>setSearch(e.target.value)}
+                    style={{background:'#12131a',border:'1px solid #2a2d3a',borderRadius:8,padding:'8px 14px',color:'#c8cfd8',fontSize:14,fontFamily:'DM Sans',outline:'none',flex:'1',minWidth:180}}
+                    onFocus={e=>e.target.style.borderColor='#F5C500'} onBlur={e=>e.target.style.borderColor='#2a2d3a'} />
+                {['Alle','HGB','Angestellt'].map(t=>(
+                    <button key={t} onClick={()=>setFTyp(t)} style={{
+                        padding:'8px 14px',borderRadius:8,border:'1px solid',fontFamily:'DM Sans',
+                        borderColor:fTyp===t?'#F5C500':'#2a2d3a',background:fTyp===t?'rgba(245,197,0,0.1)':'transparent',
+                        color:fTyp===t?'#F5C500':'#8b95a5',fontSize:13,fontWeight:500,cursor:'pointer',
+                    }}>{t}</button>
+                ))}
+                <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#8b95a5',cursor:'pointer'}}>
+                    <input type="checkbox" checked={showPaid} onChange={e=>setShowPaid(e.target.checked)} style={{accentColor:'#F5C500'}} />
+                    Bereits ausgezahlt
+                </label>
+            </div>
+
+            <div className="grid-stats" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:24}}>
+                <Stat label="Gesamt Provision" value={euro(totProv)} hl />
+                <Stat label="Aufträge" value={totAuftr} />
+                <Stat label="HGB aktiv" value={nHGB} />
+                <Stat label="Angestellte aktiv" value={nAng} />
+            </div>
+
+            <div className="grid-vt" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:12}}>
+                {abr.filter(a=>a.cnt>0||a.storCnt>0).map((a,i)=>(
+                    <VTCard key={a.name} d={a} idx={i} onClick={()=>setSelVT(a.name)} />
+                ))}
+            </div>
+            {abr.filter(a=>a.cnt>0||a.storCnt>0).length===0 && (
+                <div style={{textAlign:'center',padding:60,color:'#6b7280'}}>Keine Aufträge für diesen Monat.</div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+function Stat({label,value,hl}) {
+    return (
+        <div className="fade-in" style={{background:'#12131a',borderRadius:12,padding:'16px 20px',border:`1px solid ${hl?'rgba(245,197,0,0.3)':'#1e1f2a'}`}}>
+            <div style={{fontSize:12,color:'#6b7280',fontWeight:500,marginBottom:6,letterSpacing:0.5}}>{label}</div>
+            <div style={{fontSize:22,fontWeight:700,color:hl?'#F5C500':'#fff'}}>{value}</div>
+        </div>
+    );
+}
+
+function VTCard({d,idx,onClick}) {
+    return (
+        <div onClick={onClick} style={{
+            background:'#12131a',borderRadius:12,padding:'16px 20px',border:'1px solid #1e1f2a',
+            cursor:'pointer',transition:'all 0.2s',animation:`slideUp 0.3s ease-out ${idx*0.03}s both`,
+        }}
+            onMouseOver={e=>{e.currentTarget.style.borderColor='#F5C500';e.currentTarget.style.transform='translateY(-2px)';}}
+            onMouseOut={e=>{e.currentTarget.style.borderColor='#1e1f2a';e.currentTarget.style.transform='translateY(0)';}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
+                <div>
+                    <div style={{fontSize:15,fontWeight:600,color:'#fff',marginBottom:4}}>{d.name}</div>
+                    <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        <TypeBadge typ={d.typ}/>
+                        {d.ab8 && <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:4,background:'rgba(72,187,120,0.15)',color:'#48bb78'}}>🚀 Staffel+</span>}
+                    </div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:20,fontWeight:700,color:'#F5C500'}}>{euro(d.total)}</div>
+                    <div style={{fontSize:12,color:'#6b7280'}}>{d.cnt} Anlage{d.cnt!==1?'n':''}{d.storCnt>0?` + ${d.storCnt} storniert`:''}</div>
+                </div>
+            </div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                <MTag label="Staffel" val={euro(d.staffGes)} />
+                {d.spB>0 && <MTag label="Speicher" val={'+'+euro(d.spB)} c="#a78bfa"/>}
+                {d.elB>0 && <MTag label="Eigenlead" val={'+'+euro(d.elB)} c="#48bb78"/>}
+                {d.emB>0 && <MTag label="Empfehlung" val={'+'+euro(d.emB)} c="#63b3ed"/>}
+            </div>
+        </div>
+    );
+}
+
+function TypeBadge({typ}) {
+    return <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:4,
+        background:typ==='HGB'?'rgba(245,197,0,0.15)':'rgba(99,179,237,0.15)',
+        color:typ==='HGB'?'#F5C500':'#63b3ed'}}>{typ}</span>;
+}
+
+function MTag({label,val,c='#8b95a5'}) {
+    return <span style={{fontSize:11,padding:'3px 8px',borderRadius:4,background:'rgba(255,255,255,0.04)',color:c}}>{label}: <strong>{val}</strong></span>;
+}
+
+function BonusLine({label,val,color}) {
+    return <div style={{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:14}}>
+        <span style={{color}}>{label}</span><span style={{color:'#fff',fontWeight:500}}>{euro(val)}</span>
+    </div>;
+}
+
+function QTag({q}) {
+    const cs = { Eigenlead:{bg:'rgba(72,187,120,0.15)',c:'#48bb78'}, Empfehlung:{bg:'rgba(99,179,237,0.15)',c:'#63b3ed'} };
+    const s = cs[q] || {bg:'rgba(255,255,255,0.04)',c:'#6b7280'};
+    return <span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:s.bg,color:s.c,fontWeight:500}}>{q||'-'}</span>;
+}
+
+const cardStyle = {background:'#12131a',borderRadius:12,padding:20,border:'1px solid #1e1f2a'};
+const backBtn = {background:'none',border:'none',color:'#F5C500',cursor:'pointer',fontSize:14,fontWeight:500,fontFamily:'DM Sans',padding:0};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
