@@ -821,40 +821,6 @@ function DispatchApp() {
 function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, updateProject, onCardClick }) {
   const colTemplate = '160px repeat(5,1fr)';
 
-  // Hover-Highlight + Auto-Scroll: Gegenstück sichtbar machen
-  const [hoveredProjId, setHoveredProjId] = useState(null);
-  const savedScrollRef = useRef(null);
-  const scrollContainerRef = useRef(null);
-
-  // Click-to-flash: kurz alle Karten eines Projekts aufleuchten lassen
-  const flashProject = useCallback((projId) => {
-    const container = scrollContainerRef.current || document.querySelector('[data-dispatch-grid]');
-    if(!container) return;
-    const cards = container.querySelectorAll(`[data-proj-id="${projId}"]`);
-    cards.forEach(card => {
-      card.style.transition = 'box-shadow 0.15s, transform 0.15s';
-      card.style.boxShadow = '0 0 18px rgba(245,197,0,0.5), 0 0 6px rgba(245,197,0,0.3)';
-      card.style.transform = 'scale(1.04)';
-      card.style.zIndex = '30';
-    });
-    // Scroll zur ersten entfernten Karte
-    if(cards.length >= 2) {
-      const last = cards[cards.length-1];
-      last.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'nearest' });
-    }
-    setTimeout(() => {
-      cards.forEach(card => {
-        card.style.boxShadow = '';
-        card.style.transform = '';
-        card.style.zIndex = '';
-      });
-    }, 1800);
-  }, []);
-
-  // Legacy handlers (no-op für hover, nur flash bei klick auf link-badge)
-  const handleHoverProject = useCallback(() => {}, []);
-  const handleLeaveProject = useCallback(() => {}, []);
-
   return (
     <div data-dispatch-grid="" style={{minWidth:820, position:'relative'}}>
 
@@ -923,7 +889,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
                   gridColumn: hasSpan2 ? 'span 2' : undefined,
                 }}>
                   {items.map(({proj, phase, span: itemSpan}) => (
-                    <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)} isSpan2={itemSpan===2} onHoverProject={handleHoverProject} onLeaveProject={handleLeaveProject}/>
+                    <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)} isSpan2={itemSpan===2}/>
                   ))}
                   {full && <div style={{fontSize:9, color:C.red, textAlign:'center', fontWeight:700}}>● VOLL</div>}
                 </div>
@@ -949,8 +915,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
                 {items.map(proj => (
                   <div key={proj.id} data-proj-card="" data-proj-id={proj.id}
                     onClick={()=>onCardClick(proj)}
-                    onMouseEnter={()=>handleHoverProject(proj.id)}
-                    onMouseLeave={handleLeaveProject}
+
                     style={{
                     background:C.teal+'10', border:`1px solid ${C.teal}44`, borderLeft:`3px solid ${C.teal}`,
                     borderRadius:5, padding:'4px 6px', marginBottom:3, cursor:'pointer',
@@ -972,98 +937,9 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// COUNTERPART CARD – Aufklappbare DC↔AC Info
-// ═══════════════════════════════════════════════════════════════════════════════
-function CounterpartCard({ isDC, linkedDate, linkedTech, linkedPhase, linkedIcon, linkedCol, linkedSteps, linkedProgress, linkedStepDef }) {
-  const [open, setOpen] = useState(false);
-  const done = linkedSteps ? linkedProgress.length : 0;
-  const total = linkedSteps ? linkedSteps.length : 0;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-
-  return (
-    <div style={{marginTop:3}}>
-      {/* Collapsed: klickbare Zeile */}
-      <div onClick={e => { e.stopPropagation(); setOpen(!open); }}
-        style={{display:'flex', alignItems:'center', gap:4, padding:'3px 6px', borderRadius: open ? '5px 5px 0 0' : 5,
-          background:linkedCol+'10', border:`1px solid ${linkedCol}25`,
-          borderBottom: open ? `1px dashed ${linkedCol}30` : `1px solid ${linkedCol}25`,
-          cursor:'pointer', transition:'all 0.15s'}}>
-        <span style={{fontSize:9, fontWeight:800, color:linkedCol}}>{linkedIcon} {linkedPhase}</span>
-        <span style={{width:1, height:10, background:linkedCol+'30'}}/>
-        <span style={{fontSize:9, fontWeight:700, color:C.text}}>{fmtDay(linkedDate)}</span>
-        {linkedTech && (
-          <>
-            <span style={{fontSize:7, color:C.muted}}>·</span>
-            {linkedTech.foto
-              ? <img src={linkedTech.foto} style={{width:14, height:14, borderRadius:'50%', objectFit:'cover', border:`1px solid ${linkedTech.color}55`}} onError={e=>{e.target.style.display='none'}}/>
-              : <Avatar ini={linkedTech.ini} col={linkedTech.color} size={14}/>
-            }
-            <span style={{fontSize:8, color:C.dim, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:55}}>{linkedTech.name.split(' ')[0]}</span>
-          </>
-        )}
-        {/* Mini progress */}
-        {total > 0 && (
-          <span style={{marginLeft:'auto', fontSize:7, fontWeight:700, color: pct===100 ? C.green : linkedCol}}>
-            {pct===100 ? '✓' : `${done}/${total}`}
-          </span>
-        )}
-        <span style={{fontSize:10, color:linkedCol, opacity:0.5, marginLeft: total>0 ? 0 : 'auto', transition:'transform 0.2s', transform:open?'rotate(180deg)':'rotate(0)'}}>{open ? '▾' : '▸'}</span>
-      </div>
-
-      {/* Expanded: Details */}
-      {open && (
-        <div onClick={e => e.stopPropagation()}
-          style={{background:linkedCol+'08', border:`1px solid ${linkedCol}25`, borderTop:'none',
-            borderRadius:'0 0 5px 5px', padding:'6px 8px', transition:'all 0.2s'}}>
-          {/* Tech info */}
-          {linkedTech && (
-            <div style={{display:'flex', gap:6, alignItems:'center', marginBottom:5}}>
-              {linkedTech.foto
-                ? <img src={linkedTech.foto} style={{width:24, height:24, borderRadius:'50%', objectFit:'cover', border:`2px solid ${linkedTech.color}`}} onError={e=>{e.target.style.display='none'}}/>
-                : <Avatar ini={linkedTech.ini} col={linkedTech.color} size={24}/>
-              }
-              <div>
-                <div style={{fontSize:10, fontWeight:700, color:C.text}}>{linkedTech.name}</div>
-                <div style={{fontSize:8, color:C.dim}}>{linkedTech.region} · PLZ {linkedTech.plz}{linkedTech.sub ? ' · SU' : ''}</div>
-              </div>
-            </div>
-          )}
-          {/* Progress steps */}
-          {linkedSteps && linkedSteps.length > 0 && (
-            <div>
-              <div style={{display:'flex', gap:1, marginBottom:3}}>
-                {linkedSteps.map(s => {
-                  const d = linkedProgress.some(p => p.step === s.key);
-                  return <div key={s.key} style={{flex:1, height:3, borderRadius:1, background:d?C.green:C.border+'88'}}/>;
-                })}
-              </div>
-              <div style={{display:'flex', flexWrap:'wrap', gap:2}}>
-                {linkedSteps.map(s => {
-                  const d = linkedProgress.some(p => p.step === s.key);
-                  return (
-                    <span key={s.key} style={{fontSize:7, padding:'1px 4px', borderRadius:3,
-                      background: d ? C.green+'18' : 'transparent',
-                      color: d ? C.green : C.muted, fontWeight: d ? 700 : 400,
-                      border: d ? `1px solid ${C.green}30` : `1px solid ${C.border}`,
-                    }}>{s.icon} {s.label.length > 12 ? s.label.substring(0,10)+'…' : s.label}</span>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          {linkedStepDef && (
-            <div style={{fontSize:8, color:C.green, fontWeight:600, marginTop:3}}>Zuletzt: {linkedStepDef.icon} {linkedStepDef.label}</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // PROJECT CARD (in Wochenansicht)
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2, onHoverProject, onLeaveProject }) {
+function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2 }) {
   const pt = PROJECT_TYPES[proj.type];
   const isExt = phase.includes('ext');
   const phaseCol = isExt ? C.orange : phase==='dc' ? C.dc : phase==='ac' ? C.ac : C.teal;
@@ -1099,8 +975,7 @@ function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2, onHoverProject, 
   return (
     <div data-proj={dataAttr} data-proj-card="" data-proj-id={proj.id}
       onClick={onClick}
-      onMouseEnter={()=>onHoverProject && onHoverProject(proj.id)}
-      onMouseLeave={()=>onLeaveProject && onLeaveProject()}
+
       style={{
       background:C.cardHover, border:`1px solid ${bs ? bs.col+'66' : phaseCol+'44'}`,
       borderLeft:`3px solid ${bs ? bs.col : phaseCol}`,
@@ -1188,28 +1063,73 @@ function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2, onHoverProject, 
           </div>
         )}
 
-        {/* ── Verknüpfte Phase (DC↔AC) – aufklappbar ── */}
+        {/* ── DC ↔ AC Mini-Timeline ── */}
         {needsBoth && !isExt && (() => {
           const isDC = phase === 'dc';
-          const linkedDate = isDC ? proj.acDate : proj.dcDate;
-          const linkedTechId = isDC ? proj.acTechId : proj.dcTechId;
-          const linkedTech = linkedTechId ? MONTEURE.find(m => m.id === linkedTechId) : null;
-          const linkedPhase = isDC ? 'AC' : 'DC';
-          const linkedIcon = isDC ? '⚡' : '🏠';
-          const linkedCol = isDC ? C.ac : C.dc;
-          const linkedSteps = isDC ? getAcSteps(proj.type) : getDcSteps(proj.type);
-          const linkedProgress = isDC ? (proj.acProgress||[]) : (proj.dcProgress||[]);
-          const linkedLastStep = linkedProgress.length > 0 ? linkedProgress[linkedProgress.length-1] : null;
-          const linkedStepDef = linkedLastStep ? linkedSteps?.find(s => s.key === linkedLastStep.step) : null;
+          const otherDate = isDC ? proj.acDate : proj.dcDate;
+          const otherTechId = isDC ? proj.acTechId : proj.dcTechId;
+          const otherTech = otherTechId ? MONTEURE.find(m => m.id === otherTechId) : null;
+          const thisDate = isDC ? proj.dcDate : proj.acDate;
+          const otherSteps = isDC ? getAcSteps(proj.type) : getDcSteps(proj.type);
+          const otherProg = isDC ? (proj.acProgress||[]) : (proj.dcProgress||[]);
+          const thisDone = progress.length; const thisTotal = steps ? steps.length : 0;
+          const otherDone = otherProg.length; const otherTotal = otherSteps ? otherSteps.length : 0;
 
-          if(!linkedDate) return null;
+          // Kurzer Name: "Tom S." 
+          const shortName = (t) => {
+            if(!t) return '–';
+            const p = t.name.split(' ');
+            return p.length >= 2 ? `${p[0]} ${p[p.length-1][0]}.` : p[0];
+          };
+          // Kurzdate: "Mo 24."
+          const shortDate = (d) => {
+            if(!d) return '?';
+            const dt = new Date(d+'T12:00:00');
+            const day = ['So','Mo','Di','Mi','Do','Fr','Sa'][dt.getDay()];
+            return `${day} ${dt.getDate()}.`;
+          };
+
+          const dcDate = isDC ? thisDate : otherDate;
+          const acDate = isDC ? otherDate : thisDate;
+          const dcPct = isDC ? (thisTotal > 0 ? thisDone/thisTotal : 0) : (otherTotal > 0 ? otherDone/otherTotal : 0);
+          const acPct = isDC ? (otherTotal > 0 ? otherDone/otherTotal : 0) : (thisTotal > 0 ? thisDone/thisTotal : 0);
+          const dcTechShort = isDC ? shortName(tech) : shortName(otherTech);
+          const acTechShort = isDC ? shortName(otherTech) : shortName(tech);
 
           return (
-            <CounterpartCard
-              isDC={isDC} linkedDate={linkedDate} linkedTech={linkedTech}
-              linkedPhase={linkedPhase} linkedIcon={linkedIcon} linkedCol={linkedCol}
-              linkedSteps={linkedSteps} linkedProgress={linkedProgress} linkedStepDef={linkedStepDef}
-            />
+            <div style={{marginTop:4, background:C.panel, borderRadius:5, border:`1px solid ${C.border}`, padding:'4px 5px', overflow:'hidden'}}>
+              <div style={{display:'flex', alignItems:'center', gap:0}}>
+                {/* DC Side */}
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{display:'flex', alignItems:'center', gap:3, marginBottom:2}}>
+                    <span style={{fontSize:8, fontWeight:800, color: isDC ? C.dc : C.dim, opacity: isDC ? 1 : 0.6}}>🏠 DC</span>
+                    <span style={{fontSize:8, fontWeight:600, color: isDC ? C.text : C.muted}}>{shortDate(dcDate)}</span>
+                  </div>
+                  {/* Progress mini-bar */}
+                  <div style={{height:3, borderRadius:2, background:C.border+'66', overflow:'hidden'}}>
+                    <div style={{width:`${dcPct*100}%`, height:'100%', borderRadius:2, background: dcPct >= 1 ? C.green : C.dc, transition:'width 0.3s'}}/>
+                  </div>
+                  <div style={{fontSize:7, color: isDC ? C.text : C.muted, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', opacity: isDC ? 1 : 0.6}}>{dcTechShort}</div>
+                </div>
+
+                {/* Arrow */}
+                <div style={{padding:'0 4px', display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0}}>
+                  <span style={{fontSize:8, color:C.muted}}>→</span>
+                </div>
+
+                {/* AC Side */}
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{display:'flex', alignItems:'center', gap:3, marginBottom:2}}>
+                    <span style={{fontSize:8, fontWeight:800, color: !isDC ? C.ac : acDate ? C.dim : C.red, opacity: !isDC ? 1 : 0.6}}>⚡ AC</span>
+                    <span style={{fontSize:8, fontWeight:600, color: !isDC ? C.text : C.muted}}>{acDate ? shortDate(acDate) : '–'}</span>
+                  </div>
+                  <div style={{height:3, borderRadius:2, background:C.border+'66', overflow:'hidden'}}>
+                    <div style={{width:`${acPct*100}%`, height:'100%', borderRadius:2, background: acPct >= 1 ? C.green : C.ac, transition:'width 0.3s'}}/>
+                  </div>
+                  <div style={{fontSize:7, color: !isDC ? C.text : C.muted, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', opacity: !isDC ? 1 : 0.6}}>{acTechShort}</div>
+                </div>
+              </div>
+            </div>
           );
         })()}
 
