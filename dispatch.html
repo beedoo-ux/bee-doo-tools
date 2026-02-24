@@ -639,7 +639,7 @@ function DispatchApp() {
         <span style={{color:C.dim, fontSize:12, fontWeight:300, letterSpacing:'0.08em'}}>DISPATCH</span>
         <div style={{width:1, height:16, background:C.border, margin:'0 4px'}}/>
 
-        {[['week','📅 Woche'],['month','📆 Monat'],['map','🗺️ Karte'],['capacity','📊 Kapazität']].map(([k,l]) =>
+        {[['week','📅 Woche'],['month','📆 Monat'],['route','🛣️ Route'],['map','🗺️ Karte'],['capacity','📊 Kapazität']].map(([k,l]) =>
           <button key={k} onClick={()=>setView(k)} style={{
             background:view===k?C.brand+'22':'transparent', color:view===k?C.brand:C.dim,
             border:`1px solid ${view===k?C.brand+'44':'transparent'}`, borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer', fontWeight:view===k?600:400
@@ -793,6 +793,7 @@ function DispatchApp() {
             updateProject={updateProject} onCardClick={p => setModal({type:'detail',proj:p})}/>}
           {view==='month' && <MonthView baseDate={baseDate} projekte={projekte} techs={filteredMonteure} engel={BAUENGEL} onCardClick={p => setModal({type:'detail',proj:p})}/>}
           {view==='map' && <MapView projekte={projekte}/>}
+          {view==='route' && <RouteView weekDays={weekDays} techs={filteredMonteure} engel={BAUENGEL} techSlots={techSlots} engelSlots={engelSlots} projekte={projekte} onCardClick={p => setModal({type:'detail',proj:p})}/>}
           {view==='capacity' && <CapacityView weekDays={weekDays} techs={filteredMonteure} engel={BAUENGEL} techSlots={techSlots} engelSlots={engelSlots} projekte={projekte}/>}
         </main>
 
@@ -1305,6 +1306,269 @@ function MonthView({ baseDate, projekte, techs, engel, onCardClick }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAP VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROUTE OPTIMIZATION VIEW
+// ═══════════════════════════════════════════════════════════════════════════════
+function RouteView({ weekDays, techs, engel, techSlots, engelSlots, projekte, onCardClick }) {
+  const [selDay, setSelDay] = useState(fmtDate(weekDays[0]));
+  const [selTeam, setSelTeam] = useState('all');
+  const [optimized, setOptimized] = useState({});
+  const routeMapRef = useRef(null);
+  const routeMapInst = useRef(null);
+  const routeLayerRef = useRef(null);
+  const isMob = window.innerWidth < 768;
+
+  // Haversine distance in km
+  const haversine = (lat1,lng1,lat2,lng2) => {
+    const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  };
+
+  // Build daily assignments per tech
+  const dailyRoutes = useMemo(() => {
+    const routes = {};
+    const allTechs = [...techs, ...engel];
+    allTechs.forEach(t => {
+      const key = `${t.id}`;
+      const dayProjects = projekte.filter(p => {
+        if (!p.lat || !p.lng) return false;
+        const isDC = p.dcTechId === t.id && p.dcDate === selDay;
+        const isAC = p.acTechId === t.id && p.acDate === selDay;
+        const isEngel = p.engelId === t.id && (p.dcDate === selDay || p.acDate === selDay);
+        return isDC || isAC || isEngel;
+      });
+      if (dayProjects.length > 0) {
+        routes[key] = { tech: t, projects: dayProjects };
+      }
+    });
+    return routes;
+  }, [techs, engel, projekte, selDay]);
+
+  // Nearest-neighbor TSP optimization
+  const optimizeRoute = useCallback((projects, startPlz) => {
+    if (projects.length <= 1) return { order: projects, totalKm: 0, savedKm: 0 };
+    const startCoords = PLZ_COORDS[startPlz] || [51.532, 8.533];
+
+    // Original order distance
+    let origKm = 0;
+    let prevLat = startCoords[0], prevLng = startCoords[1];
+    projects.forEach(p => {
+      origKm += haversine(prevLat, prevLng, p.lat, p.lng);
+      prevLat = p.lat; prevLng = p.lng;
+    });
+
+    // Nearest neighbor
+    const remaining = [...projects];
+    const ordered = [];
+    let curLat = startCoords[0], curLng = startCoords[1];
+    let optKm = 0;
+
+    while (remaining.length > 0) {
+      let bestIdx = 0, bestDist = Infinity;
+      remaining.forEach((p, i) => {
+        const d = haversine(curLat, curLng, p.lat, p.lng);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      });
+      const next = remaining.splice(bestIdx, 1)[0];
+      optKm += bestDist;
+      ordered.push({ ...next, distFromPrev: Math.round(bestDist * 10) / 10 });
+      curLat = next.lat; curLng = next.lng;
+    }
+
+    return { order: ordered, totalKm: Math.round(optKm * 10) / 10, origKm: Math.round(origKm * 10) / 10, savedKm: Math.round((origKm - optKm) * 10) / 10 };
+  }, []);
+
+  // Compute all optimized routes
+  useEffect(() => {
+    const opt = {};
+    Object.entries(dailyRoutes).forEach(([key, data]) => {
+      opt[key] = optimizeRoute(data.projects, data.tech.plz);
+    });
+    setOptimized(opt);
+  }, [dailyRoutes, optimizeRoute]);
+
+  // Render map
+  useEffect(() => {
+    if (!routeMapRef.current) return;
+    if (!routeMapInst.current) {
+      routeMapInst.current = L.map(routeMapRef.current, { zoomControl: true }).setView([51.75, 8.65], 9);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OSM &copy; CARTO', maxZoom: 19
+      }).addTo(routeMapInst.current);
+      routeLayerRef.current = L.layerGroup().addTo(routeMapInst.current);
+    }
+
+    // Clear previous
+    routeLayerRef.current.clearLayers();
+    const allPts = [];
+    const routeColors = [C.green, C.blue, C.yellow, C.pink, C.purple, C.teal, C.orange, '#ef4444', '#8b5cf6', '#06b6d4'];
+    let colorIdx = 0;
+
+    Object.entries(dailyRoutes).forEach(([key, data]) => {
+      if (selTeam !== 'all' && key !== selTeam) return;
+      const opt = optimized[key];
+      if (!opt || !opt.order || opt.order.length === 0) return;
+
+      const techColor = routeColors[colorIdx % routeColors.length];
+      colorIdx++;
+      const startCoords = PLZ_COORDS[data.tech.plz] || [51.532, 8.533];
+
+      // Start marker (home)
+      const homeIcon = L.divIcon({
+        html: `<div style="width:14px;height:14px;border-radius:50%;background:${techColor};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:7px;color:#fff;font-weight:900">${data.tech.ini}</div>`,
+        className: '', iconSize: [14, 14], iconAnchor: [7, 7]
+      });
+      L.marker(startCoords, { icon: homeIcon }).addTo(routeLayerRef.current).bindTooltip(`🏠 ${data.tech.name} (Start)`, { className: 'dark-tip' });
+      allPts.push(startCoords);
+
+      // Route line
+      const linePoints = [startCoords, ...opt.order.map(p => [p.lat, p.lng])];
+      L.polyline(linePoints, { color: techColor, weight: 3, opacity: 0.7, dashArray: '8,6' }).addTo(routeLayerRef.current);
+
+      // Project markers
+      opt.order.forEach((p, i) => {
+        const mkIcon = L.divIcon({
+          html: `<div style="width:24px;height:24px;border-radius:50%;background:${techColor}30;border:2.5px solid ${techColor};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:${techColor}">${i + 1}</div>`,
+          className: '', iconSize: [24, 24], iconAnchor: [12, 12]
+        });
+        L.marker([p.lat, p.lng], { icon: mkIcon }).addTo(routeLayerRef.current)
+          .bindPopup(`<div style="font-family:'DM Sans';color:#222;min-width:160px"><strong>Stop ${i + 1}: ${p.customer}</strong><br>${p.address}, ${p.plz} ${p.city}<br><span style="color:#666">${p.distFromPrev} km vom vorherigen Stop</span>${p.kwp > 0 ? `<br>${p.kwp} kWp` : ''}</div>`);
+        allPts.push([p.lat, p.lng]);
+      });
+    });
+
+    if (allPts.length > 1) {
+      routeMapInst.current.fitBounds(allPts, { padding: [40, 40], maxZoom: 11 });
+    }
+  }, [dailyRoutes, optimized, selTeam, selDay]);
+
+  // Cleanup map on unmount
+  useEffect(() => () => {
+    if (routeMapInst.current) { routeMapInst.current.remove(); routeMapInst.current = null; }
+  }, []);
+
+  const totalKm = Object.entries(optimized).filter(([k]) => selTeam === 'all' || k === selTeam).reduce((s, [, v]) => s + (v.totalKm || 0), 0);
+  const totalSaved = Object.entries(optimized).filter(([k]) => selTeam === 'all' || k === selTeam).reduce((s, [, v]) => s + (v.savedKm || 0), 0);
+  const totalStops = Object.entries(dailyRoutes).filter(([k]) => selTeam === 'all' || k === selTeam).reduce((s, [, v]) => s + v.projects.length, 0);
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: isMob ? 'column' : 'row', gap: 0 }}>
+      {/* Left panel: Route list */}
+      <div style={{ width: isMob ? '100%' : '380px', minWidth: isMob ? 'auto' : '340px', height: isMob ? '50%' : '100%', overflow: 'auto', borderRight: isMob ? 'none' : `1px solid ${C.border}`, borderBottom: isMob ? `1px solid ${C.border}` : 'none', padding: isMob ? '10px' : '12px' }}>
+        {/* Day + Filter */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {weekDays.map(d => {
+            const ds = fmtDate(d);
+            const dayNames = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+            return <button key={ds} onClick={() => setSelDay(ds)} style={{
+              padding: '4px 10px', borderRadius: 6, border: `1px solid ${selDay === ds ? C.brand : C.border}`,
+              background: selDay === ds ? C.brand + '20' : 'transparent', color: selDay === ds ? C.brand : C.dim,
+              cursor: 'pointer', fontSize: isMob ? 12 : 11, fontWeight: selDay === ds ? 700 : 500
+            }}>{dayNames[d.getDay()]} {d.getDate()}.{d.getMonth() + 1}</button>;
+          })}
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center' }}>
+          <select value={selTeam} onChange={e => setSelTeam(e.target.value)} style={{
+            background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 8px',
+            color: C.text, fontSize: isMob ? 12 : 11, cursor: 'pointer'
+          }}>
+            <option value="all">Alle Teams</option>
+            {Object.entries(dailyRoutes).map(([k, v]) => <option key={k} value={k}>{v.tech.name}</option>)}
+          </select>
+        </div>
+
+        {/* Summary */}
+        <div style={{ display: 'flex', gap: isMob ? 8 : 6, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: isMob ? '8px 12px' : '6px 10px', flex: 1, minWidth: 80 }}>
+            <div style={{ fontSize: isMob ? 9 : 8, color: C.dim, fontWeight: 700, textTransform: 'uppercase' }}>Gesamt km</div>
+            <div style={{ fontSize: isMob ? 18 : 16, fontWeight: 900, color: C.brand }}>{totalKm} km</div>
+          </div>
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: isMob ? '8px 12px' : '6px 10px', flex: 1, minWidth: 80 }}>
+            <div style={{ fontSize: isMob ? 9 : 8, color: C.dim, fontWeight: 700, textTransform: 'uppercase' }}>Gespart</div>
+            <div style={{ fontSize: isMob ? 18 : 16, fontWeight: 900, color: totalSaved > 0 ? C.green : C.dim }}>{totalSaved > 0 ? '-' : ''}{totalSaved} km</div>
+          </div>
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: isMob ? '8px 12px' : '6px 10px', flex: 1, minWidth: 80 }}>
+            <div style={{ fontSize: isMob ? 9 : 8, color: C.dim, fontWeight: 700, textTransform: 'uppercase' }}>Stops</div>
+            <div style={{ fontSize: isMob ? 18 : 16, fontWeight: 900, color: C.text }}>{totalStops}</div>
+          </div>
+        </div>
+
+        {/* Route details per team */}
+        {Object.entries(dailyRoutes).filter(([k]) => selTeam === 'all' || k === selTeam).map(([key, data]) => {
+          const opt = optimized[key];
+          if (!opt) return null;
+          return (
+            <div key={key} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
+              <div style={{ padding: isMob ? '10px 12px' : '8px 10px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {data.tech.foto ? <img src={data.tech.foto} style={{ width: isMob ? 28 : 24, height: isMob ? 28 : 24, borderRadius: '50%', objectFit: 'cover' }}/> :
+                    <div style={{ width: isMob ? 28 : 24, height: isMob ? 28 : 24, borderRadius: '50%', background: (data.tech.color || C.dim) + '30', border: `1.5px solid ${data.tech.color || C.dim}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMob ? 9 : 8, fontWeight: 800, color: data.tech.color || C.dim }}>{data.tech.ini}</div>}
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: isMob ? 13 : 11 }}>{data.tech.name}</div>
+                    <div style={{ fontSize: isMob ? 10 : 9, color: C.dim }}>{data.tech.region} · PLZ {data.tech.plz}</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: isMob ? 14 : 12, fontWeight: 800, color: C.brand }}>{opt.totalKm} km</div>
+                  {opt.savedKm > 0 && <div style={{ fontSize: isMob ? 9 : 8, color: C.green, fontWeight: 600 }}>⬇ {opt.savedKm} km gespart</div>}
+                </div>
+              </div>
+
+              {/* Stops */}
+              <div style={{ padding: isMob ? '6px 0' : '4px 0' }}>
+                {/* Start */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: isMob ? '4px 12px' : '3px 10px' }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: C.green + '20', border: `1.5px solid ${C.green}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, flexShrink: 0 }}>🏠</div>
+                  <span style={{ fontSize: isMob ? 11 : 10, color: C.dim }}>Start: PLZ {data.tech.plz}</span>
+                </div>
+                {/* Vertical line connector */}
+                <div style={{ marginLeft: isMob ? 21 : 19, height: 12, borderLeft: `2px dashed ${C.border}` }}/>
+
+                {opt.order.map((p, i) => (
+                  <React.Fragment key={p.id}>
+                    <div onClick={() => onCardClick && onCardClick(p)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: isMob ? '6px 12px' : '4px 10px', cursor: 'pointer', transition: 'background .15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = C.card} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <div style={{ width: 20, height: 20, borderRadius: '50%', background: C.brand + '20', border: `1.5px solid ${C.brand}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMob ? 10 : 9, fontWeight: 800, color: C.brand, flexShrink: 0 }}>{i + 1}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: isMob ? 12 : 10, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.customer}</div>
+                        <div style={{ fontSize: isMob ? 10 : 9, color: C.dim }}>{p.address}, {p.plz} {p.city}{p.kwp > 0 ? ` · ${p.kwp} kWp` : ''}</div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: isMob ? 11 : 10, fontWeight: 700, color: p.distFromPrev > 30 ? '#F87171' : p.distFromPrev > 15 ? C.orange : C.green }}>{p.distFromPrev} km</div>
+                      </div>
+                    </div>
+                    {i < opt.order.length - 1 && <div style={{ marginLeft: isMob ? 21 : 19, height: 8, borderLeft: `2px dashed ${C.border}` }}/>}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+
+        {Object.keys(dailyRoutes).length === 0 && (
+          <div style={{ textAlign: 'center', padding: 40, color: C.dim }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>📍</div>
+            <div style={{ fontSize: isMob ? 13 : 12 }}>Keine Montagen an diesem Tag geplant</div>
+          </div>
+        )}
+      </div>
+
+      {/* Right panel: Map */}
+      <div style={{ flex: 1, height: isMob ? '50%' : '100%', position: 'relative' }}>
+        <div ref={routeMapRef} style={{ height: '100%', width: '100%' }}/>
+        <div style={{ position: 'absolute', top: 12, right: 12, background: C.panel + 'ee', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', zIndex: 1000 }}>
+          <div style={{ fontSize: isMob ? 10 : 9, color: C.dim, fontWeight: 700, marginBottom: 4 }}>ROUTEN-INFO</div>
+          <div style={{ fontSize: isMob ? 12 : 11, fontWeight: 800, color: C.brand }}>{totalKm} km total</div>
+          {totalSaved > 0 && <div style={{ fontSize: isMob ? 10 : 9, color: C.green, fontWeight: 600 }}>{totalSaved} km Ersparnis vs. Original</div>}
+          <div style={{ fontSize: isMob ? 10 : 9, color: C.text, marginTop: 2 }}>{totalStops} Stops · {Object.keys(dailyRoutes).filter(k => selTeam === 'all' || k === selTeam).length} Teams</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MapView({ projekte }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
