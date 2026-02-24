@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>bee-doo | Empfehlungs-Dashboard</title>
+<title>bee-doo | Empfehlungs-Übersicht</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -13,779 +13,259 @@
   body { font-family: 'DM Sans', system-ui, sans-serif; background: #080C14; color: #e1e7ef; min-height: 100vh; }
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-thumb { background: rgba(245,197,0,0.3); border-radius: 4px; }
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
-  @keyframes coinGlow { 0%,100% { box-shadow: 0 0 10px rgba(255,215,0,0.3); } 50% { box-shadow: 0 0 25px rgba(255,215,0,0.6); } }
-  @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
-  .ani { animation: fadeUp 0.4s ease both; }
-  .pulse { animation: pulse 2s ease infinite; }
+  @media (max-width: 768px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .tbl-wrap { overflow-x: auto; }
+    .tbl-wrap table { min-width: 620px; }
+    .top-bar { flex-direction: column; gap: 10px !important; align-items: flex-start !important; }
+  }
+  @media (max-width: 480px) {
+    .kpi-grid { grid-template-columns: 1fr !important; }
+    .lead-row { flex-direction: column; align-items: flex-start !important; gap: 6px !important; }
+  }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useCallback } = React;
 
-const SUPABASE_URL = "https://hqzpemfaljxcysyqssng.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const SB = "https://hqzpemfaljxcysyqssng.supabase.co";
+const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const H = { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };
+const get = async (t, q) => { const r = await fetch(`${SB}/rest/v1/${t}?${q || "select=*"}`, { headers: H }); return r.ok ? r.json() : []; };
+const patch = async (t, m, d) => { await fetch(`${SB}/rest/v1/${t}?${m}`, { method: "PATCH", headers: { ...H, Prefer: "return=minimal" }, body: JSON.stringify(d) }); };
 
-const B = { bg: "#080C14", c1: "#111927", c2: "#1a2236", bd: "#1e293b", y: "#F5C500", green: "#22c55e", blue: "#3b82f6", orange: "#f97316", red: "#ef4444", purple: "#a855f7", text: "#e1e7ef", sec: "#8b95a5", dim: "#4b5563" };
-const font = "'DM Sans', system-ui, sans-serif";
+const Y = "#F5C500", G = "#22c55e", B = "#3b82f6", P = "#a855f7", O = "#f97316", R = "#ef4444";
+const BD = "#1e293b", C1 = "#111927", C2 = "#1a2236", DIM = "#4b5563", SEC = "#8b95a5", TXT = "#e1e7ef";
 
-const PRAEMIEN_STUFEN = [
-  { ab: 1, betrag: 700, label: "1. Empfehlung" },
-  { ab: 2, betrag: 800, label: "2. Empfehlung" },
-  { ab: 3, betrag: 900, label: "3. Empfehlung" },
-  { ab: 4, betrag: 1000, label: "4.+ Empfehlung" },
+const STATUS = [
+  { key: "eingegangen", label: "Eingegangen", icon: "📥", color: B },
+  { key: "angerufen", label: "Angerufen", icon: "📞", color: P },
+  { key: "termin_vereinbart", label: "Termin", icon: "📅", color: O },
+  { key: "termin_stattgefunden", label: "Stattgef.", icon: "✅", color: Y },
+  { key: "sale", label: "Sale", icon: "🎉", color: G },
+  { key: "kein_sale", label: "Kein Sale", icon: "❌", color: R },
+  { key: "storno", label: "Storno", icon: "🚫", color: R },
 ];
+const getStatus = (k) => STATUS.find(s => s.key === k) || STATUS[0];
 const getPraemie = (n) => n <= 0 ? 0 : n === 1 ? 700 : n === 2 ? 800 : n === 3 ? 900 : 1000;
-const getTotalPraemie = (sales) => { let sum = 0; for (let i = 1; i <= sales; i++) sum += getPraemie(i); return sum; };
-const getNextStufe = (sales) => ({ current: getPraemie(sales || 1), next: getPraemie((sales || 0) + 1), nr: (sales || 0) + 1 });
+const getTotalPraemie = (s) => { let t = 0; for (let i = 1; i <= s; i++) t += getPraemie(i); return t; };
 
-// ─── Tier Progress Component – Super Mario Style 🪙 ───
-const TierProgress = ({ sales, compact, pipelineLeads }) => {
-  const total = getTotalPraemie(sales);
-  const next = getNextStufe(sales);
-  const pipelineCount = pipelineLeads || 0;
-  const pipelinePotential = (() => { let sum = 0; for (let i = 1; i <= pipelineCount; i++) sum += getPraemie(sales + i); return sum; })();
-  const [showPop, setShowPop] = React.useState(false);
-  React.useEffect(() => { const t = setTimeout(() => setShowPop(true), 600); return () => clearTimeout(t); }, [sales]);
-
-  if (compact) return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: `${B.y}08`, border: `1px solid ${B.y}15` }}>
-      <span style={{ fontSize: 14 }}>🪙</span>
-      <span style={{ fontSize: 11, fontWeight: 700, color: B.y }}>{total.toLocaleString("de-DE")}€</span>
-      {pipelineCount > 0 && <span style={{ fontSize: 10, color: B.green }}>+{pipelineCount} in Pipeline</span>}
-    </div>
-  );
-
-  const coins = [
-    { betrag: 700, label: "1-UP", emoji: "🍄" },
-    { betrag: 800, label: "STAR", emoji: "⭐" },
-    { betrag: 900, label: "FIRE", emoji: "🔥" },
-    { betrag: 1000, label: "∞ GOLD", emoji: "👑" },
-  ];
-
-  // Mario walks from left to the current coin position
-  // 0 sales = at start, 1 = at coin 1, 4+ = end
-  const positions = [5, 18, 41, 63, 86];
-  const marioX = positions[Math.min(sales, 4)];
-
-  return (
-    <div style={{ borderRadius: 16, overflow: "hidden", border: `2px solid ${B.y}25`, background: `linear-gradient(180deg, #0b1428 0%, #101e35 50%, #0a1222 100%)`, position: "relative" }}>
-      <style>{`
-        @keyframes mJump {
-          0%,100% { transform: translateY(0) scaleX(-1); }
-          10% { transform: translateY(-3px) scaleX(-1); }
-          35% { transform: translateY(-36px) scaleX(-1); }
-          55% { transform: translateY(-30px) scaleX(-1); }
-          85% { transform: translateY(-2px) scaleX(-1); }
-        }
-        @keyframes mBounce {
-          0%,100% { transform: translateY(0) scaleX(-1); }
-          50% { transform: translateY(-8px) scaleX(-1); }
-        }
-        @keyframes cSpin {
-          0% { transform: rotateY(0deg) scale(1); }
-          50% { transform: rotateY(180deg) scale(1.08); }
-          100% { transform: rotateY(360deg) scale(1); }
-        }
-        @keyframes cGlow {
-          0%,100% { box-shadow: 0 0 6px #ffd70050; }
-          50% { box-shadow: 0 0 22px #ffd700a0, 0 0 44px #ffd70040; }
-        }
-        @keyframes spk {
-          0%,100% { opacity: 0; transform: scale(0) translateY(0); }
-          50% { opacity: 1; transform: scale(1) translateY(-12px); }
-        }
-        @keyframes popUp {
-          0% { opacity: 0; transform: translateY(0) scale(0.5); }
-          30% { opacity: 1; transform: translateY(-22px) scale(1.15); }
-          100% { opacity: 0; transform: translateY(-40px) scale(0.7); }
-        }
-        @keyframes groundMove {
-          from { background-position: 0 0; }
-          to { background-position: -48px 0; }
-        }
-        @keyframes floatCloud {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-200px); }
-        }
-        .m-jump { animation: mJump 1.1s cubic-bezier(0.36,0,0.66,1) infinite; }
-        .m-idle { animation: mBounce 1.8s ease infinite; }
-        .c-spin { animation: cSpin 2.2s linear infinite; }
-        .c-glow { animation: cGlow 2s ease infinite; }
-        .c-sparkle { animation: spk 1.6s ease infinite; }
-        .score-pop { animation: popUp 2.2s ease-out forwards; }
-      `}</style>
-
-      {/* ─── RETRO SCORE HEADER ─── */}
-      <div style={{ padding: "14px 18px 6px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
-          <div style={{ fontSize: 8, fontWeight: 800, color: "#4b556380", textTransform: "uppercase", letterSpacing: 3 }}>🪙 × {sales}</div>
-          <div style={{ fontSize: 34, fontWeight: 900, color: B.y, fontFamily: "'DM Sans', monospace", textShadow: "0 0 18px #f5c50040, 0 2px 0 #b8860b", marginTop: 1 }}>
-            {total.toLocaleString("de-DE")}€
-          </div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 8, fontWeight: 800, color: "#4b556380", textTransform: "uppercase", letterSpacing: 3 }}>WORLD</div>
-          <div style={{ fontSize: 24, fontWeight: 900, color: sales >= 4 ? B.green : "#fff", fontFamily: "'DM Sans', monospace", textShadow: `0 0 12px ${sales >= 4 ? B.green : B.y}40` }}>
-            {sales >= 4 ? "★-★" : `1-${Math.min(sales + 1, 4)}`}
-          </div>
-        </div>
-      </div>
-
-      {/* ─── GAME WORLD ─── */}
-      <div style={{ position: "relative", height: 155, margin: "0 6px", overflow: "hidden" }}>
-        {/* Clouds */}
-        <div style={{ position: "absolute", top: 4, left: "12%", fontSize: 18, opacity: 0.07, animation: "floatCloud 25s linear infinite" }}>☁️</div>
-        <div style={{ position: "absolute", top: 14, left: "55%", fontSize: 13, opacity: 0.05, animation: "floatCloud 35s linear infinite 5s" }}>☁️</div>
-        <div style={{ position: "absolute", top: 2, left: "80%", fontSize: 15, opacity: 0.06, animation: "floatCloud 30s linear infinite 12s" }}>☁️</div>
-
-        {/* Ground */}
-        <div style={{ position: "absolute", bottom: 0, left: -4, right: -4, height: 22, overflow: "hidden" }}>
-          <div style={{ position: "absolute", inset: 0, background: `repeating-linear-gradient(90deg, #2d1a00 0px, #3a2200 12px, #2d1a00 24px)`, animation: "groundMove 2.5s linear infinite" }} />
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: `linear-gradient(90deg, ${B.green}50, ${B.green}25, ${B.green}50)` }} />
-          {/* Little grass tufts */}
-          {[10,25,42,60,78,92].map((p,i) => <div key={i} style={{ position: "absolute", bottom: 14, left: `${p}%`, fontSize: 7, opacity: 0.4 }}>🌱</div>)}
-        </div>
-
-        {/* Progress track */}
-        <div style={{ position: "absolute", bottom: 22, left: 32, right: 32, height: 4, borderRadius: 2 }}>
-          <div style={{ position: "absolute", inset: 0, background: "#4b556320", borderRadius: 2 }} />
-          <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${(Math.min(sales, 4) / 4) * 100}%`, background: `linear-gradient(90deg, ${B.y}90, ${B.green}90)`, borderRadius: 2, transition: "width 1.5s cubic-bezier(0.22,1,0.36,1)", boxShadow: `0 0 8px ${B.y}50` }} />
-        </div>
-
-        {/* ── MARIO ── */}
-        <div style={{ position: "absolute", bottom: 26, left: `${marioX}%`, transition: "left 1.2s cubic-bezier(0.22,1,0.36,1)", zIndex: 15, marginLeft: -16 }}>
-          <div className={sales > 0 ? "m-jump" : "m-idle"} style={{ fontSize: 30, lineHeight: 1, filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.6))" }}>
-            🏃
-          </div>
-          {showPop && sales > 0 && (
-            <div className="score-pop" style={{ position: "absolute", top: -12, left: "50%", marginLeft: -20, width: 40, textAlign: "center", fontSize: 13, fontWeight: 900, color: B.y, textShadow: "0 1px 4px rgba(0,0,0,0.9)", pointerEvents: "none", whiteSpace: "nowrap" }}>
-              +{getPraemie(sales)}€
-            </div>
-          )}
-        </div>
-
-        {/* ── COINS ── */}
-        <div style={{ position: "absolute", bottom: 18, left: 8, right: 8, display: "flex", justifyContent: "space-around" }}>
-          {coins.map((c, i) => {
-            const collected = sales > i;
-            const current = sales === i;
-            return (
-              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 68, zIndex: 8, position: "relative" }}>
-                {/* Sparkles */}
-                {collected && <>
-                  <div className="c-sparkle" style={{ position: "absolute", top: -10, left: 6, fontSize: 11, animationDelay: "0s" }}>✨</div>
-                  <div className="c-sparkle" style={{ position: "absolute", top: -7, right: 8, fontSize: 9, animationDelay: "0.7s" }}>✨</div>
-                </>}
-
-                {/* Coin */}
-                <div className={current ? "c-spin c-glow" : ""} style={{
-                  width: 50, height: 50, borderRadius: "50%",
-                  background: collected
-                    ? "linear-gradient(145deg, #FFD700, #FF9F00, #FFD700)"
-                    : current
-                      ? `linear-gradient(145deg, ${B.y}45, ${B.y}18)`
-                      : "#4b556312",
-                  border: `3px solid ${collected ? "#FFD700" : current ? `${B.y}70` : "#4b556325"}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  boxShadow: collected
-                    ? "0 5px 22px #ffd70060, inset 0 -4px 8px #b8860b50, inset 0 4px 8px #fffacd40"
-                    : "none",
-                  position: "relative", transition: "all 0.6s"
-                }}>
-                  {collected
-                    ? <span style={{ fontSize: 24 }}>{c.emoji}</span>
-                    : current
-                      ? <span style={{ fontSize: 24 }}>❓</span>
-                      : <span style={{ fontSize: 22, opacity: 0.15, filter: "grayscale(1)" }}>🪙</span>
-                  }
-                  {collected && (
-                    <div style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: B.green, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 900, color: "#fff", border: "2px solid #0b1428", boxShadow: `0 2px 8px ${B.green}70` }}>✓</div>
-                  )}
-                </div>
-
-                {/* Label */}
-                <div style={{ marginTop: 5, textAlign: "center" }}>
-                  <div style={{ fontSize: 14, fontWeight: 900, color: collected ? B.green : current ? B.y : "#4b556360", textShadow: collected ? `0 0 6px ${B.green}30` : "none" }}>
-                    {c.betrag.toLocaleString("de-DE")}€
-                  </div>
-                  <div style={{ fontSize: 7, fontWeight: 800, color: collected ? `${B.green}70` : current ? `${B.y}50` : "#4b556340", textTransform: "uppercase", letterSpacing: 1.5 }}>
-                    {c.label}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ─── BOTTOM: Next + Pipeline ─── */}
-      <div style={{ padding: "8px 14px 12px", display: "flex", gap: 8, borderTop: "1px solid #1e293b" }}>
-        <div style={{ flex: 1, padding: "10px 12px", borderRadius: 10, background: `${B.y}06`, border: `1px solid ${B.y}12` }}>
-          <div style={{ fontSize: 7, fontWeight: 800, color: "#4b556370", textTransform: "uppercase", letterSpacing: 2, marginBottom: 3 }}>{sales >= 4 ? "🔥 MAX LEVEL" : "❓ NÄCHSTE MÜNZE"}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ fontSize: 16 }}>{sales >= 4 ? "👑" : "🪙"}</span>
-            <span style={{ fontSize: 20, fontWeight: 900, color: B.y }}>{next.next.toLocaleString("de-DE")}€</span>
-          </div>
-          {sales >= 4
-            ? <div style={{ fontSize: 10, color: B.green, marginTop: 1, fontWeight: 700 }}>Jeder Sale = 1.000€! 🔥</div>
-            : <div style={{ fontSize: 10, color: "#8b95a5", marginTop: 1 }}>Sale #{next.nr} knackt's!</div>
-          }
-        </div>
-        <div style={{ flex: 1, padding: "10px 12px", borderRadius: 10, background: `${B.green}06`, border: `1px solid ${B.green}12` }}>
-          <div style={{ fontSize: 7, fontWeight: 800, color: "#4b556370", textTransform: "uppercase", letterSpacing: 2, marginBottom: 3 }}>💎 PIPELINE</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ fontSize: 16 }}>💎</span>
-            <span style={{ fontSize: 20, fontWeight: 900, color: B.green }}>{pipelineCount}</span>
-            <span style={{ fontSize: 11, color: "#8b95a5" }}>Leads</span>
-          </div>
-          {pipelineCount > 0
-            ? <div style={{ fontSize: 10, color: B.green, marginTop: 1, fontWeight: 600 }}>= bis zu {pipelinePotential.toLocaleString("de-DE")}€ 💰</div>
-            : <div style={{ fontSize: 10, color: "#4b5563", marginTop: 1 }}>Noch keine offenen Leads</div>
-          }
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const PIPELINE = [
-  { key: "eingegangen", label: "Eingegangen", icon: "📥", color: B.blue },
-  { key: "angerufen", label: "Angerufen", icon: "📞", color: B.purple },
-  { key: "termin_vereinbart", label: "Termin vereinbart", icon: "📅", color: B.orange },
-  { key: "termin_stattgefunden", label: "Termin stattgefunden", icon: "✅", color: B.y },
-  { key: "sale", label: "Sale", icon: "🎉", color: B.green },
-  { key: "kein_sale", label: "Kein Sale", icon: "❌", color: B.red },
-  { key: "storno", label: "Storno", icon: "🚫", color: B.red },
-];
-
-// ─── Supabase helpers ───
-const SB = {
-  h: { apikey: SUPABASE_KEY, "Content-Type": "application/json", Authorization: "Bearer " + SUPABASE_KEY },
-  get: async (t, q) => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${t}?${q || "select=*"}`, { headers: SB.h }); return r.ok ? r.json() : []; },
-  post: async (t, d) => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${t}`, { method: "POST", headers: { ...SB.h, Prefer: "return=representation" }, body: JSON.stringify(d) }); return r.ok ? r.json() : null; },
-  patch: async (t, m, d) => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${t}?${m}`, { method: "PATCH", headers: { ...SB.h, Prefer: "return=representation" }, body: JSON.stringify(d) }); return r.ok ? r.json() : null; },
-};
-
-// ─── Components ───
-const Card = ({ children, style, className }) => (
-  <div className={className} style={{ background: B.c1, border: `1px solid ${B.bd}`, borderRadius: 14, padding: 20, ...style }}>{children}</div>
-);
-
-const Badge = ({ text, color, icon }) => (
-  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: `${color}15`, border: `1px solid ${color}30`, fontSize: 11, fontWeight: 700, color }}>{icon} {text}</span>
-);
-
-const KPI = ({ label, value, icon, color, sub }) => (
-  <Card className="ani">
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-      <div style={{ width: 36, height: 36, borderRadius: 10, background: `${color}12`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{icon}</div>
-      <div style={{ fontSize: 10, fontWeight: 700, color: B.sec, textTransform: "uppercase", letterSpacing: 1.2 }}>{label}</div>
-    </div>
-    <div style={{ fontSize: 28, fontWeight: 900, color }}>{value}</div>
-    {sub && <div style={{ fontSize: 11, color: B.dim, marginTop: 2 }}>{sub}</div>}
-  </Card>
-);
-
-// ─── Pipeline Step Button ───
-const PipelineBtn = ({ step, active, onClick, count }) => (
-  <button onClick={onClick} style={{
-    display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10,
-    border: `1.5px solid ${active ? step.color : B.bd}`,
-    background: active ? `${step.color}15` : "transparent",
-    color: active ? step.color : B.sec, fontSize: 12, fontWeight: 700, fontFamily: font, cursor: "pointer",
-    transition: "all 0.2s", position: "relative"
-  }}>
-    <span style={{ fontSize: 14 }}>{step.icon}</span> {step.label}
-    {count > 0 && <span style={{ position: "absolute", top: -6, right: -6, background: step.color, color: "#fff", fontSize: 9, fontWeight: 800, width: 18, height: 18, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{count}</span>}
-  </button>
-);
-
-// ─── Notification Toast ───
-const Toast = ({ notifs, onDismiss }) => {
-  if (!notifs.length) return null;
-  return (
-    <div style={{ position: "fixed", top: 16, right: 16, zIndex: 50000, display: "flex", flexDirection: "column", gap: 8, maxWidth: 360 }}>
-      {notifs.slice(0, 3).map((n, i) => (
-        <div key={n.id} style={{ background: B.c1, border: `1.5px solid ${n.typ === "neue_empfehlung" ? B.green : n.typ === "sale" ? B.y : B.blue}40`, borderRadius: 14, padding: "14px 16px", animation: "slideIn 0.3s ease", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", display: "flex", gap: 12, alignItems: "flex-start" }}>
-          <div style={{ fontSize: 24, flexShrink: 0 }}>{n.typ === "neue_empfehlung" ? "📥" : n.typ === "sale" ? "🎉" : "🤝"}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 2 }}>{n.titel}</div>
-            <div style={{ fontSize: 11, color: B.sec }}>{n.nachricht}</div>
-          </div>
-          <button onClick={() => onDismiss(n.id)} style={{ background: "none", border: "none", color: B.dim, cursor: "pointer", fontSize: 18, padding: 0 }}>×</button>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// ─── Lead Detail Modal ───
-const LeadModal = ({ lead, werber, leads, onClose, onStatusChange }) => {
-  if (!lead) return null;
-  const pStep = PIPELINE.find(p => p.key === (lead.pipeline_status || "eingegangen")) || PIPELINE[0];
-  const currentIdx = PIPELINE.findIndex(p => p.key === pStep.key);
-  const history = lead.pipeline_history || [];
-
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 40000, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, maxHeight: "90vh", background: B.c1, borderRadius: 18, border: `1.5px solid ${B.bd}`, overflow: "auto" }}>
-        {/* Header */}
-        <div style={{ padding: "18px 22px", borderBottom: `1px solid ${B.bd}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 900 }}>{lead.vorname} {lead.nachname}</div>
-            <div style={{ fontSize: 12, color: B.sec, marginTop: 2 }}>
-              {werber ? `Empfohlen von ${werber.vorname} ${werber.nachname}` : "Direkt-Lead"} · {lead.interesse || "PV"}
-            </div>
-          </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: B.dim, fontSize: 24, cursor: "pointer" }}>×</button>
-        </div>
-
-        <div style={{ padding: 22 }}>
-          {/* Contact Info */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-            <div style={{ padding: "10px 14px", borderRadius: 10, background: B.c2 }}>
-              <div style={{ fontSize: 9, color: B.dim, fontWeight: 700, textTransform: "uppercase" }}>Telefon</div>
-              <a href={`tel:${lead.telefon}`} style={{ fontSize: 14, fontWeight: 700, color: B.green, textDecoration: "none" }}>{lead.telefon}</a>
-            </div>
-            {lead.email && <div style={{ padding: "10px 14px", borderRadius: 10, background: B.c2 }}>
-              <div style={{ fontSize: 9, color: B.dim, fontWeight: 700, textTransform: "uppercase" }}>E-Mail</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: B.text }}>{lead.email}</div>
-            </div>}
-            {lead.plz && <div style={{ padding: "10px 14px", borderRadius: 10, background: B.c2 }}>
-              <div style={{ fontSize: 9, color: B.dim, fontWeight: 700, textTransform: "uppercase" }}>Ort</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: B.text }}>{lead.plz} {lead.ort}</div>
-            </div>}
-          </div>
-
-          {/* Current Status */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: B.dim, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Aktueller Status</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderRadius: 12, background: `${pStep.color}12`, border: `1.5px solid ${pStep.color}30` }}>
-              <span style={{ fontSize: 24 }}>{pStep.icon}</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: pStep.color }}>{pStep.label}</span>
-            </div>
-          </div>
-
-          {/* Pipeline Buttons */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: B.dim, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Status ändern</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {PIPELINE.map(step => (
-                <button key={step.key} onClick={() => onStatusChange(lead, step.key)}
-                  disabled={step.key === lead.pipeline_status}
-                  style={{
-                    padding: "8px 14px", borderRadius: 10, fontSize: 12, fontWeight: 700, fontFamily: font, cursor: step.key === lead.pipeline_status ? "default" : "pointer",
-                    border: `1.5px solid ${step.key === lead.pipeline_status ? step.color : B.bd}`,
-                    background: step.key === lead.pipeline_status ? `${step.color}20` : "transparent",
-                    color: step.key === lead.pipeline_status ? step.color : B.sec,
-                    opacity: step.key === lead.pipeline_status ? 1 : 0.7,
-                    transition: "all 0.2s", display: "flex", alignItems: "center", gap: 5
-                  }}>
-                  <span style={{ fontSize: 13 }}>{step.icon}</span> {step.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* History */}
-          {history.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: B.dim, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Verlauf</div>
-              <div style={{ borderLeft: `2px solid ${B.bd}`, paddingLeft: 16 }}>
-                {history.slice().reverse().map((h, i) => {
-                  const s = PIPELINE.find(p => p.key === h.status);
-                  return (
-                    <div key={i} style={{ marginBottom: 12, position: "relative" }}>
-                      <div style={{ position: "absolute", left: -22, top: 2, width: 10, height: 10, borderRadius: "50%", background: s?.color || B.dim }} />
-                      <div style={{ fontSize: 12, fontWeight: 700, color: s?.color || B.text }}>{s?.icon} {s?.label || h.status}</div>
-                      <div style={{ fontSize: 10, color: B.dim }}>{new Date(h.timestamp).toLocaleString("de-DE")}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Quick Actions */}
-          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <a href={`tel:${lead.telefon}`} style={{ flex: 1, padding: "12px", borderRadius: 10, background: B.green, color: "#fff", fontSize: 13, fontWeight: 700, textDecoration: "none", textAlign: "center", fontFamily: font }}>📞 Anrufen</a>
-            <button onClick={() => {
-              const text = `Hallo ${lead.vorname}, hier ist Ihr bee-doo Berater. Ich melde mich wegen Ihrer Solar-Anfrage. Wann passt es Ihnen am besten für ein Gespräch?`;
-              window.open(`https://wa.me/${lead.telefon.replace(/[^0-9+]/g, "")}?text=${encodeURIComponent(text)}`);
-            }} style={{ flex: 1, padding: "12px", borderRadius: 10, background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer", fontFamily: font }}>💬 WhatsApp</button>
-          </div>
-
-          {/* Tier Info */}
-          {werber && lead.pipeline_status !== "sale" && lead.pipeline_status !== "kein_sale" && lead.pipeline_status !== "storno" && (() => {
-            const wSales = leads.filter(l => l.werber_code === lead.werber_code && l.pipeline_status === "sale").length;
-            const nextPraemie = getPraemie(wSales + 1);
-            return (
-              <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: `${B.y}08`, border: `1px solid ${B.y}20`, fontSize: 12, color: B.sec, textAlign: "center" }}>
-                💰 Bei Sale → <strong style={{ color: B.y }}>{nextPraemie.toLocaleString("de-DE")}€</strong> Prämie für {werber.vorname} ({wSales + 1}. Sale)
-              </div>
-            );
-          })()}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ═══════════════════════════════════════════
-// MAIN APP
-// ═══════════════════════════════════════════
 function App() {
-  const [tab, setTab] = useState("dashboard");
   const [werber, setWerber] = useState([]);
   const [leads, setLeads] = useState([]);
-  const [notifs, setNotifs] = useState([]);
-  const [toasts, setToasts] = useState([]);
-  const [settings, setSettings] = useState({});
-  const [clicks, setClicks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLead, setSelectedLead] = useState(null);
-  const [pipelineFilter, setPipelineFilter] = useState("alle");
-  const [searchTerm, setSearchTerm] = useState("");
-  const beraterName = new URLSearchParams(window.location.search).get("b") || "Bernd Schulz";
-  const demoSales = new URLSearchParams(window.location.search).get("demo");
-  const demoPipeline = new URLSearchParams(window.location.search).get("pipeline");
+  const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState(null);
+  const [modal, setModal] = useState(null);
+  const berater = new URLSearchParams(window.location.search).get("b") || "Bernd Schulz";
 
-  const loadData = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      const [w, l, n, s, c] = await Promise.all([
-        SB.get("referral_customers", `select=*&berater_name=eq.${encodeURIComponent(beraterName)}&order=created_at.desc`),
-        SB.get("referral_leads", `select=*&order=created_at.desc`),
-        SB.get("referral_field_notifications", `select=*&berater_name=eq.${encodeURIComponent(beraterName)}&order=created_at.desc&limit=50`),
-        SB.get("referral_settings", "select=*&limit=1"),
-        SB.get("referral_clicks", `select=*&order=created_at.desc&limit=200`),
+      const [w, l] = await Promise.all([
+        get("referral_customers", `select=*&berater_name=eq.${encodeURIComponent(berater)}&order=created_at.desc`),
+        get("referral_leads", `select=*&order=created_at.desc`),
       ]);
-
-      // Filter leads belonging to this berater's werber
-      const werberCodes = (w || []).map(ww => ww.code);
-      const myLeads = (l || []).filter(ll => werberCodes.includes(ll.werber_code) || ll.berater_zugewiesen === beraterName);
-
       setWerber(w || []);
-      setLeads(myLeads);
-      setNotifs(n || []);
-      setSettings(s?.[0] || {});
-      setClicks(c || []);
-
-      // Show unread notifications as toasts
-      const unread = (n || []).filter(nn => !nn.gelesen);
-      if (unread.length > 0) setToasts(unread.slice(0, 3));
+      setLeads(l || []);
     } catch (e) { console.error(e); }
     setLoading(false);
-  }, [beraterName]);
+  }, [berater]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { load(); }, [load]);
 
-  // Dismiss notification
-  const dismissNotif = async (id) => {
-    setToasts(t => t.filter(tt => tt.id !== id));
-    await SB.patch("referral_field_notifications", `id=eq.${id}`, { gelesen: true });
-  };
-
-  // Change lead pipeline status
   const changeStatus = async (lead, newStatus) => {
-    const history = [...(lead.pipeline_history || []), { status: newStatus, timestamp: new Date().toISOString(), by: beraterName }];
-    await SB.patch("referral_leads", `id=eq.${lead.id}`, {
+    const hist = [...(lead.pipeline_history || []), { status: newStatus, timestamp: new Date().toISOString(), by: berater }];
+    await patch("referral_leads", `id=eq.${lead.id}`, {
       pipeline_status: newStatus,
+      pipeline_history: hist,
       status: newStatus === "sale" ? "sale" : newStatus === "storno" ? "storno" : newStatus === "angerufen" ? "kontaktiert" : newStatus === "termin_vereinbart" ? "termin" : "neu",
-      pipeline_history: history,
       updated_at: new Date().toISOString()
     });
-
-    // Create notification for promoter
-    const werberData = werber.find(w => w.code === lead.werber_code);
-    if (werberData) {
-      const statusLabels = { angerufen: "wurde angerufen", termin_vereinbart: "hat einen Termin", termin_stattgefunden: "Termin hat stattgefunden", sale: "hat abgeschlossen! 🎉", kein_sale: "leider kein Abschluss", storno: "wurde storniert" };
-      const msg = `${lead.vorname} ${lead.nachname} ${statusLabels[newStatus] || newStatus}`;
-      await SB.post("referral_notifications", {
-        werber_code: lead.werber_code,
-        lead_id: lead.id,
-        typ: newStatus === "sale" ? "sale_confirm" : "status_update",
-        kanal: werberData.benachrichtigung_kanal || "whatsapp",
-        nachricht: msg
-      });
-    }
-
-    setSelectedLead(null);
-    loadData();
+    setModal(null);
+    load();
   };
 
-  // Stats
-  const totalLeads = leads.length;
-  const salesCount = demoSales !== null ? parseInt(demoSales) : leads.filter(l => l.pipeline_status === "sale").length;
-  const pendingCount = demoPipeline !== null ? parseInt(demoPipeline) : leads.filter(l => !["sale", "kein_sale", "storno"].includes(l.pipeline_status || "")).length;
-  const convRate = totalLeads > 0 ? Math.round((salesCount / totalLeads) * 100) : 0;
-  const totalClicks = werber.reduce((s, w) => s + (w.link_clicks || 0), 0);
-  const praemie = settings.praemie_kunde || 200;
-  const unreadCount = notifs.filter(n => !n.gelesen).length;
-
-  // Filtered leads
-  const filteredLeads = leads.filter(l => {
-    if (pipelineFilter !== "alle" && l.pipeline_status !== pipelineFilter) return false;
-    if (searchTerm) {
-      const s = searchTerm.toLowerCase();
-      return `${l.vorname} ${l.nachname}`.toLowerCase().includes(s) || (l.telefon || "").includes(s) || (l.werber_code || "").toLowerCase().includes(s);
-    }
-    return true;
+  // Per-Kunde Stats
+  const rows = werber.map(w => {
+    const wl = leads.filter(l => l.werber_code === w.code);
+    const sales = wl.filter(l => l.pipeline_status === "sale").length;
+    const pending = wl.filter(l => !["sale", "kein_sale", "storno"].includes(l.pipeline_status || "")).length;
+    return { ...w, leads: wl, empf: wl.length, sales, pending, praemie: getTotalPraemie(sales), klicks: w.link_clicks || 0 };
   });
 
-  const tabs = [
-    { key: "dashboard", icon: "📊", label: "Dashboard" },
-    { key: "pipeline", icon: "📋", label: "Pipeline", count: pendingCount },
-    { key: "promoter", icon: "🤝", label: "Promoter", count: werber.length },
-    { key: "verlauf", icon: "🔔", label: "Verlauf", count: unreadCount },
-  ];
+  const filtered = rows.filter(w => {
+    if (!search) return true;
+    const s = search.toLowerCase();
+    return `${w.vorname} ${w.nachname}`.toLowerCase().includes(s) || w.code?.toLowerCase().includes(s) || (w.ort || "").toLowerCase().includes(s);
+  });
 
-  if (loading) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ textAlign: "center" }}><div style={{ fontSize: 40, marginBottom: 12 }}>🐝</div><div style={{ color: B.sec }}>Laden...</div></div>
-    </div>
+  const tot = { kunden: rows.length, empf: rows.reduce((a,w) => a+w.empf, 0), sales: rows.reduce((a,w) => a+w.sales, 0), pending: rows.reduce((a,w) => a+w.pending, 0), klicks: rows.reduce((a,w) => a+w.klicks, 0), praemie: rows.reduce((a,w) => a+w.praemie, 0) };
+
+  const Badge = ({ text, color }) => (
+    <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, background: `${color}15`, border: `1px solid ${color}30`, fontSize: 11, fontWeight: 700, color }}>{text}</span>
   );
 
+  if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: SEC }}>Laden...</div>;
+
   return (
-    <div style={{ minHeight: "100vh", maxWidth: 900, margin: "0 auto", padding: "0 16px 80px" }}>
-      <Toast notifs={toasts} onDismiss={dismissNotif} />
-      <LeadModal lead={selectedLead} werber={werber.find(w => w.code === selectedLead?.werber_code)} leads={leads} onClose={() => setSelectedLead(null)} onStatusChange={changeStatus} />
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 16px 60px" }}>
 
-      {/* Header */}
-      <div style={{ padding: "20px 0 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 900 }}>🐝 Empfehlungen</div>
-          <div style={{ fontSize: 12, color: B.sec }}>{beraterName}</div>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {unreadCount > 0 && <div className="pulse" style={{ width: 32, height: 32, borderRadius: "50%", background: `${B.y}20`, border: `2px solid ${B.y}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, color: B.y }}>{unreadCount}</div>}
-          <button onClick={loadData} style={{ padding: "8px 14px", borderRadius: 10, background: B.c1, border: `1px solid ${B.bd}`, color: B.sec, fontSize: 12, fontWeight: 700, fontFamily: font, cursor: "pointer" }}>🔄</button>
-          <a href="field.html" style={{ padding: "8px 14px", borderRadius: 10, background: B.c1, border: `1px solid ${B.bd}`, color: B.sec, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>← Field</a>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 20, background: B.c1, borderRadius: 14, padding: 4 }}>
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} style={{
-            flex: 1, padding: "10px 8px", borderRadius: 10, border: "none", fontSize: 12, fontWeight: 700, fontFamily: font, cursor: "pointer",
-            background: tab === t.key ? B.y : "transparent", color: tab === t.key ? B.bg : B.sec, position: "relative", transition: "all 0.2s"
-          }}>
-            {t.icon} {t.label}
-            {t.count > 0 && <span style={{ position: "absolute", top: 2, right: 8, background: tab === t.key ? B.bg : B.y, color: tab === t.key ? B.y : B.bg, fontSize: 9, fontWeight: 900, width: 16, height: 16, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{t.count}</span>}
-          </button>
-        ))}
-      </div>
-
-      {/* ═══ DASHBOARD TAB ═══ */}
-      {tab === "dashboard" && (
-        <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
-            <KPI label="Promoter" value={werber.length} icon="🤝" color={B.blue} sub="registriert" />
-            <KPI label="Empfehlungen" value={totalLeads} icon="📥" color={B.purple} sub={`${pendingCount} offen`} />
-            <KPI label="Sales" value={salesCount} icon="🎉" color={B.green} sub={`${convRate}% Conversion`} />
-            <KPI label="Link-Klicks" value={totalClicks} icon="🔗" color={B.y} sub="gesamt" />
-            <KPI label="Provision" value={`${getTotalPraemie(salesCount).toLocaleString("de-DE")}€`} icon="💰" color={B.orange} sub={`Stufe: ${getPraemie(salesCount || 1)}€/Sale`} />
-          </div>
-
-          {/* Tier Progress */}
-          <div className="ani" style={{ marginBottom: 16 }}>
-            <TierProgress sales={salesCount} pipelineLeads={pendingCount} />
-          </div>
-
-          {/* Pipeline Overview */}
-          <Card className="ani" style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: B.dim, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 }}>Pipeline Übersicht</div>
-            <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-              {PIPELINE.filter(p => !["kein_sale", "storno"].includes(p.key)).map(step => {
-                const count = leads.filter(l => l.pipeline_status === step.key).length;
-                const pct = totalLeads > 0 ? (count / totalLeads) * 100 : 0;
+      {/* ── Status-Modal ── */}
+      {modal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setModal(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 420, background: C1, borderRadius: 16, border: `1px solid ${BD}`, padding: 24 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>{modal.lead.vorname} {modal.lead.nachname}</div>
+            <div style={{ fontSize: 12, color: SEC, marginBottom: 16 }}>
+              via {modal.werber?.vorname} {modal.werber?.nachname} · {modal.lead.telefon}
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: DIM, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8 }}>Status ändern</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {STATUS.map(st => {
+                const active = modal.lead.pipeline_status === st.key;
                 return (
-                  <div key={step.key} style={{ flex: Math.max(pct, 5), height: 32, background: `${step.color}25`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.3s", minWidth: 32 }}>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: step.color }}>{count > 0 ? `${step.icon} ${count}` : ""}</span>
-                  </div>
+                  <button key={st.key} onClick={() => !active && changeStatus(modal.lead, st.key)}
+                    style={{ padding: "8px 14px", borderRadius: 8, border: `1.5px solid ${active ? st.color : BD}`, background: active ? `${st.color}18` : "transparent", color: active ? st.color : SEC, fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: active ? "default" : "pointer", opacity: active ? 1 : 0.8 }}>
+                    {st.icon} {st.label}
+                  </button>
                 );
               })}
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: B.dim }}>
-              <span>📥 Eingegangen</span><span>📞 Angerufen</span><span>📅 Termin</span><span>✅ Stattgef.</span><span>🎉 Sale</span>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <a href={`tel:${modal.lead.telefon}`} style={{ flex: 1, padding: 10, borderRadius: 8, background: G, color: "#fff", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>📞 Anrufen</a>
+              <button onClick={() => { window.open(`https://wa.me/${(modal.lead.telefon||"").replace(/[^0-9+]/g, "")}?text=${encodeURIComponent(`Hallo ${modal.lead.vorname}, hier ist Ihr bee-doo Berater.`)}`); }} style={{ flex: 1, padding: 10, borderRadius: 8, background: "#25D366", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>💬 WhatsApp</button>
+              <button onClick={() => setModal(null)} style={{ padding: "10px 16px", borderRadius: 8, background: C2, color: SEC, fontSize: 12, fontWeight: 700, border: `1px solid ${BD}`, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>Schließen</button>
             </div>
-          </Card>
-
-          {/* Recent Leads */}
-          <Card className="ani">
-            <div style={{ fontSize: 10, fontWeight: 700, color: B.dim, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 }}>Letzte Empfehlungen</div>
-            {leads.slice(0, 5).map(l => {
-              const s = PIPELINE.find(p => p.key === (l.pipeline_status || "eingegangen")) || PIPELINE[0];
-              const w = werber.find(ww => ww.code === l.werber_code);
-              return (
-                <div key={l.id} onClick={() => setSelectedLead(l)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, marginBottom: 6, background: B.c2, cursor: "pointer", transition: "all 0.2s" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{s.icon}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>{l.vorname} {l.nachname}</div>
-                    <div style={{ fontSize: 10, color: B.sec }}>{w ? `via ${w.vorname} ${w.nachname}` : "Direkt"} · {l.interesse || "PV"}</div>
-                  </div>
-                  <Badge text={s.label} color={s.color} />
-                </div>
-              );
-            })}
-            {leads.length === 0 && <div style={{ textAlign: "center", padding: 20, color: B.dim }}>Noch keine Empfehlungen</div>}
-          </Card>
+          </div>
         </div>
       )}
 
-      {/* ═══ PIPELINE TAB ═══ */}
-      {tab === "pipeline" && (
+      {/* ── Header ── */}
+      <div className="top-bar" style={{ padding: "20px 0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div>
-          {/* Filters */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-            <PipelineBtn step={{ key: "alle", label: "Alle", icon: "📋", color: B.y }} active={pipelineFilter === "alle"} onClick={() => setPipelineFilter("alle")} count={totalLeads} />
-            {PIPELINE.map(step => (
-              <PipelineBtn key={step.key} step={step} active={pipelineFilter === step.key} onClick={() => setPipelineFilter(step.key)} count={leads.filter(l => l.pipeline_status === step.key).length} />
-            ))}
-          </div>
-
-          {/* Search */}
-          <div style={{ marginBottom: 16 }}>
-            <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="🔍 Name, Telefon oder Code suchen..." style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: `1px solid ${B.bd}`, background: B.c1, color: B.text, fontSize: 14, fontFamily: font, outline: "none", boxSizing: "border-box" }} />
-          </div>
-
-          {/* Lead List */}
-          {filteredLeads.map(l => {
-            const s = PIPELINE.find(p => p.key === (l.pipeline_status || "eingegangen")) || PIPELINE[0];
-            const w = werber.find(ww => ww.code === l.werber_code);
-            const age = Math.round((Date.now() - new Date(l.created_at).getTime()) / 86400000);
-            return (
-              <Card key={l.id} className="ani" style={{ marginBottom: 8, cursor: "pointer", transition: "all 0.15s" }} onClick={() => setSelectedLead(l)}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: "50%", background: `${s.color}15`, border: `2px solid ${s.color}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{s.icon}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 15, fontWeight: 800 }}>{l.vorname} {l.nachname}</span>
-                      <Badge text={s.label} color={s.color} />
-                    </div>
-                    <div style={{ fontSize: 11, color: B.sec, marginTop: 2 }}>
-                      {w ? `🤝 ${w.vorname} ${w.nachname}` : "Direkt"} · {l.telefon} · {l.interesse || "PV"} · vor {age}d
-                    </div>
-                  </div>
-                  <div style={{ color: B.dim, fontSize: 18 }}>›</div>
-                </div>
-              </Card>
-            );
-          })}
-          {filteredLeads.length === 0 && <div style={{ textAlign: "center", padding: 40, color: B.dim }}>Keine Leads in diesem Status</div>}
+          <div style={{ fontSize: 20, fontWeight: 900 }}>🤝 Empfehlungs-Übersicht</div>
+          <div style={{ fontSize: 12, color: SEC }}>{berater} · {rows.length} Kunden</div>
         </div>
-      )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={load} style={{ padding: "8px 14px", borderRadius: 8, background: C1, border: `1px solid ${BD}`, color: SEC, fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>🔄</button>
+          <a href="field.html" style={{ padding: "8px 14px", borderRadius: 8, background: C1, border: `1px solid ${BD}`, color: SEC, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>← Field</a>
+        </div>
+      </div>
 
-      {/* ═══ PROMOTER TAB ═══ */}
-      {tab === "promoter" && (
-        <div>
-          {werber.map(w => {
-            const wLeads = leads.filter(l => l.werber_code === w.code);
-            const wSales = wLeads.filter(l => l.pipeline_status === "sale").length;
-            const wPending = wLeads.filter(l => !["sale", "kein_sale", "storno"].includes(l.pipeline_status || "")).length;
-            return (
-              <Card key={w.id} className="ani" style={{ marginBottom: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: `${B.y}12`, border: `2px solid ${B.y}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 900, color: B.y }}>
-                    {w.vorname?.[0]}{w.nachname?.[0]}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 16, fontWeight: 800 }}>{w.vorname} {w.nachname}</div>
-                    <div style={{ fontSize: 11, color: B.sec }}>{w.plz} {w.ort} · Code: <span style={{ color: B.y, fontWeight: 700 }}>{w.code}</span></div>
-                  </div>
-                  <Badge text={w.status || "aktiv"} color={w.status === "aktiv" ? B.green : B.dim} />
-                </div>
+      {/* ── KPIs ── */}
+      <div className="kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
+        {[
+          { label: "Kunden", val: tot.kunden, color: B },
+          { label: "Empfehlungen", val: tot.empf, sub: `${tot.pending} in Bearbeitung`, color: P },
+          { label: "Sales", val: tot.sales, sub: tot.empf > 0 ? `${Math.round((tot.sales/tot.empf)*100)}% Abschlussrate` : "", color: G },
+          { label: "Link-Klicks", val: tot.klicks, color: Y },
+        ].map(k => (
+          <div key={k.label} style={{ background: C1, border: `1px solid ${BD}`, borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: DIM, textTransform: "uppercase", letterSpacing: 1 }}>{k.label}</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: k.color, marginTop: 2 }}>{k.val.toLocaleString("de-DE")}</div>
+            {k.sub && <div style={{ fontSize: 11, color: DIM, marginTop: 1 }}>{k.sub}</div>}
+          </div>
+        ))}
+      </div>
 
-                {/* Stats Row */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 12 }}>
-                  {[
-                    { label: "Empfehlungen", val: wLeads.length, color: B.blue },
-                    { label: "Offen", val: wPending, color: B.orange },
-                    { label: "Sales", val: wSales, color: B.green },
-                    { label: "Klicks", val: w.link_clicks || 0, color: B.purple },
-                    { label: "Provision", val: `${getTotalPraemie(wSales).toLocaleString("de-DE")}€`, color: B.y },
-                  ].map(s => (
-                    <div key={s.label} style={{ textAlign: "center", padding: "8px 4px", borderRadius: 8, background: `${s.color}08` }}>
-                      <div style={{ fontSize: 16, fontWeight: 900, color: s.color }}>{s.val}</div>
-                      <div style={{ fontSize: 8, color: B.dim, fontWeight: 600, textTransform: "uppercase" }}>{s.label}</div>
+      {/* ── Suche ── */}
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Kunde suchen…"
+        style={{ width: "100%", padding: "11px 16px", borderRadius: 10, border: `1px solid ${BD}`, background: C1, color: TXT, fontSize: 14, fontFamily: "'DM Sans',sans-serif", outline: "none", marginBottom: 16 }} />
+
+      {/* ── Tabelle ── */}
+      <div className="tbl-wrap" style={{ background: C1, border: `1px solid ${BD}`, borderRadius: 14, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${BD}` }}>
+              {["Kunde", "Code", "Klicks", "Empfehlungen", "Offen", "Sales", "Prämie", ""].map(h => (
+                <th key={h} style={{ padding: "12px 14px", fontSize: 10, fontWeight: 700, color: DIM, textTransform: "uppercase", letterSpacing: 1.2, textAlign: "left", whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(w => (
+              <React.Fragment key={w.id}>
+                {/* ── Zeile ── */}
+                <tr onClick={() => setExpanded(expanded === w.id ? null : w.id)}
+                  style={{ borderBottom: `1px solid ${BD}`, cursor: "pointer", background: expanded === w.id ? `${Y}06` : "transparent" }}>
+                  <td style={{ padding: "12px 14px" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{w.vorname} {w.nachname}</div>
+                    <div style={{ fontSize: 11, color: DIM }}>{w.plz} {w.ort}</div>
+                  </td>
+                  <td style={{ padding: "12px 14px" }}>
+                    <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: Y, background: `${Y}10`, padding: "3px 8px", borderRadius: 6 }}>{w.code}</span>
+                  </td>
+                  <td style={{ padding: "12px 14px", fontSize: 15, fontWeight: 700, color: w.klicks > 0 ? Y : DIM }}>{w.klicks}</td>
+                  <td style={{ padding: "12px 14px", fontSize: 15, fontWeight: 700, color: w.empf > 0 ? P : DIM }}>{w.empf}</td>
+                  <td style={{ padding: "12px 14px" }}>
+                    {w.pending > 0 ? <Badge text={`${w.pending} offen`} color={O} /> : <span style={{ color: DIM }}>0</span>}
+                  </td>
+                  <td style={{ padding: "12px 14px", fontSize: 15, fontWeight: 700, color: w.sales > 0 ? G : DIM }}>{w.sales}</td>
+                  <td style={{ padding: "12px 14px", fontSize: 15, fontWeight: 800, color: w.praemie > 0 ? G : DIM }}>
+                    {w.praemie > 0 ? `${w.praemie.toLocaleString("de-DE")}€` : "–"}
+                  </td>
+                  <td style={{ padding: "12px 14px", textAlign: "center", color: DIM, fontSize: 14 }}>{expanded === w.id ? "▲" : "▼"}</td>
+                </tr>
+
+                {/* ── Aufgeklappt: Leads ── */}
+                {expanded === w.id && (
+                  <tr><td colSpan={8} style={{ padding: "0 14px 14px", background: `${Y}03` }}>
+                    {w.leads.length > 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 10 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: DIM, textTransform: "uppercase", letterSpacing: 1, marginBottom: 2 }}>Empfehlungen von {w.vorname}</div>
+                        {w.leads.map(l => {
+                          const st = getStatus(l.pipeline_status || "eingegangen");
+                          const days = Math.round((Date.now() - new Date(l.created_at).getTime()) / 86400000);
+                          return (
+                            <div key={l.id} className="lead-row" onClick={e => { e.stopPropagation(); setModal({ lead: l, werber: w }); }}
+                              style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, background: C2, cursor: "pointer" }}>
+                              <div style={{ width: 30, height: 30, borderRadius: "50%", background: `${st.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0 }}>{st.icon}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 700 }}>{l.vorname} {l.nachname}</div>
+                                <div style={{ fontSize: 11, color: DIM }}>{l.telefon} · vor {days}d</div>
+                              </div>
+                              <Badge text={st.label} color={st.color} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ padding: "14px 0", fontSize: 12, color: DIM }}>Noch keine Empfehlungen über {w.vorname}</div>
+                    )}
+                    {/* Quick Actions */}
+                    <div style={{ display: "flex", gap: 8, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${BD}` }}>
+                      <button onClick={e => { e.stopPropagation();
+                        const link = `https://bee-doo-tools.vercel.app/empfehlung-r.html?c=${w.code}&s=whatsapp`;
+                        const txt = `Hallo ${w.vorname}! Hier ist dein Empfehlungslink für bee-doo Solar:\n${link}\n\nTeile ihn mit Freunden – für jeden Abschluss gibt's eine Prämie! 🪙`;
+                        window.open(`https://wa.me/${(w.telefon||"").replace(/[^0-9+]/g, "")}?text=${encodeURIComponent(txt)}`);
+                      }} style={{ padding: "8px 14px", borderRadius: 8, background: "#25D366", color: "#fff", fontSize: 11, fontWeight: 700, border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                        💬 Link an {w.vorname} senden
+                      </button>
+                      <button onClick={e => { e.stopPropagation();
+                        navigator.clipboard.writeText(`https://bee-doo-tools.vercel.app/empfehlung-r.html?c=${w.code}`);
+                      }} style={{ padding: "8px 14px", borderRadius: 8, background: C2, color: SEC, fontSize: 11, fontWeight: 700, border: `1px solid ${BD}`, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                        📋 Link kopieren
+                      </button>
                     </div>
-                  ))}
-                </div>
-
-                {/* Tier Progress per Promoter */}
-                <div style={{ marginBottom: 12 }}>
-                  <TierProgress sales={wSales} pipelineLeads={wPending} />
-                </div>
-
-                {/* Share Stats */}
-                <div style={{ display: "flex", gap: 8, fontSize: 11, color: B.sec }}>
-                  <span>💬 {w.whatsapp_shares || 0}× WhatsApp</span>
-                  <span>📧 {w.email_shares || 0}× E-Mail</span>
-                  <span>📱 Benachrichtigung: {(w.benachrichtigung_kanal || "whatsapp").toUpperCase()}</span>
-                </div>
-
-                {/* Lead Timeline */}
-                {wLeads.length > 0 && (
-                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${B.bd}` }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, textTransform: "uppercase", marginBottom: 6 }}>Empfehlungen</div>
-                    {wLeads.slice(0, 5).map(l => {
-                      const s = PIPELINE.find(p => p.key === (l.pipeline_status || "eingegangen")) || PIPELINE[0];
-                      return (
-                        <div key={l.id} onClick={() => setSelectedLead(l)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, marginBottom: 4, background: B.c2, cursor: "pointer", fontSize: 12 }}>
-                          <span>{s.icon}</span>
-                          <span style={{ fontWeight: 700 }}>{l.vorname} {l.nachname}</span>
-                          <span style={{ color: s.color, fontSize: 10, fontWeight: 700 }}>{s.label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  </td></tr>
                 )}
-              </Card>
-            );
-          })}
-          {werber.length === 0 && (
-            <Card style={{ textAlign: "center", padding: 40 }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>🤝</div>
-              <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Noch keine Promoter</div>
-              <div style={{ fontSize: 13, color: B.sec }}>Registriere deinen ersten Kunden in der <a href="field.html" style={{ color: B.y }}>Field App</a></div>
-            </Card>
-          )}
-        </div>
-      )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && (
+          <div style={{ padding: 40, textAlign: "center", color: DIM }}>
+            {search ? "Kein Kunde gefunden" : "Noch keine Kunden registriert"}
+          </div>
+        )}
+      </div>
 
-      {/* ═══ VERLAUF TAB ═══ */}
-      {tab === "verlauf" && (
-        <div>
-          {notifs.length > 0 ? notifs.map(n => (
-            <Card key={n.id} className="ani" style={{ marginBottom: 8, opacity: n.gelesen ? 0.6 : 1, borderColor: n.gelesen ? B.bd : `${B.y}30` }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                <div style={{ fontSize: 24, flexShrink: 0 }}>{n.typ === "neue_empfehlung" ? "📥" : n.typ === "sale" ? "🎉" : n.typ === "neuer_promoter" ? "🤝" : "🔔"}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>{n.titel}</div>
-                  <div style={{ fontSize: 12, color: B.sec }}>{n.nachricht}</div>
-                  <div style={{ fontSize: 10, color: B.dim, marginTop: 4 }}>{new Date(n.created_at).toLocaleString("de-DE")}</div>
-                </div>
-                {!n.gelesen && <div style={{ width: 8, height: 8, borderRadius: "50%", background: B.y, flexShrink: 0, marginTop: 6 }} />}
-              </div>
-            </Card>
-          )) : (
-            <Card style={{ textAlign: "center", padding: 40 }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>🔔</div>
-              <div style={{ fontSize: 14, color: B.sec }}>Keine Benachrichtigungen</div>
-            </Card>
-          )}
-          {notifs.filter(n => !n.gelesen).length > 0 && (
-            <button onClick={async () => {
-              for (const n of notifs.filter(nn => !nn.gelesen)) {
-                await SB.patch("referral_field_notifications", `id=eq.${n.id}`, { gelesen: true });
-              }
-              loadData();
-            }} style={{ width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${B.bd}`, background: B.c1, color: B.y, fontSize: 13, fontWeight: 700, fontFamily: font, cursor: "pointer", marginTop: 8 }}>✓ Alle als gelesen markieren</button>
-          )}
+      {/* ── Prämien-Footer ── */}
+      {tot.praemie > 0 && (
+        <div style={{ marginTop: 16, padding: "14px 20px", background: C1, border: `1px solid ${BD}`, borderRadius: 12, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ fontSize: 12, color: SEC }}>Gesamt-Prämien (700 → 800 → 900 → 1.000€ je Sale)</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: G }}>{tot.praemie.toLocaleString("de-DE")}€</div>
         </div>
       )}
     </div>
