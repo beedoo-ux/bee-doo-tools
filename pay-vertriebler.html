@@ -136,8 +136,17 @@ function calcProv(auftr, name) {
         (a['Auftragsstatus']||'').trim() !== 'Storniert'
     );
     const st = STAFFEL[typ], cnt = provRelevant.length;
-    const perA = cnt >= st.schwelle ? st.ab8 : st.basis;
-    const staffGes = cnt * perA;
+    
+    // Christoph Held: 3000€ flat pro Auftrag
+    let perA, staffGes;
+    if (name === 'Christoph Held') {
+        perA = 3000;
+        staffGes = cnt * 3000;
+    } else {
+        perA = cnt >= st.schwelle ? st.ab8 : st.basis;
+        staffGes = cnt * perA;
+    }
+    
     let spB = 0, elB = 0, emB = 0;
     provRelevant.forEach(a => {
         if (a['Speichererweiterung']?.trim()) spB += BONI.Speichererweiterung[typ];
@@ -150,14 +159,14 @@ function calcProv(auftr, name) {
     const boniGes = spB + elB + emB;
     let zeroBonus = 0;
     let teamBonus = 0;
-    if (typ === 'HGB') {
+    if (typ === 'HGB' && name !== 'Christoph Held') {
         if (cnt >= 15) zeroBonus = 5000;
         else if (cnt >= 10) zeroBonus = 2000;
     }
     if (name === 'Christoph Held') {
         teamBonus = cnt * 200;
     }
-    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, totalCnt: auftr.length, ab8: cnt >= st.schwelle };
+    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, totalCnt: auftr.length, ab8: name !== 'Christoph Held' && cnt >= st.schwelle, isSonder: name === 'Christoph Held' };
 }
 
 function App() {
@@ -263,8 +272,8 @@ function App() {
 
                 <div className="detail-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20}}>
                     <div style={cardStyle}>
-                        <div style={{fontSize:13,color:'#6b7280',marginBottom:12,fontWeight:500}}>📊 Staffel-Provision</div>
-                        <div style={{fontSize:14,color:'#c8cfd8',marginBottom:6}}>{det.cnt} Anlage{det.cnt!==1?'n':''} × {euro(det.perA)}</div>
+                        <div style={{fontSize:13,color:'#6b7280',marginBottom:12,fontWeight:500}}>{det.isSonder?'⭐ Sonder-Provision':'📊 Staffel-Provision'}</div>
+                        <div style={{fontSize:14,color:'#c8cfd8',marginBottom:6}}>{det.cnt} Anlage{det.cnt!==1?'n':''} × {euro(det.perA)}{det.isSonder?' (Sondersatz)':''}</div>
                         {det.ab8 && <div style={{fontSize:12,color:'#48bb78',marginBottom:6}}>🚀 Ab 8 Anlagen – rückwirkend {euro(det.perA)}</div>}
                         <div style={{fontSize:20,fontWeight:700,color:'#fff',marginTop:8}}>{euro(det.staffGes)}</div>
                     </div>
@@ -401,11 +410,12 @@ function VTCard({d,idx,onClick}) {
                     <div style={{display:'flex',gap:6,alignItems:'center'}}>
                         <TypeBadge typ={d.typ}/>
                         {d.ab8 && <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:4,background:'rgba(72,187,120,0.15)',color:'#48bb78'}}>🚀 Staffel+</span>}
+                        {d.isSonder && <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:4,background:'rgba(252,129,129,0.15)',color:'#fc8181'}}>⭐ Sonder</span>}
                     </div>
                 </div>
                 <div style={{textAlign:'right'}}>
                     <div style={{fontSize:20,fontWeight:700,color:'#F5C500'}}>{euro(d.total)}</div>
-                    <div style={{fontSize:12,color:'#6b7280'}}>{d.cnt} Anlage{d.cnt!==1?'n':''}{d.storCnt>0?` · ${d.storCnt} storniert`:''}{d.nrCnt>0?` · ${d.nrCnt} n. rel.`:''}</div>
+                    <div style={{fontSize:12,color:'#6b7280'}}>{d.totalCnt} Anlagen: {d.cnt} positiv{d.storCnt>0?`, ${d.storCnt} storniert`:''}{d.nrCnt>0?`, ${d.nrCnt} n. rel.`:''}</div>
                 </div>
             </div>
             <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
