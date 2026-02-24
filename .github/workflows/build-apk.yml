@@ -32,24 +32,27 @@ jobs:
     - name: Accept licenses
       run: yes | sdkmanager --licenses || true
 
-    - name: Create Android TWA Project
+    - name: Install SDK packages
+      run: |
+        sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+    - name: Create project structure
       run: |
         mkdir -p app/src/main/java/de/beedoo/scout
-        mkdir -p app/src/main/res/values
-        mkdir -p app/src/main/res/drawable
-        mkdir -p app/src/main/res/xml
-        mkdir -p app/src/main/res/mipmap-mdpi
-        mkdir -p app/src/main/res/mipmap-hdpi
-        mkdir -p app/src/main/res/mipmap-xhdpi
-        mkdir -p app/src/main/res/mipmap-xxhdpi
-        mkdir -p app/src/main/res/mipmap-xxxhdpi
+        mkdir -p app/src/main/res/{values,drawable,xml}
+        mkdir -p app/src/main/res/{mipmap-mdpi,mipmap-hdpi,mipmap-xhdpi,mipmap-xxhdpi,mipmap-xxxhdpi}
         mkdir -p gradle/wrapper
 
-    - name: Generate Icons from URL
+    - name: Download icons
       run: |
-        # Download icons from deployed site
         for SIZE in 48 72 96 144 192; do
-          curl -s -o icon-${SIZE}.png "https://bee-doo-tools.vercel.app/icons/icon-${SIZE}x${SIZE}.png" || true
+          curl -sf -o icon-${SIZE}.png "https://bee-doo-tools.vercel.app/icons/icon-${SIZE}x${SIZE}.png" || echo "Icon $SIZE not found, using placeholder"
+        done
+        # Fallback: create simple placeholder if icons not available
+        for SIZE in 48 72 96 144 192; do
+          if [ ! -f "icon-${SIZE}.png" ]; then
+            convert -size ${SIZE}x${SIZE} xc:'#1A1A2E' icon-${SIZE}.png 2>/dev/null || touch icon-${SIZE}.png
+          fi
         done
         cp icon-48.png app/src/main/res/mipmap-mdpi/ic_launcher.png
         cp icon-72.png app/src/main/res/mipmap-hdpi/ic_launcher.png
@@ -57,9 +60,19 @@ jobs:
         cp icon-144.png app/src/main/res/mipmap-xxhdpi/ic_launcher.png
         cp icon-192.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
+    - name: Create Gradle wrapper
+      run: |
+        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+        distributionBase=GRADLE_USER_HOME
+        distributionPath=wrapper/dists
+        distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+        zipStoreBase=GRADLE_USER_HOME
+        zipStorePath=wrapper/dists
+        EOF
+
     - name: Create settings.gradle
       run: |
-        cat > settings.gradle << 'EOF'
+        cat > settings.gradle << 'SETTINGS'
         pluginManagement {
             repositories {
                 google()
@@ -76,19 +89,15 @@ jobs:
         }
         rootProject.name = "bee-doo-scout"
         include ':app'
-        EOF
+        SETTINGS
 
-    - name: Create build.gradle (root)
+    - name: Create root build.gradle
       run: |
-        cat > build.gradle << 'EOF'
-        buildscript {
-            repositories { google(); mavenCentral() }
-            dependencies { classpath 'com.android.tools.build:gradle:8.2.0' }
+        cat > build.gradle << 'GRADLE'
+        plugins {
+            id 'com.android.application' version '8.2.0' apply false
         }
-        allprojects {
-            repositories { google(); mavenCentral() }
-        }
-        EOF
+        GRADLE
 
     - name: Create gradle.properties
       run: |
@@ -98,20 +107,12 @@ jobs:
         android.nonTransitiveRClass=true
         EOF
 
-    - name: Create gradle wrapper properties
-      run: |
-        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
-        distributionBase=GRADLE_USER_HOME
-        distributionPath=wrapper/dists
-        distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
-        zipStoreBase=GRADLE_USER_HOME
-        zipStorePath=wrapper/dists
-        EOF
-
     - name: Create app/build.gradle
       run: |
         cat > app/build.gradle << 'GRADLE'
-        plugins { id 'com.android.application' }
+        plugins {
+            id 'com.android.application'
+        }
         android {
             namespace 'de.beedoo.scout'
             compileSdk 34
@@ -123,7 +124,10 @@ jobs:
                 versionName "1.0.0"
             }
             buildTypes {
-                debug { applicationIdSuffix ".debug" }
+                debug {
+                    applicationIdSuffix ".debug"
+                    debuggable true
+                }
                 release {
                     minifyEnabled false
                 }
@@ -176,8 +180,6 @@ jobs:
                         <category android:name="android.intent.category.BROWSABLE" />
                         <data android:scheme="https" android:host="bee-doo-tools.vercel.app" />
                     </intent-filter>
-                    <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL"
-                        android:value="https://bee-doo-tools.vercel.app/scouting.html" />
                 </activity>
                 <receiver android:name="de.beedoo.scout.BootReceiver" android:exported="true">
                     <intent-filter>
@@ -188,10 +190,11 @@ jobs:
         </manifest>
         XML
 
-    - name: Create LauncherActivity.java
+    - name: Create Java sources
       run: |
         cat > app/src/main/java/de/beedoo/scout/LauncherActivity.java << 'JAVA'
         package de.beedoo.scout;
+        
         import android.Manifest;
         import android.app.Activity;
         import android.content.Intent;
@@ -200,7 +203,6 @@ jobs:
         import android.os.Build;
         import android.os.Bundle;
         import android.util.Log;
-        import android.widget.Toast;
         import androidx.browser.customtabs.CustomTabsIntent;
         import androidx.core.app.ActivityCompat;
         import androidx.core.content.ContextCompat;
@@ -208,55 +210,45 @@ jobs:
         import java.util.List;
         
         public class LauncherActivity extends Activity {
-            private static final String TAG = "BeeDoScout";
             private static final String URL = "https://bee-doo-tools.vercel.app/scouting.html";
-            private static final int PERM_REQ = 100;
+            private static final int PERM_CODE = 100;
         
             @Override
-            protected void onCreate(Bundle savedInstanceState) {
-                super.onCreate(savedInstanceState);
-                checkPermissions();
-            }
-        
-            private void checkPermissions() {
-                List<String> needed = new ArrayList<>();
+            protected void onCreate(Bundle state) {
+                super.onCreate(state);
+                List<String> perms = new ArrayList<>();
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-                    needed.add(Manifest.permission.ACCESS_FINE_LOCATION);
+                    perms.add(Manifest.permission.ACCESS_FINE_LOCATION);
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED)
-                    needed.add(Manifest.permission.CAMERA);
+                    perms.add(Manifest.permission.CAMERA);
                 if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                    needed.add(Manifest.permission.POST_NOTIFICATIONS);
-                if (!needed.isEmpty()) {
-                    ActivityCompat.requestPermissions(this, needed.toArray(new String[0]), PERM_REQ);
-                } else {
-                    launchApp();
-                }
+                    perms.add(Manifest.permission.POST_NOTIFICATIONS);
+                if (!perms.isEmpty()) {
+                    ActivityCompat.requestPermissions(this, perms.toArray(new String[0]), PERM_CODE);
+                } else { launch(); }
             }
         
             @Override
-            public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
-                super.onRequestPermissionsResult(code, perms, results);
-                launchApp();
+            public void onRequestPermissionsResult(int c, String[] p, int[] r) {
+                super.onRequestPermissionsResult(c, p, r);
+                launch();
             }
         
-            private void launchApp() {
+            private void launch() {
                 try {
-                    CustomTabsIntent.Builder builder = new CustomTabsIntent.Builder();
-                    builder.setShowTitle(false);
-                    builder.setUrlBarHidingEnabled(true);
-                    CustomTabsIntent intent = builder.build();
-                    intent.intent.setPackage("com.android.chrome");
-                    intent.launchUrl(this, Uri.parse(URL));
+                    CustomTabsIntent.Builder b = new CustomTabsIntent.Builder();
+                    b.setShowTitle(false);
+                    b.setUrlBarHidingEnabled(true);
+                    CustomTabsIntent i = b.build();
+                    i.intent.setPackage("com.android.chrome");
+                    i.launchUrl(this, Uri.parse(URL));
                 } catch (Exception e) {
-                    Log.e(TAG, "Fallback to browser", e);
                     startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(URL)));
                 }
             }
         }
         JAVA
-
-    - name: Create BootReceiver.java
-      run: |
+        
         cat > app/src/main/java/de/beedoo/scout/BootReceiver.java << 'JAVA'
         package de.beedoo.scout;
         import android.content.BroadcastReceiver;
@@ -266,9 +258,9 @@ jobs:
             @Override
             public void onReceive(Context ctx, Intent intent) {
                 if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
-                    Intent launch = new Intent(ctx, LauncherActivity.class);
-                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    ctx.startActivity(launch);
+                    Intent l = new Intent(ctx, LauncherActivity.class);
+                    l.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(l);
                 }
             }
         }
@@ -285,7 +277,6 @@ jobs:
             <color name="backgroundColor">#0D0D1A</color>
         </resources>
         XML
-        
         cat > app/src/main/res/values/styles.xml << 'XML'
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
@@ -296,14 +287,10 @@ jobs:
             </style>
         </resources>
         XML
-        
         cat > app/src/main/res/values/strings.xml << 'XML'
         <?xml version="1.0" encoding="utf-8"?>
-        <resources>
-            <string name="app_name">bee-doo Scout</string>
-        </resources>
+        <resources><string name="app_name">bee-doo Scout</string></resources>
         XML
-        
         cat > app/src/main/res/xml/network_security_config.xml << 'XML'
         <?xml version="1.0" encoding="utf-8"?>
         <network-security-config>
@@ -313,28 +300,22 @@ jobs:
             </domain-config>
         </network-security-config>
         XML
-        
         cat > app/src/main/res/drawable/splash.xml << 'XML'
         <?xml version="1.0" encoding="utf-8"?>
         <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
             <item android:drawable="@color/backgroundColor" />
-            <item android:gravity="center" android:width="144dp" android:height="144dp">
-                <bitmap android:gravity="center" android:src="@mipmap/ic_launcher" />
-            </item>
         </layer-list>
         XML
 
-    - name: Setup Gradle Wrapper
-      uses: gradle/actions/setup-gradle@v3
-
     - name: Build APK
       run: |
+        # Use Gradle wrapper with pinned version
         gradle wrapper --gradle-version 8.5
         chmod +x gradlew
         if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --no-daemon
         else
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --no-daemon
         fi
 
     - name: Upload APK
