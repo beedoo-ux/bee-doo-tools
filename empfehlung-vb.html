@@ -31,6 +31,75 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const B = { bg: "#080C14", c1: "#111927", c2: "#1a2236", bd: "#1e293b", y: "#F5C500", green: "#22c55e", blue: "#3b82f6", orange: "#f97316", red: "#ef4444", purple: "#a855f7", text: "#e1e7ef", sec: "#8b95a5", dim: "#4b5563" };
 const font = "'DM Sans', system-ui, sans-serif";
 
+const PRAEMIEN_STUFEN = [
+  { ab: 1, betrag: 700, label: "1. Empfehlung" },
+  { ab: 2, betrag: 800, label: "2. Empfehlung" },
+  { ab: 3, betrag: 900, label: "3. Empfehlung" },
+  { ab: 4, betrag: 1000, label: "4.+ Empfehlung" },
+];
+const getPraemie = (n) => n <= 0 ? 0 : n === 1 ? 700 : n === 2 ? 800 : n === 3 ? 900 : 1000;
+const getTotalPraemie = (sales) => { let sum = 0; for (let i = 1; i <= sales; i++) sum += getPraemie(i); return sum; };
+const getNextStufe = (sales) => ({ current: getPraemie(sales || 1), next: getPraemie((sales || 0) + 1), nr: (sales || 0) + 1 });
+
+// ─── Tier Progress Component ───
+const TierProgress = ({ sales, compact }) => {
+  const total = getTotalPraemie(sales);
+  const next = getNextStufe(sales);
+  const tiers = [700, 800, 900, 1000];
+
+  if (compact) return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: `${B.y}08`, border: `1px solid ${B.y}15` }}>
+      <span style={{ fontSize: 12 }}>🏆</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color: B.y }}>{total.toLocaleString("de-DE")}€</span>
+      <span style={{ fontSize: 10, color: B.sec }}>·</span>
+      <span style={{ fontSize: 10, color: B.sec }}>Nächste: <strong style={{ color: B.green }}>{next.next.toLocaleString("de-DE")}€</strong></span>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "14px 16px", borderRadius: 12, background: `linear-gradient(135deg, ${B.y}08, ${B.green}05)`, border: `1.5px solid ${B.y}20` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: B.dim, textTransform: "uppercase", letterSpacing: 1.2 }}>🏆 Prämien-Stufen</div>
+        <div style={{ fontSize: 13, fontWeight: 900, color: B.y }}>{total.toLocaleString("de-DE")}€ verdient</div>
+      </div>
+      <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+        {tiers.map((t, i) => {
+          const done = sales > i;
+          const current = sales === i;
+          return (
+            <div key={i} style={{ flex: 1, position: "relative" }}>
+              <div style={{
+                height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+                background: done ? `${B.green}25` : current ? `${B.y}15` : `${B.dim}10`,
+                border: `1.5px solid ${done ? B.green : current ? B.y : B.dim}${done ? "50" : current ? "40" : "20"}`,
+                transition: "all 0.3s"
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: done ? B.green : current ? B.y : B.dim }}>
+                  {done ? "✓" : ""} {t}€
+                </span>
+              </div>
+              <div style={{ textAlign: "center", fontSize: 8, color: done ? B.green : B.dim, fontWeight: 600, marginTop: 3 }}>
+                {i < 3 ? `${i + 1}. Sale` : "4.+"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {sales < 4 && (
+        <div style={{ fontSize: 11, color: B.sec, textAlign: "center", padding: "6px 0", borderTop: `1px solid ${B.bd}`, marginTop: 4 }}>
+          Nächster Sale → <strong style={{ color: B.y }}>{next.next.toLocaleString("de-DE")}€</strong> Prämie
+          {sales < 3 && <span> · Noch {3 - sales} bis zur 1.000€-Stufe!</span>}
+        </div>
+      )}
+      {sales >= 4 && (
+        <div style={{ fontSize: 11, color: B.green, textAlign: "center", padding: "6px 0", borderTop: `1px solid ${B.bd}`, marginTop: 4, fontWeight: 700 }}>
+          🎉 Maximalstufe erreicht – jeder weitere Sale = 1.000€!
+        </div>
+      )}
+    </div>
+  );
+};
+
 const PIPELINE = [
   { key: "eingegangen", label: "Eingegangen", icon: "📥", color: B.blue },
   { key: "angerufen", label: "Angerufen", icon: "📞", color: B.purple },
@@ -103,7 +172,7 @@ const Toast = ({ notifs, onDismiss }) => {
 };
 
 // ─── Lead Detail Modal ───
-const LeadModal = ({ lead, werber, onClose, onStatusChange }) => {
+const LeadModal = ({ lead, werber, leads, onClose, onStatusChange }) => {
   if (!lead) return null;
   const pStep = PIPELINE.find(p => p.key === (lead.pipeline_status || "eingegangen")) || PIPELINE[0];
   const currentIdx = PIPELINE.findIndex(p => p.key === pStep.key);
@@ -197,6 +266,17 @@ const LeadModal = ({ lead, werber, onClose, onStatusChange }) => {
               window.open(`https://wa.me/${lead.telefon.replace(/[^0-9+]/g, "")}?text=${encodeURIComponent(text)}`);
             }} style={{ flex: 1, padding: "12px", borderRadius: 10, background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer", fontFamily: font }}>💬 WhatsApp</button>
           </div>
+
+          {/* Tier Info */}
+          {werber && lead.pipeline_status !== "sale" && lead.pipeline_status !== "kein_sale" && lead.pipeline_status !== "storno" && (() => {
+            const wSales = leads.filter(l => l.werber_code === lead.werber_code && l.pipeline_status === "sale").length;
+            const nextPraemie = getPraemie(wSales + 1);
+            return (
+              <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: `${B.y}08`, border: `1px solid ${B.y}20`, fontSize: 12, color: B.sec, textAlign: "center" }}>
+                💰 Bei Sale → <strong style={{ color: B.y }}>{nextPraemie.toLocaleString("de-DE")}€</strong> Prämie für {werber.vorname} ({wSales + 1}. Sale)
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>
@@ -318,7 +398,7 @@ function App() {
   return (
     <div style={{ minHeight: "100vh", maxWidth: 900, margin: "0 auto", padding: "0 16px 80px" }}>
       <Toast notifs={toasts} onDismiss={dismissNotif} />
-      <LeadModal lead={selectedLead} werber={werber.find(w => w.code === selectedLead?.werber_code)} onClose={() => setSelectedLead(null)} onStatusChange={changeStatus} />
+      <LeadModal lead={selectedLead} werber={werber.find(w => w.code === selectedLead?.werber_code)} leads={leads} onClose={() => setSelectedLead(null)} onStatusChange={changeStatus} />
 
       {/* Header */}
       <div style={{ padding: "20px 0 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -354,7 +434,12 @@ function App() {
             <KPI label="Empfehlungen" value={totalLeads} icon="📥" color={B.purple} sub={`${pendingCount} offen`} />
             <KPI label="Sales" value={salesCount} icon="🎉" color={B.green} sub={`${convRate}% Conversion`} />
             <KPI label="Link-Klicks" value={totalClicks} icon="🔗" color={B.y} sub="gesamt" />
-            <KPI label="Provision" value={`${(salesCount * praemie).toLocaleString("de-DE")}€`} icon="💰" color={B.orange} sub={`je ${praemie}€`} />
+            <KPI label="Provision" value={`${getTotalPraemie(salesCount).toLocaleString("de-DE")}€`} icon="💰" color={B.orange} sub={`Stufe: ${getPraemie(salesCount || 1)}€/Sale`} />
+          </div>
+
+          {/* Tier Progress */}
+          <div className="ani" style={{ marginBottom: 16 }}>
+            <TierProgress sales={salesCount} />
           </div>
 
           {/* Pipeline Overview */}
@@ -468,13 +553,18 @@ function App() {
                     { label: "Offen", val: wPending, color: B.orange },
                     { label: "Sales", val: wSales, color: B.green },
                     { label: "Klicks", val: w.link_clicks || 0, color: B.purple },
-                    { label: "Provision", val: `${wSales * praemie}€`, color: B.y },
+                    { label: "Provision", val: `${getTotalPraemie(wSales).toLocaleString("de-DE")}€`, color: B.y },
                   ].map(s => (
                     <div key={s.label} style={{ textAlign: "center", padding: "8px 4px", borderRadius: 8, background: `${s.color}08` }}>
                       <div style={{ fontSize: 16, fontWeight: 900, color: s.color }}>{s.val}</div>
                       <div style={{ fontSize: 8, color: B.dim, fontWeight: 600, textTransform: "uppercase" }}>{s.label}</div>
                     </div>
                   ))}
+                </div>
+
+                {/* Tier Progress per Promoter */}
+                <div style={{ marginBottom: 12 }}>
+                  <TierProgress sales={wSales} />
                 </div>
 
                 {/* Share Stats */}
