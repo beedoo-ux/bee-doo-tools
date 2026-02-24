@@ -197,6 +197,7 @@ function App() {
     const [fTyp, setFTyp] = React.useState('Alle');
     const [selVT, setSelVT] = React.useState(null);
     const [search, setSearch] = React.useState('');
+    const [showDups, setShowDups] = React.useState(false);
 
     function onFile(e) {
         const f = e.target.files[0]; if (!f) return;
@@ -215,6 +216,41 @@ function App() {
         d.forEach(r => { const k = monthKey(r['DatumErstellt']); if (k) s.add(k); });
         return [...s].sort();
     }
+
+    function findDuplicates(data) {
+        if (!data) return [];
+        const kundenMap = {};
+        data.forEach(r => {
+            const kunde = (r['Kunde']||'').trim();
+            if (!kunde) return;
+            if (!kundenMap[kunde]) kundenMap[kunde] = [];
+            kundenMap[kunde].push(r);
+        });
+        const dups = [];
+        Object.entries(kundenMap).forEach(([kunde, auftr]) => {
+            const aktiv = auftr.filter(a => (a['Auftragsstatus']||'').trim() !== 'Storniert');
+            if (aktiv.length < 2) return;
+            const combos = {};
+            aktiv.forEach(a => {
+                const key = (a['Kunde PLZ']||'').trim() + '|' + (a['Angebot KWP']||'').trim();
+                if (!combos[key]) combos[key] = [];
+                combos[key].push(a);
+            });
+            Object.values(combos).forEach(group => {
+                if (group.length >= 2) {
+                    dups.push({ kunde, plz: (group[0]['Kunde PLZ']||'').trim(), kwp: (group[0]['Angebot KWP']||'').trim(), auftraege: group });
+                }
+            });
+        });
+        return dups;
+    }
+
+    const duplicates = React.useMemo(() => findDuplicates(csv), [csv]);
+    const dupANSet = React.useMemo(() => {
+        const s = new Set();
+        duplicates.forEach(d => d.auftraege.forEach(a => s.add(a['AN Nr.'])));
+        return s;
+    }, [duplicates]);
 
     function filtered() {
         if (!csv || !selMonth) return [];
@@ -323,10 +359,11 @@ function App() {
                                     const isStor = (a['Auftragsstatus']||'').trim() === 'Storniert';
                                     const isNR = (a['Auszahlungsrelevant']||'').trim() !== 'Ja';
                                     const isPaid = !!(a['Ausgezahlt am']||'').trim();
+                                    const isDup = dupANSet.has(a['AN Nr.']);
                                     const dimmed = isStor || isNR || isPaid;
                                     return (
-                                    <tr key={i} style={{borderBottom:'1px solid #0f1015',opacity:dimmed?0.4:1}}>
-                                        <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#F5C500',fontWeight:600}}>{a['AN Nr.']}</td>
+                                    <tr key={i} style={{borderBottom:'1px solid #0f1015',opacity:dimmed?0.4:1,borderLeft:isDup?'3px solid #f59e0b':'3px solid transparent'}}>
+                                        <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#F5C500',fontWeight:600}}>{isDup&&'⚠️ '}{a['AN Nr.']}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#c8cfd8'}}>{a['Kunde']||'-'}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#c8cfd8',whiteSpace:'nowrap'}}>{a['Angebot KWP'] ? a['Angebot KWP'].trim()+' kWp' : '-'}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#fff',fontWeight:500,textDecoration:isStor?'line-through':'none'}}>{euro(nettoNum(a['AN-WertNetto']))}</td>
@@ -385,6 +422,49 @@ function App() {
                     }}>{t}</button>
                 ))}
             </div>
+
+            {duplicates.length > 0 && (
+                <div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:12,padding:'14px 20px',marginBottom:20,cursor:'pointer'}}
+                    onClick={()=>setShowDups(!showDups)}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:10}}>
+                            <span style={{fontSize:18}}>⚠️</span>
+                            <span style={{fontSize:14,fontWeight:600,color:'#f59e0b'}}>{duplicates.length} mögliche Duplikate gefunden</span>
+                            <span style={{fontSize:12,color:'#8b95a5'}}>Gleicher Kunde + gleiche kWp + gleiche PLZ</span>
+                        </div>
+                        <span style={{fontSize:12,color:'#f59e0b',fontWeight:500}}>{showDups?'▲ Ausblenden':'▼ Anzeigen'}</span>
+                    </div>
+                    {showDups && (
+                        <div onClick={e=>e.stopPropagation()} style={{marginTop:16}}>
+                            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                                <thead><tr style={{borderBottom:'1px solid rgba(245,158,11,0.2)'}}>
+                                    {['Kunde','PLZ','kWp','AN-Nummern','Netto','VT','Status','AZ','Erstellt'].map(h=>(
+                                        <th key={h} style={{padding:'8px 10px',textAlign:'left',color:'#f59e0b',fontWeight:500,fontSize:12,whiteSpace:'nowrap'}}>{h}</th>
+                                    ))}
+                                </tr></thead>
+                                <tbody>
+                                    {duplicates.map((dup,di) => 
+                                        dup.auftraege.map((a,ai) => (
+                                            <tr key={di+'-'+ai} style={{borderBottom:'1px solid rgba(245,158,11,0.1)',background:ai===0&&di>0?'rgba(245,158,11,0.04)':'transparent',borderTop:ai===0&&di>0?'2px solid rgba(245,158,11,0.2)':'none'}}>
+                                                {ai===0 && <td rowSpan={dup.auftraege.length} style={{padding:'8px 10px',color:'#f59e0b',fontWeight:600,verticalAlign:'top'}}>{dup.kunde}</td>}
+                                                {ai===0 && <td rowSpan={dup.auftraege.length} style={{padding:'8px 10px',color:'#c8cfd8',verticalAlign:'top'}}>{dup.plz}</td>}
+                                                {ai===0 && <td rowSpan={dup.auftraege.length} style={{padding:'8px 10px',color:'#c8cfd8',verticalAlign:'top'}}>{dup.kwp}</td>}
+                                                <td style={{padding:'8px 10px',color:'#F5C500',fontWeight:600}}>{a['AN Nr.']}</td>
+                                                <td style={{padding:'8px 10px',color:'#fff'}}>{euro(nettoNum(a['AN-WertNetto']))}</td>
+                                                <td style={{padding:'8px 10px',color:'#c8cfd8'}}>{(a['Kundenberater']||'').trim()}</td>
+                                                <td style={{padding:'8px 10px',color:'#8b95a5',fontSize:12}}>{(a['Auftragsstatus']||'').trim()}</td>
+                                                <td style={{padding:'8px 10px'}}><span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:(a['Auszahlungsrelevant']||'').trim()!=='Ja'?'rgba(229,62,62,0.15)':'rgba(72,187,120,0.15)',color:(a['Auszahlungsrelevant']||'').trim()!=='Ja'?'#e53e3e':'#48bb78',fontWeight:500}}>{(a['Auszahlungsrelevant']||'').trim()||'Nein'}</span></td>
+                                                <td style={{padding:'8px 10px',color:'#8b95a5',whiteSpace:'nowrap'}}>{a['DatumErstellt']}</td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                            <div style={{marginTop:12,fontSize:12,color:'#8b95a5',fontStyle:'italic'}}>⚡ Bitte prüfen ob doppelte Aufträge. Duplikate werden in den Abrechnungen mit ⚠️ markiert.</div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="grid-stats" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:24}}>
                 <Stat label="Gesamt Provision" value={euro(totProv)} hl />
