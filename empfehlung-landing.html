@@ -85,10 +85,36 @@ function App() {
           ort: form.ort,
           strasse: form.strasse,
           interesse: form.interesse,
-          status: "neu"
+          status: "neu",
+          pipeline_status: "eingegangen",
+          pipeline_history: [{ status: "eingegangen", timestamp: new Date().toISOString(), by: "landing_page" }]
         })
       });
       if (res.ok) {
+        // Create field notification for the berater
+        if (refCode && werberName) {
+          try {
+            // Find berater from werber data
+            const wRes = await fetch(`${SUPABASE_URL}/rest/v1/referral_customers?code=eq.${refCode}&select=berater_name`, {
+              headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+            });
+            const wData = await wRes.json();
+            const berater = wData?.[0]?.berater_name;
+            if (berater) {
+              await fetch(`${SUPABASE_URL}/rest/v1/referral_field_notifications`, {
+                method: "POST",
+                headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  berater_name: berater,
+                  typ: "neue_empfehlung",
+                  titel: "Neue Empfehlung eingegangen!",
+                  nachricht: `${form.vorname} ${form.nachname} wurde von ${werberName} empfohlen. Interesse: ${form.interesse || "PV"}`,
+                  werber_code: refCode
+                })
+              });
+            }
+          } catch(e) {}
+        }
         setStep("success");
       } else {
         // If Supabase table doesn't exist yet, show success anyway (demo mode)
