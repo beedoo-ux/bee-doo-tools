@@ -144,15 +144,19 @@ function calcProv(auftr, name, selectedMonth, allCsv, exclANs) {
     );
     const st = STAFFEL[typ], cnt = provRelevant.length;
     
-    // Christoph Held: 3000€ flat pro Auftrag
+    // Sonderprovisionen
     let perA, staffGes;
     const isJan26Plus = selectedMonth && selectedMonth >= '2026-01';
+    const TAYFUN_TEAM = ['Pascal Schallenberg','Maxim Horten','Patrick Kalinowski','Bernd Krahwinkel','Kadir Danyildiz'];
     if (name === 'Christoph Held' && isJan26Plus) {
         perA = 3000;
         staffGes = cnt * 3000;
     } else if (name === 'Tayfun Süleymaniye' && isJan26Plus) {
         perA = 2700;
         staffGes = cnt * 2700;
+    } else if (name === 'Stefan Hensel') {
+        perA = 2800;
+        staffGes = cnt * 2800;
     } else {
         perA = cnt >= st.schwelle ? st.ab8 : st.basis;
         staffGes = cnt * perA;
@@ -161,7 +165,12 @@ function calcProv(auftr, name, selectedMonth, allCsv, exclANs) {
     let spB = 0, elB = 0, emB = 0;
     provRelevant.forEach(a => {
         if (a['Speichererweiterung']?.trim()) spB += BONI.Speichererweiterung[typ];
-        if (name === 'Tayfun Süleymaniye' && isJan26Plus) return; // nur Speicher, kein Eigenlead/Empfehlung
+        if (name === 'Tayfun Süleymaniye' && isJan26Plus) return; // nur Speicher
+        if (name === 'Stefan Hensel') { // kein Eigenlead, nur Empfehlung
+            const q = (a['Quelle']||'').trim();
+            if (q === 'Empfehlung') emB += BONI.Empfehlung[typ];
+            return;
+        }
         const q = (a['Quelle']||'').trim();
         const mvpp = (a['MVPP-Name']||'').trim();
         const isEigenlead = q === 'Eigenlead' || (name === 'Gino Ulitzka' && mvpp.includes('Christian Neukirch'));
@@ -173,12 +182,12 @@ function calcProv(auftr, name, selectedMonth, allCsv, exclANs) {
     let teamBonus = 0;
     let teamPrevMonth = '';
     let teamPrevCnt = 0;
-    if (typ === 'HGB' && !(name === 'Christoph Held' && isJan26Plus) && !(name === 'Tayfun Süleymaniye' && isJan26Plus)) {
+    let teamLabel = '';
+    if (typ === 'HGB' && !(name === 'Christoph Held' && isJan26Plus) && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && name !== 'Stefan Hensel') {
         if (cnt >= 15) zeroBonus = 5000;
         else if (cnt >= 10) zeroBonus = 2000;
     }
     if (name === 'Christoph Held' && allCsv && selectedMonth && selectedMonth >= '2026-01') {
-        // Alle positiven Sales aller Vertriebler im aktuellen Monat
         let curSales = 0;
         allCsv.forEach(r => {
             if (exclANs && exclANs.has(r['AN Nr.']?.trim())) return;
@@ -189,8 +198,25 @@ function calcProv(auftr, name, selectedMonth, allCsv, exclANs) {
         teamBonus = curSales * 200;
         teamPrevMonth = selectedMonth;
         teamPrevCnt = curSales;
+        teamLabel = 'Team-Bonus ('+curSales+' Sales aller VT ×200€)';
     }
-    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, teamPrevMonth, teamPrevCnt, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, bereitsAusgezahlt, storCnt: storniert.length, nrCnt: nichtRelevant.length, paidCnt: bereitsAusgezahlt.length, totalCnt: auftr.length, ab8: !(name === 'Christoph Held' && isJan26Plus) && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && cnt >= st.schwelle, isSonder: (name === 'Christoph Held' && isJan26Plus) || (name === 'Tayfun Süleymaniye' && isJan26Plus) };
+    if (name === 'Tayfun Süleymaniye' && allCsv && selectedMonth && isJan26Plus) {
+        let teamSales = 0;
+        allCsv.forEach(r => {
+            if (exclANs && exclANs.has(r['AN Nr.']?.trim())) return;
+            const vt = (r['Kundenberater']||'').trim();
+            if (!TAYFUN_TEAM.includes(vt)) return;
+            if ((r['Auszahlungsrelevant']||'').trim() !== 'Ja') return;
+            if ((r['Auftragsstatus']||'').trim() === 'Storniert') return;
+            if ((r['Ausgezahlt am']||'').trim()) return;
+            if (monthKey(r['DatumErstellt']) === selectedMonth) teamSales++;
+        });
+        teamBonus = teamSales * 300;
+        teamPrevMonth = selectedMonth;
+        teamPrevCnt = teamSales;
+        teamLabel = 'Team-Bonus ('+teamSales+' offene Sales Team ×300€)';
+    }
+    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, teamPrevMonth, teamPrevCnt, teamLabel, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, bereitsAusgezahlt, storCnt: storniert.length, nrCnt: nichtRelevant.length, paidCnt: bereitsAusgezahlt.length, totalCnt: auftr.length, ab8: !(name === 'Christoph Held' && isJan26Plus) && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && name !== 'Stefan Hensel' && cnt >= st.schwelle, isSonder: (name === 'Christoph Held' && isJan26Plus) || (name === 'Tayfun Süleymaniye' && isJan26Plus) || name === 'Stefan Hensel' };
 }
 
 function App() {
@@ -342,7 +368,7 @@ function App() {
                         {det.elB > 0 && <BonusLine label="Eigenlead" val={det.elB} color="#48bb78"/>}
                         {det.emB > 0 && <BonusLine label="Empfehlung" val={det.emB} color="#63b3ed"/>}
                         {det.zeroBonus > 0 && <BonusLine label={det.cnt>=15?'Stufenbonus (10+15)':'Stufenbonus (10)'} val={det.zeroBonus} color="#f6ad55"/>}
-                        {det.teamBonus > 0 && <BonusLine label={'Team-Bonus ('+det.teamPrevCnt+' Sales '+monthLabel(det.teamPrevMonth)+'×200€)'} val={det.teamBonus} color="#fc8181"/>}
+                        {det.teamBonus > 0 && <BonusLine label={det.teamLabel} val={det.teamBonus} color="#fc8181"/>}
                         {det.boniGes === 0 && det.zeroBonus === 0 && det.teamBonus === 0 && <div style={{fontSize:13,color:'#4a5568'}}>Keine Boni</div>}
                         <div style={{fontSize:20,fontWeight:700,color:'#fff',marginTop:8}}>{euro(det.boniGes + det.zeroBonus + det.teamBonus)}</div>
                     </div>
