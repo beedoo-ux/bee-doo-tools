@@ -124,7 +124,7 @@ function euro(n) {
     return n.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0}) + ' €';
 }
 
-function calcProv(auftr, name) {
+function calcProv(auftr, name, selectedMonth) {
     const typ = VT_TYPEN[name]; if (!typ) return null;
     const provRelevant = auftr.filter(a => 
         (a['Auszahlungsrelevant']||'').trim() === 'Ja' && 
@@ -139,9 +139,13 @@ function calcProv(auftr, name) {
     
     // Christoph Held: 3000€ flat pro Auftrag
     let perA, staffGes;
+    const isJan26Plus = selectedMonth && selectedMonth >= '2026-01';
     if (name === 'Christoph Held') {
         perA = 3000;
         staffGes = cnt * 3000;
+    } else if (name === 'Tayfun Süleymaniye' && isJan26Plus) {
+        perA = 2700;
+        staffGes = cnt * 2700;
     } else {
         perA = cnt >= st.schwelle ? st.ab8 : st.basis;
         staffGes = cnt * perA;
@@ -150,6 +154,7 @@ function calcProv(auftr, name) {
     let spB = 0, elB = 0, emB = 0;
     provRelevant.forEach(a => {
         if (a['Speichererweiterung']?.trim()) spB += BONI.Speichererweiterung[typ];
+        if (name === 'Tayfun Süleymaniye' && isJan26Plus) return; // nur Speicher, kein Eigenlead/Empfehlung
         const q = (a['Quelle']||'').trim();
         const mvpp = (a['MVPP-Name']||'').trim();
         const isEigenlead = q === 'Eigenlead' || (name === 'Gino Ulitzka' && mvpp.includes('Christian Neukirch'));
@@ -159,14 +164,14 @@ function calcProv(auftr, name) {
     const boniGes = spB + elB + emB;
     let zeroBonus = 0;
     let teamBonus = 0;
-    if (typ === 'HGB' && name !== 'Christoph Held') {
+    if (typ === 'HGB' && name !== 'Christoph Held' && !(name === 'Tayfun Süleymaniye' && isJan26Plus)) {
         if (cnt >= 15) zeroBonus = 5000;
         else if (cnt >= 10) zeroBonus = 2000;
     }
     if (name === 'Christoph Held') {
         teamBonus = cnt * 200;
     }
-    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, totalCnt: auftr.length, ab8: name !== 'Christoph Held' && cnt >= st.schwelle, isSonder: name === 'Christoph Held' };
+    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, totalCnt: auftr.length, ab8: name !== 'Christoph Held' && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && cnt >= st.schwelle, isSonder: name === 'Christoph Held' || (name === 'Tayfun Süleymaniye' && isJan26Plus) };
 }
 
 function App() {
@@ -210,7 +215,7 @@ function App() {
         d.forEach(r => { const n = r['Kundenberater']?.trim(); if (!n) return; if (!grp[n]) grp[n]=[]; grp[n].push(r); });
         const res = [];
         Object.keys(VT_TYPEN).forEach(n => {
-            const p = calcProv(grp[n]||[], n);
+            const p = calcProv(grp[n]||[], n, selMonth);
             if (p) res.push({ name:n, ...p });
         });
         return res.filter(r => {
