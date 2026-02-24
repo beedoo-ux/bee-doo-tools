@@ -798,6 +798,10 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
   const [rettungNotiz, setRettungNotiz] = useState("");
   const [showRettungNotiz, setShowRettungNotiz] = useState(false);
   const [showManualConfirm, setShowManualConfirm] = useState(false);
+  const [showReferral, setShowReferral] = useState(false);
+  const [refForm, setRefForm] = useState({ vorname: "", nachname: "", telefon: "", email: "", plz: "", ort: "" });
+  const [refCode, setRefCode] = useState("");
+  const [refSent, setRefSent] = useState(false);
   const [statsPopup, setStatsPopup] = useState(null);
   useEffect(() => { const t = setInterval(() => setClk(new Date()), 60000); return () => clearInterval(t); }, []);
   useEffect(() => { if(showAlertSplash) { var p = setInterval(function(){ setAlertPulse(function(v){return !v;}); }, 600); var t2 = setTimeout(function(){ setShowAlertSplash(false); }, 10000); return function(){ clearTimeout(t2); clearInterval(p); }; } }, [showAlertSplash]);
@@ -1217,6 +1221,85 @@ function DashboardScreen({ onNewAufnahme, onTerminClick, rueckkehrer, onRueckkeh
           React.createElement("div", { style: { width: Math.round((salesMonat / nextStufe.ab) * 100) + "%", height: "100%", background: "linear-gradient(90deg, #F5C500, #E8CC3D)", borderRadius: 5, transition: "width 0.5s" }})),
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 6 }},
           provStufen.map(function(s, i) { return React.createElement("div", { key: i, style: { fontSize: 8, color: salesMonat >= s.ab ? "#F5C500" : "rgba(255,255,255,0.25)", fontWeight: salesMonat >= s.ab ? 700 : 400 }}, s.prov + "\u20AC"); }))),
+
+      /* ── KUNDEN WERBEN KUNDEN ── */
+      React.createElement("div", { onClick: function() { setShowReferral(true); setRefSent(false); setRefCode(""); setRefForm({ vorname: "", nachname: "", telefon: "", email: "", plz: "", ort: "" }); }, style: { ...cs, gridColumn: "1 / -1", cursor: "pointer", background: "linear-gradient(135deg, rgba(245,197,0,0.06), rgba(52,211,153,0.04))", borderColor: "rgba(245,197,0,0.15)", transition: "all 0.2s" }},
+        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" }},
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 }},
+            React.createElement("span", { style: { fontSize: 28 }}, "\uD83E\uDD1D"),
+            React.createElement("div", null,
+              React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#F5C500" }}, "Kunden werben Kunden"),
+              React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}, "Kunde registrieren & Empfehlungslink teilen"))),
+          React.createElement("div", { style: { fontSize: 22, color: "rgba(255,255,255,0.3)" }}, "\u276F"))),
+
+      /* ── REFERRAL MODAL ── */
+      showReferral && React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 25000, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }, onClick: function() { setShowReferral(false); }},
+        React.createElement("div", { onClick: function(e) { e.stopPropagation(); }, style: { width: "100%", maxWidth: 420, maxHeight: "90vh", background: "#111927", borderRadius: 16, border: "1.5px solid rgba(245,197,0,0.2)", overflow: "auto", boxSizing: "border-box" }},
+          /* Modal Header */
+          React.createElement("div", { style: { padding: "16px 20px", background: "rgba(245,197,0,0.06)", borderBottom: "1px solid rgba(245,197,0,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between" }},
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 }},
+              React.createElement("span", { style: { fontSize: 20 }}, "\uD83E\uDD1D"),
+              React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#F5C500" }}, "Kunden werben Kunden")),
+            React.createElement("button", { onClick: function() { setShowReferral(false); }, style: { background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 22, cursor: "pointer" }}, "\u00D7")),
+
+          refSent ? (
+            /* Success State */
+            React.createElement("div", { style: { padding: "24px 20px", textAlign: "center" }},
+              React.createElement("div", { style: { fontSize: 56, marginBottom: 12 }}, "\u2705"),
+              React.createElement("div", { style: { fontSize: 18, fontWeight: 800, marginBottom: 6 }}, "Werber registriert!"),
+              React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 16 }}, refForm.vorname + " " + refForm.nachname + " kann jetzt Freunde empfehlen"),
+              React.createElement("div", { style: { padding: "12px 16px", borderRadius: 10, background: "rgba(245,197,0,0.06)", border: "1px solid rgba(245,197,0,0.15)", marginBottom: 12 }},
+                React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.4)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}, "Empfehlungscode"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#F5C500", letterSpacing: 2 }}, refCode)),
+              React.createElement("div", { style: { padding: "12px 16px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", marginBottom: 16, wordBreak: "break-all" }},
+                React.createElement("div", { style: { fontSize: 9, color: "rgba(255,255,255,0.4)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}, "Empfehlungslink"),
+                React.createElement("div", { style: { fontSize: 12, color: "#F5C500", fontWeight: 600 }}, "https://bee-doo-tools.vercel.app/empfehlung-landing.html?ref=" + refCode)),
+              React.createElement("div", { style: { display: "flex", gap: 8 }},
+                React.createElement("button", { onClick: function() {
+                  var link = "https://bee-doo-tools.vercel.app/empfehlung-landing.html?ref=" + refCode;
+                  var text = "Hallo! Ich habe gerade meine Solaranlage mit bee-doo geplant und bin begeistert! \u2600\uFE0F\n\nWenn du auch Interesse hast, kannst du hier ein kostenloses Angebot anfragen:\n" + link + "\n\nWenn du dich dar\u00FCber anmeldest, bekomme ich eine Pr\u00E4mie. Danke! \uD83D\uDE4F";
+                  window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank");
+                }, style: { flex: 1, padding: "12px", borderRadius: 10, border: "none", background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: font, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}, "\uD83D\uDCAC WhatsApp"),
+                React.createElement("button", { onClick: function() {
+                  navigator.clipboard.writeText("https://bee-doo-tools.vercel.app/empfehlung-landing.html?ref=" + refCode);
+                }, style: { flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: font, cursor: "pointer" }}, "\uD83D\uDCCB Link kopieren")),
+              React.createElement("button", { onClick: function() { setShowReferral(false); }, style: { width: "100%", marginTop: 10, padding: "12px", borderRadius: 10, border: "none", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)", fontSize: 13, fontWeight: 600, fontFamily: font, cursor: "pointer" }}, "Schlie\u00DFen"))
+          ) : (
+            /* Form State */
+            React.createElement("div", { style: { padding: "16px 20px" }},
+              React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 14, lineHeight: 1.5 }}, "Registrieren Sie den Kunden als Werber. Er erh\u00E4lt einen pers\u00F6nlichen Empfehlungslink."),
+              React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }},
+                React.createElement("div", null,
+                  React.createElement("label", { style: { fontSize: 10, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 3 }}, "Vorname *"),
+                  React.createElement("input", { value: refForm.vorname, onChange: function(e) { setRefForm(function(f) { return Object.assign({}, f, { vorname: e.target.value }); }); }, placeholder: "Max", style: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#fff", fontSize: 14, fontFamily: font, outline: "none", boxSizing: "border-box" }})),
+                React.createElement("div", null,
+                  React.createElement("label", { style: { fontSize: 10, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 3 }}, "Nachname *"),
+                  React.createElement("input", { value: refForm.nachname, onChange: function(e) { setRefForm(function(f) { return Object.assign({}, f, { nachname: e.target.value }); }); }, placeholder: "Mustermann", style: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#fff", fontSize: 14, fontFamily: font, outline: "none", boxSizing: "border-box" }}))),
+              React.createElement("div", { style: { marginBottom: 8 }},
+                React.createElement("label", { style: { fontSize: 10, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 3 }}, "Telefon *"),
+                React.createElement("input", { value: refForm.telefon, onChange: function(e) { setRefForm(function(f) { return Object.assign({}, f, { telefon: e.target.value }); }); }, placeholder: "0151 1234567", type: "tel", style: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#fff", fontSize: 14, fontFamily: font, outline: "none", boxSizing: "border-box" }})),
+              React.createElement("div", { style: { marginBottom: 8 }},
+                React.createElement("label", { style: { fontSize: 10, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 3 }}, "E-Mail"),
+                React.createElement("input", { value: refForm.email, onChange: function(e) { setRefForm(function(f) { return Object.assign({}, f, { email: e.target.value }); }); }, placeholder: "max@email.de", type: "email", style: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#fff", fontSize: 14, fontFamily: font, outline: "none", boxSizing: "border-box" }})),
+              React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8, marginBottom: 14 }},
+                React.createElement("div", null,
+                  React.createElement("label", { style: { fontSize: 10, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 3 }}, "PLZ"),
+                  React.createElement("input", { value: refForm.plz, onChange: function(e) { setRefForm(function(f) { return Object.assign({}, f, { plz: e.target.value }); }); }, placeholder: "33602", style: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#fff", fontSize: 14, fontFamily: font, outline: "none", boxSizing: "border-box" }})),
+                React.createElement("div", null,
+                  React.createElement("label", { style: { fontSize: 10, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 3 }}, "Ort"),
+                  React.createElement("input", { value: refForm.ort, onChange: function(e) { setRefForm(function(f) { return Object.assign({}, f, { ort: e.target.value }); }); }, placeholder: "Bielefeld", style: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#fff", fontSize: 14, fontFamily: font, outline: "none", boxSizing: "border-box" }}))),
+              React.createElement("button", { onClick: function() {
+                if (!refForm.vorname || !refForm.nachname || !refForm.telefon) return;
+                var code = (refForm.vorname.substring(0, 5).toUpperCase() + Math.floor(Math.random() * 100)).replace(/\s/g, "");
+                setRefCode(code);
+                /* Save to Supabase */
+                fetch("https://hqzpemfaljxcysyqssng.supabase.co/rest/v1/referral_customers", {
+                  method: "POST",
+                  headers: { apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik", "Content-Type": "application/json" },
+                  body: JSON.stringify({ code: code, vorname: refForm.vorname, nachname: refForm.nachname, telefon: refForm.telefon, email: refForm.email, plz: refForm.plz, ort: refForm.ort, berater_name: "Bernd Schulz", status: "aktiv" })
+                }).catch(function() {});
+                setRefSent(true);
+              }, disabled: !refForm.vorname || !refForm.nachname || !refForm.telefon, style: { width: "100%", padding: "14px", borderRadius: 12, border: "none", background: (!refForm.vorname || !refForm.nachname || !refForm.telefon) ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg, #F5C500, #E8CC3D)", color: (!refForm.vorname || !refForm.nachname || !refForm.telefon) ? "rgba(255,255,255,0.3)" : "#080C14", fontSize: 15, fontWeight: 800, fontFamily: font, cursor: (!refForm.vorname || !refForm.nachname || !refForm.telefon) ? "default" : "pointer" }}, "\uD83E\uDD1D Werber registrieren"))))),
 
       /* ── BADGES ── */
       React.createElement("div", { style: { ...cs, gridColumn: "1 / -1" }},
