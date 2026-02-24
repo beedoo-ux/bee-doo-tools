@@ -124,7 +124,7 @@ function euro(n) {
     return n.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0}) + ' €';
 }
 
-function calcProv(auftr, name, selectedMonth) {
+function calcProv(auftr, name, selectedMonth, allCsv) {
     const typ = VT_TYPEN[name]; if (!typ) return null;
     const provRelevant = auftr.filter(a => 
         (a['Auszahlungsrelevant']||'').trim() === 'Ja' && 
@@ -164,15 +164,31 @@ function calcProv(auftr, name, selectedMonth) {
     const boniGes = spB + elB + emB;
     let zeroBonus = 0;
     let teamBonus = 0;
+    let teamPrevMonth = '';
+    let teamPrevCnt = 0;
     if (typ === 'HGB' && name !== 'Christoph Held' && !(name === 'Tayfun Süleymaniye' && isJan26Plus)) {
         if (cnt >= 15) zeroBonus = 5000;
         else if (cnt >= 10) zeroBonus = 2000;
     }
-    if (name === 'Christoph Held') {
-        teamBonus = cnt * 200;
+    if (name === 'Christoph Held' && allCsv && selectedMonth) {
+        // Vormonat berechnen
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const prevM = m === 1 ? 12 : m - 1;
+        const prevY = m === 1 ? y - 1 : y;
+        const prevKey = prevY + '-' + String(prevM).padStart(2, '0');
+        // Alle positiven Sales aller Vertriebler im Vormonat
+        let prevSales = 0;
+        allCsv.forEach(r => {
+            if ((r['Auszahlungsrelevant']||'').trim() === 'Ja' && (r['Auftragsstatus']||'').trim() !== 'Storniert') {
+                if (monthKey(r['DatumErstellt']) === prevKey) prevSales++;
+            }
+        });
+        teamBonus = prevSales * 200;
+        teamPrevMonth = prevKey;
+        teamPrevCnt = prevSales;
     }
     const paid = auftr.filter(a => (a['Ausgezahlt am']||'').trim());
-    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, paidCnt: paid.length, totalCnt: auftr.length, ab8: name !== 'Christoph Held' && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && cnt >= st.schwelle, isSonder: name === 'Christoph Held' || (name === 'Tayfun Süleymaniye' && isJan26Plus) };
+    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, teamPrevMonth, teamPrevCnt, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, storCnt: storniert.length, nrCnt: nichtRelevant.length, paidCnt: paid.length, totalCnt: auftr.length, ab8: name !== 'Christoph Held' && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && cnt >= st.schwelle, isSonder: name === 'Christoph Held' || (name === 'Tayfun Süleymaniye' && isJan26Plus) };
 }
 
 function App() {
@@ -214,7 +230,7 @@ function App() {
         d.forEach(r => { const n = r['Kundenberater']?.trim(); if (!n) return; if (!grp[n]) grp[n]=[]; grp[n].push(r); });
         const res = [];
         Object.keys(VT_TYPEN).forEach(n => {
-            const p = calcProv(grp[n]||[], n, selMonth);
+            const p = calcProv(grp[n]||[], n, selMonth, csv);
             if (p) res.push({ name:n, ...p });
         });
         return res.filter(r => {
@@ -287,7 +303,7 @@ function App() {
                         {det.elB > 0 && <BonusLine label="Eigenlead" val={det.elB} color="#48bb78"/>}
                         {det.emB > 0 && <BonusLine label="Empfehlung" val={det.emB} color="#63b3ed"/>}
                         {det.zeroBonus > 0 && <BonusLine label={det.cnt>=15?'Stufenbonus (10+15)':'Stufenbonus (10)'} val={det.zeroBonus} color="#f6ad55"/>}
-                        {det.teamBonus > 0 && <BonusLine label={'Team-Bonus ('+det.cnt+'×200€)'} val={det.teamBonus} color="#fc8181"/>}
+                        {det.teamBonus > 0 && <BonusLine label={'Team-Bonus ('+det.teamPrevCnt+' Sales '+monthLabel(det.teamPrevMonth)+'×200€)'} val={det.teamBonus} color="#fc8181"/>}
                         {det.boniGes === 0 && det.zeroBonus === 0 && det.teamBonus === 0 && <div style={{fontSize:13,color:'#4a5568'}}>Keine Boni</div>}
                         <div style={{fontSize:20,fontWeight:700,color:'#fff',marginTop:8}}>{euro(det.boniGes + det.zeroBonus + det.teamBonus)}</div>
                     </div>
@@ -425,7 +441,7 @@ function VTCard({d,idx,onClick}) {
                 {d.elB>0 && <MTag label="Eigenlead" val={'+'+euro(d.elB)} c="#48bb78"/>}
                 {d.emB>0 && <MTag label="Empfehlung" val={'+'+euro(d.emB)} c="#63b3ed"/>}
                 {d.zeroBonus>0 && <MTag label="Stufenbonus" val={'+'+euro(d.zeroBonus)} c="#f6ad55"/>}
-                {d.teamBonus>0 && <MTag label="Team" val={'+'+euro(d.teamBonus)} c="#fc8181"/>}
+                {d.teamBonus>0 && <MTag label={'Team ('+d.teamPrevCnt+')'} val={'+'+euro(d.teamBonus)} c="#fc8181"/>}
             </div>
         </div>
     );
