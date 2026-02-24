@@ -826,72 +826,39 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
   const savedScrollRef = useRef(null);
   const scrollContainerRef = useRef(null);
 
-  const handleHoverProject = useCallback((projId) => {
-    setHoveredProjId(projId);
-    // Auto-scroll: Finde alle Karten dieses Projekts und scrolle so dass beide sichtbar
-    const container = scrollContainerRef.current || document.querySelector('main');
+  // Click-to-flash: kurz alle Karten eines Projekts aufleuchten lassen
+  const flashProject = useCallback((projId) => {
+    const container = scrollContainerRef.current || document.querySelector('[data-dispatch-grid]');
     if(!container) return;
-    // Scroll-Position merken
-    savedScrollRef.current = { top: container.scrollTop, left: container.scrollLeft };
-    // Alle Karten des Projekts finden
-    requestAnimationFrame(() => {
-      const cards = container.querySelectorAll(`[data-proj-id="${projId}"]`);
-      if(cards.length < 2) return; // Nur eine Karte = kein Scroll nötig
-      const containerRect = container.getBoundingClientRect();
-      let minTop = Infinity, maxBottom = -Infinity, minLeft = Infinity, maxRight = -Infinity;
-      cards.forEach(card => {
-        const r = card.getBoundingClientRect();
-        minTop = Math.min(minTop, r.top - containerRect.top + container.scrollTop);
-        maxBottom = Math.max(maxBottom, r.bottom - containerRect.top + container.scrollTop);
-        minLeft = Math.min(minLeft, r.left - containerRect.left + container.scrollLeft);
-        maxRight = Math.max(maxRight, r.right - containerRect.left + container.scrollLeft);
-      });
-      // Prüfe ob alle Karten im sichtbaren Bereich
-      const visTop = container.scrollTop;
-      const visBottom = container.scrollTop + containerRect.height;
-      const visLeft = container.scrollLeft;
-      const visRight = container.scrollLeft + containerRect.width;
-      const allVisible = minTop >= visTop && maxBottom <= visBottom && minLeft >= visLeft && maxRight <= visRight;
-      if(!allVisible) {
-        // Scrolle so dass alle Karten zentriert sichtbar sind
-        const targetTop = Math.max(0, (minTop + maxBottom) / 2 - containerRect.height / 2);
-        const targetLeft = Math.max(0, (minLeft + maxRight) / 2 - containerRect.width / 2);
-        container.scrollTo({ top: targetTop, left: targetLeft, behavior: 'smooth' });
-      }
+    const cards = container.querySelectorAll(`[data-proj-id="${projId}"]`);
+    cards.forEach(card => {
+      card.style.transition = 'box-shadow 0.15s, transform 0.15s';
+      card.style.boxShadow = '0 0 18px rgba(245,197,0,0.5), 0 0 6px rgba(245,197,0,0.3)';
+      card.style.transform = 'scale(1.04)';
+      card.style.zIndex = '30';
     });
+    // Scroll zur ersten entfernten Karte
+    if(cards.length >= 2) {
+      const last = cards[cards.length-1];
+      last.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'nearest' });
+    }
+    setTimeout(() => {
+      cards.forEach(card => {
+        card.style.boxShadow = '';
+        card.style.transform = '';
+        card.style.zIndex = '';
+      });
+    }, 1800);
   }, []);
 
-  const handleLeaveProject = useCallback(() => {
-    setHoveredProjId(null);
-    // Scroll zurück
-    const container = scrollContainerRef.current || document.querySelector('main');
-    if(container && savedScrollRef.current) {
-      container.scrollTo({ top: savedScrollRef.current.top, left: savedScrollRef.current.left, behavior: 'smooth' });
-      savedScrollRef.current = null;
-    }
-  }, []);
+  // Legacy handlers (no-op für hover, nur flash bei klick auf link-badge)
+  const handleHoverProject = useCallback(() => {}, []);
+  const handleLeaveProject = useCallback(() => {}, []);
 
   return (
     <div data-dispatch-grid="" style={{minWidth:820, position:'relative'}}>
 
-      {/* Dimming overlay when hovering a project */}
-      {hoveredProjId && (
-        <style>{`
-          [data-dispatch-grid] [data-proj-card]:not([data-proj-id="${hoveredProjId}"]) {
-            opacity: 0.2 !important;
-            filter: grayscale(0.7) !important;
-            transition: opacity 0.2s, filter 0.2s !important;
-          }
-          [data-dispatch-grid] [data-proj-card][data-proj-id="${hoveredProjId}"] {
-            opacity: 1 !important;
-            filter: none !important;
-            transform: scale(1.02);
-            z-index: 20;
-            box-shadow: 0 0 16px rgba(245,197,0,0.25), 0 0 4px rgba(245,197,0,0.15);
-            transition: all 0.2s !important;
-          }
-        `}</style>
-      )}
+      {/* Flash-Animationen werden inline per JS gesetzt */}
 
       {/* Header */}
       <div style={{display:'grid', gridTemplateColumns:colTemplate, position:'sticky', top:0, zIndex:30, background:C.bg, height:56}}>
@@ -956,7 +923,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
                   gridColumn: hasSpan2 ? 'span 2' : undefined,
                 }}>
                   {items.map(({proj, phase, span: itemSpan}) => (
-                    <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)} isSpan2={itemSpan===2} onHoverProject={handleHoverProject} onLeaveProject={handleLeaveProject}/>
+                    <ProjectCard key={`${proj.id}_${phase}`} proj={proj} phase={phase} dataAttr={`${proj.id}-${phase.replace('_ext','')}`} onClick={()=>onCardClick(proj)} isSpan2={itemSpan===2} onHoverProject={handleHoverProject} onLeaveProject={handleLeaveProject} flashProject={flashProject}/>
                   ))}
                   {full && <div style={{fontSize:9, color:C.red, textAlign:'center', fontWeight:700}}>● VOLL</div>}
                 </div>
@@ -1007,7 +974,7 @@ function WeekView({ weekDays, techs, engel, techSlots, engelSlots, projekte, upd
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROJECT CARD (in Wochenansicht)
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2, onHoverProject, onLeaveProject }) {
+function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2, onHoverProject, onLeaveProject, flashProject }) {
   const pt = PROJECT_TYPES[proj.type];
   const isExt = phase.includes('ext');
   const phaseCol = isExt ? C.orange : phase==='dc' ? C.dc : phase==='ac' ? C.ac : C.teal;
@@ -1131,6 +1098,37 @@ function ProjectCard({ proj, phase, dataAttr, onClick, isSpan2, onHoverProject, 
             )}
           </div>
         )}
+
+        {/* ── Verknüpfte Phase (DC↔AC Link) ── */}
+        {needsBoth && !isExt && (() => {
+          const isDC = phase === 'dc';
+          const linkedDate = isDC ? proj.acDate : proj.dcDate;
+          const linkedTechId = isDC ? proj.acTechId : proj.dcTechId;
+          const linkedTech = linkedTechId ? MONTEURE.find(m => m.id === linkedTechId) : null;
+          const linkedPhase = isDC ? 'AC' : 'DC';
+          const linkedIcon = isDC ? '⚡' : '🏠';
+          const linkedCol = isDC ? C.ac : C.dc;
+
+          if(!linkedDate) return null; // Missing case handled by incomplete warning below
+
+          return (
+            <div onClick={e => { e.stopPropagation(); if(flashProject) flashProject(proj.id); }}
+              style={{marginTop:3, display:'flex', alignItems:'center', gap:4, padding:'2px 5px', borderRadius:4,
+                background:linkedCol+'12', border:`1px solid ${linkedCol}30`, cursor:'pointer'}}
+              title={`${linkedPhase} anzeigen`}>
+              <span style={{fontSize:8, fontWeight:800, color:linkedCol}}>{linkedIcon} {linkedPhase}</span>
+              <span style={{fontSize:8, color:C.dim}}>→</span>
+              <span style={{fontSize:8, fontWeight:700, color:C.text}}>{fmtDay(linkedDate)}</span>
+              {linkedTech && (
+                <>
+                  <span style={{fontSize:7, color:C.muted}}>·</span>
+                  <span style={{fontSize:8, color:C.dim, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:60}}>{linkedTech.name.split(' ')[0]} {linkedTech.name.split(' ').pop()?.[0]}.</span>
+                </>
+              )}
+              <span style={{marginLeft:'auto', fontSize:8, color:linkedCol, opacity:0.6}}>↗</span>
+            </div>
+          );
+        })()}
 
         {/* Baustellen-Status */}
         {bs && (
@@ -2554,3 +2552,4 @@ document.addEventListener('DOMContentLoaded', () => setTimeout(() => BEEDOO_KI_D
 
 </body>
 </html>
+
