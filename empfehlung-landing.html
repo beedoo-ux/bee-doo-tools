@@ -56,6 +56,10 @@ function App() {
   const [werberName, setWerberName] = useState("");
   const [form, setForm] = useState({ vorname: "", nachname: "", telefon: "", email: "", plz: "", ort: "", strasse: "", interesse: "PV" });
   const [error, setError] = useState("");
+  const demoSales = parseInt(new URLSearchParams(window.location.search).get("demo") || "0");
+  const demoPipeline = parseInt(new URLSearchParams(window.location.search).get("pipeline") || "0");
+  const getPraemie = (n) => n <= 0 ? 0 : n === 1 ? 700 : n === 2 ? 800 : n === 3 ? 900 : 1000;
+  const getTotalPraemie = (s) => { let sum = 0; for (let i = 1; i <= s; i++) sum += getPraemie(i); return sum; };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -246,20 +250,29 @@ function App() {
       </div>
 
       {/* ─── MARIO COIN PRÄMIEN ─── */}
-      {werberName && (
+      {werberName && (() => {
+        const s = demoSales;
+        const earned = getTotalPraemie(s);
+        const positions = [14, 30, 50, 70, 88];
+        const mX = positions[Math.min(s, 4)];
+        const emojis = ["🍄","⭐","🔥","👑"];
+        return (
         <div className="fade fade-3" style={{ maxWidth: 480, margin: "0 auto 20px", padding: "0 16px" }}>
           <div style={{ borderRadius: 16, overflow: "hidden", border: `2px solid ${Y}25`, background: "linear-gradient(180deg, #0b1428 0%, #101e35 50%, #0a1222 100%)" }}>
             {/* Header */}
-            <div style={{ padding: "12px 16px 6px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ padding: "12px 16px 6px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
-                <div style={{ fontSize: 8, fontWeight: 800, color: "rgba(255,255,255,0.25)", textTransform: "uppercase", letterSpacing: 2.5 }}>🪙 SO VERDIENT {werberName.split(" ")[0].toUpperCase()}</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginTop: 2 }}>Pro erfolgreicher Empfehlung – <strong style={{ color: Y }}>steigend!</strong></div>
+                <div style={{ fontSize: 8, fontWeight: 800, color: "rgba(255,255,255,0.25)", textTransform: "uppercase", letterSpacing: 2.5 }}>🪙 × {s} COINS</div>
+                {s > 0 && <div style={{ fontSize: 22, fontWeight: 900, color: Y, fontFamily: "'DM Sans', monospace", textShadow: "0 0 16px rgba(245,197,0,0.3), 0 2px 0 #b8860b" }}>{earned.toLocaleString("de-DE")}€</div>}
+                {s === 0 && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginTop: 2 }}>Pro erfolgreicher Empfehlung – <strong style={{ color: Y }}>steigend!</strong></div>}
               </div>
-              <div style={{ fontSize: 18 }}>🎮</div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.2)", textTransform: "uppercase", letterSpacing: 2.5 }}>WORLD</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: s >= 4 ? "#22c55e" : "#fff", fontFamily: "'DM Sans', monospace" }}>{s >= 4 ? "★-★" : `1-${Math.min(s+1,4)}`}</div>
+              </div>
             </div>
             {/* Game World */}
-            <div style={{ position: "relative", height: 115, margin: "0 4px" }}>
-              {/* Clouds */}
+            <div style={{ position: "relative", height: 120, margin: "0 4px" }}>
               <div style={{ position: "absolute", top: 2, left: "10%", fontSize: 16, opacity: 0.06, animation: "cloudDrift 25s linear infinite" }}>☁️</div>
               <div style={{ position: "absolute", top: 10, left: "65%", fontSize: 11, opacity: 0.04, animation: "cloudDrift 35s linear infinite 8s" }}>☁️</div>
               {/* Ground */}
@@ -268,36 +281,58 @@ function App() {
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg, rgba(34,197,94,0.4), rgba(34,197,94,0.2), rgba(34,197,94,0.4))" }} />
               </div>
               {/* Track */}
-              <div style={{ position: "absolute", bottom: 18, left: 28, right: 28, height: 3, background: "rgba(255,255,255,0.04)", borderRadius: 2 }} />
+              <div style={{ position: "absolute", bottom: 18, left: 28, right: 28, height: 3, borderRadius: 2 }}>
+                <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.04)", borderRadius: 2 }} />
+                <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${(Math.min(s,4)/4)*100}%`, background: `linear-gradient(90deg, ${Y}90, #22c55e90)`, borderRadius: 2, transition: "width 1s", boxShadow: `0 0 8px ${Y}50` }} />
+              </div>
               {/* Mario */}
-              <div className="mj" style={{ position: "absolute", bottom: 22, left: "14%", zIndex: 10, fontSize: 28, lineHeight: 1, filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.6))" }}>🏃</div>
+              <div className="mj" style={{ position: "absolute", bottom: 22, left: `${mX}%`, zIndex: 10, fontSize: 28, lineHeight: 1, filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.6))", transition: "left 1s" }}>🏃</div>
               {/* Coins */}
               <div style={{ position: "absolute", bottom: 14, left: 4, right: 4, display: "flex", justifyContent: "space-around" }}>
                 {[
-                  { e: "700€", tag: "1-UP", emoji: "🍄" },
-                  { e: "800€", tag: "STAR", emoji: "⭐" },
-                  { e: "900€", tag: "FIRE", emoji: "🔥" },
-                  { e: "1.000€", tag: "∞ GOLD", emoji: "👑" },
-                ].map((c, i) => (
-                  <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 64, zIndex: 5 }}>
-                    {i === 0 && <div className="sk" style={{ position: "absolute", top: -8, fontSize: 10 }}>✨</div>}
-                    <div className={i === 0 ? "cs cg" : ""} style={{
+                  { e: "700€", tag: "1-UP" },
+                  { e: "800€", tag: "STAR" },
+                  { e: "900€", tag: "FIRE" },
+                  { e: "1.000€", tag: "∞ GOLD" },
+                ].map((c, i) => {
+                  const collected = s > i;
+                  const current = s === i;
+                  return (
+                  <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 64, zIndex: 5, position: "relative" }}>
+                    {collected && <div className="sk" style={{ position: "absolute", top: -8, fontSize: 10 }}>✨</div>}
+                    <div className={current ? "cs cg" : ""} style={{
                       width: 42, height: 42, borderRadius: "50%",
-                      background: i === 0 ? `linear-gradient(145deg, ${Y}40, ${Y}15)` : "rgba(255,255,255,0.03)",
-                      border: `2.5px solid ${i === 0 ? `${Y}60` : "rgba(255,255,255,0.06)"}`,
-                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: i === 0 ? 22 : 18,
+                      background: collected ? "linear-gradient(145deg, #FFD700, #FF9F00, #FFD700)" : current ? `linear-gradient(145deg, ${Y}40, ${Y}15)` : "rgba(255,255,255,0.03)",
+                      border: `2.5px solid ${collected ? "#FFD700" : current ? `${Y}60` : "rgba(255,255,255,0.06)"}`,
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: collected ? 22 : current ? 22 : 18,
+                      boxShadow: collected ? "0 4px 16px rgba(255,215,0,0.4), inset 0 -3px 6px rgba(180,120,0,0.3)" : "none",
                     }}>
-                      {i === 0 ? "❓" : <span style={{ opacity: 0.15, filter: "grayscale(1)" }}>🪙</span>}
+                      {collected ? <span>{emojis[i]}</span> : current ? "❓" : <span style={{ opacity: 0.15, filter: "grayscale(1)" }}>🪙</span>}
+                      {collected && <div style={{ position: "absolute", top: -5, right: -5, width: 17, height: 17, borderRadius: "50%", background: "#22c55e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 900, color: "#fff", border: "2px solid #0b1428" }}>✓</div>}
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 900, color: i === 0 ? Y : "rgba(255,255,255,0.18)", marginTop: 4 }}>{c.e}</div>
-                    <div style={{ fontSize: 6, fontWeight: 800, color: i === 0 ? `${Y}50` : "rgba(255,255,255,0.12)", textTransform: "uppercase", letterSpacing: 1.2 }}>{c.tag}</div>
+                    <div style={{ fontSize: 13, fontWeight: 900, color: collected ? "#22c55e" : current ? Y : "rgba(255,255,255,0.18)", marginTop: 4, textShadow: collected ? "0 0 6px rgba(34,197,94,0.3)" : "none" }}>{c.e}</div>
+                    <div style={{ fontSize: 6, fontWeight: 800, color: collected ? "rgba(34,197,94,0.5)" : current ? `${Y}50` : "rgba(255,255,255,0.12)", textTransform: "uppercase", letterSpacing: 1.2 }}>{c.tag}</div>
                   </div>
-                ))}
+                );})}
               </div>
             </div>
+            {/* Bottom stats */}
+            {(s > 0 || demoPipeline > 0) && (
+              <div style={{ padding: "6px 14px 10px", display: "flex", gap: 8, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ flex: 1, textAlign: "center" }}>
+                  <div style={{ fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.2)", textTransform: "uppercase", letterSpacing: 2 }}>NÄCHSTE MÜNZE</div>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: Y }}>{getPraemie(s+1).toLocaleString("de-DE")}€</div>
+                </div>
+                {demoPipeline > 0 && <div style={{ flex: 1, textAlign: "center" }}>
+                  <div style={{ fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.2)", textTransform: "uppercase", letterSpacing: 2 }}>💎 PIPELINE</div>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: "#22c55e" }}>{demoPipeline} Leads</div>
+                </div>}
+              </div>
+            )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Form Card */}
       <div className="fade fade-4" style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px 48px" }}>
