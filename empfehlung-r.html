@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo Empfehlung</title>
+<style>
+  body { background: #080C14; color: #fff; font-family: 'DM Sans', system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+  .loader { text-align: center; }
+  .spinner { width: 40px; height: 40px; border: 3px solid rgba(245,197,0,0.2); border-top-color: #F5C500; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .text { color: rgba(255,255,255,0.5); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="loader">
+  <div class="spinner"></div>
+  <div class="text">Weiterleitung...</div>
+</div>
+<script>
+(async () => {
+  const SUPABASE_URL = "https://hqzpemfaljxcysyqssng.supabase.co";
+  const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+
+  const params = new URLSearchParams(window.location.search);
+  const code = (params.get("c") || params.get("code") || "").toUpperCase().trim();
+  const source = params.get("s") || params.get("source") || "direct";
+
+  if (!code) {
+    window.location.href = "empfehlung-landing.html";
+    return;
+  }
+
+  // Track click
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/referral_clicks`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        werber_code: code,
+        source: source,
+        user_agent: navigator.userAgent.substring(0, 200),
+        referer: document.referrer.substring(0, 500)
+      })
+    });
+
+    // Also increment click counter on referral_customers
+    const wRes = await fetch(`${SUPABASE_URL}/rest/v1/referral_customers?code=eq.${code}&select=id,link_clicks`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    });
+    const wData = await wRes.json();
+    if (wData && wData[0]) {
+      await fetch(`${SUPABASE_URL}/rest/v1/referral_customers?id=eq.${wData[0].id}`, {
+        method: "PATCH",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({ link_clicks: (wData[0].link_clicks || 0) + 1 })
+      });
+    }
+
+    // Increment share counter based on source
+    if (source === "whatsapp" && wData && wData[0]) {
+      await fetch(`${SUPABASE_URL}/rest/v1/referral_customers?id=eq.${wData[0].id}`, {
+        method: "PATCH",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify({ whatsapp_shares: (wData[0].whatsapp_shares || 0) + 1 })
+      });
+    } else if (source === "email" && wData && wData[0]) {
+      await fetch(`${SUPABASE_URL}/rest/v1/referral_customers?id=eq.${wData[0].id}`, {
+        method: "PATCH",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify({ email_shares: (wData[0].email_shares || 0) + 1 })
+      });
+    }
+  } catch (e) {
+    console.error("Track error:", e);
+  }
+
+  // Redirect to landing page with ref code
+  window.location.href = `empfehlung-landing.html?ref=${encodeURIComponent(code)}`;
+})();
+</script>
+</body>
+</html>
