@@ -124,14 +124,14 @@ function euro(n) {
     return n.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0}) + ' €';
 }
 
-function calcProv(auftr, name, selectedMonth, allCsv, exclANs, gbSet) {
+function calcProv(auftr, name, selectedMonth, allCsv, exclANs, gbSet, maSet) {
     const typ = VT_TYPEN[name]; if (!typ) return null;
+    const blocked = an => (exclANs && exclANs.has(an)) || (gbSet && gbSet.has(an)) || (maSet && maSet.has(an));
     const provRelevant = auftr.filter(a => 
         (a['Auszahlungsrelevant']||'').trim() === 'Ja' && 
         (a['Auftragsstatus']||'').trim() !== 'Storniert' &&
         !(a['Ausgezahlt am']||'').trim() &&
-        !(exclANs && exclANs.has((a['AN Nr.']||'').trim())) &&
-        !(gbSet && gbSet.has((a['AN Nr.']||'').trim()))
+        !blocked((a['AN Nr.']||'').trim())
     );
     const storniert = auftr.filter(a => (a['Auftragsstatus']||'').trim() === 'Storniert');
     const bereitsAusgezahlt = auftr.filter(a => 
@@ -191,8 +191,7 @@ function calcProv(auftr, name, selectedMonth, allCsv, exclANs, gbSet) {
     if (name === 'Christoph Held' && allCsv && selectedMonth && selectedMonth >= '2026-01') {
         let curSales = 0;
         allCsv.forEach(r => {
-            if (exclANs && exclANs.has(r['AN Nr.']?.trim())) return;
-            if (gbSet && gbSet.has(r['AN Nr.']?.trim())) return;
+            if (blocked(r['AN Nr.']?.trim())) return;
             if ((r['Auszahlungsrelevant']||'').trim() === 'Ja' && (r['Auftragsstatus']||'').trim() !== 'Storniert') {
                 if (monthKey(r['DatumErstellt']) === selectedMonth) curSales++;
             }
@@ -205,8 +204,7 @@ function calcProv(auftr, name, selectedMonth, allCsv, exclANs, gbSet) {
     if (name === 'Tayfun Süleymaniye' && allCsv && selectedMonth && isJan26Plus) {
         let teamSales = 0;
         allCsv.forEach(r => {
-            if (exclANs && exclANs.has(r['AN Nr.']?.trim())) return;
-            if (gbSet && gbSet.has(r['AN Nr.']?.trim())) return;
+            if (blocked(r['AN Nr.']?.trim())) return;
             const vt = (r['Kundenberater']||'').trim();
             if (!TAYFUN_TEAM.includes(vt)) return;
             if ((r['Auszahlungsrelevant']||'').trim() !== 'Ja') return;
@@ -220,7 +218,8 @@ function calcProv(auftr, name, selectedMonth, allCsv, exclANs, gbSet) {
         teamLabel = 'Team-Bonus ('+teamSales+' offene Sales Team ×300€)';
     }
     const gbHeld = auftr.filter(a => gbSet && gbSet.has((a['AN Nr.']||'').trim()));
-    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, teamPrevMonth, teamPrevCnt, teamLabel, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, bereitsAusgezahlt, storCnt: storniert.length, nrCnt: nichtRelevant.length, paidCnt: bereitsAusgezahlt.length, gbCnt: gbHeld.length, totalCnt: auftr.length, ab8: !(name === 'Christoph Held' && isJan26Plus) && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && name !== 'Stefan Hensel' && cnt >= st.schwelle, isSonder: (name === 'Christoph Held' && isJan26Plus) || (name === 'Tayfun Süleymaniye' && isJan26Plus) || name === 'Stefan Hensel' };
+    const maHeld = auftr.filter(a => maSet && maSet.has((a['AN Nr.']||'').trim()));
+    return { typ, cnt, perA, staffGes, spB, elB, emB, boniGes, zeroBonus, teamBonus, teamPrevMonth, teamPrevCnt, teamLabel, total: staffGes + boniGes + zeroBonus + teamBonus, auftr, provRelevant, storniert, nichtRelevant, bereitsAusgezahlt, storCnt: storniert.length, nrCnt: nichtRelevant.length, paidCnt: bereitsAusgezahlt.length, gbCnt: gbHeld.length, maCnt: maHeld.length, totalCnt: auftr.length, ab8: !(name === 'Christoph Held' && isJan26Plus) && !(name === 'Tayfun Süleymaniye' && isJan26Plus) && name !== 'Stefan Hensel' && cnt >= st.schwelle, isSonder: (name === 'Christoph Held' && isJan26Plus) || (name === 'Tayfun Süleymaniye' && isJan26Plus) || name === 'Stefan Hensel' };
 }
 
 function App() {
@@ -232,20 +231,27 @@ function App() {
     const [showDups, setShowDups] = React.useState(false);
     const [excludedANs, setExcludedANs] = React.useState(new Set());
     const [gbANs, setGbANs] = React.useState(new Set());
+    const [maANs, setMaANs] = React.useState(new Set());
 
     const GB_KUNDEN = ['Katrin Winter','Melanie Niehus','Emöke Hoffmann','Sascha Mamerow','Reimund Menninghaus','Reimund Josef Menninghaus','Carsten Reinicke','Ulrich Schülke','Ulrich Schuelke','Nogin Bashar'];
 
     React.useEffect(() => {
         if (!csv) return;
         const autoGB = new Set(gbANs);
+        const autoMA = new Set(maANs);
         csv.forEach(r => {
             const kunde = (r['Kunde']||'').trim();
             const an = (r['AN Nr.']||'').trim();
             if (GB_KUNDEN.some(gk => kunde.toLowerCase().includes(gk.toLowerCase()))) {
                 autoGB.add(an);
             }
+            const wh = (r['WorkflowHistory']||'').trim();
+            if (wh.toLowerCase().includes('montage abgebrochen')) {
+                autoMA.add(an);
+            }
         });
         if (autoGB.size !== gbANs.size) setGbANs(autoGB);
+        if (autoMA.size !== maANs.size) setMaANs(autoMA);
     }, [csv]);
 
     function onFile(e) {
@@ -324,7 +330,7 @@ function App() {
         d.forEach(r => { const n = r['Kundenberater']?.trim(); if (!n) return; if (!grp[n]) grp[n]=[]; grp[n].push(r); });
         const res = [];
         Object.keys(VT_TYPEN).forEach(n => {
-            const p = calcProv(grp[n]||[], n, selMonth, csv, excludedANs, gbANs);
+            const p = calcProv(grp[n]||[], n, selMonth, csv, excludedANs, gbANs, maANs);
             if (p) res.push({ name:n, ...p });
         });
         return res.filter(r => {
@@ -428,7 +434,7 @@ function App() {
                 </div>
 
                 <div style={cardStyle}>
-                    <div style={{fontSize:13,color:'#6b7280',marginBottom:14,fontWeight:500}}>📋 Aufträge ({det.cnt} auszahlungsfähig{det.gbCnt>0?` · ${det.gbCnt} Grundbuchprüfung`:''}{det.paidCnt>0?` · ${det.paidCnt} ausgezahlt`:''}{det.storCnt>0?` · ${det.storCnt} storniert`:''}{det.nrCnt>0?` · ${det.nrCnt} nicht relevant`:''})</div>
+                    <div style={{fontSize:13,color:'#6b7280',marginBottom:14,fontWeight:500}}>📋 Aufträge ({det.cnt} auszahlungsfähig{det.gbCnt>0?` · ${det.gbCnt} Grundbuchprüfung`:''}{det.maCnt>0?` · ${det.maCnt} Montage abgebr.`:''}{det.paidCnt>0?` · ${det.paidCnt} ausgezahlt`:''}{det.storCnt>0?` · ${det.storCnt} storniert`:''}{det.nrCnt>0?` · ${det.nrCnt} nicht relevant`:''})</div>
                     <div style={{overflowX:'auto'}}>
                         <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
                             <thead><tr style={{borderBottom:'1px solid #1e1f2a'}}>
@@ -444,10 +450,11 @@ function App() {
                                     const isDup = dupANSet.has(a['AN Nr.']);
                                     const isExcluded = excludedANs.has((a['AN Nr.']||'').trim());
                                     const isGB = gbANs.has((a['AN Nr.']||'').trim());
-                                    const dimmed = isStor || isNR || isPaid || isExcluded || isGB;
+                                    const isMA = maANs.has((a['AN Nr.']||'').trim());
+                                    const dimmed = isStor || isNR || isPaid || isExcluded || isGB || isMA;
                                     return (
-                                    <tr key={i} style={{borderBottom:'1px solid #0f1015',opacity:dimmed?0.4:1,borderLeft:isGB?'3px solid #f59e0b':isDup&&!isExcluded?'3px solid #f59e0b':isExcluded?'3px solid #e53e3e':'3px solid transparent'}}>
-                                        <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#F5C500',fontWeight:600}}>{isGB&&'📋 '}{isDup&&!isExcluded&&!isGB&&'⚠️ '}{isExcluded&&'❌ '}{a['AN Nr.']}</td>
+                                    <tr key={i} style={{borderBottom:'1px solid #0f1015',opacity:dimmed?0.4:1,borderLeft:isMA?'3px solid #e53e3e':isGB?'3px solid #f59e0b':isDup&&!isExcluded?'3px solid #f59e0b':isExcluded?'3px solid #e53e3e':'3px solid transparent'}}>
+                                        <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#F5C500',fontWeight:600}}>{isMA&&'🚫 '}{isGB&&!isMA&&'📋 '}{isDup&&!isExcluded&&!isGB&&!isMA&&'⚠️ '}{isExcluded&&'❌ '}{a['AN Nr.']}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#c8cfd8'}}>{a['Kunde']||'-'}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#c8cfd8',whiteSpace:'nowrap'}}>{a['Angebot KWP'] ? a['Angebot KWP'].trim()+' kWp' : '-'}</td>
                                         <td style={{padding:'8px 10px',color:dimmed?'#6b7280':'#fff',fontWeight:500,textDecoration:isStor?'line-through':'none'}}>{euro(nettoNum(a['AN-WertNetto']))}</td>
@@ -455,7 +462,7 @@ function App() {
                                         <td style={{padding:'8px 10px',color:a['Speichererweiterung']?.trim()?'#a78bfa':'#3a3d4a'}}>{a['Speichererweiterung']?.trim()?'✓':'-'}</td>
                                         <td style={{padding:'8px 10px',color:isStor?'#e53e3e':'#8b95a5',fontSize:12,fontWeight:isStor?600:400}}>{a['Auftragsstatus']?.trim()}</td>
                                         <td style={{padding:'8px 10px'}}><span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:isNR?'rgba(229,62,62,0.15)':'rgba(72,187,120,0.15)',color:isNR?'#e53e3e':'#48bb78',fontWeight:500}}>{isNR?'Nein':'Ja'}</span></td>
-                                        <td style={{padding:'8px 10px'}}>{isGB ? <span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:'rgba(245,158,11,0.15)',color:'#f59e0b',fontWeight:600}}>📋 Grundbuchprüfung</span> : a['Ausgezahlt am']?.trim() ? <span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:'rgba(245,197,0,0.15)',color:'#F5C500',fontWeight:500}}>{a['Ausgezahlt am'].trim()}</span> : <span style={{fontSize:11,color:'#4a5568'}}>auszahlungsfähig</span>}</td>
+                                        <td style={{padding:'8px 10px'}}>{isMA ? <span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:'rgba(229,62,62,0.15)',color:'#e53e3e',fontWeight:600}}>🚫 Montage abgebr.</span> : isGB ? <span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:'rgba(245,158,11,0.15)',color:'#f59e0b',fontWeight:600}}>📋 Grundbuchprüfung</span> : a['Ausgezahlt am']?.trim() ? <span style={{fontSize:11,padding:'2px 6px',borderRadius:4,background:'rgba(245,197,0,0.15)',color:'#F5C500',fontWeight:500}}>{a['Ausgezahlt am'].trim()}</span> : <span style={{fontSize:11,color:'#4a5568'}}>auszahlungsfähig</span>}</td>
                                         <td style={{padding:'8px 10px',color:'#8b95a5',whiteSpace:'nowrap'}}>{a['DatumErstellt']}</td>
                                         <td style={{padding:'4px 6px'}}>{!isStor && !isPaid && (
                                             <button onClick={(ev)=>{ev.stopPropagation();const an=(a['AN Nr.']||'').trim();const s=new Set(gbANs);if(s.has(an))s.delete(an);else s.add(an);setGbANs(s);}}
@@ -651,7 +658,7 @@ function VTCard({d,idx,onClick}) {
                 </div>
                 <div style={{textAlign:'right'}}>
                     <div style={{fontSize:20,fontWeight:700,color:'#F5C500'}}>{euro(d.total)}</div>
-                    <div style={{fontSize:12,color:'#6b7280'}}>{d.totalCnt} Anlagen: {d.cnt} auszahlungsf.{d.gbCnt>0?`, ${d.gbCnt} GB`:''}{d.paidCnt>0?`, ${d.paidCnt} ausgez.`:''}{d.storCnt>0?`, ${d.storCnt} storn.`:''}{d.nrCnt>0?`, ${d.nrCnt} n. rel.`:''}</div>
+                    <div style={{fontSize:12,color:'#6b7280'}}>{d.totalCnt} Anlagen: {d.cnt} auszahlungsf.{d.gbCnt>0?`, ${d.gbCnt} GB`:''}{d.maCnt>0?`, ${d.maCnt} MA`:''}{d.paidCnt>0?`, ${d.paidCnt} ausgez.`:''}{d.storCnt>0?`, ${d.storCnt} storn.`:''}{d.nrCnt>0?`, ${d.nrCnt} n. rel.`:''}</div>
                 </div>
             </div>
             <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
