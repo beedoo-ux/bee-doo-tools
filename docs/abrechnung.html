@@ -174,7 +174,7 @@ async function generateAbrechnungen(periode, onProgress){
     sbG('pay_sonderprovisionen','aktiv=eq.true'),
     sbG('pay_team_bonus','aktiv=eq.true'),
     sbG('pay_sperrlisten','select=*'),
-    sbG('pay_auftraege',`storniert=eq.true&abgerechnet_monat=not.is.null&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,abgerechnet_monat,abgerechnet_jahr`),
+    sbG('pay_auftraege',`storniert=eq.true&abgerechnet_monat=not.is.null&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,abgerechnet_monat,abgerechnet_jahr,storno_provision_zurueck`),
   ]);
   // Sperrlisten: gesperrte AN-Nummern → nicht provisionieren
   const gesperrteANs = new Set();
@@ -332,11 +332,11 @@ async function generateAbrechnungen(periode, onProgress){
     // Storno-Info (nur Leistungsmonat)
     const vpStornos = stornoByVP[vpId] || [];
     vpStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(s.auftrags_datum||'').substring(0,7)}); });
-    // Storno-Abzüge: bereits ausgezahlte Stornos → negativer Abzug
+    // Storno-Abzüge: bereits ausgezahlte Stornos → negativer Abzug mit tatsächlich gezahltem Betrag
     const vpStornoAbz = stornoAbzByVP[vpId] || [];
     vpStornoAbz.forEach(s => {
-      // Berechne den damals ausgezahlten Betrag (Basis oder Staffel je nach Regel)
-      const abzBetrag = sonderFlat || regel.basis_betrag_sale; // Konservativ: Basisbetrag
+      // Bevorzugt: gespeicherter Auszahlungsbetrag; Fallback: aktuelle Regel
+      const abzBetrag = (s.storno_provision_zurueck && s.storno_provision_zurueck > 0) ? s.storno_provision_zurueck : (sonderFlat || regel.basis_betrag_sale);
       positionen.push({typ:'abzug',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno-Abzug (ausgez. ${s.abgerechnet_monat}/${s.abgerechnet_jahr})`,original_betrag:-abzBetrag,aktiv:true,zurueckgestellt:false,notiz:`Storno nach Auszahlung`});
       bruttoTotal -= abzBetrag;
     });
