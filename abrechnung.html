@@ -103,8 +103,8 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const HDR = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 
 const fmt = (n) => new Intl.NumberFormat('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n||0);
-const fmtE = (n) => fmt(n)+' \u20ac';
-const pLabel = (p) => {if(!p)return'\u2014';const[y,m]=p.split('/');const mo=['','Januar','Februar','M\u00e4rz','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];return `${mo[parseInt(m)]} ${y}`;};
+const fmtE = (n) => fmt(n)+' €';
+const pLabel = (p) => {if(!p)return'—';const[y,m]=p.split('/');const mo=['','Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];return `${mo[parseInt(m)]} ${y}`;};
 const gK = (name) => {const p=name.trim().split(/\s+/);return p.length>=2?(p[0][0]+p[p.length-1][0]).toUpperCase():name.slice(0,2).toUpperCase();};
 const gBN = (per,k,nr) => `GS-${per.replace('/','-')}-${k}-${String(nr||1).padStart(3,'0')}`;
 
@@ -142,7 +142,7 @@ function GutschriftPreview({ab,pos,sg}){
     <div className="gs-footer-col"><b>Firmensitz</b>bee-doo GmbH<br/>Am Stadtholz 39<br/>D-33609 Bielefeld<br/>StNr: 44/214/0394</div>
     <div className="gs-footer-col"><b>Kontakt</b>www.bee-doo.de<br/>info@bee-doo.de<br/>Fon: 0800 22 33 664</div>
     <div className="gs-footer-col"><b>Bankverbindung</b>IBAN DE90 2545 0110<br/>0031 0399 85<br/>BIC NOLADE21SWB</div>
-    <div className="gs-footer-col"><b>Gesch\u00e4ftsf\u00fchrer</b>Patrick Grabowski<br/>Olaf Schader<br/>HRB 46243 AG Bielefeld<br/>USt-IdNr.: DE323940446</div>
+    <div className="gs-footer-col"><b>Geschäftsführer</b>Patrick Grabowski<br/>Olaf Schader<br/>HRB 46243 AG Bielefeld<br/>USt-IdNr.: DE323940446</div>
   </div>;
 
   return <div style={{display:'flex',flexDirection:'column',gap:20}}>
@@ -161,7 +161,7 @@ function GutschriftPreview({ab,pos,sg}){
           </div>
         </div>
         <div style={{fontSize:16,fontWeight:700,marginTop:10,letterSpacing:.5}}>{hgb?'Gutschrift':'Entgeltabrechnung'} {bn}</div>
-        <div style={{fontSize:10,color:'rgba(255,255,255,.6)',marginTop:2}}>{ab.mitarbeiter_name} \u00b7 {pLabel(ab.periode)}</div>
+        <div style={{fontSize:10,color:'rgba(255,255,255,.6)',marginTop:2}}>{ab.mitarbeiter_name} · {pLabel(ab.periode)}</div>
         <div style={{position:'absolute',right:'16mm',top:'50%',transform:'translateY(-50%)',width:60,height:60,background:'#fff',borderRadius:6,padding:3,boxShadow:'0 2px 8px rgba(0,0,0,.3)'}}>
           <img src={qrUrl} width={54} height={54} style={{display:'block',borderRadius:2}} alt="QR"/>
         </div>
@@ -170,19 +170,19 @@ function GutschriftPreview({ab,pos,sg}){
       <div className="gs-body">
         <div style={{fontSize:8.5,color:'#888',borderBottom:'1px dotted #ccc',paddingBottom:4,marginBottom:8}}>bee-doo GmbH · Am Stadtholz 39 · D-33609 Bielefeld · StNr: 44/214/0394 · USt-IdNr.: DE323940446</div>
         <div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{ab.mitarbeiter_name}</div>
-        <div style={{fontSize:11,color:'#444',lineHeight:1.7,marginBottom:2}}>{window.__vpData?.strasse?`${window.__vpData.strasse} ${window.__vpData.hausnr||''}`:'\u2014'}<br/>{window.__vpData?.plz?`${window.__vpData.plz} ${window.__vpData.ort||''}`:'\u2014'}</div>
-        <div style={{fontSize:9.5,color:'#888',marginBottom:12}}>{window.__vpData?.steuernummer?`Steuernr.: ${window.__vpData.steuernummer}`:''}{window.__vpData?.steuernummer&&window.__vpData?.ustid?' \u00b7 ':''}{window.__vpData?.ustid?`USt-IdNr.: ${window.__vpData.ustid}`:''}{!window.__vpData?.steuernummer&&!window.__vpData?.ustid?(hgb?'HGB \u00a784 Handelsvertreter \u2013 \u26a0\ufe0f Steuerdaten fehlen':'Angestellt'):''}</div>
+        <div style={{fontSize:11,color:'#444',lineHeight:1.7,marginBottom:2}}>{window.__vpData?.strasse?`${window.__vpData.strasse} ${window.__vpData.hausnr||''}`:'—'}<br/>{window.__vpData?.plz?`${window.__vpData.plz} ${window.__vpData.ort||''}`:'—'}</div>
+        <div style={{fontSize:9.5,color:'#888',marginBottom:12}}>{(()=>{const vp=window.__vpData;const stnr=vp?.steuernummer&&vp.steuernummer.length>4&&/\d/.test(vp.steuernummer)?vp.steuernummer:null;const uid=vp?.ustid&&/^DE\d{9}$/.test(vp.ustid)?vp.ustid:null;if(stnr||uid)return(stnr?`Steuernr.: ${stnr}`:'')+(stnr&&uid?' · ':'')+(uid?`USt-IdNr.: ${uid}`:'');return hgb?'HGB §84 Handelsvertreter – ⚠️ Steuerdaten unvollständig':'Angestellt';})()}</div>
         <div style={{borderTop:'1px solid #eee',marginBottom:10}}></div>
 
         <div style={{display:'grid',gridTemplateColumns:'56% 42%',gap:'2%'}}>
           <div>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}><tbody>
-              <tr><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:'#E07800'}}>Provisionen ({b.sales} Sales \u2013 Vermittlung Solar/WP)</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(b.bp)}</td></tr>
+              <tr><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:'#E07800'}}>Provisionen ({b.sales} Sales – Vermittlung Solar/WP)</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(b.bp)}</td></tr>
               {aE.map((p,i)=><tr key={i}><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:(p.override_betrag!=null?p.override_betrag:p.original_betrag)>=0?'#E07800':'#9a3412'}}>{p.kunde||p.notiz||p.typ}</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
               <tr><td style={{padding:'6px 10px',borderBottom:'2px solid #aaa',fontWeight:700}}>Brutto-Provisionen</td><td style={{padding:'6px 10px',borderBottom:'2px solid #aaa',textAlign:'right',fontWeight:700}}>{fmtE(b.bp+b.es)}</td></tr>
-              {hgb&&<><tr><td style={{padding:'6px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',color:'#555',fontWeight:600}}>\ud83d\udda5\ufe0f ./. Systemgeb\u00fchr Netto (3% \u00b7 max. 200 \u20ac)</td><td style={{padding:'6px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',textAlign:'right',color:'#555',fontWeight:600}}>-{fmtE(b.sgN)}</td></tr>
-              <tr><td style={{padding:'4px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',color:'#9a3412',fontSize:10,fontWeight:600}}>\ud83d\udda5\ufe0f ./. USt 19% auf Systemgeb\u00fchr</td><td style={{padding:'4px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',textAlign:'right',color:'#9a3412',fontWeight:600}}>-{fmtE(b.sgU)}</td></tr>
-              <tr><td colSpan={2} style={{padding:'2px 10px 6px',background:'#f8f8f2',color:'#888',fontSize:9}}>Netto {fmtE(b.sgN)} + 19% MwSt {fmtE(b.sgU)} = Brutto {fmtE(b.sgN+b.sgU)} \u00b7 sep. Rechnung bee-doo GmbH \u00b7 Ziff. 4.2 HVV</td></tr></>}
+              {hgb&&<><tr><td style={{padding:'6px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',color:'#555',fontWeight:600}}>🖥️ ./. Systemgebühr Netto (3% · max. 200 €)</td><td style={{padding:'6px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',textAlign:'right',color:'#555',fontWeight:600}}>-{fmtE(b.sgN)}</td></tr>
+              <tr><td style={{padding:'4px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',color:'#9a3412',fontSize:10,fontWeight:600}}>🖥️ ./. USt 19% auf Systemgebühr</td><td style={{padding:'4px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',textAlign:'right',color:'#9a3412',fontWeight:600}}>-{fmtE(b.sgU)}</td></tr>
+              <tr><td colSpan={2} style={{padding:'2px 10px 6px',background:'#f8f8f2',color:'#888',fontSize:9}}>Netto {fmtE(b.sgN)} + 19% MwSt {fmtE(b.sgU)} = Brutto {fmtE(b.sgN+b.sgU)} · sep. Rechnung bee-doo GmbH · Ziff. 4.2 HVV</td></tr></>}
               <tr><td style={{padding:'6px 10px',borderTop:'2px solid #111',borderBottom:'1px solid #eee',color:'#555'}}>Nettobetrag</td><td style={{padding:'6px 10px',borderTop:'2px solid #111',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(b.net)}</td></tr>
               {hgb&&<tr style={{background:'#fffbeb'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #fde68a',color:'#92400e',fontWeight:600}}>+ Umsatzsteuer 19%</td><td style={{padding:'6px 10px',borderBottom:'1px solid #fde68a',textAlign:'right',color:'#92400e',fontWeight:600}}>+ {fmtE(b.uB)}</td></tr>}
               <tr style={{background:'linear-gradient(135deg,#f0fdf4,#dcfce7)'}}><td style={{padding:'9px 10px',fontWeight:800,fontSize:13}}>AUSZAHLUNGSSUMME</td><td style={{padding:'9px 10px',textAlign:'right',fontWeight:800,fontSize:13,color:'#166534'}}>{fmtE(b.aus)}</td></tr>
@@ -197,7 +197,7 @@ function GutschriftPreview({ab,pos,sg}){
               <tr style={{background:'#f0fdf4'}}><td style={{padding:'4px 7px',fontWeight:700}}>Auszahlung</td><td style={{padding:'4px 7px',textAlign:'right',fontWeight:700,color:'#166534'}}>{fmtE(b.aus)}</td></tr>
             </tbody></table>
 
-            {hgb&&b.sgN>0&&<><div style={{fontSize:10,fontWeight:700,color:'#E07800',marginTop:12,marginBottom:5,paddingBottom:3,borderBottom:'1px solid #eee'}}>Systemgeb\u00fchr (sep. Rechnung)</div>
+            {hgb&&b.sgN>0&&<><div style={{fontSize:10,fontWeight:700,color:'#E07800',marginTop:12,marginBottom:5,paddingBottom:3,borderBottom:'1px solid #eee'}}>Systemgebühr (sep. Rechnung)</div>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}><tbody>
               <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#555'}}>Netto</td><td style={{padding:'4px 7px',textAlign:'right'}}>{fmtE(b.sgN)}</td></tr>
               <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#9a3412'}}>+ USt 19%</td><td style={{padding:'4px 7px',textAlign:'right',color:'#9a3412'}}>+ {fmtE(b.sgU)}</td></tr>
@@ -205,8 +205,8 @@ function GutschriftPreview({ab,pos,sg}){
             </tbody></table></>}
 
             {hatS&&<div style={{marginTop:12,background:'linear-gradient(135deg,#fffbeb,#fef3c7)',border:'1px solid #f59e0b',borderRadius:6,padding:'8px 10px'}}>
-              <div style={{fontSize:9,fontWeight:700,color:'#92400e',textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>\u2b50 Staffel-Bonus erreicht!</div>
-              <div style={{fontSize:10,color:'#78350f',fontWeight:600}}>{b.sales} Sales \u2265 {staffel} \u2192 Erh\u00f6hte Rate aktiv</div>
+              <div style={{fontSize:9,fontWeight:700,color:'#92400e',textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>⭐ Staffel-Bonus erreicht!</div>
+              <div style={{fontSize:10,color:'#78350f',fontWeight:600}}>{b.sales} Sales ≥ {staffel} → Erhöhte Rate aktiv</div>
             </div>}
 
             <div style={{marginTop:10,background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:6,padding:'8px 10px'}}>
@@ -217,17 +217,17 @@ function GutschriftPreview({ab,pos,sg}){
               <div style={{height:8,background:'#e2e8f0',borderRadius:4,overflow:'hidden'}}>
                 <div style={{height:'100%',borderRadius:4,width:`${pct}%`,background:hatS?'linear-gradient(90deg,#22c55e,#16a34a)':'linear-gradient(90deg,#F5C500,#E07800)'}}></div>
               </div>
-              {!hatS&&<div style={{fontSize:8,color:'#94a3b8',marginTop:3,textAlign:'right'}}>Noch {staffel-b.sales} Sales bis zur n\u00e4chsten Stufe</div>}
+              {!hatS&&<div style={{fontSize:8,color:'#94a3b8',marginTop:3,textAlign:'right'}}>Noch {staffel-b.sales} Sales bis zur nächsten Stufe</div>}
             </div>
 
             <div style={{marginTop:10,background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:6,padding:'8px 10px',fontSize:9}}>
-              <b style={{color:'#9a3412'}}>\ud83d\udccb Stornoreserve:</b> <span style={{color:'#78350f'}}>Derzeit keine Stornoreserve einbehalten.</span>
+              <b style={{color:'#9a3412'}}>📋 Stornoreserve:</b> <span style={{color:'#78350f'}}>Derzeit keine Stornoreserve einbehalten.</span>
             </div>
           </div>
         </div>
 
         <div style={{marginTop:14,fontSize:9.5,color:'#555',lineHeight:1.6,borderTop:'1px solid #eee',paddingTop:8}}>
-          {hgb?`Diese Gutschrift gem. \u00a714 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers (gem. Gutschriftvereinbarung HVV). Nettobetrag: ${fmtE(b.net)} \u00b7 zzgl. 19% USt: ${fmtE(b.uB)} \u00b7 Brutto: ${fmtE(b.aus)}. Systemgeb\u00fchr (${fmtE(b.sgN+b.sgU)} brutto) wird sep. abgerechnet. Empf\u00e4nger: ${ab.mitarbeiter_name}${window.__vpData?.ustid?', USt-IdNr.: '+window.__vpData.ustid:''}${window.__vpData?.steuernummer?', StNr.: '+window.__vpData.steuernummer:''}. Aussteller: bee-doo GmbH, USt-IdNr. DE323940446, StNr. 44/214/0394.`
+          {hgb?`Diese Gutschrift gem. §14 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers (gem. Gutschriftvereinbarung HVV). Nettobetrag: ${fmtE(b.net)} · zzgl. 19% USt: ${fmtE(b.uB)} · Brutto: ${fmtE(b.aus)}. Systemgebühr (${fmtE(b.sgN+b.sgU)} brutto) wird sep. abgerechnet. Empfänger: ${ab.mitarbeiter_name}${window.__vpData?.ustid&&/^DE\d{9}$/.test(window.__vpData.ustid)?', USt-IdNr.: '+window.__vpData.ustid:''}${window.__vpData?.steuernummer&&window.__vpData.steuernummer.length>4?', StNr.: '+window.__vpData.steuernummer:''}. Aussteller: bee-doo GmbH, USt-IdNr. DE323940446, StNr. 44/214/0394.`
           :`Entgeltabrechnung ${ab.mitarbeiter_name}. Nettobetrag: ${fmtE(b.net)}.`}
         </div>
         <FooterBlock/>
@@ -238,29 +238,29 @@ function GutschriftPreview({ab,pos,sg}){
     <div className="gs-page" style={{padding:'14mm 16mm 28mm'}}>
       {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
       <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
-        <span>Provisionen {pLabel(ab.periode)}</span><span style={{color:'#aaa'}}>{bn} \u00b7 Seite 2</span>
+        <span>Provisionen {pLabel(ab.periode)}</span><span style={{color:'#aaa'}}>{bn} · Seite 2</span>
       </div>
       <div style={{fontSize:17,fontWeight:700,marginBottom:14}}>{ab.mitarbeiter_name} <span style={{fontSize:11,color:'#888',fontWeight:400}}>({k})</span></div>
       <div style={{color:'#E07800',fontWeight:700,fontSize:11,marginBottom:7,borderBottom:'1px solid #eee',paddingBottom:3}}>Einzelpositionen</div>
       <table style={{width:'100%',borderCollapse:'collapse',fontSize:10.5}}>
         <thead><tr style={{background:'#f5f5f5'}}><th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:9,textTransform:'uppercase',color:'#888'}}>Nr.</th><th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:9,textTransform:'uppercase',color:'#888'}}>Auftrag</th><th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:9,textTransform:'uppercase',color:'#888'}}>Kunde</th><th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:9,textTransform:'uppercase',color:'#888'}}>Art</th><th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'right',fontSize:9,textTransform:'uppercase',color:'#888'}}>Netto</th></tr></thead>
         <tbody>
-          {aP.map((p,i)=><tr key={i}><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#aaa',fontSize:9}}>{i+1}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#555',fontSize:10}}>{p.auftrag_nr||'\u2014'}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',fontSize:10,fontWeight:p.override_betrag!=null?600:400}}>{p.kunde||'\u2014'}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#555',fontSize:10}}>{p.produkt||p.typ}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',textAlign:'right',fontWeight:600,fontSize:10,color:p.override_betrag!=null?'#B45309':undefined}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
-          {aE.map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb'}}><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#aaa',fontSize:9}}>\u2014</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee'}}>\u2014</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee'}}>{p.kunde||p.notiz||p.typ}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee'}}>{p.typ==='einmalzahlung'?'Einmalzahlung':p.typ==='abzug'?'Abzug':'Sonstiges'}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',textAlign:'right',fontWeight:600}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
+          {aP.map((p,i)=><tr key={i}><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#aaa',fontSize:9}}>{i+1}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#555',fontSize:10}}>{p.auftrag_nr||'—'}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',fontSize:10,fontWeight:p.override_betrag!=null?600:400}}>{p.kunde||'—'}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#555',fontSize:10}}>{p.produkt||p.typ}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',textAlign:'right',fontWeight:600,fontSize:10,color:p.override_betrag!=null?'#B45309':undefined}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
+          {aE.map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb'}}><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#aaa',fontSize:9}}>—</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee'}}>—</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee'}}>{p.kunde||p.notiz||p.typ}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee'}}>{p.typ==='einmalzahlung'?'Einmalzahlung':p.typ==='abzug'?'Abzug':'Sonstiges'}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',textAlign:'right',fontWeight:600}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
           <tr style={{fontWeight:700,borderTop:'2px solid #333',background:'#f9f9f9'}}><td></td><td colSpan={3} style={{padding:'6px 8px'}}>Netto-Summe</td><td style={{padding:'6px 8px',textAlign:'right'}}>{fmtE(b.bp+b.es)}</td></tr>
-          {hgb&&<tr style={{background:'#f8f8f2'}}><td></td><td colSpan={3} style={{padding:'5px 8px',color:'#555'}}>./. Systemgeb\u00fchr + USt</td><td style={{padding:'5px 8px',textAlign:'right',color:'#9a3412'}}>-{fmtE(b.sgN+b.sgU)}</td></tr>}
+          {hgb&&<tr style={{background:'#f8f8f2'}}><td></td><td colSpan={3} style={{padding:'5px 8px',color:'#555'}}>./. Systemgebühr + USt</td><td style={{padding:'5px 8px',textAlign:'right',color:'#9a3412'}}>-{fmtE(b.sgN+b.sgU)}</td></tr>}
           <tr><td></td><td colSpan={3} style={{padding:'5px 8px',color:'#555',borderTop:'1px solid #ddd'}}>Nettobetrag</td><td style={{padding:'5px 8px',textAlign:'right',borderTop:'1px solid #ddd'}}>{fmtE(b.net)}</td></tr>
           {hgb&&<tr style={{background:'#fffbeb'}}><td></td><td colSpan={3} style={{padding:'5px 8px',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'5px 8px',textAlign:'right',color:'#92400e',fontWeight:700}}>+ {fmtE(b.uB)}</td></tr>}
           <tr style={{background:'linear-gradient(135deg,#f0fdf4,#dcfce7)',borderTop:'2px solid #166534'}}><td></td><td colSpan={3} style={{padding:'7px 8px',fontWeight:800,fontSize:12}}>BRUTTO-AUSZAHLUNG</td><td style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:13,color:'#166534'}}>{fmtE(b.aus)}</td></tr>
         </tbody>
       </table>
 
-      {ab.stb_kommentar&&<div style={{marginTop:16,padding:10,background:'#fff8e1',border:'1px solid #fde68a',borderRadius:4,fontSize:10}}><b style={{color:'#92400e'}}>\ud83d\udcce Kommentar Steuerberater:</b><br/>{ab.stb_kommentar}</div>}
+      {ab.stb_kommentar&&<div style={{marginTop:16,padding:10,background:'#fff8e1',border:'1px solid #fde68a',borderRadius:4,fontSize:10}}><b style={{color:'#92400e'}}>📎 Kommentar Steuerberater:</b><br/>{ab.stb_kommentar}</div>}
 
       <div style={{marginTop:20,display:'grid',gridTemplateColumns:'1fr 1fr',gap:30}}>
-        <div style={{textAlign:'center'}}><div style={{borderBottom:'1px solid #333',height:50,marginBottom:6}}></div><div style={{fontSize:9,color:'#888'}}>Datum, Unterschrift Gesch\u00e4ftsf\u00fchrer</div><div style={{fontSize:9,color:'#555',fontWeight:600}}>bee-doo GmbH</div></div>
+        <div style={{textAlign:'center'}}><div style={{borderBottom:'1px solid #333',height:50,marginBottom:6}}></div><div style={{fontSize:9,color:'#888'}}>Datum, Unterschrift Geschäftsführer</div><div style={{fontSize:9,color:'#555',fontWeight:600}}>bee-doo GmbH</div></div>
         <div style={{textAlign:'center'}}>
-          {isF&&<div style={{display:'inline-block',border:'2px solid #166534',color:'#166534',padding:'4px 12px',borderRadius:4,fontWeight:700,fontSize:11,transform:'rotate(-3deg)',marginTop:8}}>\u2713 FREIGEGEBEN</div>}
+          {isF&&<div style={{display:'inline-block',border:'2px solid #166534',color:'#166534',padding:'4px 12px',borderRadius:4,fontWeight:700,fontSize:11,transform:'rotate(-3deg)',marginTop:8}}>✓ FREIGEGEBEN</div>}
           {isF&&<div style={{fontSize:9,color:'#166534',marginTop:4}}>{ab.freigegeben_von||'Patrick Grabowski'}<br/>{ab.freigegeben_am?new Date(ab.freigegeben_am).toLocaleDateString('de-DE'):heute}</div>}
           {!isF&&<div style={{height:50,display:'flex',alignItems:'center',justifyContent:'center',color:'#ccc',fontSize:10,fontStyle:'italic'}}>Ausstehend</div>}
           <div style={{fontSize:9,color:'#888'}}>Freigabe-Vermerk</div>
@@ -286,44 +286,44 @@ function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
   return <div className="edit-panel">
     <div className="edit-section">
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-        <span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status==='entwurf'?'\ud83d\udcdd Entwurf':ab.status==='probeabrechnung'?'\ud83d\udd0d Probe':ab.status==='freigegeben'?'\u2705 Freigegeben':'\ud83d\udcb8 Ausgezahlt'}</span>
+        <span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status==='entwurf'?'📝 Entwurf':ab.status==='probeabrechnung'?'🔍 Probe':ab.status==='freigegeben'?'✅ Freigegeben':'💸 Ausgezahlt'}</span>
         <span style={{fontSize:11,color:'#8b949e'}}>{ab.mitarbeiter_name}</span>
       </div>
       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-        <button className="btn btn-primary btn-sm" onClick={onSave} disabled={lo}>\ud83d\udcbe Speichern</button>
-        {!lo&&<button className="btn btn-success btn-sm" onClick={onFrei}>\u2705 Freigeben</button>}
-        {ab.status==='freigegeben'&&<button className="btn btn-sm" style={{background:'#1f6feb',color:'#fff'}} onClick={()=>{setAb(p=>({...p,status:'ausgezahlt',ausgezahlt_am:new Date().toISOString()}));setTimeout(onSave,100);}}>\ud83d\udcb8 Ausgezahlt</button>}
-        <button className="btn btn-secondary btn-sm" onClick={onPdf}>\ud83d\udcc4 PDF</button>
+        <button className="btn btn-primary btn-sm" onClick={onSave} disabled={lo}>💾 Speichern</button>
+        {!lo&&<button className="btn btn-success btn-sm" onClick={onFrei}>✅ Freigeben</button>}
+        {ab.status==='freigegeben'&&<button className="btn btn-sm" style={{background:'#1f6feb',color:'#fff'}} onClick={()=>{setAb(p=>({...p,status:'ausgezahlt',ausgezahlt_am:new Date().toISOString()}));setTimeout(onSave,100);}}>💸 Ausgezahlt</button>}
+        <button className="btn btn-secondary btn-sm" onClick={onPdf}>📄 PDF</button>
       </div>
     </div>
     <div className="edit-section">
-      <div className="edit-section-title">\ud83d\udcb0 Zusammenfassung</div>
+      <div className="edit-section-title">💰 Zusammenfassung</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
         <div style={{background:'#161b22',padding:8,borderRadius:6,border:'1px solid #21262d'}}><div style={{fontSize:10,color:'#8b949e'}}>Sales</div><div style={{fontSize:18,fontWeight:700,color:'#F5C500'}}>{b.sales}</div></div>
         <div style={{background:'#161b22',padding:8,borderRadius:6,border:'1px solid #21262d'}}><div style={{fontSize:10,color:'#8b949e'}}>Auszahlung</div><div style={{fontSize:16,fontWeight:700,color:'#3fb950'}}>{fmtE(b.aus)}</div></div>
       </div>
     </div>
     <div className="edit-section">
-      <div className="edit-section-title">\ud83d\udccb Provisionen ({prov.filter(p=>p.aktiv&&!p.zurueckgestellt).length}/{prov.length})</div>
+      <div className="edit-section-title">📋 Provisionen ({prov.filter(p=>p.aktiv&&!p.zurueckgestellt).length}/{prov.length})</div>
       {prov.map((p,i)=>{const gi=pos.indexOf(p);return <div key={i} className={`pos-row ${!p.aktiv?'inactive':''}`}>
         <button className={`toggle-btn ${p.aktiv?'active':'inactive-toggle'}`} onClick={()=>tgl(gi)} disabled={lo}/>
-        <div className="pos-kunde" style={{fontSize:11}}>{p.kunde||'\u2014'}{p.zurueckgestellt&&<span style={{fontSize:9,background:'#30363d',color:'#8b949e',padding:'1px 6px',borderRadius:3,marginLeft:6}}>\u23f8</span>}</div>
+        <div className="pos-kunde" style={{fontSize:11}}>{p.kunde||'—'}{p.zurueckgestellt&&<span style={{fontSize:9,background:'#30363d',color:'#8b949e',padding:'1px 6px',borderRadius:3,marginLeft:6}}>⏸</span>}</div>
         <div className="pos-betrag" style={p.override_betrag!=null?{color:'#F5C500'}:{}}>{!lo?<input className="override-input" value={p.override_betrag!=null?p.override_betrag:p.original_betrag} onChange={e=>ovr(gi,e.target.value)}/>:<span>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</span>}</div>
-        {!lo&&<button className="btn btn-sm" style={{padding:'2px 6px',fontSize:10,background:p.zurueckgestellt?'#238636':'#30363d',color:p.zurueckgestellt?'#fff':'#8b949e'}} onClick={()=>zur(gi)}>\u23f8</button>}
+        {!lo&&<button className="btn btn-sm" style={{padding:'2px 6px',fontSize:10,background:p.zurueckgestellt?'#238636':'#30363d',color:p.zurueckgestellt?'#fff':'#8b949e'}} onClick={()=>zur(gi)}>⏸</button>}
       </div>;})}
     </div>
     <div className="edit-section">
-      <div className="edit-section-title">\u2795 Einmalzahlungen / Abz\u00fcge</div>
+      <div className="edit-section-title">➕ Einmalzahlungen / Abzüge</div>
       {extra.map((p,i)=>{const gi=pos.indexOf(p);return <div key={i} className="extra-row">
         <input className="extra-input" placeholder="Bezeichnung" value={p.kunde||p.notiz||''} onChange={e=>upE(gi,'kunde',e.target.value)} disabled={lo}/>
         <input className="extra-input extra-amount" placeholder="Betrag" value={p.original_betrag||''} onChange={e=>upE(gi,'original_betrag',e.target.value)} disabled={lo}/>
-        <select className="extra-input" style={{width:90}} value={p.typ} onChange={e=>upE(gi,'typ',e.target.value)} disabled={lo}><option value="einmalzahlung">+ Zahlung</option><option value="abzug">\u2212 Abzug</option><option value="sonstiges">Sonstiges</option></select>
-        {!lo&&<button className="btn btn-danger btn-sm btn-icon" onClick={()=>rmE(gi)}>\u2715</button>}
+        <select className="extra-input" style={{width:90}} value={p.typ} onChange={e=>upE(gi,'typ',e.target.value)} disabled={lo}><option value="einmalzahlung">+ Zahlung</option><option value="abzug">− Abzug</option><option value="sonstiges">Sonstiges</option></select>
+        {!lo&&<button className="btn btn-danger btn-sm btn-icon" onClick={()=>rmE(gi)}>✕</button>}
       </div>;})}
-      {!lo&&<div style={{display:'flex',gap:6}}><button className="btn btn-secondary btn-sm" onClick={()=>addE('einmalzahlung')}>+ Zahlung</button><button className="btn btn-secondary btn-sm" onClick={()=>addE('abzug')}>\u2212 Abzug</button></div>}
+      {!lo&&<div style={{display:'flex',gap:6}}><button className="btn btn-secondary btn-sm" onClick={()=>addE('einmalzahlung')}>+ Zahlung</button><button className="btn btn-secondary btn-sm" onClick={()=>addE('abzug')}>− Abzug</button></div>}
     </div>
-    <div className="edit-section"><div className="edit-section-title">\ud83d\udcdd Notizen</div><textarea className="notes-area" placeholder="Notizen..." value={ab.notizen||''} onChange={e=>setAb(p=>({...p,notizen:e.target.value}))} disabled={lo}/></div>
-    <div className="edit-section"><div className="edit-section-title">\ud83d\udcce Steuerberater</div><textarea className="notes-area" placeholder="Kommentar..." value={ab.stb_kommentar||''} onChange={e=>setAb(p=>({...p,stb_kommentar:e.target.value}))} disabled={lo}/></div>
+    <div className="edit-section"><div className="edit-section-title">📝 Notizen</div><textarea className="notes-area" placeholder="Notizen..." value={ab.notizen||''} onChange={e=>setAb(p=>({...p,notizen:e.target.value}))} disabled={lo}/></div>
+    <div className="edit-section"><div className="edit-section-title">📎 Steuerberater</div><textarea className="notes-area" placeholder="Kommentar..." value={ab.stb_kommentar||''} onChange={e=>setAb(p=>({...p,stb_kommentar:e.target.value}))} disabled={lo}/></div>
   </div>;
 }
 
@@ -340,16 +340,16 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
   const save=async()=>{try{const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');const d={...ab,anzahl_sales:b.sales,brutto_provisionen:b.bp,systemgebuehr_netto:b.sgN,systemgebuehr_ust:b.sgU,einmalzahlungen_summe:b.es,nettobetrag:b.net,ust_satz:b.uS,ust_betrag:b.uB,auszahlungssumme:b.aus,belegnummer:gBN(ab.periode,ab.kuerzel||gK(ab.mitarbeiter_name),1),geaendert_am:new Date().toISOString()};
   let s;if(ab.id){const{id,erstellt_am,...u}=d;s=(await sbU('pay_abrechnungen',`id=eq.${ab.id}`,u))[0];await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${ab.id}`);}else{const{id,...ins}=d;s=(await sbP('pay_abrechnungen',ins))[0];}
   const pd=pos.map(p=>({abrechnung_id:s.id,typ:p.typ,auftrag_nr:p.auftrag_nr,kunde:p.kunde,produkt:p.produkt,original_betrag:p.original_betrag,override_betrag:p.override_betrag,aktiv:p.aktiv,zurueckgestellt:p.zurueckgestellt,notiz:p.notiz}));
-  if(pd.length){const sp=await sbP('pay_abrechnungen_positionen',pd);setPos(sp);}setAb(s);window.__t?.('\u2705 Gespeichert');onRef?.();}catch(e){window.__t?.('Fehler: '+e.message,'error');}};
+  if(pd.length){const sp=await sbP('pay_abrechnungen_positionen',pd);setPos(sp);}setAb(s);window.__t?.('✅ Gespeichert');onRef?.();}catch(e){window.__t?.('Fehler: '+e.message,'error');}};
 
-  const frei=async()=>{if(!confirm(`${ab.mitarbeiter_name} (${ab.periode}) freigeben?\n\nDanach keine \u00c4nderungen mehr m\u00f6glich!`))return;setAb(p=>({...p,status:'freigegeben',freigegeben_am:new Date().toISOString(),freigegeben_von:'Patrick Grabowski'}));setTimeout(save,100);};
-  const pdf=async()=>{const pages=ref.current?.querySelectorAll('.gs-page');if(!pages?.length)return;window.__t?.('PDF wird erstellt...');try{const c=document.createElement('div');pages.forEach(p=>c.appendChild(p.cloneNode(true)));await html2pdf().set({margin:0,filename:`Gutschrift_${ab.periode.replace('/','-')}_${ab.kuerzel||gK(ab.mitarbeiter_name)}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy'],before:'.gs-page'}}).from(c).save();window.__t?.('\u2705 PDF heruntergeladen');}catch(e){window.__t?.('PDF-Fehler: '+e.message,'error');}};
+  const frei=async()=>{if(!confirm(`${ab.mitarbeiter_name} (${ab.periode}) freigeben?\n\nDanach keine Änderungen mehr möglich!`))return;setAb(p=>({...p,status:'freigegeben',freigegeben_am:new Date().toISOString(),freigegeben_von:'Patrick Grabowski'}));setTimeout(save,100);};
+  const pdf=async()=>{const pages=ref.current?.querySelectorAll('.gs-page');if(!pages?.length)return;window.__t?.('PDF wird erstellt...');try{const c=document.createElement('div');pages.forEach(p=>c.appendChild(p.cloneNode(true)));await html2pdf().set({margin:0,filename:`Gutschrift_${ab.periode.replace('/','-')}_${ab.kuerzel||gK(ab.mitarbeiter_name)}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy'],before:'.gs-page'}}).from(c).save();window.__t?.('✅ PDF heruntergeladen');}catch(e){window.__t?.('PDF-Fehler: '+e.message,'error');}};
 
   if(ld)return<div className="detail-overlay"><div className="detail-container"><div className="loading"><div className="spinner"/>Lade...</div></div></div>;
   if(!ab)return null;
   return<div className="detail-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div className="detail-container">
-      <div className="detail-header"><div style={{display:'flex',alignItems:'center',gap:12}}><button className="btn btn-secondary btn-sm" onClick={onClose}>\u2190 Zur\u00fcck</button><span style={{fontWeight:700,fontSize:15}}>{ab.mitarbeiter_name}</span><span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status}</span></div><div style={{fontSize:12,color:'#8b949e'}}>{pLabel(ab.periode)}</div></div>
+      <div className="detail-header"><div style={{display:'flex',alignItems:'center',gap:12}}><button className="btn btn-secondary btn-sm" onClick={onClose}>← Zurück</button><span style={{fontWeight:700,fontSize:15}}>{ab.mitarbeiter_name}</span><span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status}</span></div><div style={{fontSize:12,color:'#8b949e'}}>{pLabel(ab.periode)}</div></div>
       <div className="detail-body">
         <EditPanel ab={ab} pos={pos} setPos={setPos} sg={sg} onSave={save} onFrei={frei} onPdf={pdf} onClose={onClose} setAb={setAb}/>
         <div className="preview-panel" ref={ref}><GutschriftPreview ab={ab} pos={pos} sg={sg}/></div>
@@ -369,26 +369,26 @@ function App(){
   const vtG=useMemo(()=>{const g={};ausz.forEach(a=>{const n=a.vertriebler;if(!g[n])g[n]={name:n,items:[],total:0};g[n].items.push(a);g[n].total+=parseFloat(a.netto)||0;});abrs.forEach(ab=>{if(!g[ab.mitarbeiter_name])g[ab.mitarbeiter_name]={name:ab.mitarbeiter_name,items:[],total:ab.brutto_provisionen||0};g[ab.mitarbeiter_name].abrechnung=ab;});return Object.values(g).sort((a,b)=>b.total-a.total);},[ausz,abrs]);
   const totA=abrs.reduce((s,a)=>s+(parseFloat(a.auszahlungssumme)||0),0);const frg=abrs.filter(a=>a.status==='freigegeben'||a.status==='ausgezahlt').length;
 
-  const alleErstellen=async()=>{const tc=vtG.filter(g=>!g.abrechnung);if(!confirm(`Probeabrechnungen f\u00fcr ${tc.length} VTs erstellen?`))return;window.__t?.('Erstelle...');let c=0;
-  for(const g of tc){try{const k=gK(g.name);const pd=g.items.map(item=>({typ:'provision',kunde:item.kunde||'\u2014',produkt:item.produkt||'Solar/WP',original_betrag:parseFloat(item.netto)||0,aktiv:true,zurueckgestellt:false}));const b=calc(pd.map(p=>({...p,override_betrag:null})),sg,true);const s=await sbP('pay_abrechnungen',{periode:per,mitarbeiter_name:g.name,kuerzel:k,beschaeftigungsart:'hgb',status:'entwurf',anzahl_sales:b.sales,brutto_provisionen:b.bp,systemgebuehr_netto:b.sgN,systemgebuehr_ust:b.sgU,nettobetrag:b.net,ust_satz:b.uS,ust_betrag:b.uB,auszahlungssumme:b.aus,belegnummer:gBN(per,k,c+1)});if(pd.length&&s[0])await sbP('pay_abrechnungen_positionen',pd.map(p=>({...p,abrechnung_id:s[0].id})));c++;}catch(e){console.error(g.name,e);}}
-  window.__t?.(`\u2705 ${c} Abrechnungen erstellt`);loadP();};
+  const alleErstellen=async()=>{const tc=vtG.filter(g=>!g.abrechnung);if(!confirm(`Probeabrechnungen für ${tc.length} VTs erstellen?`))return;window.__t?.('Erstelle...');let c=0;
+  for(const g of tc){try{const k=gK(g.name);const pd=g.items.map(item=>({typ:'provision',kunde:item.kunde||'—',produkt:item.produkt||'Solar/WP',original_betrag:parseFloat(item.netto)||0,aktiv:true,zurueckgestellt:false}));const b=calc(pd.map(p=>({...p,override_betrag:null})),sg,true);const s=await sbP('pay_abrechnungen',{periode:per,mitarbeiter_name:g.name,kuerzel:k,beschaeftigungsart:'hgb',status:'entwurf',anzahl_sales:b.sales,brutto_provisionen:b.bp,systemgebuehr_netto:b.sgN,systemgebuehr_ust:b.sgU,nettobetrag:b.net,ust_satz:b.uS,ust_betrag:b.uB,auszahlungssumme:b.aus,belegnummer:gBN(per,k,c+1)});if(pd.length&&s[0])await sbP('pay_abrechnungen_positionen',pd.map(p=>({...p,abrechnung_id:s[0].id})));c++;}catch(e){console.error(g.name,e);}}
+  window.__t?.(`✅ ${c} Abrechnungen erstellt`);loadP();};
 
   return<Toast>
     <div className="app-header"><div className="logo-area"><div><div className="logo-text">bee<span>-doo</span> PAY</div><div className="logo-sub">Probeabrechnung</div></div></div>
-    <div className="controls-bar">{pers.length>0&&<select className="sel-period" value={per} onChange={e=>setPer(e.target.value)}>{pers.map(p=><option key={p} value={p}>{pLabel(p)}</option>)}</select>}{vtG.filter(g=>!g.abrechnung).length>0&&<button className="btn btn-primary" onClick={alleErstellen}>\u26a1 Alle erstellen ({vtG.filter(g=>!g.abrechnung).length})</button>}<a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>\ud83c\udfe0</a></div></div>
+    <div className="controls-bar">{pers.length>0&&<select className="sel-period" value={per} onChange={e=>setPer(e.target.value)}>{pers.map(p=><option key={p} value={p}>{pLabel(p)}</option>)}</select>}{vtG.filter(g=>!g.abrechnung).length>0&&<button className="btn btn-primary" onClick={alleErstellen}>⚡ Alle erstellen ({vtG.filter(g=>!g.abrechnung).length})</button>}<a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>🏠</a></div></div>
     <div className="stats-row">
-      <div className="stat-card"><div className="stat-label">Periode</div><div className="stat-value">{per?pLabel(per):'\u2014'}</div></div>
+      <div className="stat-card"><div className="stat-label">Periode</div><div className="stat-value">{per?pLabel(per):'—'}</div></div>
       <div className="stat-card"><div className="stat-label">Vertriebler</div><div className="stat-value gold">{vtG.length}</div></div>
       <div className="stat-card"><div className="stat-label">Abrechnungen</div><div className="stat-value">{abrs.length} <span style={{fontSize:12,color:'#8b949e'}}>/ {vtG.length}</span></div></div>
       <div className="stat-card"><div className="stat-label">Freigegeben</div><div className="stat-value green">{frg}</div></div>
       <div className="stat-card"><div className="stat-label">Gesamtsumme</div><div className="stat-value gold">{fmtE(totA)}</div></div>
     </div>
-    {ld?<div className="loading"><div className="spinner"/>Lade...</div>:vtG.length===0?<div className="empty-state"><div className="icon">\ud83d\udced</div><h3>Keine Daten f\u00fcr {per?pLabel(per):'\u2014'}</h3><p>F\u00fcr diese Periode liegen noch keine Daten vor.</p></div>:
+    {ld?<div className="loading"><div className="spinner"/>Lade...</div>:vtG.length===0?<div className="empty-state"><div className="icon">📭</div><h3>Keine Daten für {per?pLabel(per):'—'}</h3><p>Für diese Periode liegen noch keine Daten vor.</p></div>:
     <div className="main-grid">{vtG.map(g=>{const ab=g.abrechnung;const k=ab?.kuerzel||gK(g.name);const st=ab?.status||'neu';return<div key={g.name} className="vt-card" onClick={()=>setSel({name:g.name,abrechnungId:ab?.id,data:g.items})}>
       <div className="vt-card-header"><span className="vt-name">{g.name}</span><span className="vt-kuerzel">{k}</span></div>
       <div className="vt-sales">{g.items.length} Positionen</div>
       <div className="vt-betrag">{fmtE(ab?ab.auszahlungssumme:g.total)}</div>
-      <div className="vt-card-footer"><span className={`badge ${st==='neu'?'badge-entwurf':st==='entwurf'?'badge-entwurf':st==='probeabrechnung'?'badge-probe':st==='freigegeben'?'badge-freigegeben':'badge-ausgezahlt'}`}>{st==='neu'?'\u2b1c Neu':st==='entwurf'?'\ud83d\udcdd Entwurf':st==='probeabrechnung'?'\ud83d\udd0d Probe':st==='freigegeben'?'\u2705 Freigegeben':'\ud83d\udcb8 Ausgezahlt'}</span><span style={{fontSize:11,color:'#484f58'}}>{ab?`${ab.anzahl_sales||0} Sales`:''}</span></div>
+      <div className="vt-card-footer"><span className={`badge ${st==='neu'?'badge-entwurf':st==='entwurf'?'badge-entwurf':st==='probeabrechnung'?'badge-probe':st==='freigegeben'?'badge-freigegeben':'badge-ausgezahlt'}`}>{st==='neu'?'⬜ Neu':st==='entwurf'?'📝 Entwurf':st==='probeabrechnung'?'🔍 Probe':st==='freigegeben'?'✅ Freigegeben':'💸 Ausgezahlt'}</span><span style={{fontSize:11,color:'#484f58'}}>{ab?`${ab.anzahl_sales||0} Sales`:''}</span></div>
     </div>;})}</div>}
     {sel&&<DetailView aId={sel.abrechnungId} per={per} vtN={sel.name} vtD={sel.data} sg={sg} onClose={()=>setSel(null)} onRef={loadP}/>}
   </Toast>;
