@@ -193,21 +193,34 @@ function App() {
   const loadData = useCallback(async (per) => {
     setLoading(true);
     try {
-      const [y,m] = per.split('/');
-      const periodeStart = `${y}-${m}-01`;
-      // Leistungsmonat = Vormonat
-      const lzD = new Date(parseInt(y), parseInt(m)-2, 1);
-      const leistungsStart = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
+      const isGesamt = per === 'gesamt';
+      let periodeStart, leistungsStart;
+      if(!isGesamt) {
+        const [y,m] = per.split('/');
+        periodeStart = `${y}-${m}-01`;
+        const lzD = new Date(parseInt(y), parseInt(m)-2, 1);
+        leistungsStart = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
+      }
+
+      const auftraegeQ = isGesamt
+        ? 'storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=*'
+        : `storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=*`;
+      const stornoQ = isGesamt
+        ? 'storniert=eq.true&select=vertriebler_id,kwp'
+        : `storniert=eq.true&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,kwp`;
+      const offenQ = isGesamt
+        ? 'zahlungsstatus=eq.offen&storniert=eq.false&select=vertriebler_id,kwp'
+        : `zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,kwp`;
 
       const [regeln, stufen, mitarbeiter, auftraege, sonderArr, teamBonusArr, stornoArr, offenArr] = await Promise.all([
         sbG('provisions_regeln','aktiv=eq.true'),
         sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
         sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ'),
-        sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=*`),
+        sbG('pay_auftraege', auftraegeQ),
         sbG('pay_sonderprovisionen','aktiv=eq.true'),
         sbG('pay_team_bonus','aktiv=eq.true'),
-        sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,kwp`),
-        sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,kwp`),
+        sbG('pay_auftraege', stornoQ),
+        sbG('pay_auftraege', offenQ),
       ]);
 
       // All auszahlbare for Staffel counting
@@ -266,7 +279,7 @@ function App() {
             vpKwp += (o.kwp||0);
             const q = (o.lead_quelle||'').toLowerCase();
             if(q.includes('eigenlead') && regel.betrag_eigenlead>0 && !(sonderFlat&&(sonderFlat.beschreibung||'').toLowerCase().includes('kein eigenlead'))) vpEigen += regel.betrag_eigenlead;
-            if(q.includes('empfehlung') && regel.betrag_empfehlung>0) vpEmpf += regel.betrag_empfehlung;
+            if(q.includes('empfehlung') && regel.betrag_empfehlung>0 && !(sonderFlat&&(sonderFlat.beschreibung||'').toLowerCase().includes('kein empfehlung'))) vpEmpf += regel.betrag_empfehlung;
             if(o.speichererweiterung && regel.betrag_speicher>0) vpSpeicher += regel.betrag_speicher;
           }
         }
@@ -361,10 +374,11 @@ function App() {
     <div className="controls">
       <label style={{fontSize:13,color:'var(--ts)'}}>Abrechnungsmonat:</label>
       <select value={periode} onChange={e => setPeriode(e.target.value)}>
+        <option value="gesamt">📊 Gesamt – alle Aufträge</option>
         {periodOptions.map(p => <option key={p} value={p}>{monatsName(p)}</option>)}
       </select>
       <button className="primary" onClick={() => loadData(periode)}>🔄 Aktualisieren</button>
-      <div className="info">Leistungszeitraum: Alle offenen Aufträge bis {monatsName(periode)}</div>
+      <div className="info">{periode === 'gesamt' ? 'Alle Aufträge (offen + abgerechnet)' : `Leistungszeitraum: Alle offenen Aufträge bis ${monatsName(periode)}`}</div>
     </div>
 
     {loading && <div className="loading"><div className="spinner"></div>Lade Kostendaten...</div>}
