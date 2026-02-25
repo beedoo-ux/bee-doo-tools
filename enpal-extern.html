@@ -7,883 +7,232 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
-<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',system-ui,sans-serif;background:#06080F;color:#E6EDF3;min-height:100vh;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#06080F;color:#E6EDF3;min-height:100vh;-webkit-font-smoothing:antialiased}
 button,select,input{font-family:inherit;color:inherit}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-thumb{background:#1B2332;border-radius:3px}
-
-/* === TABLET (768px) === */
-@media(max-width:768px){
-  .grid-wrap{grid-template-columns:1fr 1fr !important}
-  .flex-row-wrap{flex-wrap:wrap !important}
-  .side-by-side>div{flex:1 1 100% !important;min-width:0 !important}
-  .sec-pad{padding:16px !important}
-  .header-bar{padding:0 14px !important}
-  .header-bar .hide-tablet{display:none !important}
-  .kpi-row{gap:8px !important}
-  .kpi-row>div{min-width:110px !important;padding:12px 14px !important}
-}
-/* === MOBILE (480px) === */
-@media(max-width:480px){
-  .grid-wrap{grid-template-columns:1fr !important}
-  .content-area{padding:12px !important}
-  .sec-pad{padding:12px !important}
-  .tab-bar button{padding:6px 10px !important;font-size:11px !important}
-  .kpi-row>div{min-width:0 !important;flex:1 1 45% !important}
-  .header-bar{height:auto !important;padding:10px 12px !important;flex-wrap:wrap !important}
-  table{font-size:10px !important}
-  .chart-h-280{height:200px !important}
-  .chart-h-240{height:180px !important}
-  .chart-h-220{height:160px !important}
-  .chart-h-200{height:160px !important}
-  .chart-h-180{height:140px !important}
-  input{font-size:16px !important}
-  button{min-height:44px}
-}
+@media(max-width:768px){.kpi-grid{grid-template-columns:repeat(2,1fr)!important}.side-by-side{flex-direction:column!important}.section-card{padding:14px!important}.main-content{padding:14px!important}.tab-btn{padding:6px 10px!important;font-size:11px!important}}
+@media(max-width:480px){.kpi-grid{grid-template-columns:1fr!important}.login-card{padding:28px 20px!important;margin:0 12px!important}input[type="password"]{font-size:16px!important}table{font-size:11px!important}table th,table td{padding:5px 4px!important}.header-bar{flex-direction:column!important;height:auto!important;padding:10px 14px!important;gap:8px}.header-right{width:100%;justify-content:space-between!important}.tab-bar{overflow-x:auto;-webkit-overflow-scrolling:touch}.tab-btn{white-space:nowrap;font-size:11px!important;padding:6px 8px!important}}
 </style>
 </head>
 <body>
 <a href="index.html" style="position:fixed;top:10px;left:10px;z-index:9999;background:#111827;border:1px solid #333;color:#9ca3af;padding:6px 13px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;font-family:inherit;transition:all .15s" onmouseover="this.style.color='#F5C500';this.style.borderColor='#F5C500'" onmouseout="this.style.color='#9ca3af';this.style.borderColor='#333'">← Launcher</a>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useMemo } = React;
-const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } = Recharts;
+const{useState}=React;
+const{BarChart,Bar,XAxis,YAxis,CartesianGrid,Tooltip,ResponsiveContainer,PieChart,Pie,Cell,Legend}=Recharts;
+const PW='Enpal2026!',SK='enpal_ext_v6';
+const C={bg:'#06080F',card:'#0D1117',border:'#1B2332',text:'#E6EDF3',sec:'#8B949E',dim:'#6B7280',orange:'#F97316',green:'#3FB950',red:'#F85149',blue:'#58A6FF',amber:'#F0A030',cyan:'#56D4DD',purple:'#BC8CFF'};
+const CL=[C.orange,C.green,C.cyan,C.amber,C.purple,C.blue,C.red,'#E879F9','#22D3EE','#94A3B8'];
+const fmt=n=>n==null?'—':Number(n).toLocaleString('de-DE');
+const fmtP=n=>n==null?'—':Number(n).toFixed(1)+' %';
+const eur=n=>n==null?'—':Math.round(n).toLocaleString('de-DE')+' €';
 
-/* ═══ COLORS ═══ */
-const C = {
-  bg:'#06080F', card:'#0D1117', border:'#1B2332',
-  text:'#E6EDF3', sec:'#8B949E', dim:'#6E7681',
-  orange:'#F97316', green:'#3FB950', red:'#F85149',
-  blue:'#58A6FF', amber:'#F0A030', cyan:'#56D4DD',
-  purple:'#BC8CFF', pink:'#F778BA', teal:'#2DD4BF',
+const E={
+  jan:{leads:211,wp:75,kl:133,term:9,ang:6,rekl:102,ne:51},
+  feb:{leads:973,wp:915,kl:58,term:76,ang:10,rekl:317,ne5:189,ne:180,wvl:107},
+  terme:108,termeWP:98,termeKl:10,termeAbg:10,termeAF:14,termeOffen:84,sales:1,salesNetto:30195,
+  dailyImport:[{d:"02.02.",wp:164,kl:5,t:169},{d:"03.02.",wp:96,kl:5,t:101},{d:"04.02.",wp:73,kl:15,t:88},{d:"05.02.",wp:102,kl:6,t:108},{d:"06.02.",wp:60,kl:9,t:69},{d:"07.02.",wp:41,kl:1,t:42},{d:"09.02.",wp:82,kl:2,t:84},{d:"10.02.",wp:88,kl:4,t:92},{d:"11.02.",wp:125,kl:5,t:130},{d:"12.02.",wp:84,kl:5,t:89}],
+  dailyErstellt:[{d:"02.02.",wp:0,kl:2,t:2},{d:"03.02.",wp:18,kl:0,t:18},{d:"04.02.",wp:8,kl:2,t:10},{d:"05.02.",wp:18,kl:1,t:19},{d:"06.02.",wp:7,kl:3,t:10},{d:"07.02.",wp:5,kl:1,t:6},{d:"09.02.",wp:11,kl:0,t:11},{d:"10.02.",wp:3,kl:0,t:3},{d:"11.02.",wp:14,kl:1,t:15},{d:"12.02.",wp:14,kl:0,t:14}],
+  dailyTermine:[{d:"03.02.",abg:0,af:1,offen:0},{d:"05.02.",abg:1,af:0,offen:0},{d:"09.02.",abg:2,af:0,offen:1},{d:"10.02.",abg:2,af:1,offen:0},{d:"11.02.",abg:2,af:1,offen:2},{d:"12.02.",abg:3,af:2,offen:2},{d:"13.02.",abg:0,af:0,offen:5},{d:"14.02.",abg:0,af:0,offen:1},{d:"16.02.",abg:0,af:1,offen:7},{d:"17.02.",abg:0,af:3,offen:6},{d:"18.02.",abg:0,af:2,offen:5},{d:"19.02.",abg:0,af:0,offen:6},{d:"20.02.",abg:0,af:0,offen:10},{d:"21.02.",abg:0,af:0,offen:2},{d:"23.02.",abg:0,af:2,offen:3},{d:"24.02.",abg:0,af:1,offen:7},{d:"25.02.",abg:0,af:0,offen:5},{d:"26.02.",abg:0,af:0,offen:7},{d:"27.02.",abg:0,af:0,offen:6},{d:"28.02.",abg:0,af:0,offen:1}],
+  leadStatus:[{name:"REKLAMATION",v:317,fill:C.red},{name:"5× nicht err.",v:189,fill:"#D29922"},{name:"nicht erreicht",v:180,fill:C.orange},{name:"WVL",v:107,fill:C.blue},{name:"Terminiert",v:76,fill:C.green},{name:"Nicht im PLZ",v:49,fill:C.purple},{name:"Angebot",v:10,fill:C.cyan},{name:"Sonstige",v:45,fill:C.dim}],
+  berater:[{n:"Gino Ulitzka",t:20},{n:"Janik Voß",t:14},{n:"Patrick Kalinowski",t:13},{n:"Andreas Klee",t:12},{n:"Bernd Krahwinkel",t:11},{n:"Kadir Danyildiz",t:8},{n:"Maxim Horten",t:5},{n:"Fabian Hindenberg",t:4},{n:"Sonstige",t:21}],
+  terminierer:[{n:"Jasmin Hübner",t:24},{n:"Nadia Kucab",t:22},{n:"Selin Aylikcioglu",t:20},{n:"Jenny Litke",t:19},{n:"Celine Madlaine",t:10},{n:"Mensure Baykan",t:5},{n:"Sonstige (VB)",t:8}],
+  abschluss:[{n:"WVL Überleger",v:3},{n:"WVL Frau nicht da",v:2},{n:"Kein Interesse",v:2},{n:"Sale",v:1},{n:"WVL Gegenangebot",v:1},{n:"T.n.M. Dachbelag",v:1}],
+  ccEnpal:[{n:"Selin Aylikcioglu",leads:89,term:16,rekl:44,rate:18.0,reklP:49},{n:"Jasmin Hübner",leads:72,term:11,rekl:46,rate:15.3,reklP:64},{n:"Jenny Litke",leads:116,term:16,rekl:50,rate:13.8,reklP:43},{n:"Celine Madlaine",leads:38,term:5,rekl:21,rate:13.2,reklP:55},{n:"Nadia Kucab",leads:161,term:16,rekl:103,rate:9.9,reklP:64},{n:"Mensure Baykan",leads:85,term:4,rekl:32,rate:4.7,reklP:38}],
+  speed:{median:18.6,avg:42.3,matches:108,unter24h:60,unter24hP:56,ueber72h:10,buckets:[{n:"<4h",v:0},{n:"4-12h",v:6},{n:"12-24h",v:54},{n:"24-48h",v:26},{n:"48-72h",v:12},{n:">72h",v:10}]},
+  pipeline:{wvl:107,wvlU3d:34,wvl3to7d:21,wvlU7d:52,ne:180,ne5:189,neTotal:369,neU3d:93,ne3to7d:85,neU7d:191},
+  benchmark:[{n:"MVPP",leads:351,term:184,termP:52.4,rekl:5,reklP:1.4,color:"#6366F1"},{n:"Gesamt",leads:3569,term:623,termP:17.5,rekl:770,reklP:21.6,color:"#94A3B8"},{n:"Enpal",leads:973,term:86,termP:8.8,rekl:317,reklP:32.6,color:"#F97316"}],
+  wochentag:[{d:"Mo",abg:2,af:3,offen:11},{d:"Di",abg:2,af:6,offen:13},{d:"Mi",abg:2,af:3,offen:12},{d:"Do",abg:4,af:2,offen:15},{d:"Fr",abg:0,af:0,offen:21},{d:"Sa",abg:0,af:0,offen:4}],
+  plz:[{n:"41xxx",leads:43,term:6,rate:14.0},{n:"44xxx",leads:51,term:7,rate:13.7},{n:"51xxx",leads:30,term:4,rate:13.3},{n:"40xxx",leads:31,term:4,rate:12.9},{n:"53xxx",leads:36,term:4,rate:11.1},{n:"42xxx",leads:29,term:3,rate:10.3},{n:"47xxx",leads:29,term:3,rate:10.3},{n:"35xxx",leads:83,term:8,rate:9.6},{n:"45xxx",leads:45,term:4,rate:8.9},{n:"52xxx",leads:34,term:3,rate:8.8},{n:"27xxx",leads:47,term:4,rate:8.5},{n:"26xxx",leads:136,term:8,rate:5.9},{n:"28xxx",leads:69,term:3,rate:4.3},{n:"49xxx",leads:65,term:1,rate:1.5}],
+  afGruende:[{n:"Kein Interesse",v:5},{n:"Techn. ungeeignet",v:3},{n:"Anderer Anbieter",v:2},{n:"Sprachprobleme",v:1},{n:"Sonstige",v:3}],
 };
-const CL = [C.amber,C.blue,C.green,C.red,C.purple,C.pink,C.cyan,C.orange,C.teal,"#A371F7","#D2A8FF"];
+const febLeads=E.feb.leads,termRate=(E.feb.term+E.feb.ang)/febLeads*100,afRate=E.termeAF/(E.termeAbg+E.termeAF)*100,wasteRate=(E.feb.rekl+E.feb.ne5)/febLeads*100;
 
-/* ═══ FORMATTERS ═══ */
-const fmt  = n => n==null?'—':Number(n).toLocaleString('de-DE');
-const fmtP = n => n==null?'—':Number(n).toFixed(1)+' %';
-const eur  = n => n==null?'—':Math.round(n).toLocaleString('de-DE')+' €';
+function KPI({label,value,sub,color,small}){const c=color||C.orange;return(<div style={{background:C.card,border:'1px solid '+C.border,borderRadius:small?8:10,padding:small?'10px 14px':'18px 22px',minWidth:small?100:140,flex:'1 1 auto'}}><div style={{fontSize:small?20:26,fontWeight:800,color:c}}>{value}</div><div style={{fontSize:small?11:13,fontWeight:600,color:C.text,marginTop:2}}>{label}</div>{sub&&<div style={{fontSize:small?10:11,color:C.sec,marginTop:2}}>{sub}</div>}</div>);}
+function Sec({title,children}){return(<div className="section-card" style={{background:C.card,border:'1px solid '+C.border,borderRadius:12,padding:20}}><div style={{fontSize:14,fontWeight:700,marginBottom:14,color:C.text}}>{title}</div>{children}</div>);}
+function Badge({v:val,color}){return <span style={{background:color+'18',color,padding:'2px 8px',borderRadius:6,fontSize:11,fontWeight:700}}>{val}</span>;}
+function Alrt({color,icon,children}){return(<div style={{background:color+'0A',border:'1px solid '+color+'30',borderRadius:10,padding:'12px 16px',fontSize:12,color:C.text,lineHeight:1.6}}>{icon&&<span style={{marginRight:6}}>{icon}</span>}{children}</div>);}
+function TT(){return{contentStyle:{background:C.card,border:'1px solid '+C.border,borderRadius:8,fontSize:12}};}
+const TABS=[{k:'uebersicht',l:'📊 Übersicht'},{k:'termine',l:'📆 Termine'},{k:'berater',l:'👤 Berater & CC'},{k:'pipeline',l:'🔄 Pipeline'},{k:'benchmark',l:'📉 Benchmark'},{k:'details',l:'📍 Details'}];
 
-/* ═══ PASSWORD ═══ */
-const PW = 'Enpal2026!';
-const SK = 'enpal_ext_v6';
-
-/* ═══════════════════════════════════════════════════════════
-   DATA — aus bee-doo Reporting Dashboard, Stand 24.02.2026
-   ═══════════════════════════════════════════════════════════ */
-const E = {
-  jan: { leads:211, wp:75, kl:133, term:9, ang:6, rekl:102, ne:51 },
-  feb: { leads:973, wp:915, kl:58, term:76, ang:10, rekl:317, ne5:189, ne:180, wvl:107 },
-  terme:108, termeWP:98, termeKl:10,
-  termeAbg:10, termeAF:14, termeOffen:84,
-  sales:1, salesNetto:30195,
-
-  dailyImport:[
-    {d:"02.02.",wp:164,kl:5,t:169},{d:"03.02.",wp:96,kl:5,t:101},{d:"04.02.",wp:73,kl:15,t:88},
-    {d:"05.02.",wp:102,kl:6,t:108},{d:"06.02.",wp:60,kl:9,t:69},{d:"07.02.",wp:41,kl:1,t:42},
-    {d:"09.02.",wp:82,kl:2,t:84},{d:"10.02.",wp:88,kl:4,t:92},{d:"11.02.",wp:125,kl:5,t:130},
-    {d:"12.02.",wp:84,kl:5,t:89},
-  ],
-  dailyErstellt:[
-    {d:"02.02.",wp:0,kl:2,t:2},{d:"03.02.",wp:18,kl:0,t:18},{d:"04.02.",wp:8,kl:2,t:10},
-    {d:"05.02.",wp:18,kl:1,t:19},{d:"06.02.",wp:7,kl:3,t:10},{d:"07.02.",wp:5,kl:1,t:6},
-    {d:"09.02.",wp:11,kl:0,t:11},{d:"10.02.",wp:3,kl:0,t:3},{d:"11.02.",wp:14,kl:1,t:15},
-    {d:"12.02.",wp:14,kl:0,t:14},
-  ],
-  dailyTermine:[
-    {d:"03.02.",t:1,abg:0,af:1,offen:0},{d:"05.02.",t:1,abg:1,af:0,offen:0},
-    {d:"09.02.",t:3,abg:2,af:0,offen:1},{d:"10.02.",t:3,abg:2,af:1,offen:0},
-    {d:"11.02.",t:5,abg:2,af:1,offen:2},{d:"12.02.",t:7,abg:3,af:2,offen:2},
-    {d:"13.02.",t:5,abg:0,af:0,offen:5},{d:"14.02.",t:1,abg:0,af:0,offen:1},
-    {d:"16.02.",t:8,abg:0,af:1,offen:7},{d:"17.02.",t:9,abg:0,af:3,offen:6},
-    {d:"18.02.",t:7,abg:0,af:2,offen:5},{d:"19.02.",t:6,abg:0,af:0,offen:6},
-    {d:"20.02.",t:10,abg:0,af:0,offen:10},{d:"21.02.",t:2,abg:0,af:0,offen:2},
-    {d:"23.02.",t:5,abg:0,af:2,offen:3},{d:"24.02.",t:8,abg:0,af:1,offen:7},
-    {d:"25.02.",t:5,abg:0,af:0,offen:5},{d:"26.02.",t:7,abg:0,af:0,offen:7},
-    {d:"27.02.",t:6,abg:0,af:0,offen:6},{d:"28.02.",t:1,abg:0,af:0,offen:1},
-  ],
-  leadStatus:[
-    {name:"REKLAMATION",v:317,fill:C.red},{name:"5× nicht err.",v:189,fill:"#D29922"},
-    {name:"nicht erreicht",v:180,fill:C.orange},{name:"WVL",v:107,fill:C.blue},
-    {name:"Terminiert",v:76,fill:C.green},{name:"Nicht im PLZ",v:49,fill:C.purple},
-    {name:"Angebot",v:10,fill:C.cyan},{name:"Sonstige",v:45,fill:C.dim},
-  ],
-  berater:[
-    {n:"Gino Ulitzka",t:20},{n:"Janik Voß",t:14},{n:"Patrick Kalinowski",t:13},
-    {n:"Andreas Klee",t:12},{n:"Bernd Krahwinkel",t:11},{n:"Kadir Danyildiz",t:8},
-    {n:"Maxim Horten",t:5},{n:"Fabian Hindenberg",t:4},{n:"Sonstige",t:21},
-  ],
-  terminierer:[
-    {n:"Jasmin Hübner",t:24},{n:"Nadia Kucab",t:22},{n:"Selin Aylikcioglu",t:20},
-    {n:"Jenny Litke",t:19},{n:"Celine Madlaine",t:10},{n:"Mensure Baykan",t:5},
-    {n:"Sonstige (VB)",t:8},
-  ],
-  abschluss:[
-    {n:"WVL Überleger",v:3},{n:"WVL Frau nicht da",v:2},{n:"Kein Interesse",v:2},
-    {n:"Sale",v:1},{n:"WVL Gegenangebot",v:1},{n:"T.n.M. Dachbelag",v:1},
-  ],
-  ccEnpal:[
-    {n:"Selin Aylikcioglu",leads:89,term:16,rekl:44,rate:18.0,reklP:49},
-    {n:"Jasmin Hübner",leads:72,term:11,rekl:46,rate:15.3,reklP:64},
-    {n:"Jenny Litke",leads:116,term:16,rekl:50,rate:13.8,reklP:43},
-    {n:"Celine Madlaine",leads:38,term:5,rekl:21,rate:13.2,reklP:55},
-    {n:"Nadia Kucab",leads:161,term:16,rekl:103,rate:9.9,reklP:64},
-    {n:"Mensure Baykan",leads:85,term:4,rekl:32,rate:4.7,reklP:38},
-  ],
-  speed:{
-    median:18.6, avg:42.3, matches:108,
-    unter24h:60, unter24hP:56, unter48h:86, unter48hP:80, ueber72h:10,
-    buckets:[
-      {n:"<4h",v:0},{n:"4–12h",v:6},{n:"12–24h",v:54},
-      {n:"24–48h",v:26},{n:"48–72h",v:12},{n:">72h",v:10},
-    ],
-  },
-  pipeline:{
-    wvl:107, wvlU3d:34, wvl3to7d:21, wvlU7d:52, wvlAvg:5,
-    ne:180, ne5:189, neTotal:369, neU3d:93, ne3to7d:85, neU7d:191, neAvg:6,
-  },
-  benchmark:[
-    {n:"MVPP",leads:351,term:184,termP:52.4,rekl:5,reklP:1.4,color:"#6366F1"},
-    {n:"Gesamt",leads:3569,term:623,termP:17.5,rekl:770,reklP:21.6,color:"#94A3B8"},
-    {n:"Enpal",leads:973,term:86,termP:8.8,rekl:317,reklP:32.6,color:"#F97316"},
-  ],
-  wochentag:[
-    {d:"Mo",t:16,abg:2,af:3,offen:11},{d:"Di",t:21,abg:2,af:6,offen:13},
-    {d:"Mi",t:17,abg:2,af:3,offen:12},{d:"Do",t:21,abg:4,af:2,offen:15},
-    {d:"Fr",t:21,abg:0,af:0,offen:21},{d:"Sa",t:4,abg:0,af:0,offen:4},
-  ],
-  plz:[
-    {n:"41xxx",leads:43,term:6,rate:14.0},{n:"44xxx",leads:51,term:7,rate:13.7},
-    {n:"51xxx",leads:30,term:4,rate:13.3},{n:"40xxx",leads:31,term:4,rate:12.9},
-    {n:"53xxx",leads:36,term:4,rate:11.1},{n:"42xxx",leads:29,term:3,rate:10.3},
-    {n:"47xxx",leads:29,term:3,rate:10.3},{n:"35xxx",leads:83,term:8,rate:9.6},
-    {n:"45xxx",leads:45,term:4,rate:8.9},{n:"52xxx",leads:34,term:3,rate:8.8},
-    {n:"27xxx",leads:47,term:4,rate:8.5},{n:"26xxx",leads:136,term:8,rate:5.9},
-    {n:"28xxx",leads:69,term:3,rate:4.3},{n:"49xxx",leads:65,term:1,rate:1.5},
-  ],
-  afGruende:[
-    {n:"Kein Interesse",v:5},{n:"Techn. ungeeignet",v:3},
-    {n:"Anderer Anbieter",v:2},{n:"Sprachprobleme",v:1},{n:"Sonstige",v:3},
-  ],
-};
-
-/* ═══ DERIVED ═══ */
-const febLeads = E.feb.leads;
-const termRate = (E.feb.term + E.feb.ang) / febLeads * 100;
-const afRate = E.termeAF / (E.termeAbg + E.termeAF) * 100;
-const wasteRate = (E.feb.rekl + E.feb.ne5) / febLeads * 100;
-
-/* ═══ COMPONENTS ═══ */
-const KPI = ({ label, value, sub, color=C.orange, small }) => (
-  <div style={{ background:C.card, borderRadius:14, padding:small?"14px 16px":"18px 22px", border:`1px solid ${C.border}`, flex:"1 1 0", minWidth:small?120:140 }}>
-    <div style={{ fontSize:10, color:C.sec, fontWeight:600, letterSpacing:".06em", textTransform:"uppercase", marginBottom:5 }}>{label}</div>
-    <div style={{ fontSize:small?22:28, fontWeight:800, color, lineHeight:1 }}>{value}</div>
-    {sub && <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>{sub}</div>}
-  </div>
-);
-
-const TT = ({ active, payload, label }) => {
-  if(!active||!payload?.length) return null;
-  return (
-    <div style={{ background:"#1B2332", border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 14px", boxShadow:"0 12px 40px rgba(0,0,0,.5)" }}>
-      <div style={{ color:C.text, fontWeight:700, fontSize:13, marginBottom:4 }}>{label}</div>
-      {payload.map((p,i)=>(
-        <div key={i} style={{ color:p.color||C.text, fontSize:12, display:"flex", gap:6, alignItems:"center" }}>
-          <span style={{ width:8, height:8, borderRadius:"50%", background:p.color, flexShrink:0 }}/>
-          {p.name}: <strong style={{ color:C.text }}>{typeof p.value==="number"?fmt(p.value):p.value}</strong>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const Sec = ({ title, children }) => (
-  <div className="sec-pad" style={{ background:C.card, borderRadius:14, padding:"20px 24px", border:`1px solid ${C.border}` }}>
-    <h3 style={{ color:C.text, fontSize:16, fontWeight:700, margin:"0 0 16px" }}>{title}</h3>
-    {children}
-  </div>
-);
-
-const Badge = ({ v, color }) => (
-  <span style={{ background:color+"18", color, padding:"3px 9px", borderRadius:6, fontWeight:700, fontSize:12 }}>{v}</span>
-);
-
-const AlertBox = ({ color, icon, children }) => (
-  <div style={{ background:color+"08", borderRadius:10, padding:"12px 16px", border:`1px solid ${color}20`, display:"flex", gap:10, alignItems:"flex-start" }}>
-    <span style={{ fontSize:16, flexShrink:0 }}>{icon}</span>
-    <div style={{ fontSize:12, color:C.sec, lineHeight:1.6 }}>{children}</div>
-  </div>
-);
-
-/* ═══ TABS ═══ */
-const TABS = [
-  { k:'uebersicht', l:'📊 Übersicht' },
-  { k:'termine',    l:'📆 Termine' },
-  { k:'berater',    l:'👤 Berater & CC' },
-  { k:'pipeline',   l:'🚨 Pipeline' },
-  { k:'speed',      l:'⏱️ Speed' },
-  { k:'benchmark',  l:'📊 Benchmark' },
-  { k:'plz',        l:'📍 PLZ' },
-  { k:'details',    l:'📋 Details' },
-];
-
-/* ═══ BOARD ═══ */
-function Board({ onLogout }) {
-  const [tab, setTab] = useState('uebersicht');
-
-  return (
-    <div style={{ minHeight:'100vh', background:C.bg }}>
-      {/* Header */}
-      <div className="header-bar" style={{ background:C.card, borderBottom:`1px solid ${C.border}`, padding:'0 24px' }}>
-        <div style={{ maxWidth:1200, margin:'0 auto', display:'flex', alignItems:'center', justifyContent:'space-between', height:56, gap:12, flexWrap:'wrap' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <span style={{ fontWeight:800, fontSize:18 }}>bee<span style={{ color:C.orange }}>·</span>doo</span>
-            <span style={{ background:'rgba(249,115,22,.15)', color:C.orange, fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20 }}>ENPAL PARTNER BOARD</span>
-            <span className="hide-tablet" style={{ fontSize:11, color:C.sec }}>Stand: 24.02.2026</span>
+function Board({onLogout}){
+  const[tab,setTab]=useState('uebersicht');
+  return(
+    <div style={{minHeight:'100vh',background:C.bg}}>
+      <div style={{background:C.card,borderBottom:'1px solid '+C.border,padding:'0 24px'}}>
+        <div className="header-bar" style={{maxWidth:1200,margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'space-between',height:56}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <span style={{fontWeight:800,fontSize:18}}>bee<span style={{color:C.orange}}>·</span>doo</span>
+            <span style={{background:'rgba(249,115,22,.15)',color:C.orange,fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>ENPAL PARTNER BOARD</span>
           </div>
-          <button onClick={onLogout} style={{ background:'transparent', border:`1px solid ${C.border}`, borderRadius:8, color:C.sec, padding:'5px 12px', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Abmelden</button>
+          <div className="header-right" style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:11,color:C.sec}}>Stand: 16.02.2026</span>
+            <button onClick={onLogout} style={{background:'transparent',border:'1px solid '+C.border,borderRadius:8,color:C.sec,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>Abmelden</button>
+          </div>
         </div>
       </div>
-
-      <div className="content-area" style={{ maxWidth:1200, margin:'0 auto', padding:24 }}>
-        {/* Tabs */}
-        <div className="tab-bar" style={{ display:'flex', gap:4, marginBottom:20, flexWrap:'wrap' }}>
-          {TABS.map(t => (
-            <button key={t.k} onClick={()=>setTab(t.k)} style={{ padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:tab===t.k?C.orange:C.card, color:tab===t.k?'#fff':C.sec, transition:'all .15s' }}>
-              {t.l}
-            </button>
-          ))}
+      <div className="main-content" style={{maxWidth:1200,margin:'0 auto',padding:24}}>
+        <div className="tab-bar" style={{display:'flex',gap:4,marginBottom:20,flexWrap:'wrap'}}>
+          {TABS.map(t=>(<button key={t.k} className="tab-btn" onClick={()=>setTab(t.k)} style={{padding:'8px 16px',borderRadius:8,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===t.k?C.orange:C.card,color:tab===t.k?'#fff':C.sec,fontFamily:'inherit'}}>{t.l}</button>))}
         </div>
 
-        {/* ═══ TAB: ÜBERSICHT ═══ */}
-        {tab==='uebersicht' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
-            {/* KPIs */}
-            <div className="kpi-row" style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
-              <KPI label="Enpal Leads Feb" value={fmt(febLeads)} sub={`WP: ${fmt(E.feb.wp)} · Klass.: ${E.feb.kl}`} />
-              <KPI label="Terminiert+Ang" value={fmt(E.feb.term+E.feb.ang)} sub={`${termRate.toFixed(1)}% Rate`} color={C.green}/>
-              <KPI label="Terme erstellt" value={fmt(E.terme)} sub={`WP: ${E.termeWP} · Klass.: ${E.termeKl}`} color={C.cyan}/>
-              <KPI label="Stattgef./Ausgef." value={`${E.termeAbg}/${E.termeAF}`} sub={`${E.termeOffen} offen`} color={C.amber}/>
-              <KPI label="Sales" value={E.sales} sub={eur(E.salesNetto)} color={E.sales>0?C.green:C.red}/>
-              <KPI label="Waste" value={`${wasteRate.toFixed(0)}%`} sub={`${fmt(E.feb.rekl)} REKL + ${fmt(E.feb.ne5)} NE5`} color={C.red}/>
-            </div>
-
-            {/* Daily Lead Import */}
-            <Sec title="📥 Täglicher Enpal Lead-Import (Feb)">
-              <div className="chart-h-240" style={{ height:240 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={E.dailyImport}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                    <XAxis dataKey="d" tick={{fill:C.sec,fontSize:11}}/>
-                    <YAxis tick={{fill:C.sec,fontSize:11}}/>
-                    <Tooltip content={<TT/>}/>
-                    <Legend wrapperStyle={{fontSize:10}}/>
-                    <Bar dataKey="wp" stackId="a" fill={C.orange} name="Enpal WP"/>
-                    <Bar dataKey="kl" stackId="a" fill={C.amber} name="Enpal klassisch" radius={[4,4,0,0]}/>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>Ø {Math.round(E.dailyImport.reduce((a,d)=>a+d.t,0)/E.dailyImport.length)}/Tag · <strong style={{color:C.orange}}>94% WP-Leads</strong> · Peaks: 02.02. (169), 11.02. (130)</div>
-            </Sec>
-
-            {/* Leadstatus + Funnel */}
-            <div className="side-by-side" style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
-              <div style={{ flex:'1 1 360px' }}>
-                <Sec title={`📊 Leadstatus Feb (${fmt(febLeads)} = 100%)`}>
-                  <div className="chart-h-240" style={{ height:260 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={E.leadStatus} cx="50%" cy="50%" outerRadius={90} innerRadius={48} dataKey="v" paddingAngle={1.5} stroke="none">
-                          {E.leadStatus.map((e,i)=><Cell key={i} fill={e.fill}/>)}
-                        </Pie>
-                        <Tooltip content={<TT/>}/>
-                        <Legend wrapperStyle={{fontSize:10}}/>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>{Math.round(E.feb.rekl/febLeads*100)}% Reklamation + {Math.round((E.feb.ne5+E.feb.ne)/febLeads*100)}% nicht erreichbar</div>
-                </Sec>
-              </div>
-              <div style={{ flex:'1 1 360px' }}>
-                <Sec title="🔻 Funnel">
-                  {[
-                    {s:"Leads (LMT)",v:febLeads,c:C.dim},
-                    {s:"Qualifiziert",v:febLeads-E.feb.rekl-E.feb.ne5,c:C.purple},
-                    {s:"Terminiert+Ang",v:E.feb.term+E.feb.ang,c:C.cyan},
-                    {s:"Terme erstellt",v:E.terme,c:C.blue},
-                    {s:"Stattgef.",v:E.termeAbg,c:C.amber},
-                    {s:"Sales",v:E.sales,c:C.green},
-                  ].map((f,i)=>{
-                    const w = Math.max((f.v/febLeads)*100, 3);
-                    return (
-                      <div key={i} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
-                        <div style={{ width:110, textAlign:"right", fontSize:11, color:C.sec }}>{f.s}</div>
-                        <div style={{ flex:1 }}>
-                          <div style={{ width:`${w}%`, height:26, background:f.c, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, color:i===0?C.text:"#06080F", minWidth:30 }}>{fmt(f.v)}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:8 }}>
-                    <KPI small label="Lead→Term" value={`${termRate.toFixed(1)}%`} color={C.cyan}/>
-                    <KPI small label="Term→Stattg." value={`${E.terme>0?Math.round(E.termeAbg/E.terme*100):0}%`} color={C.amber}/>
-                    <KPI small label="Stattg.→Sale" value={`${E.termeAbg>0?Math.round(E.sales/E.termeAbg*100):0}%`} color={C.green}/>
-                  </div>
-                </Sec>
-              </div>
-            </div>
-
-            {/* Summary Alert */}
-            <AlertBox color={C.orange} icon="⚠️">
-              <strong>Enpal Feb:</strong> {fmt(febLeads)} Leads → {E.terme} Terme → {E.termeAbg} stattgef. → <strong style={{color:C.green}}>{E.sales} Sale ({eur(E.salesNetto)})</strong>.
-              <strong style={{color:C.red}}> {Math.round(E.feb.rekl/febLeads*100)}% REKL</strong> · MVPP terminiert <strong>6× besser</strong>.
-              {" "}<strong style={{color:C.blue}}>{E.termeOffen} Terme offen</strong> + <strong style={{color:C.amber}}>{E.pipeline.wvl+E.pipeline.ne} Pipeline</strong> nachfassbar.
-            </AlertBox>
+        {tab==='uebersicht'&&(<div style={{display:'flex',flexDirection:'column',gap:18}}>
+          <div className="kpi-grid" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+            <KPI label="Enpal Leads Feb" value={fmt(febLeads)} sub={'WP: '+fmt(E.feb.wp)+' · Klass.: '+E.feb.kl}/>
+            <KPI label="Terminiert+Ang." value={fmt(E.feb.term+E.feb.ang)} sub={fmtP(termRate)+' Rate'} color={C.green}/>
+            <KPI label="Terme erstellt" value={fmt(E.terme)} sub={'WP: '+E.termeWP+' · Klass.: '+E.termeKl} color={C.cyan}/>
+            <KPI label="Stattgef./Ausgef." value={E.termeAbg+'/'+E.termeAF} sub={E.termeOffen+' offen'} color={C.amber}/>
+            <KPI label="Sales" value={E.sales} sub={eur(E.salesNetto)} color={E.sales>0?C.green:C.red}/>
+            <KPI label="Waste-Quote" value={Math.round(wasteRate)+'%'} sub={fmt(E.feb.rekl)+' Rekl. + '+fmt(E.feb.ne5)+' NE5'} color={C.red}/>
           </div>
-        )}
-
-        {/* ═══ TAB: TERMINE ═══ */}
-        {tab==='termine' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <Sec title="📆 Termine erstellt pro Tag (Feb)">
-              <div className="chart-h-220" style={{ height:220 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={E.dailyErstellt}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                    <XAxis dataKey="d" tick={{fill:C.sec,fontSize:11}}/>
-                    <YAxis tick={{fill:C.sec,fontSize:11}}/>
-                    <Tooltip content={<TT/>}/>
-                    <Legend wrapperStyle={{fontSize:10}}/>
-                    <Bar dataKey="wp" stackId="a" fill={C.orange} name="WP-Termine"/>
-                    <Bar dataKey="kl" stackId="a" fill={C.amber} name="Klass.-Terme" radius={[4,4,0,0]}/>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>Ø {Math.round(E.dailyErstellt.reduce((a,d)=>a+d.t,0)/E.dailyErstellt.length)}/Tag · {E.terme} gesamt · 91% WP-Termine</div>
-            </Sec>
-
-            <Sec title="📊 Termine pro Tag – Stattgef./Ausgef./Offen">
-              <div className="chart-h-280" style={{ height:280 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={E.dailyTermine}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                    <XAxis dataKey="d" tick={{fill:C.sec,fontSize:10}} interval={0} angle={-45} textAnchor="end" height={50}/>
-                    <YAxis tick={{fill:C.sec,fontSize:11}}/>
-                    <Tooltip content={<TT/>}/>
-                    <Legend wrapperStyle={{fontSize:10}}/>
-                    <Bar dataKey="abg" stackId="a" fill={C.green} name="Stattgefunden"/>
-                    <Bar dataKey="af" stackId="a" fill={C.red} name="Ausgefallen"/>
-                    <Bar dataKey="offen" stackId="a" fill={C.blue} name="Offen" radius={[4,4,0,0]}/>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>
-                Bis 12.02.: {E.termeAbg} stattgef., {E.termeAF} ausgef. · <strong style={{color:C.blue}}>Ab 13.02.: {E.termeOffen} offene Termine</strong> – Ergebnisse folgen
-              </div>
-            </Sec>
-
-            <Sec title="📅 Enpal-Termine nach Wochentag">
-              <div className="chart-h-200" style={{ height:200 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={E.wochentag}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                    <XAxis dataKey="d" tick={{fill:C.sec,fontSize:12}}/>
-                    <YAxis tick={{fill:C.sec,fontSize:11}}/>
-                    <Tooltip content={<TT/>}/>
-                    <Legend wrapperStyle={{fontSize:10}}/>
-                    <Bar dataKey="abg" stackId="a" fill={C.green} name="Stattgefunden"/>
-                    <Bar dataKey="af" stackId="a" fill={C.red} name="Ausgefallen"/>
-                    <Bar dataKey="offen" stackId="a" fill={C.blue} name="Offen" radius={[4,4,0,0]}/>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>
-                <strong style={{color:C.green}}>Do = meiste Stattgefundene</strong> (4 von 10) · <strong style={{color:C.red}}>Di = meiste Ausfälle</strong> (6 von 14!) · Fr 21 Terme noch offen
-              </div>
-            </Sec>
-
-            <div className="side-by-side" style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
-              <div style={{ flex:'1 1 400px' }}>
-                <Sec title="❌ Ausfall-Gründe (14 Ausgef.)">
-                  <div className="chart-h-180" style={{ height:160 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={E.afGruende} layout="vertical" margin={{left:120}}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis type="number" tick={{fill:C.sec,fontSize:11}}/>
-                        <YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:10}} width={110}/>
-                        <Tooltip content={<TT/>}/>
-                        <Bar dataKey="v" name="Anzahl" radius={[0,6,6,0]}>
-                          {E.afGruende.map((d,i)=><Cell key={i} fill={[C.red,C.orange,C.amber,C.purple,C.dim][i]}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div style={{ fontSize:10, color:C.dim, marginTop:4 }}>36% Kein Interesse · 21% techn. ungeeignet</div>
-                </Sec>
-              </div>
-              <div style={{ flex:'1 1 400px' }}>
-                <Sec title="📋 Termin-Ergebnisse (10 Stattgef.)">
-                  <div className="chart-h-180" style={{ height:160 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={E.abschluss} layout="vertical" margin={{left:120}}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis type="number" tick={{fill:C.sec,fontSize:11}}/>
-                        <YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:10}} width={110}/>
-                        <Tooltip content={<TT/>}/>
-                        <Bar dataKey="v" name="Anzahl" radius={[0,6,6,0]}>
-                          {E.abschluss.map((d,i)=><Cell key={i} fill={d.n==="Sale"?C.green:d.n.startsWith("WVL")?C.amber:C.red}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div style={{ fontSize:10, color:C.dim, marginTop:4 }}>1 Sale (P. Kalinowski, {eur(E.salesNetto)}) · 6 WVL nachfassbar</div>
-                </Sec>
-              </div>
+          <Sec title="🔻 Funnel: Lead → Sale">
+            {[{s:"Leads (LMT)",v:febLeads,c:C.dim},{s:"Qualifiziert",v:febLeads-E.feb.rekl-E.feb.ne5,c:C.purple},{s:"Terminiert+Ang",v:E.feb.term+E.feb.ang,c:C.cyan},{s:"Terme erstellt",v:E.terme,c:C.blue},{s:"Stattgef.",v:E.termeAbg,c:C.amber},{s:"Sales",v:E.sales,c:C.green}].map((f,i)=>{const w=Math.max((f.v/febLeads)*100,3);return(<div key={i} style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}><div style={{width:110,textAlign:'right',fontSize:11,color:C.sec,flexShrink:0}}>{f.s}</div><div style={{flex:1}}><div style={{width:w+'%',height:26,background:f.c,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:i===0?C.text:'#06080F',minWidth:30}}>{fmt(f.v)}</div></div></div>);})}
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}>
+              <KPI small label="Lead→Term" value={fmtP(termRate)} color={C.cyan}/>
+              <KPI small label="Term→Stattg." value={(E.terme>0?Math.round(E.termeAbg/E.terme*100):0)+'%'} color={C.amber}/>
+              <KPI small label="Stattg.→Sale" value={(E.termeAbg>0?Math.round(E.sales/E.termeAbg*100):0)+'%'} color={C.green}/>
             </div>
+          </Sec>
+          <Sec title="📥 Täglicher Enpal Lead-Import (Feb)">
+            <ResponsiveContainer width="100%" height={240}><BarChart data={E.dailyImport}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis dataKey="d" tick={{fill:C.sec,fontSize:11}}/><YAxis tick={{fill:C.sec,fontSize:11}}/><Tooltip {...TT()}/><Legend wrapperStyle={{fontSize:10}}/><Bar dataKey="wp" stackId="a" fill={C.orange} name="Enpal WP"/><Bar dataKey="kl" stackId="a" fill={C.amber} name="Enpal klassisch" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer>
+            <div style={{fontSize:11,color:C.dim,marginTop:4}}>Ø {Math.round(E.dailyImport.reduce((a,d)=>a+d.t,0)/E.dailyImport.length)}/Tag · <strong style={{color:C.orange}}>94% WP-Leads</strong></div>
+          </Sec>
+          <Sec title={'📊 Leadstatus Feb ('+fmt(febLeads)+' = 100%)'}>
+            <ResponsiveContainer width="100%" height={280}><PieChart><Pie data={E.leadStatus} cx="50%" cy="50%" outerRadius={95} innerRadius={50} dataKey="v" paddingAngle={1.5} stroke="none">{E.leadStatus.map((el,i)=><Cell key={i} fill={el.fill}/>)}</Pie><Tooltip {...TT()}/><Legend wrapperStyle={{fontSize:10}}/></PieChart></ResponsiveContainer>
+          </Sec>
+        </div>)}
+
+        {tab==='termine'&&(<div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <Sec title="📆 Termine erstellt pro Tag (Feb)">
+            <ResponsiveContainer width="100%" height={220}><BarChart data={E.dailyErstellt}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis dataKey="d" tick={{fill:C.sec,fontSize:11}}/><YAxis tick={{fill:C.sec,fontSize:11}}/><Tooltip {...TT()}/><Legend wrapperStyle={{fontSize:10}}/><Bar dataKey="wp" stackId="a" fill={C.orange} name="WP-Termine"/><Bar dataKey="kl" stackId="a" fill={C.amber} name="Klass.-Terme" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer>
+          </Sec>
+          <Sec title="📊 Termine pro Tag – Stattgef./Ausgef./Offen">
+            <ResponsiveContainer width="100%" height={280}><BarChart data={E.dailyTermine}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis dataKey="d" tick={{fill:C.sec,fontSize:10}} interval={0} angle={-45} textAnchor="end" height={50}/><YAxis tick={{fill:C.sec,fontSize:11}}/><Tooltip {...TT()}/><Legend wrapperStyle={{fontSize:10}}/><Bar dataKey="abg" stackId="a" fill={C.green} name="Stattgefunden"/><Bar dataKey="af" stackId="a" fill={C.red} name="Ausgefallen"/><Bar dataKey="offen" stackId="a" fill={C.blue} name="Offen" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer>
+            <div style={{fontSize:11,color:C.dim,marginTop:4}}>Bis 12.02.: {E.termeAbg} stattgef., {E.termeAF} ausgef. · <strong style={{color:C.blue}}>Ab 13.02.: {E.termeOffen} offene Termine</strong></div>
+          </Sec>
+          <Sec title="📅 Termine nach Wochentag">
+            <ResponsiveContainer width="100%" height={200}><BarChart data={E.wochentag}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis dataKey="d" tick={{fill:C.sec,fontSize:12}}/><YAxis tick={{fill:C.sec,fontSize:11}}/><Tooltip {...TT()}/><Legend wrapperStyle={{fontSize:10}}/><Bar dataKey="abg" stackId="a" fill={C.green} name="Stattgefunden"/><Bar dataKey="af" stackId="a" fill={C.red} name="Ausgefallen"/><Bar dataKey="offen" stackId="a" fill={C.blue} name="Offen" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer>
+          </Sec>
+          <div className="side-by-side" style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+            <div style={{flex:'1 1 400px'}}><Sec title="📋 Termin-Ergebnisse (10 Stattgef.)">
+              {E.abschluss.map((a,i)=>(<div key={i} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:'1px solid '+C.border}}><span style={{fontSize:13,color:a.n==='Sale'?C.green:C.text}}>{a.n}</span><span style={{fontSize:13,fontWeight:700,color:a.n==='Sale'?C.green:C.sec}}>{a.v}</span></div>))}
+            </Sec></div>
+            <div style={{flex:'1 1 400px'}}><Sec title="❌ Ausfall-Gründe (14 Ausgefallen)">
+              <ResponsiveContainer width="100%" height={160}><BarChart data={E.afGruende} layout="vertical" margin={{left:120}}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis type="number" tick={{fill:C.sec,fontSize:11}}/><YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:10}} width={110}/><Tooltip {...TT()}/><Bar dataKey="v" name="Anzahl" radius={[0,6,6,0]}>{E.afGruende.map((_,i)=><Cell key={i} fill={[C.red,C.orange,C.amber,C.purple,C.dim][i]}/>)}</Bar></BarChart></ResponsiveContainer>
+            </Sec></div>
           </div>
-        )}
+        </div>)}
 
-        {/* ═══ TAB: BERATER & CC ═══ */}
-        {tab==='berater' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <div className="side-by-side" style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
-              <div style={{ flex:'1 1 400px' }}>
-                <Sec title="👤 Berater (Termine)">
-                  <div style={{ height:Math.max(E.berater.length*32,200) }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={E.berater} layout="vertical" margin={{left:130}}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis type="number" tick={{fill:C.sec,fontSize:11}}/>
-                        <YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:11}} width={120}/>
-                        <Tooltip content={<TT/>}/>
-                        <Bar dataKey="t" name="Termine" radius={[0,6,6,0]}>
-                          {E.berater.map((_,i)=><Cell key={i} fill={CL[i%CL.length]}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Sec>
-              </div>
-              <div style={{ flex:'1 1 400px' }}>
-                <Sec title="📞 Terminiert von (CC + VB)">
-                  <div style={{ height:Math.max(E.terminierer.length*32,200) }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={E.terminierer} layout="vertical" margin={{left:130}}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis type="number" tick={{fill:C.sec,fontSize:11}}/>
-                        <YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:11}} width={120}/>
-                        <Tooltip content={<TT/>}/>
-                        <Bar dataKey="t" name="Termine" radius={[0,6,6,0]}>
-                          {E.terminierer.map((_,i)=><Cell key={i} fill={CL[i%CL.length]}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Sec>
-              </div>
-            </div>
-
-            {/* CC Agent Conversion */}
-            <Sec title="👩‍💼 CC-Agent Enpal-Conversion (LMT Feb)">
-              <div style={{ fontSize:11, color:C.sec, marginBottom:8 }}>Wie gut qualifiziert jeder Agent speziell Enpal-Leads?</div>
-              <div className="side-by-side" style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
-                <div style={{ flex:'1 1 420px' }}>
-                  <div className="chart-h-200" style={{ height:200 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={E.ccEnpal} layout="vertical" margin={{left:120}}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis type="number" unit="%" domain={[0,20]} tick={{fill:C.sec,fontSize:11}}/>
-                        <YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:11}} width={110}/>
-                        <Tooltip content={<TT/>}/>
-                        <Bar dataKey="rate" name="Term-Rate %" radius={[0,6,6,0]}>
-                          {E.ccEnpal.map((d,i)=><Cell key={i} fill={d.rate>15?C.green:d.rate>10?C.amber:C.red}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-                <div style={{ flex:'1 1 420px' }}>
-                  <div style={{ overflowX:"auto" }}>
-                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                      <thead><tr style={{ borderBottom:`2px solid ${C.border}` }}>
-                        {["Agent","Leads","Term","Rate","REKL","REKL%"].map(h=>(
-                          <th key={h} style={{ padding:"6px 6px", textAlign:h==="Agent"?"left":"right", color:C.sec, fontWeight:600, fontSize:10 }}>{h}</th>
-                        ))}
-                      </tr></thead>
-                      <tbody>{E.ccEnpal.map((a,i)=>(
-                        <tr key={i} style={{ borderBottom:`1px solid ${C.border}` }}>
-                          <td style={{ padding:"6px", fontWeight:600, fontSize:12 }}>{a.n}</td>
-                          <td style={{ padding:"6px", textAlign:"right" }}>{a.leads}</td>
-                          <td style={{ padding:"6px", textAlign:"right", color:C.green, fontWeight:700 }}>{a.term}</td>
-                          <td style={{ padding:"6px", textAlign:"right" }}><Badge v={`${a.rate.toFixed(1)}%`} color={a.rate>15?C.green:a.rate>10?C.amber:C.red}/></td>
-                          <td style={{ padding:"6px", textAlign:"right", color:C.red }}>{a.rekl}</td>
-                          <td style={{ padding:"6px", textAlign:"right" }}><Badge v={`${a.reklP}%`} color={a.reklP>55?C.red:a.reklP>40?C.amber:C.green}/></td>
-                        </tr>
-                      ))}</tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-              <AlertBox color={C.cyan} icon="💡">
-                <strong style={{color:C.green}}>Selin</strong> (18,0%) und <strong style={{color:C.green}}>Jasmin</strong> (15,3%) beste Enpal-Conversion · <strong style={{color:C.red}}>Mensure</strong> nur 4,7% – 4× schlechter.
-                <strong style={{color:C.red}}> Nadia</strong> bekommt 161 Leads (meiste!) aber 64% REKL.
-              </AlertBox>
-            </Sec>
+        {tab==='berater'&&(<div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div className="side-by-side" style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+            <div style={{flex:'1 1 400px'}}><Sec title="👤 Berater — Termine erstellt">
+              <ResponsiveContainer width="100%" height={Math.max(200,E.berater.length*34)}><BarChart data={E.berater} layout="vertical" margin={{left:130}}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis type="number" tick={{fill:C.sec,fontSize:11}}/><YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:11}} width={120}/><Tooltip {...TT()}/><Bar dataKey="t" name="Termine" radius={[0,6,6,0]}>{E.berater.map((_,i)=><Cell key={i} fill={CL[i%CL.length]}/>)}</Bar></BarChart></ResponsiveContainer>
+            </Sec></div>
+            <div style={{flex:'1 1 400px'}}><Sec title="📞 Terminiert von (CC + VB)">
+              <ResponsiveContainer width="100%" height={Math.max(200,E.terminierer.length*34)}><BarChart data={E.terminierer} layout="vertical" margin={{left:130}}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis type="number" tick={{fill:C.sec,fontSize:11}}/><YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:11}} width={120}/><Tooltip {...TT()}/><Bar dataKey="t" name="Termine" radius={[0,6,6,0]}>{E.terminierer.map((_,i)=><Cell key={i} fill={CL[i%CL.length]}/>)}</Bar></BarChart></ResponsiveContainer>
+            </Sec></div>
           </div>
-        )}
-
-        {/* ═══ TAB: PIPELINE ═══ */}
-        {tab==='pipeline' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <div className="kpi-row" style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
-              <KPI small label="WVL" value={E.pipeline.wvl} sub={`Ø ${E.pipeline.wvlAvg}d alt`} color={C.blue}/>
-              <KPI small label="Nicht erreicht" value={E.pipeline.ne} sub="noch versuchbar" color={C.orange}/>
-              <KPI small label="5× NE (aufgeg.)" value={E.pipeline.ne5} sub="vermutlich verloren" color={C.red}/>
-              <KPI small label="Total Pipeline" value={E.pipeline.wvl+E.pipeline.ne} sub="WVL + NE aktiv" color={C.cyan}/>
-            </div>
-
-            <div className="side-by-side" style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
-              <div style={{ flex:'1 1 350px' }}>
-                <Sec title={`📋 WVL-Alter (${E.pipeline.wvl} Leads)`}>
-                  <div style={{ height:140 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={[
-                        {n:"< 3 Tage",v:E.pipeline.wvlU3d},{n:"3–7 Tage",v:E.pipeline.wvl3to7d},{n:"> 7 Tage",v:E.pipeline.wvlU7d},
-                      ]}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis dataKey="n" tick={{fill:C.sec,fontSize:10}}/>
-                        <YAxis tick={{fill:C.sec,fontSize:10}}/>
-                        <Tooltip content={<TT/>}/>
-                        <Bar dataKey="v" name="Leads" radius={[6,6,0,0]}>
-                          {[C.green,C.amber,C.red].map((c,i)=><Cell key={i} fill={c}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Sec>
+          <Sec title="👩‍💼 CC-Agent Enpal-Conversion (LMT Feb)">
+            <div style={{fontSize:11,color:C.sec,marginBottom:10}}>Wie gut qualifiziert jeder Agent speziell Enpal-Leads?</div>
+            <div className="side-by-side" style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+              <div style={{flex:'1 1 420px'}}>
+                <ResponsiveContainer width="100%" height={200}><BarChart data={E.ccEnpal} layout="vertical" margin={{left:120}}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis type="number" unit="%" domain={[0,20]} tick={{fill:C.sec,fontSize:11}}/><YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:11}} width={110}/><Tooltip {...TT()}/><Bar dataKey="rate" name="Term-Rate %" radius={[0,6,6,0]}>{E.ccEnpal.map((d,i)=><Cell key={i} fill={d.rate>15?C.green:d.rate>10?C.amber:C.red}/>)}</Bar></BarChart></ResponsiveContainer>
               </div>
-              <div style={{ flex:'1 1 350px' }}>
-                <Sec title={`📋 NE-Alter (${E.pipeline.neTotal} Leads)`}>
-                  <div style={{ height:140 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={[
-                        {n:"< 3 Tage",v:E.pipeline.neU3d},{n:"3–7 Tage",v:E.pipeline.ne3to7d},{n:"> 7 Tage",v:E.pipeline.neU7d},
-                      ]}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis dataKey="n" tick={{fill:C.sec,fontSize:10}}/>
-                        <YAxis tick={{fill:C.sec,fontSize:10}}/>
-                        <Tooltip content={<TT/>}/>
-                        <Bar dataKey="v" name="Leads" radius={[6,6,0,0]}>
-                          {[C.green,C.amber,C.red].map((c,i)=><Cell key={i} fill={c}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Sec>
+              <div style={{flex:'1 1 400px',overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr style={{borderBottom:'2px solid '+C.border}}>{['Agent','Leads','Term','Rate','REKL','REKL%'].map(h=>(<th key={h} style={{padding:'7px 6px',textAlign:h==='Agent'?'left':'right',color:C.sec,fontWeight:600,fontSize:10}}>{h}</th>))}</tr></thead><tbody>{[...E.ccEnpal].sort((a,b)=>b.rate-a.rate).map((a,i)=>(<tr key={i} style={{borderBottom:'1px solid '+C.border}}><td style={{padding:'7px 6px',fontWeight:600}}>{a.n}</td><td style={{padding:'7px 6px',textAlign:'right'}}>{a.leads}</td><td style={{padding:'7px 6px',textAlign:'right',color:C.green,fontWeight:700}}>{a.term}</td><td style={{padding:'7px 6px',textAlign:'right'}}><Badge v={a.rate.toFixed(1)+'%'} color={a.rate>=15?C.green:a.rate>=10?C.amber:C.red}/></td><td style={{padding:'7px 6px',textAlign:'right',color:C.red}}>{a.rekl}</td><td style={{padding:'7px 6px',textAlign:'right'}}><Badge v={a.reklP+'%'} color={a.reklP>50?C.red:C.amber}/></td></tr>))}</tbody></table>
               </div>
             </div>
+            <div style={{marginTop:12}}><Alrt color={C.amber} icon="💡"><strong style={{color:C.green}}>Selin</strong> (18,0%) und <strong style={{color:C.green}}>Jasmin</strong> (15,3%) beste Conversion. <strong style={{color:C.red}}>Mensure</strong> nur 4,7%. <strong style={{color:C.amber}}>Nadia</strong> bekommt 161 Leads (meiste!) aber 64% REKL.</Alrt></div>
+          </Sec>
+        </div>)}
 
-            <AlertBox color={C.red} icon="⚠️">
-              <strong style={{color:C.red}}>{E.pipeline.wvlU7d} WVL &gt; 7d</strong> – drohen zu verfallen! <strong style={{color:C.green}}>{E.pipeline.neU3d} NE &lt; 3d</strong> noch frisch.
-              Bei 15% Nachfass-Conversion = <strong style={{color:C.green}}>~{Math.round((E.pipeline.wvl+E.pipeline.ne)*0.15)} zusätzliche Termine</strong> möglich.
-            </AlertBox>
-
-            <Sec title="📋 Handlungsempfehlungen">
-              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                {termRate<15 && (
-                  <div style={{ background:'rgba(240,160,48,.08)', border:'1px solid rgba(240,160,48,.25)', borderRadius:8, padding:'10px 14px', fontSize:13, color:C.sec }}>
-                    🟡 <strong style={{color:C.amber}}>Terminierungsquote {fmtP(termRate)}</strong> — Ziel: &gt;15% · {fmt(febLeads-(E.feb.term+E.feb.ang))} Leads bisher nicht terminiert
-                  </div>
-                )}
-                {afRate>40 && (
-                  <div style={{ background:'rgba(248,81,73,.08)', border:'1px solid rgba(248,81,73,.25)', borderRadius:8, padding:'10px 14px', fontSize:13, color:C.sec }}>
-                    🔴 <strong style={{color:C.red}}>Ausfallquote {fmtP(afRate)}</strong> — Höher als Benchmark · Bestätigungsanrufe optimieren
-                  </div>
-                )}
-                <div style={{ background:'rgba(88,166,255,.08)', border:'1px solid rgba(88,166,255,.25)', borderRadius:8, padding:'10px 14px', fontSize:13, color:C.sec }}>
-                  🔵 <strong style={{color:C.blue}}>{fmt(E.termeOffen)} offene Termine</strong> stehen noch aus — Ergebnisse folgen
-                </div>
-                <div style={{ background:'rgba(63,185,80,.08)', border:'1px solid rgba(63,185,80,.25)', borderRadius:8, padding:'10px 14px', fontSize:13, color:C.sec }}>
-                  🟢 <strong style={{color:C.green}}>{fmt(E.pipeline.wvl)} Wiedervorlagen</strong> nachfassen — potenzielle Abschlüsse
-                </div>
-              </div>
-            </Sec>
+        {tab==='pipeline'&&(<div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div className="kpi-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+            <KPI label="WVL" value={fmt(E.pipeline.wvl)} sub="Ø 5d alt" color={C.blue}/>
+            <KPI label="Nicht erreicht" value={fmt(E.pipeline.ne)} sub="noch versuchbar" color={C.amber}/>
+            <KPI label="5× NE (aufgeg.)" value={fmt(E.pipeline.ne5)} sub="vermutlich verloren" color={C.red}/>
+            <KPI label="Total Pipeline" value={fmt(E.pipeline.wvl+E.pipeline.ne)} sub="WVL + NE aktiv" color={C.green}/>
           </div>
-        )}
-
-        {/* ═══ TAB: SPEED ═══ */}
-        {tab==='speed' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <div className="kpi-row" style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
-              <KPI small label="Median" value={`${E.speed.median}h`} color={C.green}/>
-              <KPI small label="Durchschnitt" value={`${E.speed.avg}h`} sub="Ausreißer ziehen hoch" color={C.amber}/>
-              <KPI small label="<24h" value={`${E.speed.unter24hP}%`} sub={`${E.speed.unter24h} von ${E.speed.matches}`} color={C.green}/>
+          <div className="side-by-side" style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+            <div style={{flex:'1 1 350px'}}><Sec title={'📋 WVL-Alter ('+E.pipeline.wvl+' Leads)'}>
+              <ResponsiveContainer width="100%" height={140}><BarChart data={[{n:"< 3 Tage",v:E.pipeline.wvlU3d},{n:"3-7 Tage",v:E.pipeline.wvl3to7d},{n:"> 7 Tage",v:E.pipeline.wvlU7d}]}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis dataKey="n" tick={{fill:C.sec,fontSize:10}}/><YAxis tick={{fill:C.sec,fontSize:10}}/><Tooltip {...TT()}/><Bar dataKey="v" name="Leads" radius={[6,6,0,0]}>{[C.green,C.amber,C.red].map((c,i)=><Cell key={i} fill={c}/>)}</Bar></BarChart></ResponsiveContainer>
+            </Sec></div>
+            <div style={{flex:'1 1 350px'}}><Sec title={'📋 NE-Alter ('+E.pipeline.neTotal+' Leads)'}>
+              <ResponsiveContainer width="100%" height={140}><BarChart data={[{n:"< 3 Tage",v:E.pipeline.neU3d},{n:"3-7 Tage",v:E.pipeline.ne3to7d},{n:"> 7 Tage",v:E.pipeline.neU7d}]}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis dataKey="n" tick={{fill:C.sec,fontSize:10}}/><YAxis tick={{fill:C.sec,fontSize:10}}/><Tooltip {...TT()}/><Bar dataKey="v" name="Leads" radius={[6,6,0,0]}>{[C.green,C.amber,C.red].map((c,i)=><Cell key={i} fill={c}/>)}</Bar></BarChart></ResponsiveContainer>
+            </Sec></div>
+          </div>
+          <Alrt color={C.red} icon="⚠️"><strong style={{color:C.red}}>{E.pipeline.wvlU7d} WVL &gt; 7d</strong> – drohen zu verfallen! <strong style={{color:C.green}}>{E.pipeline.neU3d} NE &lt; 3d</strong> noch frisch. Bei 15% Nachfass-Conversion = <strong style={{color:C.green}}>~{Math.round((E.pipeline.wvl+E.pipeline.ne)*0.15)} zusätzliche Termine</strong> möglich.</Alrt>
+          <Sec title="⏱️ Lead→Termin Speed (Enpal)">
+            <div className="kpi-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:12}}>
+              <KPI small label="Median" value={E.speed.median+'h'} color={C.green}/>
+              <KPI small label="Durchschnitt" value={E.speed.avg+'h'} sub="Ausreißer ziehen hoch" color={C.amber}/>
+              <KPI small label="<24h" value={E.speed.unter24hP+'%'} sub={E.speed.unter24h+' von '+E.speed.matches} color={C.green}/>
               <KPI small label=">72h" value={E.speed.ueber72h} sub="zu langsam" color={C.red}/>
             </div>
+            <ResponsiveContainer width="100%" height={180}><BarChart data={E.speed.buckets}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis dataKey="n" tick={{fill:C.sec,fontSize:11}}/><YAxis tick={{fill:C.sec,fontSize:11}}/><Tooltip {...TT()}/><Bar dataKey="v" name="Leads" radius={[6,6,0,0]}>{E.speed.buckets.map((_,i)=><Cell key={i} fill={i<3?C.green:i<4?C.amber:C.red}/>)}</Bar></BarChart></ResponsiveContainer>
+          </Sec>
+          <Sec title="📋 Handlungsempfehlungen">
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              <Alrt color={C.amber} icon="🟡"><strong>Terminierungsquote {fmtP(termRate)}</strong> — Ziel: &gt;15%</Alrt>
+              <Alrt color={C.red} icon="🔴"><strong>Ausfallquote {Math.round(afRate)}%</strong> — Bestätigungsanrufe optimieren</Alrt>
+              <Alrt color={C.blue} icon="🔵"><strong>{fmt(E.termeOffen)} offene Termine</strong> stehen noch aus</Alrt>
+              <Alrt color={C.green} icon="🟢"><strong>{fmt(E.pipeline.wvl+E.pipeline.ne)} Pipeline-Leads</strong> nachfassen</Alrt>
+            </div>
+          </Sec>
+        </div>)}
 
-            <Sec title="⏱️ Lead→Termin Reaktionszeit">
-              <div className="chart-h-200" style={{ height:200 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={E.speed.buckets}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                    <XAxis dataKey="n" tick={{fill:C.sec,fontSize:11}}/>
-                    <YAxis tick={{fill:C.sec,fontSize:11}}/>
-                    <Tooltip content={<TT/>}/>
-                    <Bar dataKey="v" name="Leads" radius={[6,6,0,0]}>
-                      {E.speed.buckets.map((d,i)=><Cell key={i} fill={i<3?C.green:i<4?C.amber:C.red}/>)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+        {tab==='benchmark'&&(<div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <Sec title="📊 Benchmark: Enpal vs. MVPP vs. Gesamt">
+            <div className="side-by-side" style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+              <div style={{flex:'1 1 350px'}}><div style={{fontSize:11,fontWeight:700,color:C.sec,marginBottom:6}}>Terminierungsrate %</div>
+                <ResponsiveContainer width="100%" height={140}><BarChart data={E.benchmark} layout="vertical" margin={{left:60}}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis type="number" unit="%" domain={[0,60]} tick={{fill:C.sec,fontSize:11}}/><YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:12}} width={50}/><Tooltip {...TT()}/><Bar dataKey="termP" name="Term-Rate %" radius={[0,6,6,0]}>{E.benchmark.map((d,i)=><Cell key={i} fill={d.color}/>)}</Bar></BarChart></ResponsiveContainer>
               </div>
-              <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>56% innerhalb 24h terminiert ✅ · Sweet Spot 12–24h (50%) · 9% brauchen &gt;72h</div>
-            </Sec>
-          </div>
-        )}
-
-        {/* ═══ TAB: BENCHMARK ═══ */}
-        {tab==='benchmark' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <div className="side-by-side" style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
-              <div style={{ flex:'1 1 350px' }}>
-                <Sec title="Terminierungsrate %">
-                  <div className="chart-h-180" style={{ height:160 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={E.benchmark} layout="vertical" margin={{left:60}}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis type="number" unit="%" domain={[0,60]} tick={{fill:C.sec,fontSize:11}}/>
-                        <YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:12}} width={50}/>
-                        <Tooltip content={<TT/>}/>
-                        <Bar dataKey="termP" name="Term-Rate %" radius={[0,6,6,0]}>
-                          {E.benchmark.map((d,i)=><Cell key={i} fill={d.color}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Sec>
-              </div>
-              <div style={{ flex:'1 1 350px' }}>
-                <Sec title="Reklamationsrate %">
-                  <div className="chart-h-180" style={{ height:160 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={E.benchmark} layout="vertical" margin={{left:60}}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis type="number" unit="%" domain={[0,40]} tick={{fill:C.sec,fontSize:11}}/>
-                        <YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:12}} width={50}/>
-                        <Tooltip content={<TT/>}/>
-                        <Bar dataKey="reklP" name="REKL-Rate %" radius={[0,6,6,0]}>
-                          {E.benchmark.map((d,i)=><Cell key={i} fill={d.reklP>25?C.red:d.reklP>15?C.amber:C.green}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Sec>
+              <div style={{flex:'1 1 350px'}}><div style={{fontSize:11,fontWeight:700,color:C.sec,marginBottom:6}}>Reklamationsrate %</div>
+                <ResponsiveContainer width="100%" height={140}><BarChart data={E.benchmark} layout="vertical" margin={{left:60}}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis type="number" unit="%" domain={[0,40]} tick={{fill:C.sec,fontSize:11}}/><YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:12}} width={50}/><Tooltip {...TT()}/><Bar dataKey="reklP" name="REKL-Rate %" radius={[0,6,6,0]}>{E.benchmark.map((d,i)=><Cell key={i} fill={d.reklP>25?C.red:d.reklP>15?C.amber:C.green}/>)}</Bar></BarChart></ResponsiveContainer>
               </div>
             </div>
+            <div style={{overflowX:'auto',marginTop:12}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr style={{borderBottom:'2px solid '+C.border}}>{['Quelle','Leads','Term','Term%','REKL','REKL%','Faktor'].map(h=>(<th key={h} style={{padding:'7px 6px',textAlign:h==='Quelle'?'left':'right',color:C.sec,fontWeight:600,fontSize:10}}>{h}</th>))}</tr></thead><tbody>{E.benchmark.map((b,i)=>(<tr key={i} style={{borderBottom:'1px solid '+C.border,background:b.n==='Enpal'?C.orange+'08':'transparent'}}><td style={{padding:'7px 6px',fontWeight:700,color:b.color}}>{b.n}</td><td style={{padding:'7px 6px',textAlign:'right'}}>{fmt(b.leads)}</td><td style={{padding:'7px 6px',textAlign:'right',color:C.green,fontWeight:700}}>{b.term}</td><td style={{padding:'7px 6px',textAlign:'right'}}><Badge v={b.termP+'%'} color={b.termP>30?C.green:b.termP>15?C.amber:C.red}/></td><td style={{padding:'7px 6px',textAlign:'right',color:C.red}}>{b.rekl}</td><td style={{padding:'7px 6px',textAlign:'right'}}><Badge v={b.reklP+'%'} color={b.reklP>25?C.red:b.reklP>15?C.amber:C.green}/></td><td style={{padding:'7px 6px',textAlign:'right',fontWeight:700,color:b.n==='Enpal'?C.dim:C.green}}>{b.n==='Enpal'?'–':(b.termP/8.8).toFixed(1)+'×'}</td></tr>))}</tbody></table>
+            </div>
+            <div style={{marginTop:12}}><Alrt color={C.purple} icon="📉">MVPP terminiert <strong style={{color:C.green}}>6,0× besser</strong> als Enpal bei <strong style={{color:C.green}}>23× weniger REKL</strong>. Enpal liegt <strong style={{color:C.red}}>50% unter</strong> dem Gesamtschnitt.</Alrt></div>
+          </Sec>
+          <Sec title="📈 Enpal: Jan vs. Feb">
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr style={{borderBottom:'2px solid '+C.border}}>{['','Leads','WP','Klass.','Term+Ang','Term%','REKL','REKL%'].map(h=>(<th key={h} style={{padding:'7px 6px',textAlign:h===''?'left':'right',color:C.sec,fontWeight:600,fontSize:10}}>{h}</th>))}</tr></thead><tbody>
+                <tr style={{borderBottom:'1px solid '+C.border}}><td style={{padding:'7px 6px',fontWeight:700,color:C.blue}}>Januar</td><td style={{padding:'7px 6px',textAlign:'right'}}>{E.jan.leads}</td><td style={{padding:'7px 6px',textAlign:'right'}}>{E.jan.wp}</td><td style={{padding:'7px 6px',textAlign:'right'}}>{E.jan.kl}</td><td style={{padding:'7px 6px',textAlign:'right',color:C.green}}>{E.jan.term+E.jan.ang}</td><td style={{padding:'7px 6px',textAlign:'right'}}><Badge v={((E.jan.term+E.jan.ang)/E.jan.leads*100).toFixed(1)+'%'} color={C.red}/></td><td style={{padding:'7px 6px',textAlign:'right',color:C.red}}>{E.jan.rekl}</td><td style={{padding:'7px 6px',textAlign:'right'}}><Badge v={Math.round(E.jan.rekl/E.jan.leads*100)+'%'} color={C.red}/></td></tr>
+                <tr style={{borderBottom:'1px solid '+C.border}}><td style={{padding:'7px 6px',fontWeight:700,color:C.orange}}>Februar</td><td style={{padding:'7px 6px',textAlign:'right',fontWeight:700}}>{fmt(febLeads)}</td><td style={{padding:'7px 6px',textAlign:'right'}}>{fmt(E.feb.wp)}</td><td style={{padding:'7px 6px',textAlign:'right'}}>{E.feb.kl}</td><td style={{padding:'7px 6px',textAlign:'right',color:C.green,fontWeight:700}}>{E.feb.term+E.feb.ang}</td><td style={{padding:'7px 6px',textAlign:'right'}}><Badge v={fmtP(termRate)} color={C.amber}/></td><td style={{padding:'7px 6px',textAlign:'right',color:C.red}}>{E.feb.rekl}</td><td style={{padding:'7px 6px',textAlign:'right'}}><Badge v={Math.round(E.feb.rekl/febLeads*100)+'%'} color={C.red}/></td></tr>
+                <tr style={{borderTop:'2px solid '+C.orange,background:C.orange+'08'}}><td style={{padding:'7px 6px',fontWeight:700,color:C.orange}}>Δ</td><td style={{padding:'7px 6px',textAlign:'right',color:C.green,fontWeight:700}}>+{fmt(febLeads-E.jan.leads)}</td><td colSpan={2} style={{padding:'7px 6px',textAlign:'right',fontSize:10,color:C.sec}}>WP ×{Math.round(E.feb.wp/Math.max(E.jan.wp,1))}</td><td style={{padding:'7px 6px',textAlign:'right',color:C.green}}>+{(E.feb.term+E.feb.ang)-(E.jan.term+E.jan.ang)}</td><td colSpan={3}/></tr>
+              </tbody></table>
+            </div>
+          </Sec>
+        </div>)}
 
-            <Sec title="📊 Vergleichstabelle">
-              <div style={{ overflowX:"auto" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                  <thead><tr style={{ borderBottom:`2px solid ${C.border}` }}>
-                    {["Quelle","Leads","Term","Term%","REKL","REKL%","Faktor vs Enpal"].map(h=>(
-                      <th key={h} style={{ padding:"7px 6px", textAlign:h==="Quelle"?"left":"right", color:C.sec, fontWeight:600, fontSize:10 }}>{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>{E.benchmark.map((b,i)=>(
-                    <tr key={i} style={{ borderBottom:`1px solid ${C.border}`, background:b.n==="Enpal"?`${C.orange}08`:"transparent" }}>
-                      <td style={{ padding:"7px 6px", fontWeight:700, color:b.color }}>{b.n}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}>{fmt(b.leads)}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.green, fontWeight:700 }}>{b.term}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}><Badge v={`${b.termP}%`} color={b.termP>30?C.green:b.termP>15?C.amber:C.red}/></td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.red }}>{b.rekl}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}><Badge v={`${b.reklP}%`} color={b.reklP>25?C.red:b.reklP>15?C.amber:C.green}/></td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", fontWeight:700, color:b.n==="Enpal"?C.dim:C.green }}>{b.n==="Enpal"?"–":`${(b.termP/8.8).toFixed(1)}×`}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
-            </Sec>
+        {tab==='details'&&(<div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <Sec title="📍 PLZ-Gebiete: Conversion-Unterschiede">
+            <ResponsiveContainer width="100%" height={Math.max(E.plz.length*24,250)}><BarChart data={E.plz} layout="vertical" margin={{left:60}}><CartesianGrid strokeDasharray="3 3" stroke={C.border}/><XAxis type="number" unit="%" domain={[0,16]} tick={{fill:C.sec,fontSize:11}}/><YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:10}} width={50}/><Tooltip {...TT()}/><Bar dataKey="rate" name="Term-Rate %" radius={[0,6,6,0]}>{E.plz.map((d,i)=><Cell key={i} fill={d.rate>12?C.green:d.rate>8?C.amber:C.red}/>)}</Bar></BarChart></ResponsiveContainer>
+            <div style={{overflowX:'auto',marginTop:8}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}><thead><tr style={{borderBottom:'2px solid '+C.border}}>{['PLZ','Leads','Term','Rate'].map(h=>(<th key={h} style={{padding:'5px 4px',textAlign:h==='PLZ'?'left':'right',color:C.sec,fontWeight:600,fontSize:10}}>{h}</th>))}</tr></thead><tbody>{E.plz.map((p,i)=>(<tr key={i} style={{borderBottom:'1px solid '+C.border}}><td style={{padding:'4px',fontWeight:600}}>{p.n}</td><td style={{padding:'4px',textAlign:'right'}}>{p.leads}</td><td style={{padding:'4px',textAlign:'right',color:C.green,fontWeight:700}}>{p.term}</td><td style={{padding:'4px',textAlign:'right'}}><Badge v={p.rate.toFixed(1)+'%'} color={p.rate>12?C.green:p.rate>8?C.amber:C.red}/></td></tr>))}</tbody></table>
+            </div>
+            <div style={{fontSize:10,color:C.dim,marginTop:4}}><strong style={{color:C.green}}>41/44/51/40xxx</strong> = Top-Gebiete · <strong style={{color:C.red}}>49xxx</strong> nur 1,5% bei 65 Leads!</div>
+          </Sec>
+          <Alrt color={C.orange} icon="⚠️"><strong>Enpal Feb:</strong> {fmt(febLeads)} Leads → {E.terme} Terme → {E.termeAbg} stattgef. → <strong style={{color:C.green}}>{E.sales} Sale ({eur(E.salesNetto)})</strong>. <strong style={{color:C.red}}>{Math.round(E.feb.rekl/febLeads*100)}% REKL</strong> · MVPP terminiert <strong>6× besser</strong>. <strong style={{color:C.blue}}>{E.termeOffen} Terme offen</strong> + <strong style={{color:C.amber}}>{E.pipeline.wvl+E.pipeline.ne} Pipeline</strong> nachfassbar.</Alrt>
+        </div>)}
 
-            <AlertBox color={C.purple} icon="📉">
-              MVPP terminiert <strong style={{color:C.green}}>6,0× besser</strong> als Enpal bei <strong style={{color:C.green}}>23× weniger REKL</strong>.
-              Enpal liegt <strong style={{color:C.red}}>50% unter</strong> dem Gesamtschnitt.
-            </AlertBox>
-          </div>
-        )}
-
-        {/* ═══ TAB: PLZ ═══ */}
-        {tab==='plz' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <Sec title="📍 PLZ-Gebiete: Conversion-Unterschiede">
-              <div style={{ height:Math.max(E.plz.length*24,250) }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={E.plz} layout="vertical" margin={{left:60}}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                    <XAxis type="number" unit="%" domain={[0,16]} tick={{fill:C.sec,fontSize:11}}/>
-                    <YAxis type="category" dataKey="n" tick={{fill:C.sec,fontSize:10}} width={50}/>
-                    <Tooltip content={<TT/>}/>
-                    <Bar dataKey="rate" name="Term-Rate %" radius={[0,6,6,0]}>
-                      {E.plz.map((d,i)=><Cell key={i} fill={d.rate>12?C.green:d.rate>8?C.amber:C.red}/>)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ overflowX:"auto", marginTop:8 }}>
-                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                  <thead><tr style={{ borderBottom:`2px solid ${C.border}` }}>
-                    {["PLZ","Leads","Term","Rate"].map(h=>(
-                      <th key={h} style={{ padding:"6px", textAlign:h==="PLZ"?"left":"right", color:C.sec, fontWeight:600, fontSize:10 }}>{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>{E.plz.map((p,i)=>(
-                    <tr key={i} style={{ borderBottom:`1px solid ${C.border}` }}>
-                      <td style={{ padding:"5px 6px", fontWeight:600 }}>{p.n}</td>
-                      <td style={{ padding:"5px 6px", textAlign:"right" }}>{p.leads}</td>
-                      <td style={{ padding:"5px 6px", textAlign:"right", color:C.green, fontWeight:700 }}>{p.term}</td>
-                      <td style={{ padding:"5px 6px", textAlign:"right" }}><Badge v={`${p.rate.toFixed(1)}%`} color={p.rate>12?C.green:p.rate>8?C.amber:C.red}/></td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
-              <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>
-                <strong style={{color:C.green}}>41/44/51/40xxx</strong> = Top (12–14%) · <strong style={{color:C.red}}>49xxx</strong> nur 1,5% bei 65 Leads! · 26xxx meiste Leads (136) aber nur 5,9%
-              </div>
-            </Sec>
-          </div>
-        )}
-
-        {/* ═══ TAB: DETAILS ═══ */}
-        {tab==='details' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <Sec title="⚡ WP vs. Klassisch Vergleich">
-              <div style={{ overflowX:"auto" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                  <thead><tr style={{ borderBottom:`2px solid ${C.border}` }}>
-                    {["","Leads","Term","Term%","REKL","NE5","Terme","Stattgef.","Ausgef.","Sales"].map(h=>(
-                      <th key={h} style={{ padding:"7px 6px", textAlign:h===""?"left":"right", color:C.sec, fontWeight:600, fontSize:10 }}>{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>
-                    <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-                      <td style={{ padding:"7px 6px", fontWeight:700, color:C.orange }}>⚡ WP</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", fontWeight:700 }}>{fmt(E.feb.wp)}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.green }}>70</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}><Badge v={`${(70/E.feb.wp*100).toFixed(1)}%`} color={C.red}/></td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.red }}>290</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.orange }}>182</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.cyan }}>{E.termeWP}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.green }}>10</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.red }}>13</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.green, fontWeight:700 }}>1</td>
-                    </tr>
-                    <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-                      <td style={{ padding:"7px 6px", fontWeight:700, color:C.amber }}>☀️ Klassisch</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", fontWeight:700 }}>{E.feb.kl}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.green }}>6</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}><Badge v={`${(6/E.feb.kl*100).toFixed(1)}%`} color={C.amber}/></td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.red }}>27</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.orange }}>7</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.cyan }}>{E.termeKl}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.dim }}>0</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.red }}>1</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.dim }}>0</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>WP = 94% aller Leads · Klassisch höhere Term-Rate (10,3% vs 7,7%) aber kaum Volumen</div>
-            </Sec>
-
-            <Sec title="📈 Enpal: Jan vs. Feb">
-              <div style={{ overflowX:"auto" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                  <thead><tr style={{ borderBottom:`2px solid ${C.border}` }}>
-                    {["","Leads","WP","Klass.","Term.+Angebot","Term%","REKL","REKL%"].map(h=>(
-                      <th key={h} style={{ padding:"7px 6px", textAlign:h===""?"left":"right", color:C.sec, fontWeight:600, fontSize:10 }}>{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>
-                    <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-                      <td style={{ padding:"7px 6px", fontWeight:700, color:C.blue }}>Januar</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}>{E.jan.leads}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}>{E.jan.wp}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}>{E.jan.kl}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.green }}>{E.jan.term+E.jan.ang}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}><Badge v={`${((E.jan.term+E.jan.ang)/E.jan.leads*100).toFixed(1)}%`} color={C.red}/></td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.red }}>{E.jan.rekl}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}><Badge v={`${Math.round(E.jan.rekl/E.jan.leads*100)}%`} color={C.red}/></td>
-                    </tr>
-                    <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-                      <td style={{ padding:"7px 6px", fontWeight:700, color:C.orange }}>Februar</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", fontWeight:700 }}>{fmt(febLeads)}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}>{fmt(E.feb.wp)}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}>{E.feb.kl}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.green, fontWeight:700 }}>{E.feb.term+E.feb.ang}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}><Badge v={`${termRate.toFixed(1)}%`} color={C.amber}/></td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.red }}>{E.feb.rekl}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}><Badge v={`${Math.round(E.feb.rekl/febLeads*100)}%`} color={C.red}/></td>
-                    </tr>
-                    <tr style={{ borderTop:`2px solid ${C.orange}`, background:`${C.orange}08` }}>
-                      <td style={{ padding:"7px 6px", fontWeight:700, color:C.orange }}>Δ</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.red, fontWeight:700 }}>+{fmt(febLeads-E.jan.leads)}</td>
-                      <td colSpan={2} style={{ padding:"7px 6px", textAlign:"right", fontSize:10, color:C.sec }}>WP ×{Math.round(E.feb.wp/Math.max(E.jan.wp,1))}!</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right", color:C.green }}>+{(E.feb.term+E.feb.ang)-(E.jan.term+E.jan.ang)}</td>
-                      <td style={{ padding:"7px 6px", textAlign:"right" }}><Badge v={`+${(termRate-((E.jan.term+E.jan.ang)/E.jan.leads*100)).toFixed(1)}pp`} color={C.green}/></td>
-                      <td colSpan={2}/>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>Feb ×{(febLeads/E.jan.leads).toFixed(1)} Leads vs. Jan · WP-Volumen explodiert (75→{fmt(E.feb.wp)}) · Term-Rate verbessert</div>
-            </Sec>
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-/* ═══ LOGIN ═══ */
-function Login({ onLogin }) {
-  const [pw, setPw] = useState('');
-  const [err, setErr] = useState(false);
-  const submit = () => {
-    if (pw === PW) { sessionStorage.setItem(SK, '1'); onLogin(); }
-    else { setErr(true); setTimeout(() => setErr(false), 3000); }
-  };
-  return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:C.bg }}>
-      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:'48px 40px', width:'100%', maxWidth:380, textAlign:'center' }}>
-        <div style={{ fontSize:36, fontWeight:800, marginBottom:4 }}>bee<span style={{color:C.orange}}>·</span>doo</div>
-        <div style={{ background:'rgba(249,115,22,.15)', color:C.orange, display:'inline-block', padding:'3px 14px', borderRadius:20, fontSize:11, fontWeight:700, marginBottom:32 }}>ENPAL PARTNER BOARD</div>
-        <div style={{ fontSize:15, color:C.sec, marginBottom:20 }}>Bitte Passwort eingeben</div>
-        <input
-          type="password" value={pw} onChange={e=>setPw(e.target.value)}
-          onKeyDown={e=>e.key==='Enter'&&submit()}
-          placeholder="Passwort" autoFocus
-          style={{ width:'100%', padding:'12px 16px', borderRadius:10, fontSize:15, border:`2px solid ${err?C.red:C.border}`, background:'#0D1117', color:C.text, outline:'none', marginBottom:8, display:'block' }}
-        />
-        {err && <div style={{ color:C.red, fontSize:12, marginBottom:8 }}>Falsches Passwort</div>}
-        <button onClick={submit} style={{ width:'100%', padding:12, borderRadius:10, border:'none', cursor:'pointer', background:C.orange, color:'#fff', fontWeight:800, fontSize:15, marginTop:8, fontFamily:'inherit' }}>
-          Anmelden →
-        </button>
-        <div style={{ marginTop:24, fontSize:12, color:C.sec }}>bee-doo GmbH · Enpal Partner Analytics</div>
-      </div>
-    </div>
-  );
-}
+function Login({onLogin}){const[pw,setPw]=useState('');const[err,setErr]=useState(false);const submit=()=>{if(pw===PW){sessionStorage.setItem(SK,'1');onLogin();}else{setErr(true);setTimeout(()=>setErr(false),3000);}};return(<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:C.bg}}><div className="login-card" style={{background:C.card,border:'1px solid '+C.border,borderRadius:16,padding:'48px 40px',width:'100%',maxWidth:380,textAlign:'center'}}><div style={{fontSize:36,fontWeight:800,marginBottom:4}}>bee<span style={{color:C.orange}}>·</span>doo</div><div style={{background:'rgba(249,115,22,.15)',color:C.orange,display:'inline-block',padding:'3px 14px',borderRadius:20,fontSize:11,fontWeight:700,marginBottom:32}}>ENPAL PARTNER BOARD</div><div style={{fontSize:15,color:C.sec,marginBottom:20}}>Bitte Passwort eingeben</div><input type="password" value={pw} onChange={ev=>setPw(ev.target.value)} onKeyDown={ev=>ev.key==='Enter'&&submit()} placeholder="Passwort" autoFocus style={{width:'100%',padding:'12px 16px',borderRadius:10,fontSize:15,border:'2px solid '+(err?C.red:C.border),background:'#0D1117',color:C.text,outline:'none',marginBottom:8,display:'block'}}/>{err&&<div style={{color:C.red,fontSize:12,marginBottom:8}}>Falsches Passwort</div>}<button onClick={submit} style={{width:'100%',padding:12,borderRadius:10,border:'none',cursor:'pointer',background:C.orange,color:'#fff',fontWeight:800,fontSize:15,marginTop:8,fontFamily:'inherit'}}>Anmelden →</button><div style={{marginTop:24,fontSize:12,color:C.sec}}>bee-doo GmbH · Enpal Partner Analytics</div></div></div>);}
 
-/* ═══ MAIN ═══ */
-function Main() {
-  const [auth, setAuth] = useState(() => sessionStorage.getItem(SK) === '1');
-  if (!auth) return <Login onLogin={() => setAuth(true)} />;
-  return <Board onLogout={() => { sessionStorage.removeItem(SK); setAuth(false); }} />;
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<Main />);
+function Main(){const[auth,setAuth]=useState(()=>sessionStorage.getItem(SK)==='1');if(!auth)return <Login onLogin={()=>setAuth(true)}/>;return <Board onLogout={()=>{sessionStorage.removeItem(SK);setAuth(false);}}/>;}
+ReactDOM.createRoot(document.getElementById('root')).render(<Main/>);
 </script>
 </body>
 </html>
