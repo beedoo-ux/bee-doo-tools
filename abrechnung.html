@@ -205,6 +205,21 @@ async function generateAbrechnungen(periode, onProgress){
   const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')));
   const gesperrteGefunden = auftraege.length - auftraegeClean.length;
   if(gesperrteGefunden>0) log(`⚠️ ${gesperrteGefunden} gesperrte Aufträge übersprungen`);
+  // NZ-Duplikate auto-erkennen: gleicher Kunde + gleicher VT → in pay_duplikate schreiben
+  const nzClean = auftraegeClean.filter(a=>a._nachzuegler);
+  const nzByKey = {};
+  nzClean.forEach(a=>{const k=`${(a.kunde_name||'').trim().toLowerCase()}__${a.vertriebler_id}`;if(!nzByKey[k])nzByKey[k]=[];nzByKey[k].push(a);});
+  for(const [k,arr] of Object.entries(nzByKey)){
+    if(arr.length<2)continue;
+    // Check if already in pay_duplikate
+    const an1=String(arr[0].auftrag_nr).replace('AN-','');const an2=String(arr[1].auftrag_nr).replace('AN-','');
+    const existing=await sbG('pay_duplikate',`or=(and(auftrag_nr_1.eq.${an1},auftrag_nr_2.eq.${an2}),and(auftrag_nr_1.eq.${an2},auftrag_nr_2.eq.${an1}))`).catch(()=>[]);
+    if(existing.length===0){
+      const vp=mitarbeiter.find(m=>m.id===arr[0].vertriebler_id);
+      await sbP('pay_duplikate',{kunde_name:arr[0].kunde_name,auftrag_nr_1:an1,auftrag_nr_2:an2,vertriebler:vp?`${vp.vorname} ${vp.nachname}`:'',status:'entscheidung_noetig',notiz:`NZ-Duplikat erkannt: ${arr.length}× gleicher Kunde`}).catch(()=>{});
+      log(`⚠️ NZ-Duplikat erkannt: ${arr[0].kunde_name} (AN-${an1} / AN-${an2})`);
+    }
+  }
   // Storno: nur Leistungsmonat
   const stornoAuftr = stornoLZ;
   // Storno-Abzüge: nach VP groupieren
@@ -824,6 +839,11 @@ function GutschriftPreview({ab,pos,sg}){
       }
       const getG = (item) => item.src==='lz'?lzG.byAN[item.an]:nzG.byAN[item.an];
       
+      // NZ-Duplikate erkennen: gleicher Kundenname → Warnung
+      const nzKundeCount = {};
+      nzG.groups.forEach(an => { const g=nzG.byAN[an]; if(g?.main?.kunde){ const k=g.main.kunde.trim().toLowerCase(); nzKundeCount[k]=(nzKundeCount[k]||0)+1; } });
+      const isNZDupe = (kunde) => kunde && nzKundeCount[kunde.trim().toLowerCase()] > 1;
+      
       // Dynamic page break: count actual rows per group, max ~38 rows per page
       const MAX_ROWS = 44;
       const LAST_PAGE_RESERVE = 4; // Summen + Unterschriften
@@ -867,7 +887,7 @@ function GutschriftPreview({ab,pos,sg}){
         return <React.Fragment>
           <tr style={{borderBottom:hasBoni?'none':'1px solid #eee',background:isNZ?'#fffbeb':'transparent'}}>
             <td style={{padding:'5px 6px',color:'#aaa',fontSize:9,verticalAlign:'top'}}>{nr}.</td>
-            <td style={{padding:'5px 6px'}}><div style={{fontWeight:600}}>{m.kunde||'—'}{isNZ&&<span style={{fontSize:7,color:'#B45309',marginLeft:4,padding:'1px 4px',background:'#fef3c7',borderRadius:3}}>NZ</span>}</div><div style={{fontSize:8.5,color:'#888'}}>{m.produkt} · {cleanNotiz}</div></td>
+            <td style={{padding:'5px 6px'}}><div style={{fontWeight:600}}>{m.kunde||'—'}{isNZ&&<span style={{fontSize:7,color:'#B45309',marginLeft:4,padding:'1px 4px',background:'#fef3c7',borderRadius:3}}>NZ</span>}{isNZ&&isNZDupe(m.kunde)&&<span style={{fontSize:7,color:'#dc2626',marginLeft:4,padding:'1px 4px',background:'#fef2f2',borderRadius:3,border:'1px solid #fecaca'}}>⚠️ Duplikat?</span>}</div><div style={{fontSize:8.5,color:'#888'}}>{m.produkt} · {cleanNotiz}</div></td>
             <td style={{padding:'5px 6px',color:'#888',fontSize:9,verticalAlign:'top'}}>{item.an}</td>
             <td style={{padding:'5px 6px',textAlign:'right',verticalAlign:'top'}}>{hasBoni?'':<span style={{fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(m.override_betrag!=null?m.override_betrag:m.original_betrag)}</span>}</td>
           </tr>
@@ -900,6 +920,7 @@ function GutschriftPreview({ab,pos,sg}){
               {pageGroups.map((item,gi) => { if(item.src==='sep') return <PosRow key="nz-hdr" item={item} nr={0}/>; globalNr = startNr + gi + 1 - pageGroups.slice(0,gi+1).filter(x=>x.src==='sep').length; return <PosRow key={item.an} item={item} nr={globalNr}/>; })}
               
               {isLastPage && <>
+                {aE.length>0 && <tr><td colSpan={4} style={{padding:'10px 6px 4px',fontWeight:700,color:'#334155',fontSize:10,borderBottom:'2px solid #334155',textTransform:'uppercase',letterSpacing:'.5px'}}>📎 Einmalzahlungen &amp; Abzüge ({aE.length})</td></tr>}
                 {aE.map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb',borderBottom:'1px solid #eee'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10}}>{p.kunde||p.notiz||p.typ} <span style={{fontSize:9,color:'#888'}}>({p.typ==='einmalzahlung'?'Einmalzahlung':p.typ==='abzug'?'Abzug':'Sonstiges'})</span></td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
                 <tr style={{fontWeight:700,borderTop:'2px solid #333',background:'#f9f9f9'}}><td></td><td colSpan={2} style={{padding:'6px 6px'}}>Netto-Summe</td><td style={{padding:'6px 6px',textAlign:'right',whiteSpace:'nowrap'}}>{fmtE(b.bp+b.es)}</td></tr>
                 <tr><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#555',borderTop:'1px solid #ddd'}}>Nettobetrag</td><td style={{padding:'4px 6px',textAlign:'right',borderTop:'1px solid #ddd',whiteSpace:'nowrap'}}>{fmtE(b.net)}</td></tr>
