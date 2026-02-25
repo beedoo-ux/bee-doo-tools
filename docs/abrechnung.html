@@ -255,6 +255,10 @@ async function generateAbrechnungen(periode, onProgress){
     const sonder = sonderByVP[vpId];
     const sonderFlat = sonder?.typ==='flat_rate' ? sonder.betrag : null;
     const sonderNoEigenlead = sonder?.beschreibung?.toLowerCase().includes('kein eigenlead');
+    const sonderNoEmpfehlung = sonder?.beschreibung?.toLowerCase().includes('kein empfehlung');
+    // NZ-Override: "NZ:2000" in Beschreibung → eigene Basis für Nachzügler, alle Boni aktiv
+    const nzMatch = sonder?.beschreibung?.match(/NZ:(\d+)/);
+    const sonderNZBetrag = nzMatch ? parseFloat(nzMatch[1]) : null;
     const ordersLZ = orders.filter(o => !o._nachzuegler);
     const ordersNZ = orders.filter(o => o._nachzuegler);
     const positionen = []; let bruttoTotal = 0;
@@ -262,17 +266,19 @@ async function generateAbrechnungen(periode, onProgress){
     const processOrders = (monthOrders, om, isNZ) => {
       const monthKey=vpId+'_'+om; const monthTotal=salesPerVPMonth[monthKey]||monthOrders.length;
       const staffel=monthTotal>=regel.staffel_schwelle;
-      // Sonderprovision überschreibt Basis/Staffel
-      const baseBetrag = sonderFlat || (staffel ? regel.staffel_betrag_sale : regel.basis_betrag_sale);
+      // NZ mit eigenem Betrag → NZ-Rate, alle Boni; sonst Sonder-Flat oder Staffel/Basis
+      const useNZOverride = isNZ && sonderNZBetrag;
+      const baseBetrag = useNZOverride ? sonderNZBetrag : (sonderFlat || (staffel ? regel.staffel_betrag_sale : regel.basis_betrag_sale));
       const nzTag = isNZ ? ' ★NZ' : '';
-      const staffelTag = sonderFlat ? ' (Sonder)' : (staffel ? ' (Staffel)' : '');
+      const staffelTag = useNZOverride ? ' (NZ-Sonder)' : (sonderFlat ? ' (Sonder)' : (staffel ? ' (Staffel)' : ''));
       for(const o of monthOrders){
         positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Solar ${o.kwp||0} kWp`,original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffelTag}${nzTag}`});
         bruttoTotal+=baseBetrag;
         const q=(o.lead_quelle||'').toLowerCase();
-        // Eigenlead-Bonus (nicht bei Sonder mit "kein Eigenlead")
-        if(q.includes('eigenlead')&&regel.betrag_eigenlead>0&&!sonderNoEigenlead){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_eigenlead;}
-        if(q.includes('empfehlung')&&regel.betrag_empfehlung>0){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_empfehlung;}
+        // Eigenlead-Bonus: bei NZ-Override immer aktiv, sonst nicht bei "kein Eigenlead"
+        if(q.includes('eigenlead')&&regel.betrag_eigenlead>0&&(useNZOverride||!sonderNoEigenlead)){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_eigenlead;}
+        // Empfehlungs-Bonus: bei NZ-Override immer aktiv, sonst nicht bei "kein Empfehlung"
+        if(q.includes('empfehlung')&&regel.betrag_empfehlung>0&&(useNZOverride||!sonderNoEmpfehlung)){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_empfehlung;}
         if(o.speichererweiterung&&regel.betrag_speicher>0){positionen.push({typ:'speicher',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Speicher-Bonus',original_betrag:regel.betrag_speicher,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_speicher;}
 
       }
@@ -287,9 +293,10 @@ async function generateAbrechnungen(periode, onProgress){
       ordersNZ.forEach(o => { const d=o.auftrags_datum||''; const om=d.substring(0,4)+'/'+d.substring(5,7); if(!ordersByMonthNZ[om])ordersByMonthNZ[om]=[]; ordersByMonthNZ[om].push(o); });
       for(const [om, mo] of Object.entries(ordersByMonthNZ)) processOrders(mo, om, true);
     }
-    // Stufenbonus
+    // Stufenbonus (nicht bei "kein Stufenbonus" in Sonder-Beschreibung)
+    const sonderNoStufen = sonder?.beschreibung?.toLowerCase().includes('kein stufenbonus');
     let stufenBonus=0;
-    for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const [k,cnt] of Object.entries(salesPerVPMonth)){ if(!k.startsWith(vpId+'_')) continue; if(cnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } }
+    if(!sonderNoStufen){ for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const [k,cnt] of Object.entries(salesPerVPMonth)){ if(!k.startsWith(vpId+'_')) continue; if(cnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } } }
     if(stufenBonus>0){ positionen.push({typ:'einmalzahlung',auftrag_nr:null,kunde:null,produkt:'Stufenbonus',original_betrag:stufenBonus,aktiv:true,zurueckgestellt:false,notiz:'Stufenbonus'}); bruttoTotal+=stufenBonus; }
     // Team-Bonus: Christoph Held → 200€ pro Sale ALLER VTs, Tayfun → 300€ pro Sale seines Teams
     const tb = teamBonusByVP[vpId];
