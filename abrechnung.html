@@ -214,7 +214,8 @@ async function generateAbrechnungen(periode, onProgress){
       }
     }
     let stufenBonus=0;
-    for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const [k,cnt] of Object.entries(salesPerVPMonth)){ if(!k.startsWith(vpId+'_')) continue; if(cnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } }
+    const keinStufen = sonderFlat&&(sonderFlat.beschreibung||'').toLowerCase().includes('kein stufenbonus');
+    if(!keinStufen){ for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const [k,cnt] of Object.entries(salesPerVPMonth)){ if(!k.startsWith(vpId+'_')) continue; if(cnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } } }
     if(stufenBonus>0){ positionen.push({typ:'einmalzahlung',auftrag_nr:null,kunde:null,produkt:'Stufenbonus',original_betrag:stufenBonus,aktiv:true,zurueckgestellt:false,notiz:'Stufenbonus'}); bruttoTotal+=stufenBonus; }
     // Team-Bonus
     const tb = teamBonusByVP[vpId];
@@ -295,7 +296,7 @@ function calc(pos,sg,hgb){
 let tt=null;
 function Toast({children}){const[t,setT]=useState(null);window.__t=(m,ty='success')=>{clearTimeout(tt);setT({m,ty});tt=setTimeout(()=>setT(null),3000);};return<>{children}{t&&<div className={`toast ${t.ty}`}>{t.m}</div>}</>;}
 
-function GutschriftPreview({ab,pos,sg}){
+function GutschriftPreview({ab,pos,sg,teamData}){
   const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');
   const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
   const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges','storno_abzug'].includes(p.typ));
@@ -559,6 +560,66 @@ function GutschriftPreview({ab,pos,sg}){
       </div>);
     })()}
 
+    {/* === TEAM-AUFTRÄGE SEITE (nur für Teamleiter) === */}
+    {teamData&&teamData.orders.length>0&&(()=>{
+      const MAX_ROWS_TEAM=38;
+      const allRows=[];
+      teamData.orders.forEach(member=>{
+        if(member.orders.length===0)return;
+        allRows.push({type:'header',name:member.name,count:member.orders.length});
+        member.orders.forEach(o=>allRows.push({type:'order',...o,vtName:member.name}));
+      });
+      const pages=[];let cur=[];
+      allRows.forEach(r=>{
+        if(cur.length>=MAX_ROWS_TEAM){pages.push(cur);cur=[];}
+        cur.push(r);
+      });
+      if(cur.length)pages.push(cur);
+
+      return pages.map((pageRows,pi)=><div key={`team-${pi}`} className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'14mm 16mm 4mm'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:800,color:'#1a1a2e'}}>👥 Team-Aufträge – {teamData.teamleiter}</div>
+              <div style={{fontSize:10,color:'#666',marginTop:2}}>{teamData.bezugsgruppe==='alle_vt'?'Alle Vertriebler':'Eigenes Team'} · {teamData.betrag_pro_sale}€ pro Sale · {pLabel(ab.periode)}</div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontSize:20,fontWeight:800,color:'#166534'}}>{teamData.totalSales}</div>
+              <div style={{fontSize:9,color:'#666'}}>Team-Sales gesamt</div>
+              <div style={{fontSize:11,fontWeight:700,color:'#E07800',marginTop:2}}>{fmtE(teamData.totalSales*teamData.betrag_pro_sale)} Bonus</div>
+            </div>
+          </div>
+          {pi===0&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+            {teamData.orders.filter(m=>m.orders.length>0).map(m=><div key={m.name} style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:6,padding:'4px 10px',fontSize:10}}>
+              <b style={{color:'#166534'}}>{m.name}</b> <span style={{color:'#16a34a'}}>{m.orders.length} Sales</span>
+            </div>)}
+          </div>}
+        </div>
+        <div style={{flex:1,padding:'0 16mm'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
+            <thead><tr style={{background:'#f5f5f5'}}>
+              <th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:30}}>#</th>
+              <th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888'}}>Vertriebler</th>
+              <th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888'}}>Auftrag</th>
+              <th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888'}}>Kunde</th>
+              <th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'right',fontSize:8,textTransform:'uppercase',color:'#888'}}>kWp</th>
+              <th style={{padding:'5px 8px',borderBottom:'2px solid #ddd',textAlign:'right',fontSize:8,textTransform:'uppercase',color:'#888'}}>Datum</th>
+            </tr></thead>
+            <tbody>
+              {pageRows.map((r,ri)=>{
+                if(r.type==='header')return<tr key={ri} style={{background:'#f0f9ff'}}><td colSpan={6} style={{padding:'6px 8px',fontWeight:700,fontSize:11,color:'#0369a1',borderBottom:'1px solid #bae6fd'}}>👤 {r.name} – {r.count} Sales</td></tr>;
+                return<tr key={ri} style={{borderBottom:'1px solid #f0f0f0'}}><td style={{padding:'3px 8px',color:'#aaa',fontSize:9}}>—</td><td style={{padding:'3px 8px',fontSize:9,color:'#666'}}>{r.vtName}</td><td style={{padding:'3px 8px',fontWeight:600}}>{r.auftrag_nr}</td><td style={{padding:'3px 8px'}}>{r.kunde_name}</td><td style={{padding:'3px 8px',textAlign:'right'}}>{r.kwp||0}</td><td style={{padding:'3px 8px',textAlign:'right',color:'#666'}}>{r.auftrags_datum}</td></tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{padding:'0 16mm 2mm'}}>
+          <div style={{fontSize:8,color:'#aaa',textAlign:'right',marginTop:4}}>Team-Aufträge Seite {pi+1}/{pages.length}</div>
+        </div>
+        <FooterBlock/>
+      </div>);
+    })()}
+
     {/* === SYSTEMGEBÜHR-RECHNUNG (nur HGB) === */}
     {hgb&&b.sgN>0&&<div className="gs-page" style={{padding:'14mm 16mm 28mm'}}>
       <div className="gs-branded-header" style={{background:'linear-gradient(135deg,#1a1a2e 0%,#2d1810 100%)'}}>
@@ -690,13 +751,36 @@ function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
 }
 
 function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
-  const[ab,setAb]=useState(null);const[pos,setPos]=useState([]);const[ld,setLd]=useState(true);const ref=useRef(null);
+  const[ab,setAb]=useState(null);const[pos,setPos]=useState([]);const[ld,setLd]=useState(true);const ref=useRef(null);const[teamData,setTeamData]=useState(null);
   useEffect(()=>{load();},[aId]);
   const load=async()=>{setLd(true);try{
     // VP-Stammdaten laden
     const nameParts=vtN.trim().split(/\s+/);const vn=nameParts[0];const nn=nameParts.slice(1).join(' ');
     const vpArr=await sbG('pay_mitarbeiter',`vorname=eq.${encodeURIComponent(vn)}&nachname=eq.${encodeURIComponent(nn)}&limit=1`).catch(()=>[]);
     const vp=vpArr[0]||null;if(vp)window.__vpData=vp;
+    // Team-Daten laden
+    const tbArr=vp?await sbG('pay_team_bonus',`mitarbeiter_id=eq.${vp.id}&aktiv=eq.true`).catch(()=>[]):[];
+    if(tbArr.length){
+      const tb=tbArr[0];const[y,m]=per.split('/');const periodeStart=`${y}-${m}-01`;
+      let teamOrders=[];
+      if(tb.bezugsgruppe==='eigenes_team'&&tb.team_mitglieder){
+        const members=Array.isArray(tb.team_mitglieder)?tb.team_mitglieder:[];
+        const allVT=await sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname');
+        const memberIds=[];
+        members.forEach(mn=>{const found=allVT.find(v=>`${v.vorname} ${v.nachname}`===mn);if(found)memberIds.push({id:found.id,name:mn});});
+        if(memberIds.length){
+          const allOrders=await sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,lead_quelle`);
+          memberIds.forEach(m=>{const mo=allOrders.filter(o=>o.vertriebler_id===m.id);teamOrders.push({name:m.name,orders:mo});});
+        }
+      } else if(tb.bezugsgruppe==='alle_vt'){
+        const allOrders=await sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,lead_quelle`);
+        const allVT=await sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname');
+        const vtMap={};allVT.forEach(v=>{vtMap[v.id]=`${v.vorname} ${v.nachname}`;});
+        const grouped={};allOrders.forEach(o=>{const n=vtMap[o.vertriebler_id]||'Unbekannt';if(!grouped[n])grouped[n]=[];grouped[n].push(o);});
+        teamOrders=Object.entries(grouped).map(([name,orders])=>({name,orders})).sort((a,b)=>b.orders.length-a.orders.length);
+      }
+      setTeamData({teamleiter:vtN,bezugsgruppe:tb.bezugsgruppe,betrag_pro_sale:tb.betrag_pro_sale,mitglieder:tb.team_mitglieder,orders:teamOrders,totalSales:teamOrders.reduce((s,m)=>s+m.orders.length,0)});
+    } else { setTeamData(null); }
     if(aId){const[a,p]=await Promise.all([sbG('pay_abrechnungen',`id=eq.${aId}`),sbG('pay_abrechnungen_positionen',`abrechnung_id=eq.${aId}&order=erstellt_am.asc`)]);if(a.length){setAb(a[0]);setPos(p);}}else{setAb({periode:per,mitarbeiter_name:vtN,kuerzel:vp?.kuerzel||gK(vtN),beschaeftigungsart:vp?.typ?.startsWith('hgb')?'hgb':'angestellt',status:'entwurf',notizen:'',stb_kommentar:''});setPos((vtD||[]).map(d=>({typ:'provision',auftrag_nr:'',kunde:d.kunde,produkt:d.produkt,original_betrag:d.netto,override_betrag:null,aktiv:true,zurueckgestellt:false,notiz:'',isNew:true})));}}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);};
 
   const save=async()=>{try{const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');const d={...ab,anzahl_sales:b.sales,brutto_provisionen:b.bp,systemgebuehr_netto:b.sgN,systemgebuehr_ust:b.sgU,einmalzahlungen_summe:b.es,nettobetrag:b.net,ust_satz:b.uS,ust_betrag:b.uB,auszahlungssumme:b.aus,belegnummer:gBN(ab.periode,ab.kuerzel||gK(ab.mitarbeiter_name),1),geaendert_am:new Date().toISOString()};
@@ -714,7 +798,7 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
       <div className="detail-header"><div style={{display:'flex',alignItems:'center',gap:12}}><button className="btn btn-secondary btn-sm" onClick={onClose}>← Zurück</button><span style={{fontWeight:700,fontSize:15}}>{ab.mitarbeiter_name}</span><span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status}</span></div><div style={{fontSize:12,color:'#8b949e'}}>{pLabel(ab.periode)}</div></div>
       <div className="detail-body">
         <EditPanel ab={ab} pos={pos} setPos={setPos} sg={sg} onSave={save} onFrei={frei} onPdf={pdf} onClose={onClose} setAb={setAb}/>
-        <div className="preview-panel" ref={ref}><GutschriftPreview ab={ab} pos={pos} sg={sg}/></div>
+        <div className="preview-panel" ref={ref}><GutschriftPreview ab={ab} pos={pos} sg={sg} teamData={teamData}/></div>
       </div>
     </div>
   </div>;
