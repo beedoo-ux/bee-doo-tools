@@ -123,14 +123,17 @@ async function generateAbrechnungen(periode, onProgress){
   // Abrechnungsmonat = periode (z.B. 2026/02). Leistungszeitraum = alles VOR diesem Monat.
   // Nur Aufträge abrechnen deren DatumErstellt VOR dem Abrechnungsmonat liegt.
   const periodeStart = `${y}-${m}-01`; // Aufträge VOR diesem Datum
+  // Leistungsmonat = Vormonat (für Storno/Offen-Rubrik)
+  const lzD = new Date(parseInt(y), parseInt(m)-2, 1);
+  const leistungsStart = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
   const [regeln, stufen, mitarbeiter, auftraege, sgArr, stornoAuftr, offeneAuftr] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
     sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig'),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=*`),
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
-    sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
-    sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
   ]);
   const sgConfig = sgArr[0] || {prozent:3, max_netto:200, ust_satz:19};
   const regelMap = {}; regeln.forEach(r => regelMap[r.mitarbeiter_typ] = r);
