@@ -70,14 +70,14 @@ body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-heigh
 .notes-area{background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:10px;border-radius:8px;font-family:'DM Sans';font-size:12px;width:100%;min-height:60px;resize:vertical}
 .notes-area:focus{outline:none;border-color:#F5C500}
 /* PDF Page */
-.gs-page{background:#fff;width:210mm;min-height:297mm;padding:0;position:relative;color:#111;font-family:Arial,sans-serif;font-size:11px;box-shadow:0 4px 24px rgba(0,0,0,.4);overflow:hidden}
+.gs-page{background:#fff;width:210mm;min-height:297mm;padding:0;position:relative;color:#111;font-family:Arial,sans-serif;font-size:11px;box-shadow:0 4px 24px rgba(0,0,0,.4);overflow:hidden;display:flex;flex-direction:column}
 .gs-page *{color:#111}
 .gs-watermark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:68px;font-weight:900;color:rgba(245,197,0,0.07);letter-spacing:8px;text-transform:uppercase;pointer-events:none;z-index:1;white-space:nowrap}
 .gs-branded-header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:18mm 16mm 12mm;color:#fff!important;position:relative;overflow:hidden}
 .gs-branded-header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#F5C500,#E07800,#F5C500)}
 .gs-branded-header *{color:#fff!important}
-.gs-body{padding:8mm 16mm 28mm;position:relative;z-index:2}
-.gs-footer{position:absolute;bottom:8mm;left:16mm;right:16mm;border-top:1px solid #ddd;padding-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
+.gs-body{padding:8mm 16mm 12mm;position:relative;z-index:2;flex:1;display:flex;flex-direction:column}
+.gs-footer{margin-top:auto;padding-top:6px;border-top:1px solid #ddd;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;position:relative;bottom:0}
 .gs-footer-col{font-size:7.5px;color:#666!important;line-height:1.6}
 .gs-footer-col b{font-size:8.5px;color:#111!important;display:block;margin-bottom:2px}
 .empty-state{text-align:center;padding:60px 20px;color:#484f58}
@@ -120,7 +120,7 @@ function calc(pos,sg,hgb){
   const bp=prov.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   const es=extra.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   let sgN=0,sgU=0;if(hgb&&sg){sgN=Math.min(bp*(sg.prozent/100),sg.max_netto);sgU=sgN*(sg.ust_satz/100);}
-  const net=bp-sgN+es;const uS=hgb?19:0;const uB=net*(uS/100);
+  const net=bp+es;const uS=hgb?19:0;const uB=net*(uS/100);
   return{sales:prov.filter(p=>p.typ==='provision').length,bp,sgN:Math.round(sgN*100)/100,sgU:Math.round(sgU*100)/100,es,net:Math.round(net*100)/100,uS,uB:Math.round(uB*100)/100,aus:Math.round((net+uB)*100)/100};
 }
 
@@ -187,9 +187,6 @@ function GutschriftPreview({ab,pos,sg}){
               <tr><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:'#E07800'}}>Provisionen ({b.sales} Sales – Vermittlung Solar/WP)</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(b.bp)}</td></tr>
               {aE.map((p,i)=><tr key={i}><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:(p.override_betrag!=null?p.override_betrag:p.original_betrag)>=0?'#E07800':'#9a3412'}}>{p.kunde||p.notiz||p.typ}</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
               <tr><td style={{padding:'6px 10px',borderBottom:'2px solid #aaa',fontWeight:700}}>Brutto-Provisionen</td><td style={{padding:'6px 10px',borderBottom:'2px solid #aaa',textAlign:'right',fontWeight:700}}>{fmtE(b.bp+b.es)}</td></tr>
-              {hgb&&<><tr><td style={{padding:'6px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',color:'#555',fontWeight:600}}>🖥️ ./. Systemgebühr Netto (3% · max. 200 €)</td><td style={{padding:'6px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',textAlign:'right',color:'#555',fontWeight:600}}>-{fmtE(b.sgN)}</td></tr>
-              <tr><td style={{padding:'4px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',color:'#9a3412',fontSize:10,fontWeight:600}}>🖥️ ./. USt 19% auf Systemgebühr</td><td style={{padding:'4px 10px',background:'#f8f8f2',borderBottom:'1px solid #e5e5e5',textAlign:'right',color:'#9a3412',fontWeight:600}}>-{fmtE(b.sgU)}</td></tr>
-              <tr><td colSpan={2} style={{padding:'2px 10px 6px',background:'#f8f8f2',color:'#888',fontSize:9}}>Netto {fmtE(b.sgN)} + 19% MwSt {fmtE(b.sgU)} = Brutto {fmtE(b.sgN+b.sgU)} · sep. Rechnung bee-doo GmbH · Ziff. 4.2 HVV</td></tr></>}
               <tr><td style={{padding:'6px 10px',borderTop:'2px solid #111',borderBottom:'1px solid #eee',color:'#555'}}>Nettobetrag</td><td style={{padding:'6px 10px',borderTop:'2px solid #111',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(b.net)}</td></tr>
               {hgb&&<tr style={{background:'#fffbeb'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #fde68a',color:'#92400e',fontWeight:600}}>+ Umsatzsteuer 19%</td><td style={{padding:'6px 10px',borderBottom:'1px solid #fde68a',textAlign:'right',color:'#92400e',fontWeight:600}}>+ {fmtE(b.uB)}</td></tr>}
               <tr style={{background:'linear-gradient(135deg,#f0fdf4,#dcfce7)'}}><td style={{padding:'9px 10px',fontWeight:800,fontSize:13}}>AUSZAHLUNGSSUMME</td><td style={{padding:'9px 10px',textAlign:'right',fontWeight:800,fontSize:13,color:'#166534'}}>{fmtE(b.aus)}</td></tr>
@@ -204,12 +201,9 @@ function GutschriftPreview({ab,pos,sg}){
               <tr style={{background:'#f0fdf4'}}><td style={{padding:'4px 7px',fontWeight:700}}>Auszahlung</td><td style={{padding:'4px 7px',textAlign:'right',fontWeight:700,color:'#166534'}}>{fmtE(b.aus)}</td></tr>
             </tbody></table>
 
-            {hgb&&b.sgN>0&&<><div style={{fontSize:10,fontWeight:700,color:'#E07800',marginTop:12,marginBottom:5,paddingBottom:3,borderBottom:'1px solid #eee'}}>Systemgebühr (sep. Rechnung)</div>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}><tbody>
-              <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#555'}}>Netto</td><td style={{padding:'4px 7px',textAlign:'right'}}>{fmtE(b.sgN)}</td></tr>
-              <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#9a3412'}}>+ USt 19%</td><td style={{padding:'4px 7px',textAlign:'right',color:'#9a3412'}}>+ {fmtE(b.sgU)}</td></tr>
-              <tr><td style={{padding:'4px 7px',background:'#fff7ed',fontWeight:700,color:'#92400e'}}>Brutto</td><td style={{padding:'4px 7px',background:'#fff7ed',textAlign:'right',fontWeight:700,color:'#92400e'}}>{fmtE(b.sgN+b.sgU)}</td></tr>
-            </tbody></table></>}
+            {hgb&&b.sgN>0&&<div style={{marginTop:12,background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:6,padding:'8px 10px',fontSize:9}}>
+              <b style={{color:'#9a3412'}}>📄 Systemgebühr:</b> <span style={{color:'#78350f'}}>Separate Rechnung anbei ({fmtE(b.sgN+b.sgU)} brutto)</span>
+            </div>}
 
             {hatS&&<div style={{marginTop:12,background:'linear-gradient(135deg,#fffbeb,#fef3c7)',border:'1px solid #f59e0b',borderRadius:6,padding:'8px 10px'}}>
               <div style={{fontSize:9,fontWeight:700,color:'#92400e',textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>⭐ Staffel-Bonus erreicht!</div>
@@ -234,7 +228,7 @@ function GutschriftPreview({ab,pos,sg}){
         </div>
 
         <div style={{marginTop:14,fontSize:9.5,color:'#555',lineHeight:1.6,borderTop:'1px solid #eee',paddingTop:8}}>
-          {hgb?`Diese Gutschrift gem. §14 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers (gem. Gutschriftvereinbarung HVV). Nettobetrag: ${fmtE(b.net)} · zzgl. 19% USt: ${fmtE(b.uB)} · Brutto: ${fmtE(b.aus)}. Systemgebühr (${fmtE(b.sgN+b.sgU)} brutto) wird sep. abgerechnet. Empfänger: ${ab.mitarbeiter_name}${window.__vpData?.ustid&&/^DE\d{9}$/.test(window.__vpData.ustid)?', USt-IdNr.: '+window.__vpData.ustid:''}${window.__vpData?.steuernummer&&window.__vpData.steuernummer.length>4?', StNr.: '+window.__vpData.steuernummer:''}. Aussteller: bee-doo GmbH, USt-IdNr. DE323940446, StNr. 44/214/0394.`
+          {hgb?`Diese Gutschrift gem. §14 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers (gem. Gutschriftvereinbarung HVV). Nettobetrag: ${fmtE(b.net)} · zzgl. 19% USt: ${fmtE(b.uB)} · Brutto: ${fmtE(b.aus)}. Die Systemgebühr gem. Ziff. 4.2 HVV wird separat per Rechnung der bee-doo GmbH abgerechnet. Empfänger: ${ab.mitarbeiter_name}${window.__vpData?.ustid&&/^DE\d{9}$/.test(window.__vpData.ustid)?', USt-IdNr.: '+window.__vpData.ustid:''}${window.__vpData?.steuernummer&&window.__vpData.steuernummer.length>4?', StNr.: '+window.__vpData.steuernummer:''}. Aussteller: bee-doo GmbH, USt-IdNr. DE323940446, StNr. 44/214/0394.`
           :`Entgeltabrechnung ${ab.mitarbeiter_name}. Nettobetrag: ${fmtE(b.net)}.`}
         </div>
         <FooterBlock/>
@@ -255,7 +249,6 @@ function GutschriftPreview({ab,pos,sg}){
           {aP.map((p,i)=><tr key={i}><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#aaa',fontSize:9}}>{i+1}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#555',fontSize:10}}>{p.auftrag_nr||'—'}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',fontSize:10,fontWeight:p.override_betrag!=null?600:400}}>{p.kunde||'—'}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#555',fontSize:10}}>{p.produkt||p.typ}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',textAlign:'right',fontWeight:600,fontSize:10,color:p.override_betrag!=null?'#B45309':undefined}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
           {aE.map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb'}}><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',color:'#aaa',fontSize:9}}>—</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee'}}>—</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee'}}>{p.kunde||p.notiz||p.typ}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee'}}>{p.typ==='einmalzahlung'?'Einmalzahlung':p.typ==='abzug'?'Abzug':'Sonstiges'}</td><td style={{padding:'5px 8px',borderBottom:'1px solid #eee',textAlign:'right',fontWeight:600}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
           <tr style={{fontWeight:700,borderTop:'2px solid #333',background:'#f9f9f9'}}><td></td><td colSpan={3} style={{padding:'6px 8px'}}>Netto-Summe</td><td style={{padding:'6px 8px',textAlign:'right'}}>{fmtE(b.bp+b.es)}</td></tr>
-          {hgb&&<tr style={{background:'#f8f8f2'}}><td></td><td colSpan={3} style={{padding:'5px 8px',color:'#555'}}>./. Systemgebühr + USt</td><td style={{padding:'5px 8px',textAlign:'right',color:'#9a3412'}}>-{fmtE(b.sgN+b.sgU)}</td></tr>}
           <tr><td></td><td colSpan={3} style={{padding:'5px 8px',color:'#555',borderTop:'1px solid #ddd'}}>Nettobetrag</td><td style={{padding:'5px 8px',textAlign:'right',borderTop:'1px solid #ddd'}}>{fmtE(b.net)}</td></tr>
           {hgb&&<tr style={{background:'#fffbeb'}}><td></td><td colSpan={3} style={{padding:'5px 8px',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'5px 8px',textAlign:'right',color:'#92400e',fontWeight:700}}>+ {fmtE(b.uB)}</td></tr>}
           <tr style={{background:'linear-gradient(135deg,#f0fdf4,#dcfce7)',borderTop:'2px solid #166534'}}><td></td><td colSpan={3} style={{padding:'7px 8px',fontWeight:800,fontSize:12}}>BRUTTO-AUSZAHLUNG</td><td style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:13,color:'#166534'}}>{fmtE(b.aus)}</td></tr>
