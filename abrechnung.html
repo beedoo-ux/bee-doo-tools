@@ -126,7 +126,7 @@ async function generateAbrechnungen(periode, onProgress){
   // Leistungsmonat = Vormonat (für Storno/Offen-Rubrik)
   const lzD = new Date(parseInt(y), parseInt(m)-2, 1);
   const leistungsStart = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
-  const [regeln, stufen, mitarbeiter, auftraege, sgArr, stornoAuftr, offeneAuftr, sonderArr, teamBonusArr] = await Promise.all([
+  const [regeln, stufen, mitarbeiter, auftraege, sgArr, stornoAuftr, offeneAuftr, sonderArr, teamBonusArr, sperrlistenArr, duplikateArr, bezahlteStornos] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
     sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig'),
@@ -136,7 +136,26 @@ async function generateAbrechnungen(periode, onProgress){
     sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
     sbG('pay_sonderprovisionen','aktiv=eq.true'),
     sbG('pay_team_bonus','aktiv=eq.true'),
+    sbG('pay_sperrlisten','status=eq.gesperrt'),
+    sbG('pay_duplikate','status=eq.entscheidung_noetig'),
+    sbG('pay_auftraege',`storniert=eq.true&abgerechnet_monat=not.is.null&storno_abgerechnet=eq.false&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,lead_quelle,speichererweiterung,abgerechnet_monat,abgerechnet_jahr`),
   ]);
+  // Sperrlisten-Set: gesperrte Auftragsnummern (normalize: remove AN- prefix for matching)
+  const normNr = (nr) => (nr||'').replace(/^AN-/,'');
+  const gesperrteNrRaw = new Set(sperrlistenArr.map(s => normNr(s.auftrag_nr)));
+  const gesperrteNr = new Set(); // will hold actual auftrag_nr from pay_auftraege
+  auftraege.forEach(a => { if(gesperrteNrRaw.has(normNr(a.auftrag_nr))) gesperrteNr.add(a.auftrag_nr); });
+  const gesperrteAuftraege = auftraege.filter(a => gesperrteNr.has(a.auftrag_nr));
+  const freigegebeneAuftraege = auftraege.filter(a => !gesperrteNr.has(a.auftrag_nr));
+  // Duplikate-Set: ungelöste Auftragsnummern (normalize)
+  const duplikatNrRaw = new Set();
+  duplikateArr.forEach(d => { duplikatNrRaw.add(normNr(d.auftrag_nr_1)); duplikatNrRaw.add(normNr(d.auftrag_nr_2)); });
+  const duplikatNr = new Set();
+  auftraege.forEach(a => { if(duplikatNrRaw.has(normNr(a.auftrag_nr))) duplikatNr.add(a.auftrag_nr); });
+  // Log warnings
+  if(gesperrteAuftraege.length) log(`⚠️ ${gesperrteAuftraege.length} Aufträge gesperrt (Sperrliste) – werden übersprungen`);
+  if(duplikateArr.length) log(`⚠️ ${duplikateArr.length} ungelöste Duplikate gefunden`);
+  if(bezahlteStornos.length) log(`⚠️ ${bezahlteStornos.length} Stornos bereits ausgezahlt – Abzug wird berechnet`);
   const sgConfig = sgArr[0] || {prozent:3, max_netto:200, ust_satz:19};
   const regelMap = {}; regeln.forEach(r => regelMap[r.mitarbeiter_typ] = r);
   const typMap = {hgb_vertriebler_haupt:'hgb_vertriebler_haupt',hgb84:'hgb_vertriebler_haupt',angestellt_vt:'angestellt_vertriebler',angestellt_vertriebler:'angestellt_vertriebler',hgb_vertriebler_agentur:'hgb_vertriebler_agentur',vertriebler:'vertriebler',hgb_scouter:'hgb_scouter',angestellt_scouter:'angestellt_scouter'};
@@ -146,27 +165,31 @@ async function generateAbrechnungen(periode, onProgress){
   // Team-Bonus-Map (mitarbeiter_id → teamBonus)
   const teamBonusByVP = {}; teamBonusArr.forEach(t => { teamBonusByVP[t.mitarbeiter_id] = t; });
   const byVP = {};
-  auftraege.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id] = []; byVP[a.vertriebler_id].push(a); });
+  freigegebeneAuftraege.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id] = []; byVP[a.vertriebler_id].push(a); });
   // Group storno + offen by VP
   const stornoByVP = {};
   stornoAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!stornoByVP[a.vertriebler_id]) stornoByVP[a.vertriebler_id] = []; stornoByVP[a.vertriebler_id].push(a); });
   const offenByVP = {};
   offeneAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!offenByVP[a.vertriebler_id]) offenByVP[a.vertriebler_id] = []; offenByVP[a.vertriebler_id].push(a); });
-  const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=vertriebler_id,auftrags_datum');
+  // Bezahlte Stornos (für Abzug) by VP
+  const bezStByVP = {};
+  bezahlteStornos.forEach(a => { if(!a.vertriebler_id) return; if(!bezStByVP[a.vertriebler_id]) bezStByVP[a.vertriebler_id] = []; bezStByVP[a.vertriebler_id].push(a); });
+  const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=vertriebler_id,auftrags_datum,auftrag_nr');
   const salesPerVPMonth = {};
-  allRelevant.forEach(a => { if(!a.vertriebler_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.vertriebler_id+'_'+om; salesPerVPMonth[key]=(salesPerVPMonth[key]||0)+1; });
+  allRelevant.filter(a => !gesperrteNr.has(a.auftrag_nr)).forEach(a => { if(!a.vertriebler_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.vertriebler_id+'_'+om; salesPerVPMonth[key]=(salesPerVPMonth[key]||0)+1; });
   log('Lösche alte Entwürfe...');
   const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&status=in.(entwurf,probeabrechnung)&select=id`);
   for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
   let count = 0;
   // Combine all VP IDs (auszahlbar + storno + offen)
-  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP)]);
+  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(bezStByVP)]);
   for(const vpId of allVPIds){
     const vp = vpById[vpId]; if(!vp) continue;
     const orders = byVP[vpId] || [];
     const vpStornos2 = stornoByVP[vpId] || [];
     const vpOffen2 = offenByVP[vpId] || [];
-    if(!orders.length && !vpStornos2.length && !vpOffen2.length) continue;
+    const vpBezSt2 = bezStByVP[vpId] || [];
+    if(!orders.length && !vpStornos2.length && !vpOffen2.length && !vpBezSt2.length) continue;
     const ruleTyp = typMap[vp.typ] || vp.typ;
     const regel = regelMap[ruleTyp];
     if(!regel){ log(`⚠️ ${vp.vorname} ${vp.nachname}: keine Regel für ${ruleTyp}`); continue; }
@@ -220,6 +243,30 @@ async function generateAbrechnungen(periode, onProgress){
     // Offene Aufträge (kein Termin gelegt, nur zur Info)
     const vpOffen = offenByVP[vpId] || [];
     vpOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:o.auftrags_datum?.substring(0,7)||''}); });
+    // Duplikate-Warnungen zu Positionen hinzufügen
+    positionen.forEach(p => { if(p.auftrag_nr && duplikatNr.has(p.auftrag_nr)) p.notiz = (p.notiz||'') + ' ⚠️ Duplikat'; });
+    // Gesperrte Aufträge als Info
+    const vpGesperrt = gesperrteAuftraege.filter(a => a.vertriebler_id === vpId);
+    vpGesperrt.forEach(g => { positionen.push({typ:'gesperrt_info',auftrag_nr:g.auftrag_nr,kunde:g.kunde_name,produkt:`🔒 Gesperrt – Solar ${g.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:sperrlistenArr.find(s=>normNr(s.auftrag_nr)===normNr(g.auftrag_nr))?.typ||''}); });
+    // Storno-Abzug: bereits ausgezahlte Stornos zurückfordern
+    let stornoAbzug = 0;
+    const vpBezSt = bezStByVP[vpId] || [];
+    vpBezSt.forEach(st => {
+      // Berechne ursprünglichen Betrag (Grundprovision + ggf. Eigenlead/Empfehlung/Speicher)
+      const om = (st.auftrags_datum||'').substring(0,7).replace('-','/');
+      const monthKey = vpId+'_'+om;
+      const monthTotal = salesPerVPMonth[monthKey] || 1;
+      const staffel = monthTotal >= regel.staffel_schwelle;
+      const sonderFlat2 = sonderByVP[vpId];
+      let abzBetrag = sonderFlat2 ? sonderFlat2.betrag : (staffel ? regel.staffel_betrag_sale : regel.basis_betrag_sale);
+      const q = (st.lead_quelle||'').toLowerCase();
+      if(q.includes('eigenlead') && regel.betrag_eigenlead > 0 && !(sonderFlat2&&(sonderFlat2.beschreibung||'').toLowerCase().includes('kein eigenlead'))) abzBetrag += regel.betrag_eigenlead;
+      if(q.includes('empfehlung') && regel.betrag_empfehlung > 0 && !(sonderFlat2&&(sonderFlat2.beschreibung||'').toLowerCase().includes('kein empfehlung'))) abzBetrag += regel.betrag_empfehlung;
+      if(st.speichererweiterung && regel.betrag_speicher > 0) abzBetrag += regel.betrag_speicher;
+      positionen.push({typ:'storno_abzug',auftrag_nr:st.auftrag_nr,kunde:st.kunde_name,produkt:`Storno-Abzug – Solar ${st.kwp||0} kWp (ausgez. ${st.abgerechnet_monat}/${st.abgerechnet_jahr})`,original_betrag:-abzBetrag,aktiv:true,zurueckgestellt:false,notiz:`Rückforderung`});
+      stornoAbzug += abzBetrag;
+      bruttoTotal -= abzBetrag;
+    });
     const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
     const sgUst=sgNetto*(sgConfig.ust_satz/100);
     const ustSatz=isHGB&&vp.mwst_pflichtig?19:0;
@@ -237,7 +284,7 @@ async function generateAbrechnungen(periode, onProgress){
 function calc(pos,sg,hgb){
   const ak=pos.filter(p=>p.aktiv&&!p.zurueckgestellt);
   const prov=ak.filter(p=>['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
-  const extra=ak.filter(p=>['einmalzahlung','abzug','sonstiges'].includes(p.typ));
+  const extra=ak.filter(p=>['einmalzahlung','abzug','sonstiges','storno_abzug'].includes(p.typ));
   const bp=prov.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   const es=extra.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   let sgN=0,sgU=0;if(hgb&&sg){sgN=Math.min(bp*(sg.prozent/100),sg.max_netto);sgU=sgN*(sg.ust_satz/100);}
@@ -251,9 +298,10 @@ function Toast({children}){const[t,setT]=useState(null);window.__t=(m,ty='succes
 function GutschriftPreview({ab,pos,sg}){
   const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');
   const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
-  const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges'].includes(p.typ));
+  const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges','storno_abzug'].includes(p.typ));
   const aSt=pos.filter(p=>p.typ==='storno_info');
   const aOf=pos.filter(p=>p.typ==='offen_info');
+  const aGe=pos.filter(p=>p.typ==='gesperrt_info');
   const k=ab.kuerzel||gK(ab.mitarbeiter_name),bn=gBN(ab.periode,k,1),hgb=ab.beschaeftigungsart==='hgb';
   const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
   const isE=ab.status==='entwurf'||ab.status==='probeabrechnung';
@@ -325,6 +373,7 @@ function GutschriftPreview({ab,pos,sg}){
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}><tbody>
               <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#555'}}>Abgerechnete Sales</td><td style={{padding:'4px 7px',textAlign:'right',fontWeight:700}}>{b.sales}</td></tr>
               {aSt.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#da3633'}}>Storniert</td><td style={{padding:'4px 7px',textAlign:'right',color:'#da3633'}}>{aSt.length}</td></tr>}
+              {aGe.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#9333ea'}}>Gesperrt</td><td style={{padding:'4px 7px',textAlign:'right',color:'#9333ea'}}>{aGe.length}</td></tr>}
               {aOf.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#8b949e'}}>Offen (kein Termin)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOf.length}</td></tr>}
               <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#555'}}>Provisionen Netto</td><td style={{padding:'4px 7px',textAlign:'right'}}>{fmtE(b.net)}</td></tr>
               {hgb&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'4px 7px',textAlign:'right',color:'#92400e'}}>+ {fmtE(b.uB)}</td></tr>}
@@ -442,7 +491,7 @@ function GutschriftPreview({ab,pos,sg}){
               {pageGroups.map((an,gi) => { globalNr = startNr + gi + 1; return <PosRow key={an} an={an} nr={startNr + gi + 1}/>; })}
               
               {isLastPage && <>
-                {aE.map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb',borderBottom:'1px solid #eee'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10}}>{p.kunde||p.notiz||p.typ} <span style={{fontSize:9,color:'#888'}}>({p.typ==='einmalzahlung'?'Einmalzahlung':p.typ==='abzug'?'Abzug':'Sonstiges'})</span></td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
+                {aE.map((p,i)=><tr key={`e${i}`} style={{background:p.typ==='storno_abzug'?'#fef2f2':'#fffbeb',borderBottom:'1px solid #eee'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10,color:p.typ==='storno_abzug'?'#da3633':'inherit'}}>{p.produkt||p.kunde||p.notiz||p.typ} <span style={{fontSize:9,color:p.typ==='storno_abzug'?'#da3633':'#888'}}>({p.typ==='einmalzahlung'?'Einmalzahlung':p.typ==='storno_abzug'?'Storno-Rückforderung':p.typ==='abzug'?'Abzug':'Sonstiges'})</span></td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap',color:p.typ==='storno_abzug'?'#da3633':'inherit'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
                 <tr style={{fontWeight:700,borderTop:'2px solid #333',background:'#f9f9f9'}}><td></td><td colSpan={2} style={{padding:'6px 6px'}}>Netto-Summe</td><td style={{padding:'6px 6px',textAlign:'right',whiteSpace:'nowrap'}}>{fmtE(b.bp+b.es)}</td></tr>
                 <tr><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#555',borderTop:'1px solid #ddd'}}>Nettobetrag</td><td style={{padding:'4px 6px',textAlign:'right',borderTop:'1px solid #ddd',whiteSpace:'nowrap'}}>{fmtE(b.net)}</td></tr>
                 {hgb&&<tr style={{background:'#fffbeb'}}><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'4px 6px',textAlign:'right',color:'#92400e',fontWeight:700,whiteSpace:'nowrap'}}>+ {fmtE(b.uB)}</td></tr>}
@@ -469,10 +518,11 @@ function GutschriftPreview({ab,pos,sg}){
     })()}
 
     {/* === STORNIERTE + OFFENE AUFTRÄGE (eigene Seite(n)) === */}
-    {(aSt.length>0||aOf.length>0)&&(()=>{
+    {(aSt.length>0||aOf.length>0||aGe.length>0)&&(()=>{
       const items = [];
       if(aSt.length>0) items.push({title:'❌ Stornierte Aufträge',color:'#da3633',bg:'#fef2f2',border:'#fecaca',data:aSt});
       if(aOf.length>0) items.push({title:'⏳ Offene Aufträge – kein Termin gelegt',color:'#6b7280',bg:'#f9fafb',border:'#e5e7eb',data:aOf});
+      if(aGe.length>0) items.push({title:'🔒 Gesperrte Aufträge (Sperrliste)',color:'#9333ea',bg:'#faf5ff',border:'#e9d5ff',data:aGe});
       // Paginate: ~35 rows per page
       const allRows = [];
       items.forEach(cat => { allRows.push({type:'header',cat}); cat.data.forEach(p => allRows.push({type:'row',cat,p})); });
@@ -502,7 +552,7 @@ function GutschriftPreview({ab,pos,sg}){
             </tbody>
           </table>
           {pi===infoPages.length-1&&<div style={{marginTop:14,padding:8,background:'#f0f0f0',borderRadius:4,fontSize:8.5,color:'#666'}}>
-            <b>Hinweis:</b> Stornierte und offene Aufträge werden nicht ausgezahlt und fließen nicht in die Staffelberechnung ein. Diese Übersicht dient der Transparenz.
+            <b>Hinweis:</b> Stornierte, offene und gesperrte Aufträge werden nicht ausgezahlt und fließen nicht in die Staffelberechnung ein. Storno-Abzüge werden von bereits ausgezahlten Stornos berechnet. Diese Übersicht dient der Transparenz.
           </div>}
         </div>
         <FooterBlock/>
@@ -671,11 +721,11 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
 }
 
 function App(){
-  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);
+  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);const[warns,setWarns]=useState(null);
 
   useEffect(()=>{(async()=>{try{const d=await sbG('pay_auszahlungen_historie','select=periode&order=periode.desc');const u=[...new Set(d.map(x=>x.periode))];const now=new Date();const cp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;if(!u.includes(cp))u.unshift(cp);const sorted=u.sort().reverse();setPers(sorted);setPer(sorted[0]||cp);}catch(e){const now=new Date();const p=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;setPers([p]);setPer(p);}})();},[]);
 
-  const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1')]);setAbrs(a);setAusz(z);setSg(s[0]||null);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
+  const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s,sp,dup,bezSt]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),sbG('pay_sperrlisten','status=eq.gesperrt'),sbG('pay_duplikate','status=eq.entscheidung_noetig'),sbG('pay_auftraege','storniert=eq.true&abgerechnet_monat=not.is.null&select=auftrag_nr,kunde_name,vertriebler_id,abgerechnet_monat,abgerechnet_jahr')]);setAbrs(a);setAusz(z);setSg(s[0]||null);setWarns({sperrlisten:sp.length,duplikate:dup.length,bezahlteStornos:bezSt.length,spDetails:sp,dupDetails:dup,bezStDetails:bezSt});}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
   useEffect(()=>{loadP();},[loadP]);
 
   const vtG=useMemo(()=>{const g={};ausz.forEach(a=>{const n=a.vertriebler;if(!g[n])g[n]={name:n,items:[],total:0};g[n].items.push(a);g[n].total+=parseFloat(a.netto)||0;});abrs.forEach(ab=>{if(!g[ab.mitarbeiter_name])g[ab.mitarbeiter_name]={name:ab.mitarbeiter_name,items:[],total:ab.brutto_provisionen||0};g[ab.mitarbeiter_name].abrechnung=ab;});return Object.values(g).sort((a,b)=>b.total-a.total);},[ausz,abrs]);
@@ -701,6 +751,11 @@ function App(){
       <div className="stat-card"><div className="stat-label">Freigegeben</div><div className="stat-value green">{frg}</div></div>
       <div className="stat-card"><div className="stat-label">Gesamtsumme</div><div className="stat-value gold">{fmtE(totA)}</div></div>
     </div>
+    {warns&&(warns.sperrlisten>0||warns.duplikate>0||warns.bezahlteStornos>0)&&<div style={{padding:'10px 24px',display:'flex',gap:16,flexWrap:'wrap',background:'#1c1210',borderBottom:'1px solid #3d2008'}}>
+      {warns.sperrlisten>0&&<span style={{fontSize:13,color:'#f85149'}}>🔒 {warns.sperrlisten} gesperrte Aufträge (Grundbuch/Montage-Abbruch)</span>}
+      {warns.duplikate>0&&<span style={{fontSize:13,color:'#d29922'}}>⚠️ {warns.duplikate} ungelöste Duplikate</span>}
+      {warns.bezahlteStornos>0&&<span style={{fontSize:13,color:'#f85149'}}>💰 {warns.bezahlteStornos} Stornos bereits ausgezahlt → Abzug</span>}
+    </div>}
     {ld?<div className="loading"><div className="spinner"/>Lade...</div>:vtG.length===0?<div className="empty-state"><div className="icon">📭</div><h3>Keine Daten für {per?pLabel(per):'—'}</h3><p>Für diese Periode liegen noch keine Daten vor.</p></div>:
     <div className="main-grid">{vtG.map(g=>{const ab=g.abrechnung;const k=ab?.kuerzel||gK(g.name);const st=ab?.status||'neu';const isHGB=ab?.beschaeftigungsart==='hgb';const typClass=isHGB?'hgb':'angestellt';return<div key={g.name} className={`vt-card ${typClass}`} onClick={()=>setSel({name:g.name,abrechnungId:ab?.id,data:g.items})}>
       <div className="vt-card-header"><span className="vt-name">{g.name}</span><div style={{display:'flex',gap:6,alignItems:'center'}}><span style={{fontSize:9,padding:'2px 6px',borderRadius:3,background:isHGB?'#F5C50020':'#58a6ff20',color:isHGB?'#F5C500':'#58a6ff',fontWeight:600}}>{isHGB?'HGB §84':'Angestellt'}</span><span className="vt-kuerzel">{k}</span></div></div>
