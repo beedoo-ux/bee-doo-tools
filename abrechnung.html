@@ -9,6 +9,8 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-height:100vh}
@@ -74,9 +76,9 @@ body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-heigh
 /* PDF Page */
 .gs-page{background:#fff;width:210mm;min-height:297mm;padding:0;position:relative;color:#111;font-family:Arial,sans-serif;font-size:11px;box-shadow:0 4px 24px rgba(0,0,0,.4);display:flex;flex-direction:column}
 .gs-page *{color:#111}
-.gs-watermark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:82px;font-weight:900;color:rgba(200,0,0,0.18);letter-spacing:10px;text-transform:uppercase;pointer-events:none;z-index:1;white-space:nowrap;text-shadow:0 0 2px rgba(200,0,0,0.1)}
-.gs-branded-header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:18mm 16mm 12mm;color:#fff!important;position:relative;overflow:hidden}
-.gs-branded-header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#F5C500,#E07800,#F5C500)}
+.gs-watermark{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:1;overflow:hidden}
+.gs-watermark svg{width:100%;height:100%}
+.gs-branded-header{background:#1a1a2e;padding:18mm 16mm 12mm;color:#fff!important;position:relative;overflow:hidden;border-bottom:3px solid #F5C500}
 .gs-branded-header *{color:#fff!important}
 .gs-body{padding:8mm 16mm 12mm;position:relative;z-index:2;flex:1;display:flex;flex-direction:column}
 .gs-footer{margin-top:auto;padding:8px 16mm 6px 16mm;border-top:1.5px solid #ccc;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;flex-shrink:0}
@@ -336,7 +338,7 @@ function GutschriftPreview({ab,pos,sg,teamData}){
   return <div style={{display:'flex',flexDirection:'column',gap:20}}>
     {/* === SEITE 1 === */}
     <div className="gs-page">
-      {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
+      {isE&&<div className="gs-watermark"><svg viewBox="0 0 800 1100"><text x="400" y="550" textAnchor="middle" dominantBaseline="middle" transform="rotate(-35,400,550)" fill="rgba(200,0,0,0.12)" fontSize="90" fontWeight="900" fontFamily="Arial" letterSpacing="8">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</text></svg></div>}
       <div className="gs-branded-header">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
           <div>
@@ -372,7 +374,7 @@ function GutschriftPreview({ab,pos,sg,teamData}){
               <tr><td style={{padding:'6px 10px',borderBottom:'2px solid #aaa',fontWeight:700}}>Brutto-Provisionen</td><td style={{padding:'6px 10px',borderBottom:'2px solid #aaa',textAlign:'right',fontWeight:700}}>{fmtE(b.bp+b.es)}</td></tr>
               <tr><td style={{padding:'6px 10px',borderTop:'2px solid #111',borderBottom:'1px solid #eee',color:'#555'}}>Nettobetrag</td><td style={{padding:'6px 10px',borderTop:'2px solid #111',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(b.net)}</td></tr>
               {hgb&&<tr style={{background:'#fffbeb'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #fde68a',color:'#92400e',fontWeight:600}}>+ Umsatzsteuer 19%</td><td style={{padding:'6px 10px',borderBottom:'1px solid #fde68a',textAlign:'right',color:'#92400e',fontWeight:600}}>+ {fmtE(b.uB)}</td></tr>}
-              <tr style={{background:'linear-gradient(135deg,#f0fdf4,#dcfce7)'}}><td style={{padding:'9px 10px',fontWeight:800,fontSize:13}}>AUSZAHLUNGSSUMME</td><td style={{padding:'9px 10px',textAlign:'right',fontWeight:800,fontSize:13,color:'#166534',whiteSpace:'nowrap'}}>{fmtE(b.aus)}</td></tr>
+              <tr style={{background:'#e8f5e9'}}><td style={{padding:'9px 10px',fontWeight:800,fontSize:13}}>AUSZAHLUNGSSUMME</td><td style={{padding:'9px 10px',textAlign:'right',fontWeight:800,fontSize:13,color:'#166534',whiteSpace:'nowrap'}}>{fmtE(b.aus)}</td></tr>
             </tbody></table>
           </div>
           <div>
@@ -391,7 +393,7 @@ function GutschriftPreview({ab,pos,sg,teamData}){
               <b style={{color:'#9a3412'}}>📄 Systemgebühr:</b> <span style={{color:'#78350f'}}>Separate Rechnung anbei ({fmtE(b.sgN+b.sgU)} brutto)</span>
             </div>}
 
-            {hatS&&<div style={{marginTop:12,background:'linear-gradient(135deg,#fffbeb,#fef3c7)',border:'1px solid #f59e0b',borderRadius:6,padding:'8px 10px'}}>
+            {hatS&&<div style={{marginTop:12,background:'#fff8e1',border:'1px solid #f59e0b',borderRadius:6,padding:'8px 10px'}}>
               <div style={{fontSize:9,fontWeight:700,color:'#92400e',textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>⭐ Staffel-Bonus erreicht!</div>
               <div style={{fontSize:10,color:'#78350f',fontWeight:600}}>{b.sales} Sales ≥ {staffel} → Erhöhte Rate aktiv</div>
             </div>}
@@ -402,7 +404,7 @@ function GutschriftPreview({ab,pos,sg,teamData}){
                 <span style={{fontWeight:700,color:hatS?'#16a34a':'#475569'}}>{b.sales} / {staffel}</span>
               </div>
               <div style={{height:8,background:'#e2e8f0',borderRadius:4,overflow:'hidden'}}>
-                <div style={{height:'100%',borderRadius:4,width:`${pct}%`,background:hatS?'linear-gradient(90deg,#22c55e,#16a34a)':'linear-gradient(90deg,#F5C500,#E07800)'}}></div>
+                <div style={{height:'100%',borderRadius:4,width:`${pct}%`,background:hatS?'#22c55e':'#F5C500'}}></div>
               </div>
               {!hatS&&<div style={{fontSize:8,color:'#94a3b8',marginTop:3,textAlign:'right'}}>Noch {staffel-b.sales} Sales bis zur nächsten Stufe</div>}
             </div>
@@ -483,7 +485,7 @@ function GutschriftPreview({ab,pos,sg,teamData}){
         const startNr = globalNr;
         
         return <div key={`pos-page-${pi}`} className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
-          {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
+          {isE&&<div className="gs-watermark"><svg viewBox="0 0 800 1100"><text x="400" y="550" textAnchor="middle" dominantBaseline="middle" transform="rotate(-35,400,550)" fill="rgba(200,0,0,0.12)" fontSize="90" fontWeight="900" fontFamily="Arial" letterSpacing="8">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</text></svg></div>}
           <div style={{padding:'14mm 16mm 0',flex:1}}>
             <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
               <span>Provisionen {lzLabel}</span><span style={{color:'#aaa'}}>{bn} · Seite {pageNum}</span>
@@ -502,7 +504,7 @@ function GutschriftPreview({ab,pos,sg,teamData}){
                 <tr style={{fontWeight:700,borderTop:'2px solid #333',background:'#f9f9f9'}}><td></td><td colSpan={2} style={{padding:'6px 6px'}}>Netto-Summe</td><td style={{padding:'6px 6px',textAlign:'right',whiteSpace:'nowrap'}}>{fmtE(b.bp+b.es)}</td></tr>
                 <tr><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#555',borderTop:'1px solid #ddd'}}>Nettobetrag</td><td style={{padding:'4px 6px',textAlign:'right',borderTop:'1px solid #ddd',whiteSpace:'nowrap'}}>{fmtE(b.net)}</td></tr>
                 {hgb&&<tr style={{background:'#fffbeb'}}><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'4px 6px',textAlign:'right',color:'#92400e',fontWeight:700,whiteSpace:'nowrap'}}>+ {fmtE(b.uB)}</td></tr>}
-                <tr style={{background:'linear-gradient(135deg,#f0fdf4,#dcfce7)',borderTop:'2px solid #166534'}}><td></td><td colSpan={2} style={{padding:'7px 6px',fontWeight:800,fontSize:12}}>BRUTTO-AUSZAHLUNG</td><td style={{padding:'7px 6px',textAlign:'right',fontWeight:900,fontSize:13,color:'#166534',whiteSpace:'nowrap'}}>{fmtE(b.aus)}</td></tr>
+                <tr style={{background:'#e8f5e9',borderTop:'2px solid #166534'}}><td></td><td colSpan={2} style={{padding:'7px 6px',fontWeight:800,fontSize:12}}>BRUTTO-AUSZAHLUNG</td><td style={{padding:'7px 6px',textAlign:'right',fontWeight:900,fontSize:13,color:'#166534',whiteSpace:'nowrap'}}>{fmtE(b.aus)}</td></tr>
               </>}
               </tbody>
             </table>
@@ -537,7 +539,7 @@ function GutschriftPreview({ab,pos,sg,teamData}){
       const infoPages = [];
       for(let i=0;i<allRows.length;i+=ROWS_PER) infoPages.push(allRows.slice(i,i+ROWS_PER));
       return infoPages.map((pageRows,pi) => <div key={`info-${pi}`} className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
-        {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
+        {isE&&<div className="gs-watermark"><svg viewBox="0 0 800 1100"><text x="400" y="550" textAnchor="middle" dominantBaseline="middle" transform="rotate(-35,400,550)" fill="rgba(200,0,0,0.12)" fontSize="90" fontWeight="900" fontFamily="Arial" letterSpacing="8">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</text></svg></div>}
         <div style={{padding:'14mm 16mm 0',flex:1}}>
           <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
             <span>Auftragsübersicht {lzLabel}</span><span style={{color:'#aaa'}}>{bn} · Anlage</span>
@@ -627,8 +629,8 @@ function GutschriftPreview({ab,pos,sg,teamData}){
     })()}
 
     {/* === SYSTEMGEBÜHR-RECHNUNG (nur HGB) === */}
-    {hgb&&b.sgN>0&&<div className="gs-page" style={{padding:'14mm 16mm 28mm'}}>
-      <div className="gs-branded-header" style={{background:'linear-gradient(135deg,#1a1a2e 0%,#2d1810 100%)'}}>
+    {hgb&&b.sgN>0&&<div className="gs-page" style={{padding:'14mm 16mm 10mm'}}>
+      <div className="gs-branded-header" style={{background:'#1a1a2e'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
           <div>
             <div style={{fontFamily:"'Arial Black',Arial",fontSize:28,fontWeight:900,letterSpacing:-1}}>bee<span style={{color:'#F5C500'}}>-doo</span></div>
@@ -659,7 +661,7 @@ function GutschriftPreview({ab,pos,sg,teamData}){
             <tr><td style={{padding:'8px 10px',borderBottom:'1px solid #eee'}}>Systemgebühr für Nutzung der bee-doo Vertriebsplattform<br/><span style={{fontSize:9,color:'#888'}}>3% auf Brutto-Provisionen ({fmtE(b.bp)}), max. 200,00 € netto</span></td><td style={{padding:'8px 10px',borderBottom:'1px solid #eee',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(b.sgN)}</td></tr>
             <tr><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:'#555'}}>Nettobetrag</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(b.sgN)}</td></tr>
             <tr style={{background:'#fffbeb'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #fde68a',color:'#92400e',fontWeight:600}}>+ Umsatzsteuer 19%</td><td style={{padding:'6px 10px',borderBottom:'1px solid #fde68a',textAlign:'right',color:'#92400e',fontWeight:600}}>+ {fmtE(b.sgU)}</td></tr>
-            <tr style={{background:'linear-gradient(135deg,#fff7ed,#ffedd5)'}}><td style={{padding:'9px 10px',fontWeight:800,fontSize:13,color:'#9a3412'}}>RECHNUNGSBETRAG</td><td style={{padding:'9px 10px',textAlign:'right',fontWeight:800,fontSize:13,color:'#9a3412'}}>{fmtE(b.sgN+b.sgU)}</td></tr>
+            <tr style={{background:'#fff3e0'}}><td style={{padding:'9px 10px',fontWeight:800,fontSize:13,color:'#9a3412'}}>RECHNUNGSBETRAG</td><td style={{padding:'9px 10px',textAlign:'right',fontWeight:800,fontSize:13,color:'#9a3412'}}>{fmtE(b.sgN+b.sgU)}</td></tr>
           </tbody>
         </table>
 
@@ -808,7 +810,25 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
   setAb(s);window.__t?.('✅ Gespeichert');onRef?.();}catch(e){window.__t?.('Fehler: '+e.message,'error');}};
 
   const frei=async()=>{if(!confirm(`${ab.mitarbeiter_name} (${ab.periode}) freigeben?\n\nDanach keine Änderungen mehr möglich!`))return;setAb(p=>({...p,status:'freigegeben',freigegeben_am:new Date().toISOString(),freigegeben_von:'Patrick Grabowski'}));setTimeout(save,100);};
-  const pdf=async()=>{const pages=ref.current?.querySelectorAll('.gs-page');if(!pages?.length)return;window.__t?.('PDF wird erstellt...');try{const c=document.createElement('div');pages.forEach(p=>c.appendChild(p.cloneNode(true)));await html2pdf().set({margin:0,filename:`Gutschrift_${ab.periode.replace('/','-')}_${ab.kuerzel||gK(ab.mitarbeiter_name)}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy'],before:'.gs-page'}}).from(c).save();window.__t?.('✅ PDF heruntergeladen');}catch(e){window.__t?.('PDF-Fehler: '+e.message,'error');}};
+  const pdf=async()=>{const pages=ref.current?.querySelectorAll('.gs-page');if(!pages?.length)return;window.__t?.('PDF wird erstellt...');try{
+    const {jsPDF}=window.jspdf||{};const pdfDoc=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    for(let i=0;i<pages.length;i++){
+      if(i>0)pdfDoc.addPage();
+      const page=pages[i];const clone=page.cloneNode(true);
+      clone.style.transform='none';clone.style.width='210mm';clone.style.minHeight='297mm';
+      document.body.appendChild(clone);
+      const canvas=await html2canvas(clone,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,windowWidth:794,windowHeight:1123});
+      document.body.removeChild(clone);
+      const imgData=canvas.toDataURL('image/jpeg',0.95);
+      pdfDoc.addImage(imgData,'JPEG',0,0,210,297);
+      window.__t?.(`Seite ${i+1}/${pages.length}...`);
+    }
+    pdfDoc.save(`Gutschrift_${ab.periode.replace('/','-')}_${ab.kuerzel||gK(ab.mitarbeiter_name)}.pdf`);
+    window.__t?.('✅ PDF heruntergeladen');
+  }catch(e){
+    // Fallback to old method
+    try{const c=document.createElement('div');pages.forEach(p=>c.appendChild(p.cloneNode(true)));await html2pdf().set({margin:0,filename:`Gutschrift_${ab.periode.replace('/','-')}_${ab.kuerzel||gK(ab.mitarbeiter_name)}.pdf`,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy'],before:'.gs-page'}}).from(c).save();window.__t?.('✅ PDF heruntergeladen');}catch(e2){window.__t?.('PDF-Fehler: '+e2.message,'error');}
+  }};
 
   if(ld)return<div className="detail-overlay"><div className="detail-container"><div className="loading"><div className="spinner"/>Lade...</div></div></div>;
   if(!ab)return null;
