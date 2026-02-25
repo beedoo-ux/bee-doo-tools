@@ -90,6 +90,68 @@ function EditCell({ value, onChange, type = "text", options, width, align }) {
   return <input type={type === "number" ? "number" : "text"} value={value ?? ""} onChange={e => onChange(type === "number" ? (e.target.value === "" ? null : +e.target.value) : e.target.value)} style={{ width: width || "100%", textAlign: align || (type === "number" ? "right" : "left") }} />;
 }
 
+function SearchSelect({ value, onChange, options, placeholder = "Suchen...", width }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = React.useRef(null);
+  useEffect(() => { const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
+  const filtered = options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+  return <div ref={ref} style={{ position: "relative", width: width || "100%" }}>
+    <div onClick={() => setOpen(!open)} style={{ background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontSize: 12, color: value ? "#fff" : "var(--ts)", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 32 }}>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value || placeholder}</span>
+      <span style={{ fontSize: 10, marginLeft: 6, opacity: 0.5 }}>▼</span>
+    </div>
+    {open && <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100, background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 8, marginTop: 2, boxShadow: "0 8px 24px #0008", maxHeight: 240, display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: 6 }}>
+        <input autoFocus type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Name eingeben..." style={{ width: "100%", padding: "6px 10px", fontSize: 12, background: "var(--s1)", border: "1px solid var(--bd)", borderRadius: 6, color: "#fff" }} />
+      </div>
+      <div style={{ overflowY: "auto", maxHeight: 190, padding: "0 4px 4px" }}>
+        {filtered.length === 0 && <div style={{ padding: "8px 10px", fontSize: 11, color: "var(--ts)" }}>Keine Treffer</div>}
+        {filtered.map(o => <div key={o.value} onClick={() => { onChange(o.value); setOpen(false); setQuery(""); }} style={{ padding: "7px 10px", cursor: "pointer", borderRadius: 6, fontSize: 12, color: value === o.value ? "var(--y)" : "#ccc", fontWeight: value === o.value ? 600 : 400, background: value === o.value ? "var(--y)15" : "transparent" }} onMouseOver={e => e.currentTarget.style.background = "var(--y)15"} onMouseOut={e => e.currentTarget.style.background = value === o.value ? "var(--y)15" : "transparent"}>
+          {o.label}
+        </div>)}
+      </div>
+    </div>}
+  </div>;
+}
+
+function MultiSearchSelect({ value = [], onChange, options, placeholder = "Mitglieder wählen..." }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = React.useRef(null);
+  useEffect(() => { const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
+  const selected = Array.isArray(value) ? value : (value ? String(value).split(",").map(s => s.trim()).filter(Boolean) : []);
+  const filtered = options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+  const toggle = (name) => {
+    const next = selected.includes(name) ? selected.filter(n => n !== name) : [...selected, name];
+    onChange(next);
+  };
+  return <div ref={ref} style={{ position: "relative" }}>
+    <div onClick={() => setOpen(!open)} style={{ background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, color: selected.length ? "#fff" : "var(--ts)", minHeight: 32, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+      {selected.length === 0 && <span>{placeholder}</span>}
+      {selected.map(n => <span key={n} style={{ background: "var(--t)", color: "#fff", borderRadius: 4, padding: "2px 6px", fontSize: 10, display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {n} <span onClick={e => { e.stopPropagation(); toggle(n); }} style={{ cursor: "pointer", opacity: 0.7, fontWeight: 700 }}>×</span>
+      </span>)}
+      <span style={{ fontSize: 10, marginLeft: "auto", opacity: 0.5 }}>▼</span>
+    </div>
+    {open && <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100, background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 8, marginTop: 2, boxShadow: "0 8px 24px #0008", maxHeight: 280, display: "flex", flexDirection: "column", minWidth: 280 }}>
+      <div style={{ padding: 6 }}>
+        <input autoFocus type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Name suchen..." style={{ width: "100%", padding: "6px 10px", fontSize: 12, background: "var(--s1)", border: "1px solid var(--bd)", borderRadius: 6, color: "#fff" }} />
+      </div>
+      <div style={{ overflowY: "auto", maxHeight: 220, padding: "0 4px 4px" }}>
+        {filtered.map(o => {
+          const isSel = selected.includes(o.label);
+          return <div key={o.value} onClick={() => toggle(o.label)} style={{ padding: "6px 10px", cursor: "pointer", borderRadius: 6, fontSize: 12, display: "flex", alignItems: "center", gap: 8, color: isSel ? "var(--g)" : "#ccc", background: isSel ? "var(--g)12" : "transparent" }} onMouseOver={e => e.currentTarget.style.background = isSel ? "var(--g)18" : "var(--y)10"} onMouseOut={e => e.currentTarget.style.background = isSel ? "var(--g)12" : "transparent"}>
+            <span style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${isSel ? "var(--g)" : "var(--bd)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, flexShrink: 0 }}>{isSel ? "✓" : ""}</span>
+            {o.label}
+          </div>;
+        })}
+      </div>
+      {selected.length > 0 && <div style={{ padding: "6px 10px", borderTop: "1px solid var(--bd)", fontSize: 11, color: "var(--ts)" }}>{selected.length} ausgewählt</div>}
+    </div>}
+  </div>;
+}
+
 function ConfirmModal({ msg, onOk, onCancel }) {
   return <div style={{ position: "fixed", inset: 0, background: "#000a", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
     <div style={{ background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 12, padding: 24, maxWidth: 400, width: "90%" }} className="fade-in">
@@ -155,9 +217,10 @@ function TabRegeln({ regeln, setRegeln, toast }) {
 }
 
 // ═══ Tab: Sonderprovisionen ═══
-function TabSonder({ sonder, setSonder, toast }) {
+function TabSonder({ sonder, setSonder, toast, mitarbeiterList }) {
   const [adding, setAdding] = useState(false);
-  const [newRow, setNewRow] = useState({ mitarbeiter_name: "", typ: "flat_rate", betrag: 0, beschreibung: "", gueltig_ab: "2026-01-01" });
+  const [newRow, setNewRow] = useState({ mitarbeiter_name: "", mitarbeiter_id: "", typ: "flat_rate", betrag: 0, beschreibung: "", gueltig_ab: "2026-01-01" });
+  const maOptions = mitarbeiterList.map(m => ({ value: m.id, label: `${m.vorname} ${m.nachname}` }));
   const [delId, setDelId] = useState(null);
 
   const save = async (s) => {
@@ -205,7 +268,7 @@ function TabSonder({ sonder, setSonder, toast }) {
         </tr></thead>
         <tbody>
           {adding && <tr style={{ background: "var(--y)08" }}>
-            <td><EditCell value={newRow.mitarbeiter_name} onChange={v => setNewRow(p => ({ ...p, mitarbeiter_name: v }))} /></td>
+            <td><SearchSelect value={newRow.mitarbeiter_name} onChange={name => { const ma = mitarbeiterList.find(m => `${m.vorname} ${m.nachname}` === name); setNewRow(p => ({ ...p, mitarbeiter_name: name, mitarbeiter_id: ma?.id || "" })); }} options={maOptions.map(o => ({ ...o, value: o.label }))} placeholder="Mitarbeiter wählen..." /></td>
             <td><EditCell value={newRow.typ} onChange={v => setNewRow(p => ({ ...p, typ: v }))} type="select" options={typOpts} /></td>
             <td><EditCell value={newRow.betrag} onChange={v => setNewRow(p => ({ ...p, betrag: v }))} type="number" /></td>
             <td><EditCell value={newRow.beschreibung} onChange={v => setNewRow(p => ({ ...p, beschreibung: v }))} /></td>
@@ -286,9 +349,10 @@ function TabStufen({ stufen, setStufen, toast }) {
 }
 
 // ═══ Tab: Team-Bonus ═══
-function TabTeam({ team, setTeam, toast }) {
+function TabTeam({ team, setTeam, toast, mitarbeiterList }) {
   const [adding, setAdding] = useState(false);
-  const [newRow, setNewRow] = useState({ mitarbeiter_name: "", betrag_pro_sale: 200, bezugsgruppe: "alle_vt", team_mitglieder: "", gueltig_ab: "2026-01-01" });
+  const [newRow, setNewRow] = useState({ mitarbeiter_name: "", mitarbeiter_id: "", betrag_pro_sale: 200, bezugsgruppe: "alle_vt", team_mitglieder: [], gueltig_ab: "2026-01-01" });
+  const maOptions = mitarbeiterList.map(m => ({ value: m.id, label: `${m.vorname} ${m.nachname}` }));
 
   const save = async (t) => {
     try {
@@ -303,7 +367,7 @@ function TabTeam({ team, setTeam, toast }) {
   };
   const add = async () => {
     try {
-      const tm = newRow.team_mitglieder ? newRow.team_mitglieder.split(",").map(s => s.trim()) : null;
+      const tm = Array.isArray(newRow.team_mitglieder) ? (newRow.team_mitglieder.length ? newRow.team_mitglieder : null) : (newRow.team_mitglieder ? newRow.team_mitglieder.split(",").map(s => s.trim()) : null);
       const res = await db.post("pay_team_bonus", { ...newRow, team_mitglieder: tm, aktiv: true });
       setTeam(prev => [...prev, res[0]]);
       setAdding(false); toast("Hinzugefügt", "ok");
@@ -320,10 +384,10 @@ function TabTeam({ team, setTeam, toast }) {
         <thead><tr><th>Mitarbeiter</th><th style={{ textAlign: "right" }}>€/Sale</th><th>Bezugsgruppe</th><th>Team-Mitglieder</th><th>Gültig ab</th><th>Aktiv</th><th style={{ width: 80 }}>Aktion</th></tr></thead>
         <tbody>
           {adding && <tr style={{ background: "var(--y)08" }}>
-            <td><EditCell value={newRow.mitarbeiter_name} onChange={v => setNewRow(p => ({ ...p, mitarbeiter_name: v }))} /></td>
+            <td><SearchSelect value={newRow.mitarbeiter_name} onChange={name => { const ma = mitarbeiterList.find(m => `${m.vorname} ${m.nachname}` === name); setNewRow(p => ({ ...p, mitarbeiter_name: name, mitarbeiter_id: ma?.id || "" })); }} options={maOptions.map(o => ({ ...o, value: o.label }))} placeholder="Mitarbeiter wählen..." /></td>
             <td><EditCell value={newRow.betrag_pro_sale} onChange={v => setNewRow(p => ({ ...p, betrag_pro_sale: v }))} type="number" width="80px" /></td>
             <td><EditCell value={newRow.bezugsgruppe} onChange={v => setNewRow(p => ({ ...p, bezugsgruppe: v }))} type="select" options={grpOpts} /></td>
-            <td><EditCell value={newRow.team_mitglieder} onChange={v => setNewRow(p => ({ ...p, team_mitglieder: v }))} /></td>
+            <td><MultiSearchSelect value={newRow.team_mitglieder} onChange={v => setNewRow(p => ({ ...p, team_mitglieder: v }))} options={maOptions.map(o => ({ ...o, value: o.label }))} /></td>
             <td><EditCell value={newRow.gueltig_ab} onChange={v => setNewRow(p => ({ ...p, gueltig_ab: v }))} /></td>
             <td><span className="badge b-g">Ja</span></td>
             <td><Btn label="✓" color="var(--g)" onClick={add} small /></td>
@@ -693,13 +757,14 @@ function App() {
   const [sperrData, setSperrData] = useState([]);
   const [duplikateData, setDuplikateData] = useState([]);
   const [historieData, setHistorieData] = useState([]);
+  const [mitarbeiterList, setMitarbeiterList] = useState([]);
 
   const toast = (msg, type = "ok") => { setToastMsg(msg); setToastType(type); setTimeout(() => setToastMsg(null), 3000); };
 
   useEffect(() => {
     (async () => {
       try {
-        const [r, s, st, tb, sp, dp, hi] = await Promise.all([
+        const [r, s, st, tb, sp, dp, hi, ma] = await Promise.all([
           db.get("provisions_regeln", "?aktiv=eq.true&order=modell_name.asc"),
           db.get("pay_sonderprovisionen", "?order=mitarbeiter_name.asc").catch(() => []),
           db.get("pay_stufenbonus", "?order=min_anlagen.asc").catch(() => []),
@@ -707,8 +772,9 @@ function App() {
           db.get("pay_sperrlisten", "?order=auftrag_nr.asc").catch(() => []),
           db.get("pay_duplikate", "?order=kunde_name.asc").catch(() => []),
           db.get("pay_provisions_historie", "?order=mitarbeiter_name.asc,gueltig_ab.asc").catch(() => []),
+          db.get("pay_mitarbeiter", "?select=id,vorname,nachname,typ&order=nachname.asc").catch(() => []),
         ]);
-        setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp); setHistorieData(hi);
+        setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp); setHistorieData(hi); setMitarbeiterList(ma);
         setLoading(false);
       } catch (e) {
         setError(e.message);
@@ -791,9 +857,9 @@ function App() {
       <div className="fade-in" key={tab}>
         {tab === "uebersicht" && <TabOverview regeln={regeln} sonder={sonder} stufen={stufen} teamBonus={teamBonus} sperr={sperrData} duplikate={duplikateData} historie={historieData} />}
         {tab === "regeln" && <TabRegeln regeln={regeln} setRegeln={setRegeln} toast={toast} />}
-        {tab === "sonder" && <TabSonder sonder={sonder} setSonder={setSonder} toast={toast} />}
+        {tab === "sonder" && <TabSonder sonder={sonder} setSonder={setSonder} toast={toast} mitarbeiterList={mitarbeiterList} />}
         {tab === "stufen" && <TabStufen stufen={stufen} setStufen={setStufen} toast={toast} />}
-        {tab === "team" && <TabTeam team={teamBonus} setTeam={setTeamBonus} toast={toast} />}
+        {tab === "team" && <TabTeam team={teamBonus} setTeam={setTeamBonus} toast={toast} mitarbeiterList={mitarbeiterList} />}
         {tab === "sperr" && <TabSperr sperr={sperrData} setSperr={setSperrData} toast={toast} />}
         {tab === "duplikate" && <TabDuplikate duplikate={duplikateData} setDuplikate={setDuplikateData} toast={toast} />}
         {tab === "historie" && <TabHistorie historie={historieData} setHistorie={setHistorieData} toast={toast} />}
