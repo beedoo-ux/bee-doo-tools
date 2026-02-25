@@ -347,9 +347,8 @@ function GutschriftPreview({ab,pos,sg}){
       });
       
       // Dynamic page break: count actual rows per group, max ~38 rows per page
-      // Last page needs ~12 rows for summaries+signatures, so we check ahead
       const MAX_ROWS = 38;
-      const LAST_PAGE_RESERVE = 14; // rows for Netto/USt/Brutto + Unterschriften
+      const LAST_PAGE_RESERVE = 14; // Summen + Unterschriften
       const pages = []; let currentPage = []; let rowCount = 0;
       const totalBoniRows = groups.reduce((s,an) => s + 1 + (byAN[an].boni.length > 0 ? byAN[an].boni.length + 2 : 0), 0);
       const estimatedPages = Math.ceil(totalBoniRows / MAX_ROWS);
@@ -413,10 +412,6 @@ function GutschriftPreview({ab,pos,sg}){
               
               {isLastPage && <>
                 {aE.map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb',borderBottom:'1px solid #eee'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10}}>{p.kunde||p.notiz||p.typ} <span style={{fontSize:9,color:'#888'}}>({p.typ==='einmalzahlung'?'Einmalzahlung':p.typ==='abzug'?'Abzug':'Sonstiges'})</span></td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
-                {aSt.length>0&&<><tr><td colSpan={4} style={{padding:'8px 6px 3px',fontSize:9,fontWeight:700,color:'#da3633',borderTop:'1px solid #eee',textTransform:'uppercase',letterSpacing:'0.5px'}}>❌ Stornierte Aufträge ({aSt.length})</td></tr>
-                {aSt.map((p,i)=><tr key={`st${i}`} style={{background:'#fef2f2',borderBottom:'1px solid #fee2e2'}}><td style={{padding:'3px 6px',color:'#fca5a5',fontSize:9}}>—</td><td style={{padding:'3px 6px',fontSize:9,color:'#991b1b'}}>{p.kunde||'—'}</td><td style={{padding:'3px 6px',fontSize:8,color:'#b91c1c'}}>{p.auftrag_nr}</td><td style={{padding:'3px 6px',textAlign:'right',fontSize:9,color:'#991b1b'}}>0,00 €</td></tr>)}</>}
-                {aOf.length>0&&<><tr><td colSpan={4} style={{padding:'8px 6px 3px',fontSize:9,fontWeight:700,color:'#8b949e',borderTop:'1px solid #eee',textTransform:'uppercase',letterSpacing:'0.5px'}}>⏳ Offene Aufträge – kein Termin gelegt ({aOf.length})</td></tr>
-                {aOf.map((p,i)=><tr key={`of${i}`} style={{background:'#f8f8f8',borderBottom:'1px solid #eee'}}><td style={{padding:'3px 6px',color:'#d1d5db',fontSize:9}}>—</td><td style={{padding:'3px 6px',fontSize:9,color:'#6b7280'}}>{p.kunde||'—'}</td><td style={{padding:'3px 6px',fontSize:8,color:'#9ca3af'}}>{p.auftrag_nr}</td><td style={{padding:'3px 6px',textAlign:'right',fontSize:9,color:'#9ca3af'}}>—</td></tr>)}</>}
                 <tr style={{fontWeight:700,borderTop:'2px solid #333',background:'#f9f9f9'}}><td></td><td colSpan={2} style={{padding:'6px 6px'}}>Netto-Summe</td><td style={{padding:'6px 6px',textAlign:'right',whiteSpace:'nowrap'}}>{fmtE(b.bp+b.es)}</td></tr>
                 <tr><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#555',borderTop:'1px solid #ddd'}}>Nettobetrag</td><td style={{padding:'4px 6px',textAlign:'right',borderTop:'1px solid #ddd',whiteSpace:'nowrap'}}>{fmtE(b.net)}</td></tr>
                 {hgb&&<tr style={{background:'#fffbeb'}}><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'4px 6px',textAlign:'right',color:'#92400e',fontWeight:700,whiteSpace:'nowrap'}}>+ {fmtE(b.uB)}</td></tr>}
@@ -442,7 +437,48 @@ function GutschriftPreview({ab,pos,sg}){
       });
     })()}
 
-    {/* === SEITE 3: SYSTEMGEBÜHR-RECHNUNG (nur HGB) === */}
+    {/* === STORNIERTE + OFFENE AUFTRÄGE (eigene Seite(n)) === */}
+    {(aSt.length>0||aOf.length>0)&&(()=>{
+      const items = [];
+      if(aSt.length>0) items.push({title:'❌ Stornierte Aufträge',color:'#da3633',bg:'#fef2f2',border:'#fecaca',data:aSt});
+      if(aOf.length>0) items.push({title:'⏳ Offene Aufträge – kein Termin gelegt',color:'#6b7280',bg:'#f9fafb',border:'#e5e7eb',data:aOf});
+      // Paginate: ~35 rows per page
+      const allRows = [];
+      items.forEach(cat => { allRows.push({type:'header',cat}); cat.data.forEach(p => allRows.push({type:'row',cat,p})); });
+      const ROWS_PER = 35;
+      const infoPages = [];
+      for(let i=0;i<allRows.length;i+=ROWS_PER) infoPages.push(allRows.slice(i,i+ROWS_PER));
+      return infoPages.map((pageRows,pi) => <div key={`info-${pi}`} className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
+        {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
+        <div style={{padding:'14mm 16mm 0',flex:1}}>
+          <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
+            <span>Auftragsübersicht {lzLabel}</span><span style={{color:'#aaa'}}>{bn} · Anlage</span>
+          </div>
+          {pi===0&&<div style={{fontSize:14,fontWeight:700,marginBottom:10}}>{ab.mitarbeiter_name} – Auftragsübersicht</div>}
+          {pi>0&&<div style={{fontSize:9,color:'#888',marginBottom:8}}>Fortsetzung Auftragsübersicht</div>}
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:9.5}}>
+            <tbody>
+            {pageRows.map((row,ri) => {
+              if(row.type==='header') return <tr key={ri}><td colSpan={4} style={{padding:'10px 6px 4px',fontWeight:700,color:row.cat.color,fontSize:10,borderBottom:`2px solid ${row.cat.border}`,textTransform:'uppercase',letterSpacing:'0.5px'}}>{row.cat.title} ({row.cat.data.length})</td></tr>;
+              const p = row.p;
+              return <tr key={ri} style={{background:row.cat.bg,borderBottom:`1px solid ${row.cat.border}`}}>
+                <td style={{padding:'4px 6px',color:row.cat.color,fontSize:9,width:70}}>{p.auftrag_nr}</td>
+                <td style={{padding:'4px 6px',color:row.cat.color}}>{p.kunde||'—'}</td>
+                <td style={{padding:'4px 6px',color:row.cat.color,fontSize:8.5,width:90}}>{p.produkt?.replace('Storno – ','').replace('Offen – ','')}</td>
+                <td style={{padding:'4px 6px',color:row.cat.color,fontSize:8.5,width:60,textAlign:'right'}}>{p.notiz}</td>
+              </tr>;
+            })}
+            </tbody>
+          </table>
+          {pi===infoPages.length-1&&<div style={{marginTop:14,padding:8,background:'#f0f0f0',borderRadius:4,fontSize:8.5,color:'#666'}}>
+            <b>Hinweis:</b> Stornierte und offene Aufträge werden nicht ausgezahlt und fließen nicht in die Staffelberechnung ein. Diese Übersicht dient der Transparenz.
+          </div>}
+        </div>
+        <FooterBlock/>
+      </div>);
+    })()}
+
+    {/* === SYSTEMGEBÜHR-RECHNUNG (nur HGB) === */}
     {hgb&&b.sgN>0&&<div className="gs-page" style={{padding:'14mm 16mm 28mm'}}>
       <div className="gs-branded-header" style={{background:'linear-gradient(135deg,#1a1a2e 0%,#2d1810 100%)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
