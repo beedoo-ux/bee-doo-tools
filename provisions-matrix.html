@@ -8,6 +8,7 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0a0c14;--s1:#0f1119;--s2:#14161f;--s3:#1a1d27;--s4:#222531;--bd:#2a2d37;--tx:#e2e4ea;--ts:#8b95a5;--y:#F5C500;--g:#34d399;--r:#f87171;--b:#60a5fa;--o:#fb923c;--t:#2dd4bf;--p:#a78bfa}
@@ -772,6 +773,202 @@ function TabOverview({ regeln, sonder, stufen, teamBonus, sperr, duplikate, hist
   </div>;
 }
 
+// ═══ Tab: CSV-Import (Aufträge) ═══
+function TabImport({ toast, mitarbeiterList }) {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importLog, setImportLog] = useState([]);
+  const [mode, setMode] = useState('replace');
+  const fileRef = useRef(null);
+
+  const addLog = (msg) => setImportLog(prev => [...prev, `${new Date().toLocaleTimeString('de-DE')} ${msg}`]);
+
+  const maMap = React.useMemo(() => {
+    const m = {};
+    (mitarbeiterList||[]).forEach(ma => {
+      const full = `${ma.vorname} ${ma.nachname}`.trim().toLowerCase();
+      m[full] = ma.id;
+      const parts = full.split(' ');
+      if(parts.length > 2) m[`${parts[0]} ${parts[parts.length-1]}`] = ma.id;
+    });
+    return m;
+  }, [mitarbeiterList]);
+
+  const findVT = (name) => {
+    if(!name) return null;
+    name = name.replace(/\s*\(.*?\)\s*/g, '').trim();
+    const key = name.toLowerCase();
+    if(maMap[key]) return maMap[key];
+    const parts = key.split(' ');
+    if(parts.length >= 2) { const k2 = `${parts[0]} ${parts[parts.length-1]}`; if(maMap[k2]) return maMap[k2]; }
+    return null;
+  };
+
+  const parseDt = (d) => {
+    if(!d || d.trim() === '-' || d.trim() === '') return null;
+    const m1 = d.trim().match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if(m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
+    if(/^\d{4}-\d{2}-\d{2}$/.test(d.trim())) return d.trim();
+    return null;
+  };
+
+  const parseMoney = (v) => {
+    if(!v) return null;
+    const n = parseFloat(v.trim().replace(/\./g,'').replace(',','.').replace(/\s/g,''));
+    return isNaN(n) ? null : n;
+  };
+
+  const parseKwp = (v) => {
+    if(!v) return null;
+    const n = parseFloat(v.trim().replace(',','.'));
+    return isNaN(n) ? null : n;
+  };
+
+  const handleFile = (f) => {
+    if(!f) return;
+    setFile(f); setPreview(null); setImportLog([]);
+    Papa.parse(f, {
+      header: true, encoding: 'UTF-8', skipEmptyLines: true,
+      complete: (res) => {
+        const rows = res.data.filter(r => r['AN Nr.'] && r['AN Nr.'].trim());
+        const stats = { total: rows.length, ausgezahlt: 0, storno: 0, auszahlbar: 0, offen: 0, unmapped: new Set() };
+        const mapped = rows.map(r => {
+          const status = (r['Auftragsstatus']||'').trim();
+          const fort = (r['BeeDooFortschritt']||'').trim();
+          const kb = (r['Kundenberater']||'').trim();
+          const ql = (r['Quelle']||'').trim().toLowerCase();
+          const vtId = findVT(kb);
+          if(!vtId && kb) stats.unmapped.add(kb);
+          const isStorno = status === 'Storniert' || fort === 'Storniert';
+          let zahlungsstatus = 'offen';
+          if((r['Auszahlungsrelevant']||'').trim().toLowerCase() === 'ja' || status === 'Auftragsbestätigung erstellt')
+            zahlungsstatus = 'anzahlung_eingegangen';
+          let leadQuelle = 'sonstige';
+          if(ql.includes('eigenlead')) leadQuelle = 'eigenlead';
+          else if(ql.includes('empfehlung')) leadQuelle = 'empfehlung';
+          else if(ql.includes('omega')) leadQuelle = 'mvpp';
+          else if(ql.includes('sadd')) leadQuelle = 'sadd';
+          else if(ql.includes('mvpp')) leadQuelle = 'mvpp';
+          const speicher = (r['Speichererweiterung']||'').trim().toLowerCase();
+          const datum = parseDt(r['DatumAngenommen']);
+          const ausgezahlt = parseDt(r['Ausgezahlt am']);
+          let abMonat = null, abJahr = null;
+          if(ausgezahlt) { const p = ausgezahlt.split('-'); abJahr = parseInt(p[0]); abMonat = parseInt(p[1]); stats.ausgezahlt++; }
+          if(isStorno) stats.storno++;
+          else if(zahlungsstatus === 'anzahlung_eingegangen' && !ausgezahlt) stats.auszahlbar++;
+          else if(!isStorno && !ausgezahlt) stats.offen++;
+          return {
+            auftrag_nr: `AN-${(r['AN Nr.']||'').trim()}`, kunde_name: (r['Kunde']||'').trim() || null,
+            kunde_adresse: (r['Kunde PLZ']||'').trim() || null, vertriebler_id: vtId, auftrags_datum: datum,
+            kwp: parseKwp(r['Angebot KWP']), netto_auftragswert: parseMoney(r['AN-WertNetto']),
+            zahlungsstatus, lead_quelle: leadQuelle, speichererweiterung: ['ja','true','1','x'].includes(speicher),
+            storniert: isStorno, produkt_typ: 'pv', beedoo_fortschritt: fort || null,
+            termin_stattgefunden: status === 'Auftragsbestätigung erstellt',
+            abgerechnet_monat: abMonat, abgerechnet_jahr: abJahr,
+          };
+        });
+        stats.unmapped = [...stats.unmapped];
+        setPreview({ stats, mapped });
+      }
+    });
+  };
+
+  const doImport = async () => {
+    if(!preview) return;
+    setImporting(true); setImportLog([]);
+    try {
+      if(mode === 'replace') {
+        addLog('🗑️ Lösche bestehende Daten...');
+        await db.del('pay_provisionen','id=not.is.null').catch(()=>{});
+        await db.del('pay_abrechnungen_positionen','id=not.is.null').catch(()=>{});
+        await db.del('pay_abrechnungen','id=not.is.null').catch(()=>{});
+        await db.del('pay_auftraege','id=not.is.null').catch(()=>{});
+        addLog('✅ Alte Daten gelöscht');
+      }
+      let inserted = 0;
+      for(let i = 0; i < preview.mapped.length; i += 100) {
+        const batch = preview.mapped.slice(i, i+100);
+        await db.post('pay_auftraege', batch);
+        inserted += batch.length;
+        addLog(`📦 Batch ${Math.floor(i/100)+1}: ${batch.length} Aufträge`);
+      }
+      addLog(`✅ Import fertig: ${inserted} Aufträge`);
+      addLog(`   📋 ${preview.stats.auszahlbar} auszahlbar | 💰 ${preview.stats.ausgezahlt} ausgezahlt | ❌ ${preview.stats.storno} storniert | ⏳ ${preview.stats.offen} offen`);
+      toast('✅ ' + inserted + ' Aufträge importiert', 'ok');
+    } catch(e) {
+      addLog(`❌ Fehler: ${e.message}`);
+      toast('Import-Fehler: ' + e.message, 'err');
+    }
+    setImporting(false);
+  };
+
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ background: 'var(--s2)', border: '1px solid var(--bd)', borderRadius: 10, padding: 16 }}>
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, color: 'var(--y)' }}>📥 Standard CSV-Import – Aufträge (Leveto)</div>
+      <div style={{ fontSize: 12, color: 'var(--ts)', lineHeight: 1.8 }}>
+        <span style={{ color: 'var(--g)' }}>✓</span> <b>DatumAngenommen</b> → Auftragsdatum (maßgeblich für Leistungszeitraum)<br/>
+        <span style={{ color: 'var(--g)' }}>✓</span> <b>Ausgezahlt am</b> → bereits abgerechnet → wird bei Generierung übersprungen<br/>
+        <span style={{ color: 'var(--g)' }}>✓</span> <b>BeeDooFortschritt</b> → Fortschritt für Duplikat-Entscheidungen<br/>
+        <span style={{ color: 'var(--g)' }}>✓</span> <b>Kundenberater</b> → Vertriebler-Zuordnung via pay_mitarbeiter<br/>
+        <span style={{ color: 'var(--g)' }}>✓</span> <b>Auftragsbestätigung erstellt</b> = auszahlbar | <b>Storniert</b> = storniert
+      </div>
+    </div>
+
+    <div style={{ border: '2px dashed var(--bd)', borderRadius: 12, padding: 40, textAlign: 'center', cursor: 'pointer', transition: 'all .2s' }}
+      onClick={() => fileRef.current?.click()}
+      onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--y)'; e.currentTarget.style.background = 'var(--s2)'; }}
+      onDragLeave={(e) => { e.currentTarget.style.borderColor = 'var(--bd)'; e.currentTarget.style.background = 'transparent'; }}
+      onDrop={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--bd)'; e.currentTarget.style.background = 'transparent'; handleFile(e.dataTransfer.files[0]); }}>
+      <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={(e) => handleFile(e.target.files[0])} />
+      <div style={{ fontSize: 36, marginBottom: 8 }}>{file ? '✅' : '📄'}</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--tx)', marginBottom: 4 }}>
+        {file ? file.name : 'CSV-Datei hierher ziehen oder klicken'}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--ts)' }}>Leveto-Export (Aufträge)</div>
+    </div>
+
+    {preview && <div style={{ background: 'var(--s2)', border: '1px solid var(--bd)', borderRadius: 10, padding: 16 }}>
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>📊 Vorschau – {preview.stats.total} Aufträge</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10, marginBottom: 16 }}>
+        {[
+          { label: 'Gesamt', val: preview.stats.total, c: 'var(--b)' },
+          { label: 'Auszahlbar', val: preview.stats.auszahlbar, c: 'var(--g)' },
+          { label: 'Ausgezahlt', val: preview.stats.ausgezahlt, c: 'var(--y)' },
+          { label: 'Storniert', val: preview.stats.storno, c: 'var(--r)' },
+          { label: 'Offen', val: preview.stats.offen, c: 'var(--o)' },
+        ].map(s => <div key={s.label} style={{ background: 'var(--s3)', borderRadius: 8, padding: '10px 14px', borderLeft: `3px solid ${s.c}` }}>
+          <div style={{ fontSize: 10, color: 'var(--ts)' }}>{s.label}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: s.c }}>{s.val}</div>
+        </div>)}
+      </div>
+
+      {preview.stats.unmapped.length > 0 && <div style={{ background: '#422006', border: '1px solid #92400e', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o)', marginBottom: 4 }}>⚠️ {preview.stats.unmapped.length} Vertriebler nicht in pay_mitarbeiter:</div>
+        <div style={{ fontSize: 11, color: 'var(--ts)' }}>{preview.stats.unmapped.join(', ')}</div>
+      </div>}
+
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        {[['replace','🗑️ Alles ersetzen','var(--r)'],['append','➕ Hinzufügen','var(--g)']].map(([k,l,c])=>
+          <button key={k} onClick={() => setMode(k)} style={{
+            background: mode === k ? `${c}20` : 'var(--s3)', color: mode === k ? c : 'var(--ts)',
+            border: `1px solid ${mode === k ? c : 'var(--bd)'}`, borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+          }}>{l}</button>
+        )}
+      </div>
+
+      <button onClick={doImport} disabled={importing} style={{
+        background: importing ? 'var(--s4)' : 'var(--y)', color: importing ? 'var(--ts)' : '#000',
+        border: 'none', borderRadius: 8, padding: '12px 24px', fontSize: 14, fontWeight: 700, width: '100%', cursor: importing ? 'wait' : 'pointer'
+      }}>{importing ? '⏳ Importiere...' : `📥 ${preview.stats.total} Aufträge importieren (${mode === 'replace' ? 'Ersetzen' : 'Hinzufügen'})`}</button>
+    </div>}
+
+    {importLog.length > 0 && <div style={{ background: 'var(--s1)', border: '1px solid var(--bd)', borderRadius: 10, padding: 16, fontFamily: 'monospace', fontSize: 11, color: 'var(--ts)', maxHeight: 300, overflowY: 'auto' }}>
+      {importLog.map((l,i) => <div key={i} style={{ padding: '2px 0', color: l.includes('✅') ? 'var(--g)' : l.includes('❌') ? 'var(--r)' : l.includes('⚠️') ? 'var(--o)' : 'var(--ts)' }}>{l}</div>)}
+    </div>}
+  </div>;
+}
+
 // ═══ Main App ═══
 function App() {
   const [tab, setTab] = useState("uebersicht");
@@ -822,6 +1019,7 @@ function App() {
     { key: "sperr", label: "🔒 Sperrlisten", color: "var(--r)" },
     { key: "duplikate", label: "⚠️ Duplikate", color: "var(--o)" },
     { key: "historie", label: "📜 Historie", color: "var(--p)" },
+    { key: "import", label: "📥 CSV-Import", color: "var(--t)" },
   ];
 
   const tabDescriptions = {
@@ -833,6 +1031,7 @@ function App() {
     sperr: `${sperrData.length} Sperrlisten-Einträge – Grundbuch, MA-Abbruch, CRM-Storno`,
     duplikate: `${duplikateData.length} Duplikat-Verdachtsfälle – gleicher Kunde + kWp + PLZ`,
     historie: `${historieData.length} Provisions-Perioden – Stichtagsprinzip: DatumErstellt bestimmt den Satz`,
+    import: `Leveto CSV-Import – DatumAngenommen als Auftragsdatum, Ausgezahlt am = bereits abgerechnet`,
   };
 
   if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", flexDirection: "column", gap: 16 }}>
@@ -893,6 +1092,7 @@ function App() {
         {tab === "sperr" && <TabSperr sperr={sperrData} setSperr={setSperrData} toast={toast} />}
         {tab === "duplikate" && <TabDuplikate duplikate={duplikateData} setDuplikate={setDuplikateData} toast={toast} />}
         {tab === "historie" && <TabHistorie historie={historieData} setHistorie={setHistorieData} toast={toast} />}
+        {tab === "import" && <TabImport toast={toast} mitarbeiterList={mitarbeiterList} />}
       </div>
     </div>
 
