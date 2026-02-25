@@ -9,6 +9,8 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-height:100vh}
@@ -1089,7 +1091,53 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
   if(pd.length){const sp=await sbP('pay_abrechnungen_positionen',pd);setPos(sp);}setAb(s);window.__t?.('✅ Gespeichert');onRef?.();}catch(e){window.__t?.('Fehler: '+e.message,'error');}};
 
   const frei=async()=>{if(!confirm(`${ab.mitarbeiter_name} (${ab.periode}) freigeben?\n\nDanach keine Änderungen mehr möglich!`))return;setAb(p=>({...p,status:'freigegeben',freigegeben_am:new Date().toISOString(),freigegeben_von:'Patrick Grabowski'}));setTimeout(save,100);};
-  const pdf=async()=>{const pages=ref.current?.querySelectorAll('.gs-page');if(!pages?.length)return;window.__t?.('PDF wird erstellt...');try{const c=document.createElement('div');pages.forEach(p=>c.appendChild(p.cloneNode(true)));await html2pdf().set({margin:0,filename:`Gutschrift_${ab.periode.replace('/','-')}_${ab.kuerzel||gK(ab.mitarbeiter_name)}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy'],before:'.gs-page'}}).from(c).save();window.__t?.('✅ PDF heruntergeladen');}catch(e){window.__t?.('PDF-Fehler: '+e.message,'error');}};
+  const pdf=async()=>{
+    const pages=ref.current?.querySelectorAll('.gs-page');
+    if(!pages?.length)return;
+    window.__t?.('PDF wird erstellt...');
+    try{
+      // Render each .gs-page individually to avoid page-break issues
+      const {jsPDF}=window.jspdf||{};
+      const doc=jsPDF?new jsPDF({unit:'mm',format:'a4',orientation:'portrait'}):null;
+      const A4W=210,A4H=297;
+      
+      for(let i=0;i<pages.length;i++){
+        window.__t?.(`Seite ${i+1}/${pages.length}...`);
+        const page=pages[i];
+        // Clone to offscreen container for clean rendering
+        const wrap=document.createElement('div');
+        wrap.style.cssText='position:fixed;left:-9999px;top:0;width:210mm;background:#fff;z-index:-1;';
+        const clone=page.cloneNode(true);
+        clone.style.boxShadow='none';
+        clone.style.margin='0';
+        wrap.appendChild(clone);
+        document.body.appendChild(wrap);
+        
+        const canvas=await html2canvas(clone,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+        document.body.removeChild(wrap);
+        
+        const imgData=canvas.toDataURL('image/jpeg',0.95);
+        const imgW=A4W;
+        const imgH=(canvas.height*A4W)/canvas.width;
+        
+        if(i>0&&doc) doc.addPage();
+        if(doc){
+          doc.addImage(imgData,'JPEG',0,0,imgW,Math.min(imgH,A4H));
+        } else {
+          // Fallback: use html2pdf per page
+          if(i===0){
+            await html2pdf().set({margin:0,filename:`Gutschrift_${ab.periode.replace('/','-')}_${ab.kuerzel||gK(ab.mitarbeiter_name)}.pdf`,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(clone).save();
+            window.__t?.('✅ PDF heruntergeladen (Einzelseite)');
+            return;
+          }
+        }
+      }
+      if(doc){
+        doc.save(`Gutschrift_${ab.periode.replace('/','-')}_${ab.kuerzel||gK(ab.mitarbeiter_name)}.pdf`);
+        window.__t?.('✅ PDF heruntergeladen');
+      }
+    }catch(e){console.error('PDF Error:',e);window.__t?.('PDF-Fehler: '+e.message,'error');}
+  };
 
   if(ld)return<div className="detail-overlay"><div className="detail-container"><div className="loading"><div className="spinner"/>Lade...</div></div></div>;
   if(!ab)return null;
