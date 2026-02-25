@@ -139,10 +139,10 @@ function GutschriftPreview({ab,pos,sg}){
   const qrUrl=`https://api.qrserver.com/v1/create-qr-code/?size=54x54&data=${encodeURIComponent(`bee-doo:${bn}|${b.aus}|${heute}`)}&bgcolor=ffffff&color=1a1a2e&margin=1`;
 
   const FooterBlock = () => <div className="gs-footer">
-    <div className="gs-footer-col"><b>Firmensitz</b>bee-doo GmbH<br/>Am Stadtholz 39<br/>D-33609 Bielefeld</div>
+    <div className="gs-footer-col"><b>Firmensitz</b>bee-doo GmbH<br/>Am Stadtholz 39<br/>D-33609 Bielefeld<br/>StNr: 44/214/0394</div>
     <div className="gs-footer-col"><b>Kontakt</b>www.bee-doo.de<br/>info@bee-doo.de<br/>Fon: 0800 22 33 664</div>
     <div className="gs-footer-col"><b>Bankverbindung</b>IBAN DE90 2545 0110<br/>0031 0399 85<br/>BIC NOLADE21SWB</div>
-    <div className="gs-footer-col"><b>Gesch\u00e4ftsf\u00fchrer</b>Patrick Grabowski<br/>Olaf Schader<br/>HRB 43210 Bielefeld</div>
+    <div className="gs-footer-col"><b>Gesch\u00e4ftsf\u00fchrer</b>Patrick Grabowski<br/>Olaf Schader<br/>HRB 46243 AG Bielefeld<br/>USt-IdNr.: DE323940446</div>
   </div>;
 
   return <div style={{display:'flex',flexDirection:'column',gap:20}}>
@@ -168,10 +168,10 @@ function GutschriftPreview({ab,pos,sg}){
       </div>
 
       <div className="gs-body">
-        <div style={{fontSize:8.5,color:'#888',borderBottom:'1px dotted #ccc',paddingBottom:4,marginBottom:8}}>bee-doo GmbH \u00b7 Am Stadtholz 39 \u00b7 D-33609 Bielefeld \u00b7 USt-IdNr.: DE363829401</div>
+        <div style={{fontSize:8.5,color:'#888',borderBottom:'1px dotted #ccc',paddingBottom:4,marginBottom:8}}>bee-doo GmbH · Am Stadtholz 39 · D-33609 Bielefeld · StNr: 44/214/0394 · USt-IdNr.: DE323940446</div>
         <div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{ab.mitarbeiter_name}</div>
-        <div style={{fontSize:11,color:'#444',lineHeight:1.7,marginBottom:2}}>\u2014<br/>\u2014</div>
-        <div style={{fontSize:9.5,color:'#888',marginBottom:12}}>{hgb?'HGB \u00a784 Handelsvertreter':'Angestellt'}</div>
+        <div style={{fontSize:11,color:'#444',lineHeight:1.7,marginBottom:2}}>{window.__vpData?.strasse?`${window.__vpData.strasse} ${window.__vpData.hausnr||''}`:'\u2014'}<br/>{window.__vpData?.plz?`${window.__vpData.plz} ${window.__vpData.ort||''}`:'\u2014'}</div>
+        <div style={{fontSize:9.5,color:'#888',marginBottom:12}}>{window.__vpData?.steuernummer?`Steuernr.: ${window.__vpData.steuernummer}`:''}{window.__vpData?.steuernummer&&window.__vpData?.ustid?' \u00b7 ':''}{window.__vpData?.ustid?`USt-IdNr.: ${window.__vpData.ustid}`:''}{!window.__vpData?.steuernummer&&!window.__vpData?.ustid?(hgb?'HGB \u00a784 Handelsvertreter \u2013 \u26a0\ufe0f Steuerdaten fehlen':'Angestellt'):''}</div>
         <div style={{borderTop:'1px solid #eee',marginBottom:10}}></div>
 
         <div style={{display:'grid',gridTemplateColumns:'56% 42%',gap:'2%'}}>
@@ -227,7 +227,7 @@ function GutschriftPreview({ab,pos,sg}){
         </div>
 
         <div style={{marginTop:14,fontSize:9.5,color:'#555',lineHeight:1.6,borderTop:'1px solid #eee',paddingTop:8}}>
-          {hgb?`Diese Gutschrift gem. \u00a714 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers. Nettobetrag: ${fmtE(b.net)} \u00b7 zzgl. 19% USt: ${fmtE(b.uB)} \u00b7 Brutto: ${fmtE(b.aus)}. Systemgeb\u00fchr (${fmtE(b.sgN+b.sgU)} brutto) wird sep. abgerechnet. Aussteller: bee-doo GmbH, USt-IdNr. DE363829401.`
+          {hgb?`Diese Gutschrift gem. \u00a714 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers (gem. Gutschriftvereinbarung HVV). Nettobetrag: ${fmtE(b.net)} \u00b7 zzgl. 19% USt: ${fmtE(b.uB)} \u00b7 Brutto: ${fmtE(b.aus)}. Systemgeb\u00fchr (${fmtE(b.sgN+b.sgU)} brutto) wird sep. abgerechnet. Empf\u00e4nger: ${ab.mitarbeiter_name}${window.__vpData?.ustid?', USt-IdNr.: '+window.__vpData.ustid:''}${window.__vpData?.steuernummer?', StNr.: '+window.__vpData.steuernummer:''}. Aussteller: bee-doo GmbH, USt-IdNr. DE323940446, StNr. 44/214/0394.`
           :`Entgeltabrechnung ${ab.mitarbeiter_name}. Nettobetrag: ${fmtE(b.net)}.`}
         </div>
         <FooterBlock/>
@@ -330,7 +330,12 @@ function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
 function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
   const[ab,setAb]=useState(null);const[pos,setPos]=useState([]);const[ld,setLd]=useState(true);const ref=useRef(null);
   useEffect(()=>{load();},[aId]);
-  const load=async()=>{setLd(true);try{if(aId){const[a,p]=await Promise.all([sbG('pay_abrechnungen',`id=eq.${aId}`),sbG('pay_abrechnungen_positionen',`abrechnung_id=eq.${aId}&order=erstellt_am.asc`)]);if(a.length){setAb(a[0]);setPos(p);}}else{setAb({periode:per,mitarbeiter_name:vtN,kuerzel:gK(vtN),beschaeftigungsart:'hgb',status:'entwurf',notizen:'',stb_kommentar:''});setPos((vtD||[]).map(d=>({typ:'provision',auftrag_nr:'',kunde:d.kunde,produkt:d.produkt,original_betrag:d.netto,override_betrag:null,aktiv:true,zurueckgestellt:false,notiz:'',isNew:true})));}}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);};
+  const load=async()=>{setLd(true);try{
+    // VP-Stammdaten laden
+    const nameParts=vtN.trim().split(/\s+/);const vn=nameParts[0];const nn=nameParts.slice(1).join(' ');
+    const vpArr=await sbG('pay_mitarbeiter',`vorname=eq.${encodeURIComponent(vn)}&nachname=eq.${encodeURIComponent(nn)}&limit=1`).catch(()=>[]);
+    const vp=vpArr[0]||null;if(vp)window.__vpData=vp;
+    if(aId){const[a,p]=await Promise.all([sbG('pay_abrechnungen',`id=eq.${aId}`),sbG('pay_abrechnungen_positionen',`abrechnung_id=eq.${aId}&order=erstellt_am.asc`)]);if(a.length){setAb(a[0]);setPos(p);}}else{setAb({periode:per,mitarbeiter_name:vtN,kuerzel:vp?.kuerzel||gK(vtN),beschaeftigungsart:vp?.typ?.startsWith('hgb')?'hgb':'angestellt',status:'entwurf',notizen:'',stb_kommentar:''});setPos((vtD||[]).map(d=>({typ:'provision',auftrag_nr:'',kunde:d.kunde,produkt:d.produkt,original_betrag:d.netto,override_betrag:null,aktiv:true,zurueckgestellt:false,notiz:'',isNew:true})));}}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);};
 
   const save=async()=>{try{const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');const d={...ab,anzahl_sales:b.sales,brutto_provisionen:b.bp,systemgebuehr_netto:b.sgN,systemgebuehr_ust:b.sgU,einmalzahlungen_summe:b.es,nettobetrag:b.net,ust_satz:b.uS,ust_betrag:b.uB,auszahlungssumme:b.aus,belegnummer:gBN(ab.periode,ab.kuerzel||gK(ab.mitarbeiter_name),1),geaendert_am:new Date().toISOString()};
   let s;if(ab.id){const{id,erstellt_am,...u}=d;s=(await sbU('pay_abrechnungen',`id=eq.${ab.id}`,u))[0];await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${ab.id}`);}else{const{id,...ins}=d;s=(await sbP('pay_abrechnungen',ins))[0];}
