@@ -1,3 +1,4 @@
+<!-- v1772054128 -->
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -330,7 +331,7 @@ async function generateAbrechnungen(periode, onProgress){
       teamDetail.sort((a,b)=>b.sales-a.sales);
       if(teamSales>0){
         const tbBetrag = teamSales * tb.betrag_pro_sale;
-        positionen.push({typ:'team_bonus',auftrag_nr:null,kunde:null,produkt:`Team-Bonus (${teamSales} Team-Sales × ${fmt(tb.betrag_pro_sale)}€)`,original_betrag:tbBetrag,aktiv:true,zurueckgestellt:false,notiz:'Team-Bonus',_teamDetail:teamDetail,_betragProSale:tb.betrag_pro_sale});
+        positionen.push({typ:'team_bonus',auftrag_nr:null,kunde:null,produkt:`Team-Bonus (${teamSales} Team-Sales × ${fmt(tb.betrag_pro_sale)}€)`,original_betrag:tbBetrag,aktiv:true,zurueckgestellt:false,notiz:JSON.stringify({td:teamDetail,bps:tb.betrag_pro_sale}),_teamDetail:teamDetail,_betragProSale:tb.betrag_pro_sale});
         bruttoTotal+=tbBetrag;
       }
     }
@@ -364,7 +365,7 @@ async function generateAbrechnungen(periode, onProgress){
     const ustBetrag=bruttoTotal*(ustSatz/100);
     const abr=await sbP('pay_abrechnungen',{periode,mitarbeiter_name:vpName,kuerzel:vp.kuerzel||gK(vpName),beschaeftigungsart:isHGB?'hgb':'angestellt',status:'entwurf',anzahl_sales:orders.length,brutto_provisionen:Math.round(bruttoTotal*100)/100,systemgebuehr_netto:Math.round(sgNetto*100)/100,systemgebuehr_ust:Math.round(sgUst*100)/100,nettobetrag:Math.round(bruttoTotal*100)/100,ust_satz:ustSatz,ust_betrag:Math.round(ustBetrag*100)/100,auszahlungssumme:Math.round((bruttoTotal+ustBetrag)*100)/100});
     const abrId=Array.isArray(abr)?abr[0].id:abr.id;
-    const posData=positionen.map(p=>({...p,abrechnung_id:abrId}));
+    const posData=positionen.map(p=>{const {_teamDetail,_betragProSale,...rest}=p;return{...rest,abrechnung_id:abrId};});
     for(let i=0;i<posData.length;i+=50){await sbP('pay_abrechnungen_positionen',posData.slice(i,i+50));}
     count++;
   }
@@ -957,8 +958,9 @@ function GutschriftPreview({ab,pos,sg}){
 
     {/* === TEAM-BONUS DETAIL (eigene Seite) === */}
     {aTB.length>0&&aTB.map((tbp,tbi)=>{
-      const detail=tbp._teamDetail||[];
-      const bps=tbp._betragProSale||0;
+      let detail=tbp._teamDetail||[];
+      let bps=tbp._betragProSale||0;
+      if(!detail.length&&tbp.notiz){try{const nd=JSON.parse(tbp.notiz);detail=nd.td||[];bps=nd.bps||0;}catch(e){}}
       return <div key={`tb-page-${tbi}`} className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
         {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
         <div style={{padding:'14mm 16mm 0',flex:1}}>
