@@ -123,12 +123,14 @@ async function generateAbrechnungen(periode, onProgress){
   // Abrechnungsmonat = periode (z.B. 2026/02). Leistungszeitraum = alles VOR diesem Monat.
   // Nur Aufträge abrechnen deren DatumErstellt VOR dem Abrechnungsmonat liegt.
   const periodeStart = `${y}-${m}-01`; // Aufträge VOR diesem Datum
-  const [regeln, stufen, mitarbeiter, auftraege, sgArr] = await Promise.all([
+  const [regeln, stufen, mitarbeiter, auftraege, sgArr, stornoAuftr, offeneAuftr] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
     sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig'),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=*`),
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
+    sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
   ]);
   const sgConfig = sgArr[0] || {prozent:3, max_netto:200, ust_satz:19};
   const regelMap = {}; regeln.forEach(r => regelMap[r.mitarbeiter_typ] = r);
@@ -136,6 +138,11 @@ async function generateAbrechnungen(periode, onProgress){
   const vpById = {}; mitarbeiter.forEach(v => { vpById[v.id] = v; });
   const byVP = {};
   auftraege.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id] = []; byVP[a.vertriebler_id].push(a); });
+  // Group storno + offen by VP
+  const stornoByVP = {};
+  stornoAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!stornoByVP[a.vertriebler_id]) stornoByVP[a.vertriebler_id] = []; stornoByVP[a.vertriebler_id].push(a); });
+  const offenByVP = {};
+  offeneAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!offenByVP[a.vertriebler_id]) offenByVP[a.vertriebler_id] = []; offenByVP[a.vertriebler_id].push(a); });
   const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=vertriebler_id,auftrags_datum');
   const salesPerVPMonth = {};
   allRelevant.forEach(a => { if(!a.vertriebler_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.vertriebler_id+'_'+om; salesPerVPMonth[key]=(salesPerVPMonth[key]||0)+1; });
@@ -143,9 +150,14 @@ async function generateAbrechnungen(periode, onProgress){
   const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&status=in.(entwurf,probeabrechnung)&select=id`);
   for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
   let count = 0;
-  for(const vpId of Object.keys(byVP)){
+  // Combine all VP IDs (auszahlbar + storno + offen)
+  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP)]);
+  for(const vpId of allVPIds){
     const vp = vpById[vpId]; if(!vp) continue;
-    const orders = byVP[vpId]; if(!orders.length) continue;
+    const orders = byVP[vpId] || [];
+    const vpStornos2 = stornoByVP[vpId] || [];
+    const vpOffen2 = offenByVP[vpId] || [];
+    if(!orders.length && !vpStornos2.length && !vpOffen2.length) continue;
     const ruleTyp = typMap[vp.typ] || vp.typ;
     const regel = regelMap[ruleTyp];
     if(!regel){ log(`⚠️ ${vp.vorname} ${vp.nachname}: keine Regel für ${ruleTyp}`); continue; }
@@ -171,6 +183,12 @@ async function generateAbrechnungen(periode, onProgress){
     let stufenBonus=0;
     for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const [k,cnt] of Object.entries(salesPerVPMonth)){ if(!k.startsWith(vpId+'_')) continue; if(cnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } }
     if(stufenBonus>0){ positionen.push({typ:'einmalzahlung',auftrag_nr:null,kunde:null,produkt:'Stufenbonus',original_betrag:stufenBonus,aktiv:true,zurueckgestellt:false,notiz:'Stufenbonus'}); bruttoTotal+=stufenBonus; }
+    // Stornierte Aufträge (nur zur Info, kein Betrag)
+    const vpStornos = stornoByVP[vpId] || [];
+    vpStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:s.auftrags_datum?.substring(0,7)||''}); });
+    // Offene Aufträge (kein Termin gelegt, nur zur Info)
+    const vpOffen = offenByVP[vpId] || [];
+    vpOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:o.auftrags_datum?.substring(0,7)||''}); });
     const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
     const sgUst=sgNetto*(sgConfig.ust_satz/100);
     const ustSatz=isHGB&&vp.mwst_pflichtig?19:0;
@@ -203,6 +221,8 @@ function GutschriftPreview({ab,pos,sg}){
   const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');
   const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
   const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges'].includes(p.typ));
+  const aSt=pos.filter(p=>p.typ==='storno_info');
+  const aOf=pos.filter(p=>p.typ==='offen_info');
   const k=ab.kuerzel||gK(ab.mitarbeiter_name),bn=gBN(ab.periode,k,1),hgb=ab.beschaeftigungsart==='hgb';
   const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
   const isE=ab.status==='entwurf'||ab.status==='probeabrechnung';
@@ -273,6 +293,8 @@ function GutschriftPreview({ab,pos,sg}){
             <div style={{fontSize:10,fontWeight:700,color:'#E07800',marginBottom:5,paddingBottom:3,borderBottom:'1px solid #eee'}}>Sales {pLabel(ab.periode)}</div>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}><tbody>
               <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#555'}}>Abgerechnete Sales</td><td style={{padding:'4px 7px',textAlign:'right',fontWeight:700}}>{b.sales}</td></tr>
+              {aSt.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#da3633'}}>Storniert</td><td style={{padding:'4px 7px',textAlign:'right',color:'#da3633'}}>{aSt.length}</td></tr>}
+              {aOf.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#8b949e'}}>Offen (kein Termin)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOf.length}</td></tr>}
               <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#555'}}>Provisionen Netto</td><td style={{padding:'4px 7px',textAlign:'right'}}>{fmtE(b.net)}</td></tr>
               {hgb&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'4px 7px',textAlign:'right',color:'#92400e'}}>+ {fmtE(b.uB)}</td></tr>}
               <tr style={{background:'#f0fdf4'}}><td style={{padding:'4px 7px',fontWeight:700}}>Auszahlung</td><td style={{padding:'4px 7px',textAlign:'right',fontWeight:700,color:'#166534'}}>{fmtE(b.aus)}</td></tr>
@@ -391,6 +413,10 @@ function GutschriftPreview({ab,pos,sg}){
               
               {isLastPage && <>
                 {aE.map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb',borderBottom:'1px solid #eee'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10}}>{p.kunde||p.notiz||p.typ} <span style={{fontSize:9,color:'#888'}}>({p.typ==='einmalzahlung'?'Einmalzahlung':p.typ==='abzug'?'Abzug':'Sonstiges'})</span></td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
+                {aSt.length>0&&<><tr><td colSpan={4} style={{padding:'8px 6px 3px',fontSize:9,fontWeight:700,color:'#da3633',borderTop:'1px solid #eee',textTransform:'uppercase',letterSpacing:'0.5px'}}>❌ Stornierte Aufträge ({aSt.length})</td></tr>
+                {aSt.map((p,i)=><tr key={`st${i}`} style={{background:'#fef2f2',borderBottom:'1px solid #fee2e2'}}><td style={{padding:'3px 6px',color:'#fca5a5',fontSize:9}}>—</td><td style={{padding:'3px 6px',fontSize:9,color:'#991b1b'}}>{p.kunde||'—'}</td><td style={{padding:'3px 6px',fontSize:8,color:'#b91c1c'}}>{p.auftrag_nr}</td><td style={{padding:'3px 6px',textAlign:'right',fontSize:9,color:'#991b1b'}}>0,00 €</td></tr>)}</>}
+                {aOf.length>0&&<><tr><td colSpan={4} style={{padding:'8px 6px 3px',fontSize:9,fontWeight:700,color:'#8b949e',borderTop:'1px solid #eee',textTransform:'uppercase',letterSpacing:'0.5px'}}>⏳ Offene Aufträge – kein Termin gelegt ({aOf.length})</td></tr>
+                {aOf.map((p,i)=><tr key={`of${i}`} style={{background:'#f8f8f8',borderBottom:'1px solid #eee'}}><td style={{padding:'3px 6px',color:'#d1d5db',fontSize:9}}>—</td><td style={{padding:'3px 6px',fontSize:9,color:'#6b7280'}}>{p.kunde||'—'}</td><td style={{padding:'3px 6px',fontSize:8,color:'#9ca3af'}}>{p.auftrag_nr}</td><td style={{padding:'3px 6px',textAlign:'right',fontSize:9,color:'#9ca3af'}}>—</td></tr>)}</>}
                 <tr style={{fontWeight:700,borderTop:'2px solid #333',background:'#f9f9f9'}}><td></td><td colSpan={2} style={{padding:'6px 6px'}}>Netto-Summe</td><td style={{padding:'6px 6px',textAlign:'right',whiteSpace:'nowrap'}}>{fmtE(b.bp+b.es)}</td></tr>
                 <tr><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#555',borderTop:'1px solid #ddd'}}>Nettobetrag</td><td style={{padding:'4px 6px',textAlign:'right',borderTop:'1px solid #ddd',whiteSpace:'nowrap'}}>{fmtE(b.net)}</td></tr>
                 {hgb&&<tr style={{background:'#fffbeb'}}><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'4px 6px',textAlign:'right',color:'#92400e',fontWeight:700,whiteSpace:'nowrap'}}>+ {fmtE(b.uB)}</td></tr>}
