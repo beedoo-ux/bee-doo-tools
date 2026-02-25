@@ -324,12 +324,25 @@ function GutschriftPreview({ab,pos,sg}){
         else byAN[an].boni.push(p);
       });
       
-      // Split groups into pages (ca. 22 groups per page, weniger auf Seite mit Summen)
-      const PER_PAGE = 22;
-      const pages = [];
-      for(let i=0; i<groups.length; i+=PER_PAGE){
-        pages.push(groups.slice(i, i+PER_PAGE));
-      }
+      // Dynamic page break: count actual rows per group, max ~38 rows per page
+      // Last page needs ~12 rows for summaries+signatures, so we check ahead
+      const MAX_ROWS = 38;
+      const LAST_PAGE_RESERVE = 14; // rows for Netto/USt/Brutto + Unterschriften
+      const pages = []; let currentPage = []; let rowCount = 0;
+      const totalBoniRows = groups.reduce((s,an) => s + 1 + (byAN[an].boni.length > 0 ? byAN[an].boni.length + 2 : 0), 0);
+      const estimatedPages = Math.ceil(totalBoniRows / MAX_ROWS);
+      groups.forEach((an, gi) => {
+        const g = byAN[an];
+        const rows = 1 + (g.boni.length > 0 ? g.boni.length + 2 : 0);
+        const remainingRows = groups.slice(gi).reduce((s,a) => s + 1 + (byAN[a].boni.length > 0 ? byAN[a].boni.length + 2 : 0), 0);
+        const isNearEnd = remainingRows <= (MAX_ROWS - LAST_PAGE_RESERVE);
+        const limit = isNearEnd ? (MAX_ROWS - LAST_PAGE_RESERVE) : MAX_ROWS;
+        if(rowCount + rows > limit && currentPage.length > 0){
+          pages.push(currentPage); currentPage = []; rowCount = 0;
+        }
+        currentPage.push(an); rowCount += rows;
+      });
+      if(currentPage.length > 0) pages.push(currentPage);
       if(pages.length===0) pages.push([]);
       
       let globalNr = 0;
