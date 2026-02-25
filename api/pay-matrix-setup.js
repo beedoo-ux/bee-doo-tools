@@ -22,134 +22,98 @@ export default async function handler(req, res) {
     } catch(e) { results.push({ label, error: e.message }); return false; }
   };
 
-  // ── 1. SPERRLISTEN ───
-  await sql('create_sperrlisten', `CREATE TABLE IF NOT EXISTS pay_sperrlisten (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    auftrag_nr TEXT NOT NULL, kunde_name TEXT, vertriebler TEXT,
-    typ TEXT NOT NULL CHECK(typ IN ('grundbuch','montage_abbruch','crm_storno','sonstige')),
-    status TEXT NOT NULL DEFAULT 'gesperrt' CHECK(status IN ('gesperrt','ausgezahlt','rueckforderung','geklaert')),
-    betrag NUMERIC(10,2) DEFAULT 0, ausgezahlt_am DATE, notiz TEXT,
-    erstellt_am TIMESTAMPTZ DEFAULT now(), geaendert_am TIMESTAMPTZ DEFAULT now());`);
-
-  // ── 2. DUPLIKATE ───
-  await sql('create_duplikate', `CREATE TABLE IF NOT EXISTS pay_duplikate (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    kunde_name TEXT NOT NULL, plz TEXT, kwp NUMERIC(5,2),
-    auftrag_nr_1 TEXT NOT NULL, auftrag_nr_2 TEXT NOT NULL, vertriebler TEXT,
-    status TEXT NOT NULL DEFAULT 'offen' CHECK(status IN ('offen','geklaert','storniert','entscheidung_noetig')),
-    aktion TEXT, notiz TEXT,
-    erstellt_am TIMESTAMPTZ DEFAULT now(), geaendert_am TIMESTAMPTZ DEFAULT now());`);
-
-  // ── 3. SONDERPROVISIONEN ───
-  await sql('create_sonderprovisionen', `CREATE TABLE IF NOT EXISTS pay_sonderprovisionen (
+  // ── PROVISIONS HISTORIE ───
+  await sql('create_provisions_historie', `CREATE TABLE IF NOT EXISTS pay_provisions_historie (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     mitarbeiter_id UUID REFERENCES pay_mitarbeiter(id),
     mitarbeiter_name TEXT NOT NULL,
-    typ TEXT NOT NULL CHECK(typ IN ('flat_rate','eigenlead_override','empfehlung_override','speicher_override')),
-    betrag NUMERIC(10,2) NOT NULL, beschreibung TEXT,
-    gueltig_ab DATE NOT NULL DEFAULT '2025-01-01', gueltig_bis DATE,
-    aktiv BOOLEAN DEFAULT true,
-    erstellt_am TIMESTAMPTZ DEFAULT now(), geaendert_am TIMESTAMPTZ DEFAULT now());`);
+    gueltig_ab DATE NOT NULL,
+    gueltig_bis DATE,
+    basis_betrag NUMERIC(10,2) NOT NULL,
+    staffel_betrag NUMERIC(10,2),
+    staffel_schwelle INTEGER DEFAULT 8,
+    eigenlead_betrag NUMERIC(10,2) DEFAULT 0,
+    empfehlung_betrag NUMERIC(10,2) DEFAULT 0,
+    speicher_betrag NUMERIC(10,2) DEFAULT 0,
+    stufenbonus_berechtigt BOOLEAN DEFAULT true,
+    ist_flat_rate BOOLEAN DEFAULT false,
+    notiz TEXT,
+    erstellt_am TIMESTAMPTZ DEFAULT now()
+  );`);
 
-  // ── 4. STUFENBONUS ───
-  await sql('create_stufenbonus', `CREATE TABLE IF NOT EXISTS pay_stufenbonus (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    stufe_name TEXT NOT NULL, min_anlagen INTEGER NOT NULL,
-    bonus_betrag NUMERIC(10,2) NOT NULL,
-    gilt_fuer TEXT NOT NULL DEFAULT 'hgb_vertriebler_haupt',
-    kumulativ BOOLEAN DEFAULT false, aktiv BOOLEAN DEFAULT true,
-    erstellt_am TIMESTAMPTZ DEFAULT now());`);
+  await sql('rls_historie', `ALTER TABLE pay_provisions_historie ENABLE ROW LEVEL SECURITY;`);
+  await sql('policy_historie', `DROP POLICY IF EXISTS "pay_provisions_historie_anon_all" ON pay_provisions_historie;
+    CREATE POLICY "pay_provisions_historie_anon_all" ON pay_provisions_historie FOR ALL TO anon USING (true) WITH CHECK (true);`);
 
-  // ── 5. TEAM BONUS ───
-  await sql('create_team_bonus', `CREATE TABLE IF NOT EXISTS pay_team_bonus (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    mitarbeiter_id UUID REFERENCES pay_mitarbeiter(id),
-    mitarbeiter_name TEXT NOT NULL,
-    betrag_pro_sale NUMERIC(10,2) NOT NULL,
-    bezugsgruppe TEXT NOT NULL CHECK(bezugsgruppe IN ('alle_vt','eigenes_team','custom')),
-    team_mitglieder TEXT[], gueltig_ab DATE NOT NULL DEFAULT '2026-01-01',
-    gueltig_bis DATE, aktiv BOOLEAN DEFAULT true,
-    erstellt_am TIMESTAMPTZ DEFAULT now());`);
+  // ── INDEX for fast lookups ───
+  await sql('idx_historie', `CREATE INDEX IF NOT EXISTS idx_prov_hist_ma_date 
+    ON pay_provisions_historie(mitarbeiter_name, gueltig_ab DESC);`);
 
-  // ── RLS + POLICIES ───
-  for (const t of ['pay_sperrlisten','pay_duplikate','pay_sonderprovisionen','pay_stufenbonus','pay_team_bonus']) {
-    await sql(`rls_${t}`, `ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;`);
-    await sql(`policy_${t}`, `DROP POLICY IF EXISTS "${t}_anon_all" ON ${t}; CREATE POLICY "${t}_anon_all" ON ${t} FOR ALL TO anon USING (true) WITH CHECK (true);`);
-  }
+  // ── SEED: Historical rates for ALL VTs ───
+  // HGB Vertriebler Haupt - default rate since beginning
+  const hgbVTs = [
+    'Janik Voß','Martin Bott','Philipp-Torben Hannigk','Pascal Schallenberg',
+    'Lukas Kirschner','Hartmut Seitz','Farshad Nourouzi','Gino Ulitzka',
+    'Maxim Horten','Patrick Kalinowski','Nino Rimmler','Klaus Vollmer',
+    'Sebastian Mansour','Andreas Klee','Dimitri van Eeuwen','Richard Winzent',
+    'Fabian Hindenberg','Marco Bringmann','Calogero Iannuzzo','Daniel Saweljew',
+    'Frank Reddig','Christian Seifert','Kevin Kraus'
+  ];
 
-  // ── SEED DATA ───
-  await sql('seed_stufenbonus', `INSERT INTO pay_stufenbonus (stufe_name, min_anlagen, bonus_betrag, gilt_fuer, kumulativ)
-    SELECT 'Stufe 1', 10, 2000, 'hgb_vertriebler_haupt', false WHERE NOT EXISTS (SELECT 1 FROM pay_stufenbonus WHERE stufe_name='Stufe 1');
-    INSERT INTO pay_stufenbonus (stufe_name, min_anlagen, bonus_betrag, gilt_fuer, kumulativ)
-    SELECT 'Stufe 2', 15, 5000, 'hgb_vertriebler_haupt', false WHERE NOT EXISTS (SELECT 1 FROM pay_stufenbonus WHERE stufe_name='Stufe 2');`);
+  // Standard HGB rates for all regular VTs
+  const hgbValues = hgbVTs.map(n => 
+    `((SELECT id FROM pay_mitarbeiter WHERE CONCAT(vorname,' ',nachname)='${n}' LIMIT 1),'${n}','2025-01-01',NULL,1400,1700,8,800,500,0,true,false,'Standard HGB Haupt §84')`
+  ).join(',\n');
 
-  await sql('seed_sonderprovisionen', `INSERT INTO pay_sonderprovisionen (mitarbeiter_name, typ, betrag, beschreibung, gueltig_ab, mitarbeiter_id)
-    SELECT 'Christoph Held', 'flat_rate', 3000, 'Flat 3.000€/Anlage (statt Staffel)', '2026-01-01',
-      (SELECT id FROM pay_mitarbeiter WHERE nachname='Held' AND vorname='Christoph' LIMIT 1)
-    WHERE NOT EXISTS (SELECT 1 FROM pay_sonderprovisionen WHERE mitarbeiter_name='Christoph Held' AND typ='flat_rate');
-    INSERT INTO pay_sonderprovisionen (mitarbeiter_name, typ, betrag, beschreibung, gueltig_ab, mitarbeiter_id)
-    SELECT 'Tayfun Süleymaniye', 'flat_rate', 2700, 'Flat 2.700€/Anlage (statt Staffel)', '2026-01-01',
-      (SELECT id FROM pay_mitarbeiter WHERE nachname='Süleymaniye' AND vorname='Tayfun' LIMIT 1)
-    WHERE NOT EXISTS (SELECT 1 FROM pay_sonderprovisionen WHERE mitarbeiter_name='Tayfun Süleymaniye' AND typ='flat_rate');
-    INSERT INTO pay_sonderprovisionen (mitarbeiter_name, typ, betrag, beschreibung, gueltig_ab, mitarbeiter_id)
-    SELECT 'Stefan Hensel', 'flat_rate', 2800, 'Flat 2.800€/Anlage, kein Eigenlead', '2025-01-01',
-      (SELECT id FROM pay_mitarbeiter WHERE nachname='Hensel' AND vorname='Stefan' LIMIT 1)
-    WHERE NOT EXISTS (SELECT 1 FROM pay_sonderprovisionen WHERE mitarbeiter_name='Stefan Hensel' AND typ='flat_rate');`);
+  await sql('seed_hgb_historie', `INSERT INTO pay_provisions_historie 
+    (mitarbeiter_id, mitarbeiter_name, gueltig_ab, gueltig_bis, basis_betrag, staffel_betrag, staffel_schwelle, eigenlead_betrag, empfehlung_betrag, speicher_betrag, stufenbonus_berechtigt, ist_flat_rate, notiz)
+    VALUES ${hgbValues}
+    ON CONFLICT DO NOTHING;`);
 
-  await sql('seed_team_bonus', `INSERT INTO pay_team_bonus (mitarbeiter_name, betrag_pro_sale, bezugsgruppe, team_mitglieder, gueltig_ab, mitarbeiter_id)
-    SELECT 'Christoph Held', 200, 'alle_vt', NULL, '2026-01-01',
-      (SELECT id FROM pay_mitarbeiter WHERE nachname='Held' AND vorname='Christoph' LIMIT 1)
-    WHERE NOT EXISTS (SELECT 1 FROM pay_team_bonus WHERE mitarbeiter_name='Christoph Held');
-    INSERT INTO pay_team_bonus (mitarbeiter_name, betrag_pro_sale, bezugsgruppe, team_mitglieder, gueltig_ab, mitarbeiter_id)
-    SELECT 'Tayfun Süleymaniye', 300, 'eigenes_team',
-      ARRAY['Pascal Schallenberg','Maxim Horten','Patrick Kalinowski','Bernd Krahwinkel','Kadir Danyildiz'],
-      '2026-01-01',
-      (SELECT id FROM pay_mitarbeiter WHERE nachname='Süleymaniye' AND vorname='Tayfun' LIMIT 1)
-    WHERE NOT EXISTS (SELECT 1 FROM pay_team_bonus WHERE mitarbeiter_name='Tayfun Süleymaniye');`);
+  // Angestellte VTs
+  const angVTs = ['Miguel Schader','Pascal Meier','Nils Horn','Jannis Pfeiffer','Kadir Danyildiz','Maximilian Koch','Bernd Krahwinkel'];
+  const angValues = angVTs.map(n =>
+    `((SELECT id FROM pay_mitarbeiter WHERE CONCAT(vorname,' ',nachname)='${n}' LIMIT 1),'${n}','2025-01-01',NULL,500,700,8,400,300,150,false,false,'Standard Angestellt VT')`
+  ).join(',\n');
 
-  await sql('seed_sperrlisten_gb', `INSERT INTO pay_sperrlisten (auftrag_nr, kunde_name, vertriebler, typ, status)
-    SELECT v.* FROM (VALUES
-      ('15332','Katrin Winter','Christoph Held','grundbuch','gesperrt'),
-      ('15302','Melanie Niehus','Fabian Hindenberg','grundbuch','gesperrt'),
-      ('15166','Emöke Hoffmann','Christoph Held','grundbuch','gesperrt'),
-      ('14924','Sascha Mamerow','Gino Ulitzka','grundbuch','gesperrt'),
-      ('14776','Reimund Menninghaus','Gino Ulitzka','grundbuch','gesperrt'),
-      ('15154','Carsten Reinicke','Hartmut Seitz','grundbuch','gesperrt'),
-      ('15100','Ulrich Schülke','Fabian Hindenberg','crm_storno','gesperrt'),
-      ('14489','Nogin Bashar','Stefan Hensel','crm_storno','gesperrt')
-    ) AS v(auftrag_nr,kunde_name,vertriebler,typ,status)
-    WHERE NOT EXISTS (SELECT 1 FROM pay_sperrlisten WHERE auftrag_nr=v.auftrag_nr);`);
+  await sql('seed_ang_historie', `INSERT INTO pay_provisions_historie 
+    (mitarbeiter_id, mitarbeiter_name, gueltig_ab, gueltig_bis, basis_betrag, staffel_betrag, staffel_schwelle, eigenlead_betrag, empfehlung_betrag, speicher_betrag, stufenbonus_berechtigt, ist_flat_rate, notiz)
+    VALUES ${angValues}
+    ON CONFLICT DO NOTHING;`);
 
-  await sql('seed_sperrlisten_ma', `INSERT INTO pay_sperrlisten (auftrag_nr, kunde_name, typ, status, notiz)
-    SELECT v.* FROM (VALUES
-      ('13139','MA-Abbruch','montage_abbruch','gesperrt','WorkflowHistory: Montage abgebrochen'),
-      ('13872','MA-Abbruch','montage_abbruch','gesperrt','WorkflowHistory: Montage abgebrochen'),
-      ('15151','MA-Abbruch','montage_abbruch','gesperrt','WorkflowHistory: Montage abgebrochen'),
-      ('15709','MA-Abbruch','montage_abbruch','gesperrt','WorkflowHistory: Montage abgebrochen'),
-      ('12266','MA-Abbruch ausgez.','montage_abbruch','ausgezahlt','Rückforderung prüfen'),
-      ('13453','MA-Abbruch ausgez.','montage_abbruch','ausgezahlt','Rückforderung prüfen'),
-      ('14114','MA-Abbruch ausgez.','montage_abbruch','ausgezahlt','Rückforderung prüfen'),
-      ('14827','MA-Abbruch ausgez.','montage_abbruch','ausgezahlt','Rückforderung prüfen'),
-      ('14988','MA-Abbruch ausgez.','montage_abbruch','ausgezahlt','Rückforderung prüfen'),
-      ('15523','MA-Abbruch ausgez.','montage_abbruch','ausgezahlt','Rückforderung prüfen')
-    ) AS v(auftrag_nr,kunde_name,typ,status,notiz)
-    WHERE NOT EXISTS (SELECT 1 FROM pay_sperrlisten WHERE auftrag_nr=v.auftrag_nr);`);
+  // ── SONDER-VTs: Before + After ───
+  // Tayfun: HGB Haupt bis 31.12.2025, then 2700 flat ab 01.01.2026
+  await sql('seed_tayfun_alt', `INSERT INTO pay_provisions_historie 
+    (mitarbeiter_id, mitarbeiter_name, gueltig_ab, gueltig_bis, basis_betrag, staffel_betrag, staffel_schwelle, eigenlead_betrag, empfehlung_betrag, speicher_betrag, stufenbonus_berechtigt, ist_flat_rate, notiz)
+    SELECT (SELECT id FROM pay_mitarbeiter WHERE nachname='Süleymaniye' LIMIT 1),
+      'Tayfun Süleymaniye','2025-01-01','2025-12-31',1400,1700,8,800,500,0,true,false,'HGB Haupt (vor Erhöhung)'
+    WHERE NOT EXISTS (SELECT 1 FROM pay_provisions_historie WHERE mitarbeiter_name='Tayfun Süleymaniye' AND gueltig_ab='2025-01-01');`);
 
-  await sql('seed_duplikate', `INSERT INTO pay_duplikate (kunde_name, plz, kwp, auftrag_nr_1, auftrag_nr_2, vertriebler, status)
-    SELECT v.* FROM (VALUES
-      ('Angelika Blaum','58809',9.86,'14988','15154','Hartmut Seitz','entscheidung_noetig'),
-      ('Annette Bieker','59065',10.95,'13139','13453','Nino Rimmler','entscheidung_noetig'),
-      ('David u. Oxana Meinhardt','59439',11.31,'14489','14827','Stefan Hensel','entscheidung_noetig'),
-      ('Halil Kayis','44319',8.40,'15100','15151','Fabian Hindenberg','entscheidung_noetig'),
-      ('Karin Glatz','44623',10.95,'13820','13872','Klaus Vollmer','entscheidung_noetig'),
-      ('Marc Lichtenegger','45329',9.86,'14114','14219','Gino Ulitzka','entscheidung_noetig'),
-      ('Martin Seidel','58840',11.68,'12902','13139','Nino Rimmler','entscheidung_noetig'),
-      ('Maximilian Faber','44149',10.22,'15302','15332','Fabian Hindenberg','entscheidung_noetig'),
-      ('Peter Hasse','59846',12.78,'12266','12581','Dimitri van Eeuwen','entscheidung_noetig'),
-      ('Sven Fischer','58791',9.49,'15523','15709','Stefan Hensel','entscheidung_noetig'),
-      ('Tatjana u. Steffen Podein','45549',10.58,'14776','14924','Gino Ulitzka','entscheidung_noetig')
-    ) AS v(kunde_name,plz,kwp,auftrag_nr_1,auftrag_nr_2,vertriebler,status)
-    WHERE NOT EXISTS (SELECT 1 FROM pay_duplikate WHERE auftrag_nr_1=v.auftrag_nr_1 AND auftrag_nr_2=v.auftrag_nr_2);`);
+  await sql('seed_tayfun_neu', `INSERT INTO pay_provisions_historie 
+    (mitarbeiter_id, mitarbeiter_name, gueltig_ab, gueltig_bis, basis_betrag, staffel_betrag, staffel_schwelle, eigenlead_betrag, empfehlung_betrag, speicher_betrag, stufenbonus_berechtigt, ist_flat_rate, notiz)
+    SELECT (SELECT id FROM pay_mitarbeiter WHERE nachname='Süleymaniye' LIMIT 1),
+      'Tayfun Süleymaniye','2026-01-01',NULL,2700,2700,999,0,0,200,false,true,'Flat 2.700€ + Team-Bonus (ab Jan 2026)'
+    WHERE NOT EXISTS (SELECT 1 FROM pay_provisions_historie WHERE mitarbeiter_name='Tayfun Süleymaniye' AND gueltig_ab='2026-01-01');`);
+
+  // Christoph Held: HGB Haupt bis 31.12.2025, then 3000 flat ab 01.01.2026
+  await sql('seed_christoph_alt', `INSERT INTO pay_provisions_historie 
+    (mitarbeiter_id, mitarbeiter_name, gueltig_ab, gueltig_bis, basis_betrag, staffel_betrag, staffel_schwelle, eigenlead_betrag, empfehlung_betrag, speicher_betrag, stufenbonus_berechtigt, ist_flat_rate, notiz)
+    SELECT (SELECT id FROM pay_mitarbeiter WHERE nachname='Held' AND vorname='Christoph' LIMIT 1),
+      'Christoph Held','2025-01-01','2025-12-31',1400,1700,8,800,500,0,true,false,'HGB Haupt (vor Erhöhung)'
+    WHERE NOT EXISTS (SELECT 1 FROM pay_provisions_historie WHERE mitarbeiter_name='Christoph Held' AND gueltig_ab='2025-01-01');`);
+
+  await sql('seed_christoph_neu', `INSERT INTO pay_provisions_historie 
+    (mitarbeiter_id, mitarbeiter_name, gueltig_ab, gueltig_bis, basis_betrag, staffel_betrag, staffel_schwelle, eigenlead_betrag, empfehlung_betrag, speicher_betrag, stufenbonus_berechtigt, ist_flat_rate, notiz)
+    SELECT (SELECT id FROM pay_mitarbeiter WHERE nachname='Held' AND vorname='Christoph' LIMIT 1),
+      'Christoph Held','2026-01-01',NULL,3000,3000,999,800,400,200,false,true,'Flat 3.000€ + Team-Bonus 200€×alle VT (ab Jan 2026)'
+    WHERE NOT EXISTS (SELECT 1 FROM pay_provisions_historie WHERE mitarbeiter_name='Christoph Held' AND gueltig_ab='2026-01-01');`);
+
+  // Stefan Hensel: immer 2800 flat
+  await sql('seed_stefan', `INSERT INTO pay_provisions_historie 
+    (mitarbeiter_id, mitarbeiter_name, gueltig_ab, gueltig_bis, basis_betrag, staffel_betrag, staffel_schwelle, eigenlead_betrag, empfehlung_betrag, speicher_betrag, stufenbonus_berechtigt, ist_flat_rate, notiz)
+    SELECT (SELECT id FROM pay_mitarbeiter WHERE nachname='Hensel' AND vorname='Stefan' LIMIT 1),
+      'Stefan Hensel','2025-01-01',NULL,2800,2800,999,0,400,200,false,true,'Flat 2.800€, kein Eigenlead (seit immer)'
+    WHERE NOT EXISTS (SELECT 1 FROM pay_provisions_historie WHERE mitarbeiter_name='Stefan Hensel' AND gueltig_ab='2025-01-01');`);
 
   res.json({ ok: true, total: results.length, success: results.filter(r=>r.ok).length, results });
 }
