@@ -424,6 +424,22 @@ function BereinigungPanel({onClose}){
         sbG('pay_sperrlisten','order=status.asc,erstellt_am.desc'),
         sbG('pay_duplikate','order=status.asc,erstellt_am.desc'),
       ]);
+      // Auto-enrich: fehlende Kundennamen aus pay_auftraege nachschlagen
+      const missing=sp.filter(s=>!s.kunde_name||s.kunde_name.includes('Abbruch')||s.kunde_name.includes('nicht gefunden'));
+      if(missing.length>0){
+        const ans=missing.map(s=>'AN-'+s.auftrag_nr);
+        const auftr=await sbG('pay_auftraege',`auftrag_nr=in.(${ans.join(',')})&select=auftrag_nr,kunde_name,vertriebler_id`).catch(()=>[]);
+        const mitarb=await sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname').catch(()=>[]);
+        const vtMap=Object.fromEntries(mitarb.map(m=>[m.id,`${m.vorname} ${m.nachname}`]));
+        for(const s of missing){
+          const a=auftr.find(x=>x.auftrag_nr==='AN-'+s.auftrag_nr);
+          if(a){
+            const patch={kunde_name:a.kunde_name,vertriebler:vtMap[a.vertriebler_id]||s.vertriebler||''};
+            s.kunde_name=patch.kunde_name;s.vertriebler=patch.vertriebler;
+            sbU('pay_sperrlisten',`id=eq.${s.id}`,patch).catch(()=>{});
+          }
+        }
+      }
       setSperr(sp);setDup(dp);
     }catch(e){window.__t?.('Fehler: '+e.message,'error');}
     setLd(false);
