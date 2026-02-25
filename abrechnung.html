@@ -126,7 +126,7 @@ async function generateAbrechnungen(periode, onProgress){
   // Leistungsmonat = Vormonat (für Storno/Offen-Rubrik)
   const lzD = new Date(parseInt(y), parseInt(m)-2, 1);
   const leistungsStart = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
-  const [regeln, stufen, mitarbeiter, auftraege, sgArr, stornoAuftr, offeneAuftr] = await Promise.all([
+  const [regeln, stufen, mitarbeiter, auftraege, sgArr, stornoAuftr, offeneAuftr, sonderArr, teamBonusArr] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
     sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig'),
@@ -134,11 +134,17 @@ async function generateAbrechnungen(periode, onProgress){
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
     sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
     sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    sbG('pay_sonderprovisionen','aktiv=eq.true'),
+    sbG('pay_team_bonus','aktiv=eq.true'),
   ]);
   const sgConfig = sgArr[0] || {prozent:3, max_netto:200, ust_satz:19};
   const regelMap = {}; regeln.forEach(r => regelMap[r.mitarbeiter_typ] = r);
   const typMap = {hgb_vertriebler_haupt:'hgb_vertriebler_haupt',hgb84:'hgb_vertriebler_haupt',angestellt_vt:'angestellt_vertriebler',angestellt_vertriebler:'angestellt_vertriebler',hgb_vertriebler_agentur:'hgb_vertriebler_agentur',vertriebler:'vertriebler',hgb_scouter:'hgb_scouter',angestellt_scouter:'angestellt_scouter'};
   const vpById = {}; mitarbeiter.forEach(v => { vpById[v.id] = v; });
+  // Sonderprovisionen-Map (mitarbeiter_id → sonder)
+  const sonderByVP = {}; sonderArr.forEach(s => { sonderByVP[s.mitarbeiter_id] = s; });
+  // Team-Bonus-Map (mitarbeiter_id → teamBonus)
+  const teamBonusByVP = {}; teamBonusArr.forEach(t => { teamBonusByVP[t.mitarbeiter_id] = t; });
   const byVP = {};
   auftraege.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id] = []; byVP[a.vertriebler_id].push(a); });
   // Group storno + offen by VP
@@ -173,12 +179,13 @@ async function generateAbrechnungen(periode, onProgress){
     for(const [om, monthOrders] of Object.entries(ordersByMonth)){
       const monthKey=vpId+'_'+om; const monthTotal=salesPerVPMonth[monthKey]||monthOrders.length;
       const staffel=monthTotal>=regel.staffel_schwelle;
-      const baseBetrag=staffel?regel.staffel_betrag_sale:regel.basis_betrag_sale;
+      const sonderFlat = sonderByVP[vpId];
+      const baseBetrag=sonderFlat?sonderFlat.betrag:(staffel?regel.staffel_betrag_sale:regel.basis_betrag_sale);
       for(const o of monthOrders){
-        positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Solar ${o.kwp||0} kWp`,original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffel?' (Staffel)':''}`});
+        positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Solar ${o.kwp||0} kWp`,original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${sonderFlat?' (Flat)':staffel?' (Staffel)':''}`});
         bruttoTotal+=baseBetrag;
         const q=(o.lead_quelle||'').toLowerCase();
-        if(q.includes('eigenlead')&&regel.betrag_eigenlead>0){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:om}); bruttoTotal+=regel.betrag_eigenlead;}
+        if(q.includes('eigenlead')&&regel.betrag_eigenlead>0&&!(sonderFlat&&(sonderFlat.beschreibung||'').toLowerCase().includes('kein eigenlead'))){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:om}); bruttoTotal+=regel.betrag_eigenlead;}
         if(q.includes('empfehlung')&&regel.betrag_empfehlung>0){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:om}); bruttoTotal+=regel.betrag_empfehlung;}
         if(o.speichererweiterung&&regel.betrag_speicher>0){positionen.push({typ:'speicher',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Speicher-Bonus',original_betrag:regel.betrag_speicher,aktiv:true,zurueckgestellt:false,notiz:om}); bruttoTotal+=regel.betrag_speicher;}
       }
@@ -186,6 +193,27 @@ async function generateAbrechnungen(periode, onProgress){
     let stufenBonus=0;
     for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const [k,cnt] of Object.entries(salesPerVPMonth)){ if(!k.startsWith(vpId+'_')) continue; if(cnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } }
     if(stufenBonus>0){ positionen.push({typ:'einmalzahlung',auftrag_nr:null,kunde:null,produkt:'Stufenbonus',original_betrag:stufenBonus,aktiv:true,zurueckgestellt:false,notiz:'Stufenbonus'}); bruttoTotal+=stufenBonus; }
+    // Team-Bonus
+    const tb = teamBonusByVP[vpId];
+    if(tb) {
+      let tbSales = 0;
+      if(tb.bezugsgruppe === 'alle_vt') {
+        // Count all auszahlbare sales from all VTs
+        Object.values(byVP).forEach(vpOrders => { tbSales += vpOrders.length; });
+      } else if(tb.bezugsgruppe === 'eigenes_team' && tb.team_mitglieder) {
+        // Count sales only from team members
+        const members = Array.isArray(tb.team_mitglieder) ? tb.team_mitglieder : [];
+        for(const [vid, vpOrders] of Object.entries(byVP)) {
+          const v = vpById[vid];
+          if(v && members.includes(`${v.vorname} ${v.nachname}`)) tbSales += vpOrders.length;
+        }
+      }
+      if(tbSales > 0) {
+        const tbBetrag = tbSales * tb.betrag_pro_sale;
+        positionen.push({typ:'einmalzahlung',auftrag_nr:null,kunde:null,produkt:`Team-Bonus (${tbSales} Sales × ${tb.betrag_pro_sale}€)`,original_betrag:tbBetrag,aktiv:true,zurueckgestellt:false,notiz:'Team-Bonus'});
+        bruttoTotal += tbBetrag;
+      }
+    }
     // Stornierte Aufträge (nur zur Info, kein Betrag)
     const vpStornos = stornoByVP[vpId] || [];
     vpStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:s.auftrags_datum?.substring(0,7)||''}); });
