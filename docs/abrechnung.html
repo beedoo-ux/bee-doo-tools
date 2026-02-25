@@ -78,7 +78,7 @@ body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-heigh
 .gs-branded-header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:18mm 16mm 12mm;color:#fff!important;position:relative;overflow:hidden}
 .gs-branded-header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#F5C500,#E07800,#F5C500)}
 .gs-branded-header *{color:#fff!important}
-.gs-body{padding:8mm 16mm 12mm;position:relative;z-index:2;flex:1;display:flex;flex-direction:column}
+.gs-body{padding:8mm 16mm 6mm;position:relative;z-index:2;flex:1;display:flex;flex-direction:column}
 .gs-footer{margin-top:auto;padding:8px 16mm 6px 16mm;border-top:1.5px solid #ccc;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;flex-shrink:0}
 .gs-footer-col{font-size:7px;color:#888!important;line-height:1.5;padding:0 6px}
 .gs-footer-col:first-child{padding-left:0}.gs-footer-col:last-child{padding-right:0}
@@ -120,129 +120,189 @@ async function generateAbrechnungen(periode, onProgress){
   const [y,m] = periode.split('/');
   const log = (msg) => onProgress?.(msg);
   log('Lade Daten...');
-  // Abrechnungsmonat = periode (z.B. 2026/02). Leistungszeitraum = Vormonat (z.B. Januar).
-  // Nachzügler = ältere noch nicht abgerechnete Aufträge aus Vormonaten.
-  const periodeStart = `${y}-${m}-01`; // Aufträge VOR diesem Datum
-  // Leistungsmonat berechnen (Vormonat)
-  const lzDate = new Date(parseInt(y), parseInt(m)-2, 1); // m-2 because JS months 0-indexed
+  const periodeStart = `${y}-${m}-01`;
+  const lzDate = new Date(parseInt(y), parseInt(m)-2, 1);
   const lzY = lzDate.getFullYear();
   const lzM = String(lzDate.getMonth()+1).padStart(2,'0');
-  const leistungsStart = `${lzY}-${lzM}-01`; // Start Leistungsmonat
-  const leistungsEnd = periodeStart; // Ende = Abrechnungsmonat-Start
+  const leistungsStart = `${lzY}-${lzM}-01`;
+  const leistungsEnd = periodeStart;
   log(`Leistungszeitraum: ${lzM}/${lzY}, Nachzügler vor ${lzM}/${lzY}`);
-  const [regeln, stufen, mitarbeiter, sgArr,
-    // Auszahlbar: Leistungsmonat
-    auftrLZ,
-    // Auszahlbar: Nachzügler (vor Leistungsmonat, noch nicht abgerechnet)
-    auftrNZ,
-    // Storno: alle vor Abrechnungsmonat
-    stornoAll,
-    // Offen: alle vor Abrechnungsmonat
-    offenAll
+  const [regeln, stufen, mitarbeiter, sgArr, auftrLZ, auftrNZ, stornoLZ, offenAll, sonderProv, teamBonus, sperrlisten, stornoAbzuege
   ] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
     sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig'),
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
-    // Auszahlbar Leistungsmonat
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=*`),
-    // Auszahlbar Nachzügler (vor Leistungsmonat)
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${leistungsStart}&select=*`),
-    // Storno: ALLE vor Abrechnungsmonat
-    sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
-    // Offen: ALLE vor Abrechnungsmonat
-    sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    sbG('pay_sonderprovisionen','aktiv=eq.true'),
+    sbG('pay_team_bonus','aktiv=eq.true'),
+    sbG('pay_sperrlisten','select=*'),
+    sbG('pay_auftraege',`storniert=eq.true&abgerechnet_monat=not.is.null&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,abgerechnet_monat,abgerechnet_jahr`),
   ]);
-  // Merge auszahlbar: LZ + NZ (NZ markiert)
+  // Sperrlisten: gesperrte AN-Nummern → nicht provisionieren
+  const gesperrteANs = new Set();
+  const rueckforderungANs = new Map(); // AN→{kunde,typ,notiz}
+  sperrlisten.forEach(s => {
+    const an = String(s.auftrag_nr||'');
+    if(s.status==='gesperrt') gesperrteANs.add(an);
+    if(s.status==='ausgezahlt') rueckforderungANs.set(an, {kunde:s.kunde_name,typ:s.typ,notiz:s.notiz});
+  });
+  log(`Sperrliste: ${gesperrteANs.size} gesperrt, ${rueckforderungANs.size} Rückforderungen`);
+  // Sonderprovisionen nach VP-ID indexieren
+  const sonderByVP = {};
+  sonderProv.forEach(sp => {
+    if(sp.gueltig_ab && sp.gueltig_ab > leistungsEnd) return; // noch nicht gültig
+    if(sp.gueltig_bis && sp.gueltig_bis < leistungsStart) return; // abgelaufen
+    sonderByVP[sp.mitarbeiter_id] = sp;
+  });
+  // Team-Bonus indexieren
+  const teamBonusByVP = {};
+  teamBonus.forEach(tb => {
+    if(tb.gueltig_ab && tb.gueltig_ab > leistungsEnd) return;
+    teamBonusByVP[tb.mitarbeiter_id] = tb;
+  });
+  // Merge auszahlbar
   auftrNZ.forEach(a => a._nachzuegler = true);
   const auftraege = [...auftrLZ, ...auftrNZ];
-  // Storno + Offen: mark LZ vs Vormonat
-  stornoAll.forEach(a => { a._vormonat = a.auftrags_datum < leistungsStart; });
-  offenAll.forEach(a => { a._vormonat = a.auftrags_datum < leistungsStart; });
-  const stornoAuftr = stornoAll;
+  // Filter gesperrte Aufträge raus
+  const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')));
+  const gesperrteGefunden = auftraege.length - auftraegeClean.length;
+  if(gesperrteGefunden>0) log(`⚠️ ${gesperrteGefunden} gesperrte Aufträge übersprungen`);
+  // Storno: nur Leistungsmonat
+  const stornoAuftr = stornoLZ;
+  // Storno-Abzüge: nach VP groupieren
+  const stornoAbzByVP = {};
+  stornoAbzuege.forEach(a => { if(!a.vertriebler_id) return; if(!stornoAbzByVP[a.vertriebler_id]) stornoAbzByVP[a.vertriebler_id]=[]; stornoAbzByVP[a.vertriebler_id].push(a); });
+  // Offen: LZ vs VM markieren
   const offeneAuftr = offenAll;
-  const stornoLZn = stornoAll.filter(a=>!a._vormonat).length, stornoVMn = stornoAll.filter(a=>a._vormonat).length;
-  const offenLZn = offenAll.filter(a=>!a._vormonat).length, offenVMn = offenAll.filter(a=>a._vormonat).length;
-  log(`${auftrLZ.length} auszahlbar (LZ) + ${auftrNZ.length} Nachzügler | ${stornoLZn}+${stornoVMn} Stornos (LZ+VM) | ${offenLZn}+${offenVMn} Offen (LZ+VM)`);
+  const stornoLZn = stornoLZ.length;
+  const offenLZn = offenAll.length;
+  log(`${auftrLZ.length} LZ + ${auftrNZ.length} NZ | ${stornoLZn} Stornos | ${stornoAbzuege.length} Storno-Abzüge | ${offenLZn} Offen | ${sonderProv.length} Sonder | ${teamBonus.length} Team`);
   const sgConfig = sgArr[0] || {prozent:3, max_netto:200, ust_satz:19};
   const regelMap = {}; regeln.forEach(r => regelMap[r.mitarbeiter_typ] = r);
   const typMap = {hgb_vertriebler_haupt:'hgb_vertriebler_haupt',hgb84:'hgb_vertriebler_haupt',angestellt_vt:'angestellt_vertriebler',angestellt_vertriebler:'angestellt_vertriebler',hgb_vertriebler_agentur:'hgb_vertriebler_agentur',vertriebler:'vertriebler',hgb_scouter:'hgb_scouter',angestellt_scouter:'angestellt_scouter'};
   const vpById = {}; mitarbeiter.forEach(v => { vpById[v.id] = v; });
   const byVP = {};
-  auftraege.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id] = []; byVP[a.vertriebler_id].push(a); });
-  // Group storno + offen by VP
+  auftraegeClean.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id] = []; byVP[a.vertriebler_id].push(a); });
   const stornoByVP = {};
   stornoAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!stornoByVP[a.vertriebler_id]) stornoByVP[a.vertriebler_id] = []; stornoByVP[a.vertriebler_id].push(a); });
   const offenByVP = {};
-  offeneAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!offenByVP[a.vertriebler_id]) offenByVP[a.vertriebler_id] = []; offenByVP[a.vertriebler_id].push(a); });
+  offenAll.forEach(a => { if(!a.vertriebler_id) return; if(!offenByVP[a.vertriebler_id]) offenByVP[a.vertriebler_id] = []; offenByVP[a.vertriebler_id].push(a); });
   const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=vertriebler_id,auftrags_datum');
   const salesPerVPMonth = {};
   allRelevant.forEach(a => { if(!a.vertriebler_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.vertriebler_id+'_'+om; salesPerVPMonth[key]=(salesPerVPMonth[key]||0)+1; });
+  // Total sales per VP (alle Monate) for Team-Bonus
+  const totalSalesByVP = {};
+  auftraegeClean.forEach(a => { if(!a.vertriebler_id) return; totalSalesByVP[a.vertriebler_id]=(totalSalesByVP[a.vertriebler_id]||0)+1; });
   log('Lösche alte Entwürfe...');
   const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&status=in.(entwurf,probeabrechnung)&select=id`);
   for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
   let count = 0;
-  // Combine all VP IDs (auszahlbar + storno + offen)
-  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP)]);
+  // ALL VP IDs incl. team bonus recipients + sonderprov
+  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP)]);
   for(const vpId of allVPIds){
     const vp = vpById[vpId]; if(!vp) continue;
     const orders = byVP[vpId] || [];
     const vpStornos2 = stornoByVP[vpId] || [];
     const vpOffen2 = offenByVP[vpId] || [];
-    if(!orders.length && !vpStornos2.length && !vpOffen2.length) continue;
+    const hasSonder = !!sonderByVP[vpId];
+    const hasTeamB = !!teamBonusByVP[vpId];
+    if(!orders.length && !vpStornos2.length && !vpOffen2.length && !hasTeamB) continue;
     const ruleTyp = typMap[vp.typ] || vp.typ;
     const regel = regelMap[ruleTyp];
     if(!regel){ log(`⚠️ ${vp.vorname} ${vp.nachname}: keine Regel für ${ruleTyp}`); continue; }
     const isHGB = (vp.typ||'').includes('hgb');
     const vpName = `${vp.vorname} ${vp.nachname}`;
     log(`Berechne ${vpName}...`);
-    // Separate LZ (Leistungsmonat) and NZ (Nachzügler) orders
+    // Sonderprovision: override Basisbetrag
+    const sonder = sonderByVP[vpId];
+    const sonderFlat = sonder?.typ==='flat_rate' ? sonder.betrag : null;
+    const sonderNoEigenlead = sonder?.beschreibung?.toLowerCase().includes('kein eigenlead');
     const ordersLZ = orders.filter(o => !o._nachzuegler);
     const ordersNZ = orders.filter(o => o._nachzuegler);
     const positionen = []; let bruttoTotal = 0;
-    // --- LEISTUNGSMONAT-Positionen ---
-    const ordersByMonthLZ = {};
-    ordersLZ.forEach(o => { const d=o.auftrags_datum||''; const om=d.substring(0,4)+'/'+d.substring(5,7); if(!ordersByMonthLZ[om])ordersByMonthLZ[om]=[]; ordersByMonthLZ[om].push(o); });
-    for(const [om, monthOrders] of Object.entries(ordersByMonthLZ)){
+    // Helper: process orders for a month group
+    const processOrders = (monthOrders, om, isNZ) => {
       const monthKey=vpId+'_'+om; const monthTotal=salesPerVPMonth[monthKey]||monthOrders.length;
       const staffel=monthTotal>=regel.staffel_schwelle;
-      const baseBetrag=staffel?regel.staffel_betrag_sale:regel.basis_betrag_sale;
+      // Sonderprovision überschreibt Basis/Staffel
+      const baseBetrag = sonderFlat || (staffel ? regel.staffel_betrag_sale : regel.basis_betrag_sale);
+      const nzTag = isNZ ? ' ★NZ' : '';
+      const staffelTag = sonderFlat ? ' (Sonder)' : (staffel ? ' (Staffel)' : '');
       for(const o of monthOrders){
-        positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Solar ${o.kwp||0} kWp`,original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffel?' (Staffel)':''}`});
+        positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Solar ${o.kwp||0} kWp`,original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffelTag}${nzTag}`});
         bruttoTotal+=baseBetrag;
         const q=(o.lead_quelle||'').toLowerCase();
-        if(q.includes('eigenlead')&&regel.betrag_eigenlead>0){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:om}); bruttoTotal+=regel.betrag_eigenlead;}
-        if(q.includes('empfehlung')&&regel.betrag_empfehlung>0){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:om}); bruttoTotal+=regel.betrag_empfehlung;}
-        if(o.speichererweiterung&&regel.betrag_speicher>0){positionen.push({typ:'speicher',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Speicher-Bonus',original_betrag:regel.betrag_speicher,aktiv:true,zurueckgestellt:false,notiz:om}); bruttoTotal+=regel.betrag_speicher;}
+        // Eigenlead-Bonus (nicht bei Sonder mit "kein Eigenlead")
+        if(q.includes('eigenlead')&&regel.betrag_eigenlead>0&&!sonderNoEigenlead){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_eigenlead;}
+        if(q.includes('empfehlung')&&regel.betrag_empfehlung>0){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_empfehlung;}
+        if(o.speichererweiterung&&regel.betrag_speicher>0){positionen.push({typ:'speicher',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Speicher-Bonus',original_betrag:regel.betrag_speicher,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_speicher;}
+        // Sondereinsatz-Bonus (pro Sale, wenn in Regel definiert)
+        if(regel.betrag_sondereinsatz>0){positionen.push({typ:'sondereinsatz',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Sondereinsatz-Bonus',original_betrag:regel.betrag_sondereinsatz,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_sondereinsatz;}
       }
-    }
-    // --- NACHZÜGLER-Positionen (ältere Monate, separat markiert) ---
+    };
+    // LZ
+    const ordersByMonthLZ = {};
+    ordersLZ.forEach(o => { const d=o.auftrags_datum||''; const om=d.substring(0,4)+'/'+d.substring(5,7); if(!ordersByMonthLZ[om])ordersByMonthLZ[om]=[]; ordersByMonthLZ[om].push(o); });
+    for(const [om, mo] of Object.entries(ordersByMonthLZ)) processOrders(mo, om, false);
+    // NZ
     if(ordersNZ.length > 0){
       const ordersByMonthNZ = {};
       ordersNZ.forEach(o => { const d=o.auftrags_datum||''; const om=d.substring(0,4)+'/'+d.substring(5,7); if(!ordersByMonthNZ[om])ordersByMonthNZ[om]=[]; ordersByMonthNZ[om].push(o); });
-      for(const [om, monthOrders] of Object.entries(ordersByMonthNZ)){
-        const monthKey=vpId+'_'+om; const monthTotal=salesPerVPMonth[monthKey]||monthOrders.length;
-        const staffel=monthTotal>=regel.staffel_schwelle;
-        const baseBetrag=staffel?regel.staffel_betrag_sale:regel.basis_betrag_sale;
-        for(const o of monthOrders){
-          positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Solar ${o.kwp||0} kWp`,original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffel?' (Staffel)':''} ★NZ`});
-          bruttoTotal+=baseBetrag;
-          const q=(o.lead_quelle||'').toLowerCase();
-          if(q.includes('eigenlead')&&regel.betrag_eigenlead>0){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:`${om} ★NZ`}); bruttoTotal+=regel.betrag_eigenlead;}
-          if(q.includes('empfehlung')&&regel.betrag_empfehlung>0){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:`${om} ★NZ`}); bruttoTotal+=regel.betrag_empfehlung;}
-          if(o.speichererweiterung&&regel.betrag_speicher>0){positionen.push({typ:'speicher',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Speicher-Bonus',original_betrag:regel.betrag_speicher,aktiv:true,zurueckgestellt:false,notiz:`${om} ★NZ`}); bruttoTotal+=regel.betrag_speicher;}
-        }
-      }
+      for(const [om, mo] of Object.entries(ordersByMonthNZ)) processOrders(mo, om, true);
     }
+    // Stufenbonus
     let stufenBonus=0;
     for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const [k,cnt] of Object.entries(salesPerVPMonth)){ if(!k.startsWith(vpId+'_')) continue; if(cnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } }
     if(stufenBonus>0){ positionen.push({typ:'einmalzahlung',auftrag_nr:null,kunde:null,produkt:'Stufenbonus',original_betrag:stufenBonus,aktiv:true,zurueckgestellt:false,notiz:'Stufenbonus'}); bruttoTotal+=stufenBonus; }
-    // Stornierte Aufträge (alle, LZ/VM markiert, kein Betrag)
+    // Team-Bonus: Christoph Held → 200€ pro Sale ALLER VTs, Tayfun → 300€ pro Sale seines Teams
+    const tb = teamBonusByVP[vpId];
+    if(tb){
+      let teamSales = 0;
+      if(tb.bezugsgruppe==='alle_vt'){
+        // Summe aller Sales (außer eigene)
+        for(const [vid, cnt] of Object.entries(totalSalesByVP)){ if(vid!==vpId) teamSales+=cnt; }
+      } else if(tb.bezugsgruppe==='eigenes_team' && tb.team_mitglieder){
+        // Summe der Sales der Team-Mitglieder (Name→ID matching)
+        const teamNames = (tb.team_mitglieder||[]).map(n=>n.toLowerCase());
+        for(const [vid, cnt] of Object.entries(totalSalesByVP)){
+          const tvp = vpById[vid];
+          if(tvp && teamNames.includes(`${tvp.vorname} ${tvp.nachname}`.toLowerCase())) teamSales+=cnt;
+        }
+      }
+      if(teamSales>0){
+        const tbBetrag = teamSales * tb.betrag_pro_sale;
+        positionen.push({typ:'einmalzahlung',auftrag_nr:null,kunde:null,produkt:`Team-Bonus (${teamSales} Team-Sales × ${fmt(tb.betrag_pro_sale)}€)`,original_betrag:tbBetrag,aktiv:true,zurueckgestellt:false,notiz:'Team-Bonus'});
+        bruttoTotal+=tbBetrag;
+      }
+    }
+    // Rückforderungen (gesperrte ausgezahlte)
+    for(const [an, info] of rueckforderungANs){
+      // Check if this AN belongs to this VP (check orders from allRelevant)
+      const matchOrder = allRelevant.find(a => String(a.auftrag_nr||'')===an && a.vertriebler_id===vpId);
+      // Fallback: check sperrliste vertriebler_name
+      const sperrEntry = sperrlisten.find(s => String(s.auftrag_nr||'')===an && s.status==='ausgezahlt');
+      if(matchOrder || (sperrEntry && sperrEntry.vertriebler_name && sperrEntry.vertriebler_name.includes(vp.nachname))){
+        positionen.push({typ:'abzug',auftrag_nr:an,kunde:info.kunde,produkt:`Rückforderung – ${info.typ||'Sperre'}`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:info.notiz||'Rückforderung prüfen'});
+      }
+    }
+    // Storno-Info (nur Leistungsmonat)
     const vpStornos = stornoByVP[vpId] || [];
-    vpStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:s._vormonat?`${(s.auftrags_datum||'').substring(0,7)} ★VM`:(s.auftrags_datum||'').substring(0,7)}); });
-    // Offene Aufträge (alle, LZ/VM markiert, kein Betrag)
+    vpStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(s.auftrags_datum||'').substring(0,7)}); });
+    // Storno-Abzüge: bereits ausgezahlte Stornos → negativer Abzug
+    const vpStornoAbz = stornoAbzByVP[vpId] || [];
+    vpStornoAbz.forEach(s => {
+      // Berechne den damals ausgezahlten Betrag (Basis oder Staffel je nach Regel)
+      const abzBetrag = sonderFlat || regel.basis_betrag_sale; // Konservativ: Basisbetrag
+      positionen.push({typ:'abzug',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno-Abzug (ausgez. ${s.abgerechnet_monat}/${s.abgerechnet_jahr})`,original_betrag:-abzBetrag,aktiv:true,zurueckgestellt:false,notiz:`Storno nach Auszahlung`});
+      bruttoTotal -= abzBetrag;
+    });
+    // Offen-Info (LZ + VM getrennt)
     const vpOffen = offenByVP[vpId] || [];
-    vpOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:o._vormonat?`${(o.auftrags_datum||'').substring(0,7)} ★VM`:(o.auftrags_datum||'').substring(0,7)}); });
+    vpOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
     const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
     const sgUst=sgNetto*(sgConfig.ust_satz/100);
     const ustSatz=isHGB&&vp.mwst_pflichtig?19:0;
@@ -259,7 +319,7 @@ async function generateAbrechnungen(periode, onProgress){
 
 function calc(pos,sg,hgb){
   const ak=pos.filter(p=>p.aktiv&&!p.zurueckgestellt);
-  const prov=ak.filter(p=>['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
+  const prov=ak.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz'].includes(p.typ));
   const extra=ak.filter(p=>['einmalzahlung','abzug','sonstiges'].includes(p.typ));
   const bp=prov.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   const es=extra.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
@@ -273,14 +333,14 @@ function Toast({children}){const[t,setT]=useState(null);window.__t=(m,ty='succes
 
 function GutschriftPreview({ab,pos,sg}){
   const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');
-  const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
+  const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher','sondereinsatz'].includes(p.typ));
   const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges'].includes(p.typ));
   const aSt=pos.filter(p=>p.typ==='storno_info');
   const aOf=pos.filter(p=>p.typ==='offen_info');
-  const aStLZ=aSt.filter(p=>!(p.notiz||'').includes('★VM'));
-  const aStVM=aSt.filter(p=>(p.notiz||'').includes('★VM'));
-  const aOfLZ=aOf.filter(p=>!(p.notiz||'').includes('★VM'));
-  const aOfVM=aOf.filter(p=>(p.notiz||'').includes('★VM'));
+  const aStLZ=aSt;
+  const aStVM=[];
+  const aOfLZ=aOf;
+  const aOfVM=[];
   const k=ab.kuerzel||gK(ab.mitarbeiter_name),bn=gBN(ab.periode,k,1),hgb=ab.beschaeftigungsart==='hgb';
   const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
   const isE=ab.status==='entwurf'||ab.status==='probeabrechnung';
@@ -330,7 +390,7 @@ function GutschriftPreview({ab,pos,sg}){
       </div>
 
       <div className="gs-body">
-        <div style={{fontSize:8.5,color:'#888',borderBottom:'1px dotted #ccc',paddingBottom:4,marginBottom:8}}>bee-doo GmbH · Am Stadtholz 39 · D-33609 Bielefeld · StNr: 44/214/0394 · USt-IdNr.: DE323940446</div>
+        <div style={{fontSize:8.5,color:'#888',borderBottom:'1px dotted #ccc',paddingBottom:4,marginBottom:8}}>bee-doo GmbH · Am Stadtholz 39 · D-33609 Bielefeld</div>
         <div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{ab.mitarbeiter_name}</div>
         <div style={{fontSize:11,color:'#444',lineHeight:1.7,marginBottom:2}}>{window.__vpData?.strasse?`${window.__vpData.strasse} ${window.__vpData.hausnr||''}`:'—'}<br/>{window.__vpData?.plz?`${window.__vpData.plz} ${window.__vpData.ort||''}`:'—'}</div>
         <div style={{fontSize:9.5,color:'#888',marginBottom:12}}>{(()=>{const vp=window.__vpData;const stnr=vp?.steuernummer&&vp.steuernummer.length>4&&/\d/.test(vp.steuernummer)?vp.steuernummer:null;const uid=vp?.ustid&&/^DE\d{9}$/.test(vp.ustid)?vp.ustid:null;if(stnr||uid)return(stnr?`Steuernr.: ${stnr}`:'')+(stnr&&uid?' · ':'')+(uid?`USt-IdNr.: ${uid}`:'');return hgb?'HGB §84 Handelsvertreter – ⚠️ Steuerdaten unvollständig':'Angestellt';})()}</div>
@@ -424,8 +484,8 @@ function GutschriftPreview({ab,pos,sg}){
       const getG = (item) => item.src==='lz'?lzG.byAN[item.an]:nzG.byAN[item.an];
       
       // Dynamic page break: count actual rows per group, max ~38 rows per page
-      const MAX_ROWS = 38;
-      const LAST_PAGE_RESERVE = 14; // Summen + Unterschriften
+      const MAX_ROWS = 44;
+      const LAST_PAGE_RESERVE = 4; // Summen + Unterschriften
       const pages = []; let currentPage = []; let rowCount = 0;
       allGroups.forEach((item, gi) => {
         if(item.src==='sep'){
@@ -472,7 +532,7 @@ function GutschriftPreview({ab,pos,sg}){
           </tr>
           {hasBoni && <>
             <tr><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:'#666'}}>├─ Grundprovision</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:'#666',whiteSpace:'nowrap'}}>{fmtE(m.override_betrag!=null?m.override_betrag:m.original_betrag)}</td></tr>
-            {boni.map((bb,bi) => <tr key={bi}><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':'#0369a1'}}>{bi===boni.length-1?'└─':'├─'} {bb.produkt}</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':'#0369a1',whiteSpace:'nowrap'}}>+ {fmtE(bb.override_betrag!=null?bb.override_betrag:bb.original_betrag)}</td></tr>)}
+            {boni.map((bb,bi) => <tr key={bi}><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':bb.typ==='sondereinsatz'?'#0f766e':'#0369a1'}}>{bi===boni.length-1?'└─':'├─'} {bb.produkt}</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':bb.typ==='sondereinsatz'?'#0f766e':'#0369a1',whiteSpace:'nowrap'}}>+ {fmtE(bb.override_betrag!=null?bb.override_betrag:bb.original_betrag)}</td></tr>)}
             <tr style={{borderBottom:'1px solid #eee'}}><td></td><td colSpan={2} style={{padding:'2px 6px 5px 16px',fontSize:9,fontWeight:700,color:'#333'}}>Summe Pos. {nr}</td><td style={{padding:'2px 6px 5px',textAlign:'right',fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{fmtE(posSum)}</td></tr>
           </>}
         </React.Fragment>;
@@ -529,7 +589,6 @@ function GutschriftPreview({ab,pos,sg}){
     {(aSt.length>0||aOf.length>0)&&(()=>{
       const items = [];
       if(aStLZ.length>0) items.push({title:`❌ Stornierte Aufträge – ${lzLabel}`,color:'#da3633',bg:'#fef2f2',border:'#fecaca',data:aStLZ});
-      if(aStVM.length>0) items.push({title:`❌ Stornierte Aufträge – Vormonate`,color:'#b91c1c',bg:'#fef2f2',border:'#fecaca',data:aStVM});
       if(aOfLZ.length>0) items.push({title:`⏳ Offene Aufträge – ${lzLabel}`,color:'#6b7280',bg:'#f9fafb',border:'#e5e7eb',data:aOfLZ});
       if(aOfVM.length>0) items.push({title:`⏳ Offene Aufträge – Vormonate`,color:'#4b5563',bg:'#f9fafb',border:'#e5e7eb',data:aOfVM});
       // Paginate: ~35 rows per page
@@ -585,7 +644,7 @@ function GutschriftPreview({ab,pos,sg}){
       </div>
 
       <div className="gs-body">
-        <div style={{fontSize:8.5,color:'#888',borderBottom:'1px dotted #ccc',paddingBottom:4,marginBottom:8}}>bee-doo GmbH · Am Stadtholz 39 · D-33609 Bielefeld · StNr: 44/214/0394 · USt-IdNr.: DE323940446</div>
+        <div style={{fontSize:8.5,color:'#888',borderBottom:'1px dotted #ccc',paddingBottom:4,marginBottom:8}}>bee-doo GmbH · Am Stadtholz 39 · D-33609 Bielefeld</div>
         <div style={{fontSize:11,color:'#888',marginBottom:4}}>Rechnung an:</div>
         <div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{ab.mitarbeiter_name}</div>
         <div style={{fontSize:11,color:'#444',lineHeight:1.7,marginBottom:2}}>{window.__vpData?.strasse?`${window.__vpData.strasse} ${window.__vpData.hausnr||''}`:'—'}<br/>{window.__vpData?.plz?`${window.__vpData.plz} ${window.__vpData.ort||''}`:'—'}</div>
@@ -644,7 +703,7 @@ function GutschriftPreview({ab,pos,sg}){
 
 function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
   const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');
-  const prov=pos.filter(p=>['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
+  const prov=pos.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz'].includes(p.typ));
   const extra=pos.filter(p=>['einmalzahlung','abzug','sonstiges'].includes(p.typ));
   const lo=ab.status==='freigegeben'||ab.status==='ausgezahlt';
   const tgl=(i)=>{if(lo)return;const n=[...pos];n[i]={...n[i],aktiv:!n[i].aktiv};setPos(n);};
