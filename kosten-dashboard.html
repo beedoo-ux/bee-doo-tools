@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo PAY – Kosten-Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+:root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--s3:#242d3d;--bd:#30363d;--t:#e6edf3;--ts:#8b95a5;--y:#F5C500;--g:#2ea043;--r:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#f0883e;--teal:#3fb9a0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);min-height:100vh}
+.app-header{background:var(--s1);border-bottom:1px solid var(--bd);padding:16px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.app-header h1{font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px}
+.app-header h1 .icon{width:36px;height:36px;background:linear-gradient(135deg,var(--y),var(--orange));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.app-header .sub{font-size:12px;color:var(--ts);font-weight:400;margin-left:4px}
+.back-link{color:var(--ts);text-decoration:none;font-size:13px;transition:.2s}
+.back-link:hover{color:var(--y)}
+.controls{display:flex;align-items:center;gap:12px;padding:16px 28px;background:var(--s1);border-bottom:1px solid var(--bd)}
+.controls select,.controls button{font-family:inherit;font-size:13px;border-radius:8px;border:1px solid var(--bd);background:var(--s2);color:var(--t);padding:8px 14px;cursor:pointer;transition:.2s}
+.controls select:hover,.controls button:hover{border-color:var(--y)}
+.controls button.primary{background:var(--y);color:#000;font-weight:600;border-color:var(--y)}
+.controls button.primary:hover{background:#e0b400}
+.controls .info{font-size:12px;color:var(--ts);margin-left:auto}
+
+.dashboard{padding:24px 28px;display:flex;flex-direction:column;gap:24px}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.kpi{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;position:relative;overflow:hidden;transition:.2s}
+.kpi:hover{border-color:var(--y);transform:translateY(-2px)}
+.kpi .label{font-size:11px;color:var(--ts);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-weight:500}
+.kpi .value{font-size:28px;font-weight:700;line-height:1.1}
+.kpi .detail{font-size:12px;color:var(--ts);margin-top:6px}
+.kpi .accent{position:absolute;top:0;right:0;width:60px;height:60px;border-radius:0 14px 0 40px;opacity:.12}
+.kpi.yellow .value{color:var(--y)}.kpi.yellow .accent{background:var(--y)}
+.kpi.green .value{color:var(--g)}.kpi.green .accent{background:var(--g)}
+.kpi.blue .value{color:var(--blue)}.kpi.blue .accent{background:var(--blue)}
+.kpi.purple .value{color:var(--purple)}.kpi.purple .accent{background:var(--purple)}
+.kpi.orange .value{color:var(--orange)}.kpi.orange .accent{background:var(--orange)}
+.kpi.teal .value{color:var(--teal)}.kpi.teal .accent{background:var(--teal)}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.panel{background:var(--s1);border:1px solid var(--bd);border-radius:14px;overflow:hidden}
+.panel-header{padding:16px 20px;border-bottom:1px solid var(--bd);font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.panel-body{padding:20px}
+
+.bar-chart{display:flex;flex-direction:column;gap:10px}
+.bar-row{display:flex;align-items:center;gap:12px}
+.bar-label{width:130px;font-size:12px;color:var(--ts);text-align:right;flex-shrink:0}
+.bar-track{flex:1;height:28px;background:var(--s2);border-radius:6px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding:0 10px;font-size:11px;font-weight:600;color:#000;min-width:fit-content;transition:width .8s ease}
+.bar-value{width:90px;font-size:13px;font-weight:600;text-align:right;flex-shrink:0}
+.bar-pct{font-size:11px;color:var(--ts);width:45px;text-align:right;flex-shrink:0}
+
+.donut-container{display:flex;align-items:center;justify-content:center;gap:30px;padding:10px 0}
+.donut-legend{display:flex;flex-direction:column;gap:8px}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:12px}
+.legend-dot{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+.legend-value{color:var(--ts);margin-left:auto;font-weight:500;padding-left:16px}
+
+table.cost-table{width:100%;border-collapse:collapse;font-size:13px}
+table.cost-table th{text-align:left;padding:10px 12px;font-size:11px;color:var(--ts);text-transform:uppercase;letter-spacing:.4px;font-weight:500;border-bottom:1px solid var(--bd);white-space:nowrap}
+table.cost-table td{padding:10px 12px;border-bottom:1px solid var(--bd);white-space:nowrap}
+table.cost-table tr:hover td{background:var(--s2)}
+table.cost-table .name{font-weight:600;color:var(--t)}
+table.cost-table .num{text-align:right;font-variant-numeric:tabular-nums}
+table.cost-table .highlight{color:var(--y);font-weight:600}
+table.cost-table .sub{color:var(--ts);font-size:11px}
+table.cost-table tfoot td{font-weight:700;border-top:2px solid var(--bd);background:var(--s2)}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.badge-hgb{background:#3fb9a015;color:var(--teal);border:1px solid #3fb9a030}
+.badge-ang{background:#58a6ff15;color:var(--blue);border:1px solid #58a6ff30}
+
+.empty{text-align:center;padding:60px 20px;color:var(--ts)}
+.empty .icon{font-size:48px;margin-bottom:12px;opacity:.5}
+.empty .msg{font-size:14px}
+
+.loading{display:flex;align-items:center;justify-content:center;padding:80px;gap:12px;color:var(--ts)}
+.spinner{width:20px;height:20px;border:2px solid var(--bd);border-top-color:var(--y);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .4s ease}
+
+@media(max-width:768px){
+  .app-header{padding:12px 16px}.app-header h1{font-size:16px}
+  .controls{padding:12px 16px;flex-wrap:wrap}
+  .dashboard{padding:16px}
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+  .kpi .value{font-size:22px}
+  .grid-2{grid-template-columns:1fr}
+  .bar-label{width:90px;font-size:11px}
+  table.cost-table{font-size:12px}
+  table.cost-table th,table.cost-table td{padding:8px 8px}
+  .donut-container{flex-direction:column}
+}
+@media(max-width:480px){
+  .kpi-row{grid-template-columns:1fr}
+  .controls{gap:8px}
+  .controls select,.controls button{font-size:12px;padding:6px 10px}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useCallback,useMemo} = React;
+
+const SB_URL = 'https://hqzpemfaljxcysyqssng.supabase.co/rest/v1';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const sbH = {'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json','Prefer':'return=representation'};
+const sbG = async (t,q='') => {const r=await fetch(`${SB_URL}/${t}?${q}`,{headers:sbH});return r.ok?r.json():[];};
+const eur = v => v?.toLocaleString('de-DE',{style:'currency',currency:'EUR',minimumFractionDigits:0,maximumFractionDigits:0}) || '0 €';
+const eur2 = v => v?.toLocaleString('de-DE',{style:'currency',currency:'EUR',minimumFractionDigits:2}) || '0,00 €';
+const pct = v => `${(v*100).toFixed(1)}%`;
+
+const COLORS = {
+  provision: '#F5C500',
+  eigenlead: '#3fb9a0',
+  empfehlung: '#58a6ff',
+  speicher: '#bc8cff',
+  einmalzahlung: '#f0883e',
+  teambonus: '#f85149'
+};
+const LABELS = {
+  provision: 'Grundprovision',
+  eigenlead: 'Eigenlead-Bonus',
+  empfehlung: 'Empfehlungs-Bonus',
+  speicher: 'Speicher-Bonus',
+  einmalzahlung: 'Stufenbonus',
+  teambonus: 'Team-Bonus'
+};
+
+// Donut Chart SVG
+function DonutChart({data, size=180}) {
+  const total = data.reduce((s,d) => s+d.value, 0);
+  if(!total) return null;
+  const cx=size/2, cy=size/2, r=size*0.35, sw=size*0.18;
+  let cum=0;
+  const arcs = data.filter(d=>d.value>0).map(d => {
+    const frac = d.value/total;
+    const start = cum; cum += frac;
+    const s0 = start*2*Math.PI - Math.PI/2;
+    const s1 = cum*2*Math.PI - Math.PI/2;
+    const large = frac > 0.5 ? 1 : 0;
+    const x0 = cx+r*Math.cos(s0), y0 = cy+r*Math.sin(s0);
+    const x1 = cx+r*Math.cos(s1), y1 = cy+r*Math.sin(s1);
+    return {d:`M${x0},${y0} A${r},${r} 0 ${large} 1 ${x1},${y1}`, color:d.color, label:d.label, frac};
+  });
+  return <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    {arcs.map((a,i) => <path key={i} d={a.d} fill="none" stroke={a.color} strokeWidth={sw} strokeLinecap="round" style={{opacity:.9}}/>)}
+    <text x={cx} y={cy-6} textAnchor="middle" fill="var(--t)" fontSize="22" fontWeight="700" fontFamily="DM Sans">{eur(total)}</text>
+    <text x={cx} y={cy+14} textAnchor="middle" fill="var(--ts)" fontSize="11" fontFamily="DM Sans">Gesamt</text>
+  </svg>;
+}
+
+// Horizontal bar chart
+function BarChart({data, maxVal}) {
+  const mx = maxVal || Math.max(...data.map(d=>d.value), 1);
+  const total = data.reduce((s,d) => s+d.value, 0);
+  return <div className="bar-chart">
+    {data.map((d,i) => <div key={i} className="bar-row">
+      <div className="bar-label">{d.label}</div>
+      <div className="bar-track">
+        <div className="bar-fill" style={{width:`${Math.max((d.value/mx)*100,2)}%`,background:d.color||'var(--y)'}}/>
+      </div>
+      <div className="bar-value" style={{color:d.color||'var(--t)'}}>{eur(d.value)}</div>
+      <div className="bar-pct">{total?pct(d.value/total):'–'}</div>
+    </div>)}
+  </div>;
+}
+
+function App() {
+  const now = new Date();
+  const defPeriode = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;
+  const [periode, setPeriode] = useState(defPeriode);
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+  const [availPeriods, setAvailPeriods] = useState([]);
+
+  // Generate period options (last 12 months)
+  const periodOptions = useMemo(() => {
+    const opts = [];
+    for(let i=0; i<12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      const p = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
+      opts.push(p);
+    }
+    return opts;
+  }, []);
+
+  const loadData = useCallback(async (per) => {
+    setLoading(true);
+    try {
+      const [y,m] = per.split('/');
+      const periodeStart = `${y}-${m}-01`;
+      // Leistungsmonat = Vormonat
+      const lzD = new Date(parseInt(y), parseInt(m)-2, 1);
+      const leistungsStart = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
+
+      const [regeln, stufen, mitarbeiter, auftraege, sonderArr, teamBonusArr, stornoArr, offenArr] = await Promise.all([
+        sbG('provisions_regeln','aktiv=eq.true'),
+        sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
+        sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ'),
+        sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=*`),
+        sbG('pay_sonderprovisionen','aktiv=eq.true'),
+        sbG('pay_team_bonus','aktiv=eq.true'),
+        sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,kwp`),
+        sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,kwp`),
+      ]);
+
+      // All auszahlbare for Staffel counting
+      const allAusz = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=vertriebler_id,auftrags_datum');
+      const salesPerVPMonth = {};
+      allAusz.forEach(a => {
+        if(!a.vertriebler_id||!a.auftrags_datum) return;
+        const om = a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7);
+        const key = a.vertriebler_id+'_'+om;
+        salesPerVPMonth[key] = (salesPerVPMonth[key]||0)+1;
+      });
+
+      const regelMap = {}; regeln.forEach(r => regelMap[r.mitarbeiter_typ] = r);
+      const typMap = {hgb_vertriebler_haupt:'hgb_vertriebler_haupt',hgb84:'hgb_vertriebler_haupt',angestellt_vt:'angestellt_vertriebler',angestellt_vertriebler:'angestellt_vertriebler',hgb_vertriebler_agentur:'hgb_vertriebler_agentur',vertriebler:'vertriebler',hgb_scouter:'hgb_scouter',angestellt_scouter:'angestellt_scouter'};
+      const vpById = {}; mitarbeiter.forEach(v => { vpById[v.id] = v; });
+      const sonderByVP = {}; sonderArr.forEach(s => { sonderByVP[s.mitarbeiter_id] = s; });
+      const teamBonusByVP = {}; teamBonusArr.forEach(t => { teamBonusByVP[t.mitarbeiter_id] = t; });
+
+      const byVP = {};
+      auftraege.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id]=[]; byVP[a.vertriebler_id].push(a); });
+
+      // Calculate costs per VT
+      let totalProvision=0, totalEigenlead=0, totalEmpfehlung=0, totalSpeicher=0, totalStufen=0, totalTeamBonus=0;
+      let totalSales=0, totalKwp=0;
+      const vpResults = [];
+
+      const totalAllSales = auftraege.length;
+
+      for(const [vpId, orders] of Object.entries(byVP)) {
+        const vp = vpById[vpId]; if(!vp) continue;
+        const ruleTyp = typMap[vp.typ]||vp.typ;
+        const regel = regelMap[ruleTyp]; if(!regel) continue;
+        const isHGB = (vp.typ||'').includes('hgb');
+        const sonderFlat = sonderByVP[vpId];
+        const vpName = `${vp.vorname} ${vp.nachname}`;
+
+        let vpProv=0, vpEigen=0, vpEmpf=0, vpSpeicher=0, vpStufen=0, vpTeam=0, vpKwp=0;
+
+        // Group by month for Staffel
+        const ordersByMonth = {};
+        orders.forEach(o => {
+          const d = o.auftrags_datum||'';
+          const om = d.substring(0,4)+'/'+d.substring(5,7);
+          if(!ordersByMonth[om]) ordersByMonth[om]=[];
+          ordersByMonth[om].push(o);
+        });
+
+        for(const [om, monthOrders] of Object.entries(ordersByMonth)) {
+          const monthKey = vpId+'_'+om;
+          const monthTotal = salesPerVPMonth[monthKey]||monthOrders.length;
+          const staffel = monthTotal >= regel.staffel_schwelle;
+          const baseBetrag = sonderFlat ? sonderFlat.betrag : (staffel ? regel.staffel_betrag_sale : regel.basis_betrag_sale);
+
+          for(const o of monthOrders) {
+            vpProv += baseBetrag;
+            vpKwp += (o.kwp||0);
+            const q = (o.lead_quelle||'').toLowerCase();
+            if(q.includes('eigenlead') && regel.betrag_eigenlead>0 && !(sonderFlat&&(sonderFlat.beschreibung||'').toLowerCase().includes('kein eigenlead'))) vpEigen += regel.betrag_eigenlead;
+            if(q.includes('empfehlung') && regel.betrag_empfehlung>0) vpEmpf += regel.betrag_empfehlung;
+            if(o.speichererweiterung && regel.betrag_speicher>0) vpSpeicher += regel.betrag_speicher;
+          }
+        }
+
+        // Stufenbonus
+        for(const s of stufen) {
+          if(s.gilt_fuer !== ruleTyp) continue;
+          for(const [k,cnt] of Object.entries(salesPerVPMonth)) {
+            if(!k.startsWith(vpId+'_')) continue;
+            if(cnt >= s.min_anlagen && s.bonus_betrag > vpStufen) vpStufen = s.bonus_betrag;
+          }
+        }
+
+        // Team-Bonus
+        const tb = teamBonusByVP[vpId];
+        if(tb) {
+          let tbSales = 0;
+          if(tb.bezugsgruppe === 'alle_vt') {
+            tbSales = totalAllSales;
+          } else if(tb.bezugsgruppe === 'eigenes_team' && tb.team_mitglieder) {
+            const members = Array.isArray(tb.team_mitglieder) ? tb.team_mitglieder : [];
+            for(const [vid, vpOrders] of Object.entries(byVP)) {
+              const v = vpById[vid];
+              if(v && members.includes(`${v.vorname} ${v.nachname}`)) tbSales += vpOrders.length;
+            }
+          }
+          vpTeam = tbSales * tb.betrag_pro_sale;
+        }
+
+        const vpTotal = vpProv + vpEigen + vpEmpf + vpSpeicher + vpStufen + vpTeam;
+        const vpSalesCount = orders.length;
+        totalSales += vpSalesCount;
+        totalKwp += vpKwp;
+        totalProvision += vpProv;
+        totalEigenlead += vpEigen;
+        totalEmpfehlung += vpEmpf;
+        totalSpeicher += vpSpeicher;
+        totalStufen += vpStufen;
+        totalTeamBonus += vpTeam;
+
+        vpResults.push({
+          name: vpName, kuerzel: vp.kuerzel, typ: vp.typ, isHGB,
+          sales: vpSalesCount, kwp: vpKwp,
+          provision: vpProv, eigenlead: vpEigen, empfehlung: vpEmpf,
+          speicher: vpSpeicher, stufen: vpStufen, teamBonus: vpTeam,
+          total: vpTotal,
+          avgPerSale: vpSalesCount ? vpTotal/vpSalesCount : 0,
+          spiegel: sonderFlat ? `Flat ${eur(sonderFlat.betrag)}` : null,
+        });
+      }
+
+      vpResults.sort((a,b) => b.total - a.total);
+
+      const gesamtKosten = totalProvision+totalEigenlead+totalEmpfehlung+totalSpeicher+totalStufen+totalTeamBonus;
+
+      setData({
+        totalSales, totalKwp, gesamtKosten,
+        totalProvision, totalEigenlead, totalEmpfehlung, totalSpeicher, totalStufen, totalTeamBonus,
+        avgPerSale: totalSales ? gesamtKosten/totalSales : 0,
+        avgPerKwp: totalKwp ? gesamtKosten/totalKwp : 0,
+        vpResults,
+        stornoCount: stornoArr.length,
+        offenCount: offenArr.length,
+      });
+    } catch(e) {
+      console.error('Load error:', e);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadData(periode); }, [periode]);
+
+  const catData = data ? [
+    {label:'Grundprovision', value:data.totalProvision, color:COLORS.provision},
+    {label:'Eigenlead-Bonus', value:data.totalEigenlead, color:COLORS.eigenlead},
+    {label:'Empfehlungs-Bonus', value:data.totalEmpfehlung, color:COLORS.empfehlung},
+    {label:'Speicher-Bonus', value:data.totalSpeicher, color:COLORS.speicher},
+    {label:'Stufenbonus', value:data.totalStufen, color:COLORS.einmalzahlung},
+    {label:'Team-Bonus', value:data.totalTeamBonus, color:COLORS.teambonus},
+  ] : [];
+
+  const monatsName = (p) => {
+    const [y,m] = p.split('/');
+    return new Date(parseInt(y), parseInt(m)-1).toLocaleString('de-DE',{month:'long',year:'numeric'});
+  };
+
+  return <>
+    <div className="app-header">
+      <h1><span className="icon">📊</span>Kosten-Dashboard<span className="sub">bee-doo PAY</span></h1>
+      <a href="index.html" className="back-link">← Zurück zur Toolbox</a>
+    </div>
+    <div className="controls">
+      <label style={{fontSize:13,color:'var(--ts)'}}>Abrechnungsmonat:</label>
+      <select value={periode} onChange={e => setPeriode(e.target.value)}>
+        {periodOptions.map(p => <option key={p} value={p}>{monatsName(p)}</option>)}
+      </select>
+      <button className="primary" onClick={() => loadData(periode)}>🔄 Aktualisieren</button>
+      <div className="info">Leistungszeitraum: Alle offenen Aufträge bis {monatsName(periode)}</div>
+    </div>
+
+    {loading && <div className="loading"><div className="spinner"></div>Lade Kostendaten...</div>}
+
+    {!loading && data && <div className="dashboard fade-in">
+      {/* KPI Row */}
+      <div className="kpi-row">
+        <div className="kpi yellow">
+          <div className="accent"></div>
+          <div className="label">Gesamtkosten Provisionen</div>
+          <div className="value">{eur(data.gesamtKosten)}</div>
+          <div className="detail">{data.totalSales} Sales abrechenbar</div>
+        </div>
+        <div className="kpi orange">
+          <div className="accent"></div>
+          <div className="label">Ø Kosten pro Auftrag</div>
+          <div className="value">{eur(data.avgPerSale)}</div>
+          <div className="detail">inkl. aller Boni & Zulagen</div>
+        </div>
+        <div className="kpi teal">
+          <div className="accent"></div>
+          <div className="label">Ø Kosten pro kWp</div>
+          <div className="value">{eur2(data.avgPerKwp)}</div>
+          <div className="detail">{data.totalKwp.toFixed(1)} kWp installiert</div>
+        </div>
+        <div className="kpi purple">
+          <div className="accent"></div>
+          <div className="label">Grundprovisions-Anteil</div>
+          <div className="value">{data.gesamtKosten ? pct(data.totalProvision/data.gesamtKosten) : '–'}</div>
+          <div className="detail">{eur(data.totalProvision)} von {eur(data.gesamtKosten)}</div>
+        </div>
+        <div className="kpi blue">
+          <div className="accent"></div>
+          <div className="label">Boni-Kosten gesamt</div>
+          <div className="value">{eur(data.gesamtKosten - data.totalProvision)}</div>
+          <div className="detail">Eigenlead + Empfehlung + Speicher + Stufe + Team</div>
+        </div>
+        <div className="kpi" style={{borderLeft:'3px solid var(--r)'}}>
+          <div className="label">Stornos / Offen (LZ)</div>
+          <div className="value" style={{color:'var(--r)'}}>{data.stornoCount} <span style={{fontSize:16,color:'var(--ts)'}}>/</span> <span style={{color:'var(--orange)'}}>{data.offenCount}</span></div>
+          <div className="detail">Storniert / Kein Termin</div>
+        </div>
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid-2">
+        <div className="panel">
+          <div className="panel-header">🍩 Kostenverteilung</div>
+          <div className="panel-body">
+            <div className="donut-container">
+              <DonutChart data={catData} size={190}/>
+              <div className="donut-legend">
+                {catData.filter(d=>d.value>0).map((d,i) => <div key={i} className="legend-item">
+                  <div className="legend-dot" style={{background:d.color}}/>
+                  <span>{d.label}</span>
+                  <span className="legend-value">{eur(d.value)}</span>
+                </div>)}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="panel">
+          <div className="panel-header">📊 Kostenaufschlüsselung</div>
+          <div className="panel-body">
+            <BarChart data={catData.filter(d=>d.value>0)} />
+          </div>
+        </div>
+      </div>
+
+      {/* Top Cost VTs */}
+      <div className="panel">
+        <div className="panel-header">👥 Kosten pro Vertriebler – sortiert nach Gesamtkosten</div>
+        <div className="panel-body" style={{padding:0,overflowX:'auto'}}>
+          <table className="cost-table">
+            <thead>
+              <tr>
+                <th style={{width:30}}>#</th>
+                <th>Vertriebler</th>
+                <th>Typ</th>
+                <th className="num">Sales</th>
+                <th className="num">kWp</th>
+                <th className="num">Provision</th>
+                <th className="num">Eigenlead</th>
+                <th className="num">Empfehlung</th>
+                <th className="num">Speicher</th>
+                <th className="num">Stufe/Team</th>
+                <th className="num highlight">Gesamt</th>
+                <th className="num">Ø/Sale</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.vpResults.filter(v=>v.sales>0).map((v,i) => <tr key={i}>
+                <td style={{color:'var(--ts)'}}>{i+1}</td>
+                <td className="name">
+                  {v.name}
+                  {v.spiegel && <span style={{marginLeft:6,fontSize:10,color:'var(--orange)',background:'var(--orange)15',padding:'1px 6px',borderRadius:3}}>{v.spiegel}</span>}
+                </td>
+                <td><span className={`badge ${v.isHGB?'badge-hgb':'badge-ang'}`}>{v.isHGB?'HGB §84':'Angestellt'}</span></td>
+                <td className="num">{v.sales}</td>
+                <td className="num">{v.kwp.toFixed(1)}</td>
+                <td className="num">{eur(v.provision)}</td>
+                <td className="num" style={{color:v.eigenlead?'var(--teal)':'var(--ts)'}}>{v.eigenlead?eur(v.eigenlead):'–'}</td>
+                <td className="num" style={{color:v.empfehlung?'var(--blue)':'var(--ts)'}}>{v.empfehlung?eur(v.empfehlung):'–'}</td>
+                <td className="num" style={{color:v.speicher?'var(--purple)':'var(--ts)'}}>{v.speicher?eur(v.speicher):'–'}</td>
+                <td className="num" style={{color:(v.stufen+v.teamBonus)?'var(--orange)':'var(--ts)'}}>{(v.stufen+v.teamBonus)?eur(v.stufen+v.teamBonus):'–'}</td>
+                <td className="num highlight">{eur(v.total)}</td>
+                <td className="num" style={{color:'var(--orange)'}}>{eur(v.avgPerSale)}</td>
+              </tr>)}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td></td>
+                <td style={{fontWeight:700}}>Gesamt ({data.vpResults.filter(v=>v.sales>0).length} VTs)</td>
+                <td></td>
+                <td className="num">{data.totalSales}</td>
+                <td className="num">{data.totalKwp.toFixed(1)}</td>
+                <td className="num">{eur(data.totalProvision)}</td>
+                <td className="num" style={{color:'var(--teal)'}}>{eur(data.totalEigenlead)}</td>
+                <td className="num" style={{color:'var(--blue)'}}>{eur(data.totalEmpfehlung)}</td>
+                <td className="num" style={{color:'var(--purple)'}}>{eur(data.totalSpeicher)}</td>
+                <td className="num" style={{color:'var(--orange)'}}>{eur(data.totalStufen+data.totalTeamBonus)}</td>
+                <td className="num highlight">{eur(data.gesamtKosten)}</td>
+                <td className="num" style={{color:'var(--orange)'}}>{eur(data.avgPerSale)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      {/* Teuerste vs Günstigste */}
+      <div className="grid-2">
+        <div className="panel">
+          <div className="panel-header" style={{color:'var(--r)'}}>🔴 Teuerste Aufträge (Ø/Sale)</div>
+          <div className="panel-body" style={{padding:0}}>
+            <table className="cost-table">
+              <thead><tr><th>Vertriebler</th><th className="num">Sales</th><th className="num">Ø/Sale</th><th className="num">Gesamt</th></tr></thead>
+              <tbody>
+                {[...data.vpResults].filter(v=>v.sales>0).sort((a,b)=>b.avgPerSale-a.avgPerSale).slice(0,5).map((v,i) => <tr key={i}>
+                  <td className="name">{v.name}</td>
+                  <td className="num">{v.sales}</td>
+                  <td className="num" style={{color:'var(--r)',fontWeight:600}}>{eur(v.avgPerSale)}</td>
+                  <td className="num">{eur(v.total)}</td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="panel">
+          <div className="panel-header" style={{color:'var(--g)'}}>🟢 Günstigste Aufträge (Ø/Sale)</div>
+          <div className="panel-body" style={{padding:0}}>
+            <table className="cost-table">
+              <thead><tr><th>Vertriebler</th><th className="num">Sales</th><th className="num">Ø/Sale</th><th className="num">Gesamt</th></tr></thead>
+              <tbody>
+                {[...data.vpResults].filter(v=>v.sales>0).sort((a,b)=>a.avgPerSale-b.avgPerSale).slice(0,5).map((v,i) => <tr key={i}>
+                  <td className="name">{v.name}</td>
+                  <td className="num">{v.sales}</td>
+                  <td className="num" style={{color:'var(--g)',fontWeight:600}}>{eur(v.avgPerSale)}</td>
+                  <td className="num">{eur(v.total)}</td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>}
+
+    {!loading && !data && <div className="empty"><div className="icon">📊</div><div className="msg">Keine Daten verfügbar</div></div>}
+  </>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
