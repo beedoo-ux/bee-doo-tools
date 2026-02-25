@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo PAY – Nachzahlungen & Stornos</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+:root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--s3:#242d3d;--bd:#30363d;--t:#e6edf3;--ts:#8b95a5;--y:#F5C500;--g:#2ea043;--r:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#f0883e;--teal:#3fb9a0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);min-height:100vh}
+.header{background:var(--s1);border-bottom:1px solid var(--bd);padding:16px 28px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px}
+.header h1 .ic{width:36px;height:36px;background:linear-gradient(135deg,var(--orange),var(--r));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.header .sub{font-size:12px;color:var(--ts);font-weight:400}
+.back{color:var(--ts);text-decoration:none;font-size:13px}.back:hover{color:var(--y)}
+.controls{display:flex;align-items:center;gap:12px;padding:14px 28px;background:var(--s1);border-bottom:1px solid var(--bd)}
+.controls select{font-family:inherit;font-size:13px;border-radius:8px;border:1px solid var(--bd);background:var(--s2);color:var(--t);padding:8px 14px;cursor:pointer}
+.controls select:hover{border-color:var(--y)}
+.controls .info{font-size:12px;color:var(--ts);margin-left:auto}
+.main{padding:24px 28px;display:flex;flex-direction:column;gap:24px}
+
+/* Summary cards */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.scard{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px;position:relative;transition:.2s}
+.scard:hover{border-color:var(--y);transform:translateY(-1px)}
+.scard .lbl{font-size:11px;color:var(--ts);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.scard .val{font-size:26px;font-weight:700;line-height:1.1}
+.scard .det{font-size:11px;color:var(--ts);margin-top:5px}
+
+/* Month swim lanes */
+.lanes{display:flex;flex-direction:column;gap:16px}
+.lane{background:var(--s1);border:1px solid var(--bd);border-radius:14px;overflow:hidden}
+.lane.lz{border-left:3px solid var(--g)}
+.lane.nz{border-left:3px solid var(--orange)}
+.lane.st{border-left:3px solid var(--r)}
+.lane.of{border-left:3px solid var(--purple)}
+.lane-header{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;transition:.15s}
+.lane-header:hover{background:var(--s2)}
+.lane-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:10px}
+.lane-title .tag{font-size:10px;padding:3px 8px;border-radius:5px;font-weight:600}
+.tag-lz{background:#2ea04320;color:var(--g);border:1px solid #2ea04340}
+.tag-nz{background:#f0883e20;color:var(--orange);border:1px solid #f0883e40}
+.tag-st{background:#f8514920;color:var(--r);border:1px solid #f8514940}
+.tag-of{background:#bc8cff20;color:var(--purple);border:1px solid #bc8cff40}
+.lane-stats{display:flex;gap:16px;font-size:13px;color:var(--ts)}
+.lane-stats span{display:flex;align-items:center;gap:4px}
+.lane-stats .num{color:var(--t);font-weight:600}
+.lane-body{border-top:1px solid var(--bd);max-height:0;overflow:hidden;transition:max-height .3s ease}
+.lane-body.open{max-height:3000px}
+.chevron{font-size:12px;color:var(--ts);transition:transform .2s}
+.chevron.open{transform:rotate(90deg)}
+
+/* VT groups inside lanes */
+.vt-group{border-bottom:1px solid var(--bd)}
+.vt-group:last-child{border-bottom:none}
+.vt-header{padding:10px 20px;font-size:13px;font-weight:600;color:var(--y);display:flex;align-items:center;gap:8px;background:var(--s2)}
+.vt-header .cnt{font-size:11px;color:var(--ts);font-weight:400}
+.order-row{display:grid;grid-template-columns:100px 1fr 120px 80px;gap:8px;padding:7px 20px 7px 36px;font-size:12px;align-items:center;transition:.1s}
+.order-row:hover{background:var(--s3)}
+.order-row .nr{color:var(--blue);font-weight:500}
+.order-row .kunde{color:var(--t)}
+.order-row .kwp{color:var(--ts);text-align:right}
+.order-row .datum{color:var(--ts);text-align:right;font-size:11px}
+
+/* Responsive */
+@media(max-width:768px){
+  .header,.controls,.main{padding-left:16px;padding-right:16px}
+  .summary{grid-template-columns:repeat(2,1fr)}
+  .scard .val{font-size:20px}
+  .order-row{grid-template-columns:80px 1fr 80px;font-size:11px}
+  .order-row .datum{display:none}
+  .lane-stats{gap:10px;font-size:12px}
+}
+@media(max-width:480px){
+  .summary{grid-template-columns:1fr}
+  .order-row{grid-template-columns:70px 1fr 60px;padding-left:20px}
+}
+
+.loading{display:flex;align-items:center;justify-content:center;padding:80px;gap:12px;color:var(--ts)}
+.spinner{width:20px;height:20px;border:2px solid var(--bd);border-top-color:var(--y);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .35s ease}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useMemo,useCallback} = React;
+const SB = 'https://hqzpemfaljxcysyqssng.supabase.co/rest/v1';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const H = {'apikey':KEY,'Authorization':`Bearer ${KEY}`,'Content-Type':'application/json'};
+const sbG = async(t,q='')=>{const r=await fetch(`${SB}/${t}?${q}`,{headers:H});return r.ok?r.json():[];};
+
+const monName = m => {
+  const [y,mo] = m.split('-');
+  return new Date(parseInt(y),parseInt(mo)-1).toLocaleString('de-DE',{month:'long',year:'numeric'});
+};
+
+function Lane({title, tag, tagClass, laneClass, orders, vpMap, defaultOpen}) {
+  const [open, setOpen] = useState(defaultOpen||false);
+  // Group by VT
+  const byVT = {};
+  orders.forEach(o => {
+    const vp = vpMap[o.vertriebler_id];
+    const name = vp ? `${vp.vorname} ${vp.nachname}` : 'Unbekannt';
+    if(!byVT[name]) byVT[name] = [];
+    byVT[name].push(o);
+  });
+  const sortedVTs = Object.entries(byVT).sort((a,b) => b[1].length - a[1].length);
+  const totalKwp = orders.reduce((s,o) => s+(o.kwp||0), 0);
+
+  return <div className={`lane ${laneClass}`}>
+    <div className="lane-header" onClick={() => setOpen(!open)}>
+      <div className="lane-title">
+        <span className={`chevron ${open?'open':''}`}>▶</span>
+        {title}
+        <span className={`tag ${tagClass}`}>{tag}</span>
+      </div>
+      <div className="lane-stats">
+        <span><span className="num">{orders.length}</span> Aufträge</span>
+        <span><span className="num">{sortedVTs.length}</span> VTs</span>
+        <span><span className="num">{totalKwp.toFixed(1)}</span> kWp</span>
+      </div>
+    </div>
+    <div className={`lane-body ${open?'open':''}`}>
+      {sortedVTs.map(([name, vtOrders]) => <div key={name} className="vt-group">
+        <div className="vt-header">{name} <span className="cnt">({vtOrders.length} Aufträge)</span></div>
+        {vtOrders.map(o => <div key={o.auftrag_nr} className="order-row">
+          <div className="nr">{o.auftrag_nr}</div>
+          <div className="kunde">{o.kunde_name}</div>
+          <div className="kwp">{o.kwp||0} kWp</div>
+          <div className="datum">{o.auftrags_datum}</div>
+        </div>)}
+      </div>)}
+    </div>
+  </div>;
+}
+
+function App() {
+  const now = new Date();
+  const defP = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;
+  const [periode, setPeriode] = useState(defP);
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+
+  const periodOptions = useMemo(() => {
+    const opts = [];
+    for(let i=0;i<12;i++){
+      const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+      opts.push(`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`);
+    }
+    return opts;
+  },[]);
+
+  const load = useCallback(async(per) => {
+    setLoading(true);
+    const [y,m] = per.split('/');
+    const periodeStart = `${y}-${m}-01`;
+    const lzD = new Date(parseInt(y),parseInt(m)-2,1);
+    const leistungsStart = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
+    const leistungsMonat = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}`;
+
+    const [mitarbeiter, auszahlbar, stornos, offene] = await Promise.all([
+      sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ'),
+      sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,lead_quelle`),
+      sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+      sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    ]);
+
+    const vpMap = {};
+    mitarbeiter.forEach(v => vpMap[v.id] = v);
+
+    // Split auszahlbar into LZ (Leistungsmonat) and NZ (Nachzahlung = older months)
+    const lzOrders = [];
+    const nzByMonth = {};
+    auszahlbar.forEach(o => {
+      const om = (o.auftrags_datum||'').substring(0,7);
+      if(om === leistungsMonat) {
+        lzOrders.push(o);
+      } else {
+        if(!nzByMonth[om]) nzByMonth[om] = [];
+        nzByMonth[om].push(o);
+      }
+    });
+
+    // Split stornos into LZ and other months
+    const stLz = [];
+    const stByMonth = {};
+    stornos.forEach(o => {
+      const om = (o.auftrags_datum||'').substring(0,7);
+      if(om === leistungsMonat) {
+        stLz.push(o);
+      } else {
+        if(!stByMonth[om]) stByMonth[om] = [];
+        stByMonth[om].push(o);
+      }
+    });
+
+    // Split offen into LZ and other months
+    const ofLz = [];
+    const ofByMonth = {};
+    offene.forEach(o => {
+      const om = (o.auftrags_datum||'').substring(0,7);
+      if(om === leistungsMonat) {
+        ofLz.push(o);
+      } else {
+        if(!ofByMonth[om]) ofByMonth[om] = [];
+        ofByMonth[om].push(o);
+      }
+    });
+
+    const totalNz = Object.values(nzByMonth).reduce((s,arr) => s+arr.length, 0);
+    const totalStOther = Object.values(stByMonth).reduce((s,arr) => s+arr.length, 0);
+    const totalOfOther = Object.values(ofByMonth).reduce((s,arr) => s+arr.length, 0);
+
+    setData({
+      vpMap, leistungsMonat,
+      lzOrders, nzByMonth, totalNz,
+      stLz, stByMonth, totalStOther,
+      ofLz, ofByMonth, totalOfOther,
+      totalAuszahlbar: auszahlbar.length,
+      totalStornos: stornos.length,
+      totalOffen: offene.length,
+    });
+    setLoading(false);
+  },[]);
+
+  useEffect(() => { load(periode); }, [periode]);
+
+  return <>
+    <div className="header">
+      <h1><span className="ic">📋</span>Nachzahlungen & Stornos<span className="sub"> bee-doo PAY</span></h1>
+      <a href="index.html" className="back">← Zurück zur Toolbox</a>
+    </div>
+    <div className="controls">
+      <label style={{fontSize:13,color:'var(--ts)'}}>Abrechnungsmonat:</label>
+      <select value={periode} onChange={e=>setPeriode(e.target.value)}>
+        {periodOptions.map(p=><option key={p} value={p}>{monName(p.replace('/','-'))}</option>)}
+      </select>
+      {data && <div className="info">
+        Leistungsmonat: <b style={{color:'var(--t)'}}>{monName(data.leistungsMonat)}</b> · Alles davor = Nachzahlung
+      </div>}
+    </div>
+
+    {loading && <div className="loading"><div className="spinner"/>Lade Daten...</div>}
+
+    {!loading && data && <div className="main fade-in">
+      {/* Summary */}
+      <div className="summary">
+        <div className="scard">
+          <div className="lbl">Auszahlbar gesamt</div>
+          <div className="val" style={{color:'var(--g)'}}>{data.totalAuszahlbar}</div>
+          <div className="det">Aufträge in dieser Abrechnung</div>
+        </div>
+        <div className="scard">
+          <div className="lbl">Leistungsmonat</div>
+          <div className="val" style={{color:'var(--g)'}}>{data.lzOrders.length}</div>
+          <div className="det">{monName(data.leistungsMonat)}</div>
+        </div>
+        <div className="scard">
+          <div className="lbl">Nachzahlungen</div>
+          <div className="val" style={{color:'var(--orange)'}}>{data.totalNz}</div>
+          <div className="det">aus {Object.keys(data.nzByMonth).length} Vormonat{Object.keys(data.nzByMonth).length!==1?'en':''}</div>
+        </div>
+        <div className="scard">
+          <div className="lbl">NZ-Anteil</div>
+          <div className="val" style={{color:data.totalNz/data.totalAuszahlbar>0.2?'var(--r)':'var(--orange)'}}>{data.totalAuszahlbar ? (data.totalNz/data.totalAuszahlbar*100).toFixed(1) : 0}%</div>
+          <div className="det">{data.totalNz} von {data.totalAuszahlbar}</div>
+        </div>
+        <div className="scard">
+          <div className="lbl">Stornos (alle)</div>
+          <div className="val" style={{color:'var(--r)'}}>{data.totalStornos}</div>
+          <div className="det">LZ: {data.stLz.length} · Vormonate: {data.totalStOther}</div>
+        </div>
+        <div className="scard">
+          <div className="lbl">Offen (alle)</div>
+          <div className="val" style={{color:'var(--purple)'}}>{data.totalOffen}</div>
+          <div className="det">LZ: {data.ofLz.length} · Vormonate: {data.totalOfOther}</div>
+        </div>
+      </div>
+
+      {/* ── AUSZAHLBAR ── */}
+      <h2 style={{fontSize:16,fontWeight:600,color:'var(--g)',display:'flex',alignItems:'center',gap:8}}>
+        ✅ Auszahlbare Aufträge ({data.totalAuszahlbar})
+      </h2>
+
+      <div className="lanes">
+        {/* Leistungsmonat */}
+        <Lane
+          title={`${monName(data.leistungsMonat)} – Leistungsmonat`}
+          tag="Leistungsmonat"
+          tagClass="tag-lz"
+          laneClass="lz"
+          orders={data.lzOrders}
+          vpMap={data.vpMap}
+          defaultOpen={false}
+        />
+
+        {/* Nachzahlungen per month */}
+        {Object.entries(data.nzByMonth).sort((a,b) => b[0].localeCompare(a[0])).map(([month, orders]) =>
+          <Lane
+            key={month}
+            title={`${monName(month)} – Nachzahlung`}
+            tag={`Nachzahlung`}
+            tagClass="tag-nz"
+            laneClass="nz"
+            orders={orders}
+            vpMap={data.vpMap}
+            defaultOpen={true}
+          />
+        )}
+      </div>
+
+      {/* ── STORNOS ── */}
+      <h2 style={{fontSize:16,fontWeight:600,color:'var(--r)',display:'flex',alignItems:'center',gap:8,marginTop:8}}>
+        ❌ Stornierte Aufträge ({data.totalStornos})
+      </h2>
+
+      <div className="lanes">
+        <Lane
+          title={`${monName(data.leistungsMonat)} – Stornos Leistungsmonat`}
+          tag="Leistungsmonat"
+          tagClass="tag-lz"
+          laneClass="st"
+          orders={data.stLz}
+          vpMap={data.vpMap}
+          defaultOpen={false}
+        />
+        {Object.entries(data.stByMonth).sort((a,b) => b[0].localeCompare(a[0])).map(([month, orders]) =>
+          <Lane
+            key={month}
+            title={`${monName(month)} – Stornos Vormonat`}
+            tag="Vormonat"
+            tagClass="tag-st"
+            laneClass="st"
+            orders={orders}
+            vpMap={data.vpMap}
+            defaultOpen={true}
+          />
+        )}
+      </div>
+
+      {/* ── OFFEN ── */}
+      <h2 style={{fontSize:16,fontWeight:600,color:'var(--purple)',display:'flex',alignItems:'center',gap:8,marginTop:8}}>
+        ⏳ Offene Aufträge – kein Termin gelegt ({data.totalOffen})
+      </h2>
+
+      <div className="lanes">
+        <Lane
+          title={`${monName(data.leistungsMonat)} – Offen Leistungsmonat`}
+          tag="Leistungsmonat"
+          tagClass="tag-lz"
+          laneClass="of"
+          orders={data.ofLz}
+          vpMap={data.vpMap}
+          defaultOpen={false}
+        />
+        {Object.entries(data.ofByMonth).sort((a,b) => b[0].localeCompare(a[0])).map(([month, orders]) =>
+          <Lane
+            key={month}
+            title={`${monName(month)} – Offen Vormonat`}
+            tag="Vormonat"
+            tagClass="tag-of"
+            laneClass="of"
+            orders={orders}
+            vpMap={data.vpMap}
+            defaultOpen={true}
+          />
+        )}
+      </div>
+
+    </div>}
+  </>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
