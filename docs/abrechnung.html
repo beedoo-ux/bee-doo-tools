@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo | Probeabrechnung</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-height:100vh}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#161b22}::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+
+.app-header{background:#0d1117;border-bottom:1px solid #21262d;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.logo-area{display:flex;align-items:center;gap:12px}
+.logo-text{font-size:22px;font-weight:800;letter-spacing:-0.5px}
+.logo-text span{color:#F5C500}
+.logo-sub{font-size:11px;color:#8b949e;letter-spacing:1px;text-transform:uppercase}
+
+.controls-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.sel-period{background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:8px 14px;border-radius:8px;font-family:'DM Sans';font-size:14px;cursor:pointer}
+.sel-period:focus{outline:none;border-color:#F5C500}
+.btn{padding:8px 16px;border-radius:8px;font-family:'DM Sans';font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .2s}
+.btn-primary{background:#F5C500;color:#0a0a0f}.btn-primary:hover{background:#e6b800}
+.btn-secondary{background:#21262d;color:#c9d1d9;border:1px solid #30363d}.btn-secondary:hover{background:#30363d}
+.btn-success{background:#238636;color:#fff}.btn-success:hover{background:#2ea043}
+.btn-danger{background:#da3633;color:#fff}.btn-danger:hover{background:#f85149}
+.btn-sm{padding:5px 10px;font-size:11px}
+.btn-icon{width:32px;height:32px;display:flex;align-items:center;justify-content:center;padding:0}
+
+.stats-row{display:flex;gap:16px;padding:16px 24px;flex-wrap:wrap}
+.stat-card{background:#161b22;border:1px solid #21262d;border-radius:10px;padding:14px 18px;flex:1;min-width:140px}
+.stat-label{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.stat-value{font-size:22px;font-weight:700;color:#e6edf3}
+.stat-value.gold{color:#F5C500}
+.stat-value.green{color:#3fb950}
+
+.main-grid{padding:0 24px 24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+
+.vt-card{background:#161b22;border:1px solid #21262d;border-radius:12px;padding:16px;cursor:pointer;transition:all .2s}
+.vt-card:hover{border-color:#F5C500;transform:translateY(-2px)}
+.vt-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.vt-name{font-size:15px;font-weight:700;color:#e6edf3}
+.vt-kuerzel{font-size:11px;color:#8b949e;background:#21262d;padding:2px 8px;border-radius:4px}
+.vt-sales{font-size:12px;color:#8b949e;margin-bottom:6px}
+.vt-betrag{font-size:20px;font-weight:800;color:#F5C500}
+.vt-card-footer{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid #21262d}
+
+.badge{font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.3px}
+.badge-entwurf{background:#30363d;color:#8b949e}
+.badge-probe{background:#1f2d1f;color:#F5C500;border:1px solid #F5C50040}
+.badge-freigegeben{background:#0d2818;color:#3fb950;border:1px solid #3fb95040}
+.badge-ausgezahlt{background:#0d1d2d;color:#58a6ff;border:1px solid #58a6ff40}
+
+/* ── Detail View ── */
+.detail-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:100;display:flex;justify-content:center;align-items:stretch}
+.detail-container{background:#0d1117;width:100%;max-width:1400px;display:flex;flex-direction:column;overflow:hidden}
+.detail-header{background:#161b22;border-bottom:1px solid #21262d;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.detail-body{display:flex;flex:1;overflow:hidden}
+.edit-panel{width:420px;min-width:380px;background:#0d1117;border-right:1px solid #21262d;overflow-y:auto;padding:16px;flex-shrink:0}
+.preview-panel{flex:1;overflow-y:auto;background:#2d2d2d;padding:20px;display:flex;justify-content:center}
+
+.edit-section{margin-bottom:16px}
+.edit-section-title{font-size:12px;font-weight:700;color:#F5C500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #21262d}
+
+.pos-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#161b22;border:1px solid #21262d;border-radius:8px;margin-bottom:6px;font-size:12px;transition:all .2s}
+.pos-row.inactive{opacity:.4;background:#0d1117}
+.pos-row .pos-kunde{flex:1;color:#c9d1d9;font-weight:500}
+.pos-row .pos-art{flex:1;color:#8b949e;font-size:11px}
+.pos-row .pos-betrag{font-weight:700;color:#e6edf3;min-width:80px;text-align:right}
+.pos-row .pos-betrag.overridden{color:#F5C500}
+
+.override-input{background:#21262d;border:1px solid #30363d;color:#F5C500;padding:4px 8px;border-radius:4px;width:80px;text-align:right;font-family:'DM Sans';font-size:12px;font-weight:600}
+.override-input:focus{outline:none;border-color:#F5C500}
+
+.toggle-btn{width:28px;height:16px;border-radius:8px;border:none;cursor:pointer;position:relative;transition:background .2s}
+.toggle-btn.active{background:#238636}
+.toggle-btn.inactive-toggle{background:#484f58}
+.toggle-btn::after{content:'';position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;top:2px;transition:left .2s}
+.toggle-btn.active::after{left:14px}
+.toggle-btn.inactive-toggle::after{left:2px}
+
+.extra-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.extra-input{background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:6px 10px;border-radius:6px;font-family:'DM Sans';font-size:12px;flex:1}
+.extra-input:focus{outline:none;border-color:#F5C500}
+.extra-amount{width:100px}
+
+.notes-area{background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:10px;border-radius:8px;font-family:'DM Sans';font-size:12px;width:100%;min-height:60px;resize:vertical}
+.notes-area:focus{outline:none;border-color:#F5C500}
+
+/* ── Preview (White PDF Look) ── */
+.gutschrift-page{background:#fff;width:210mm;min-height:297mm;padding:14mm 16mm 28mm;position:relative;color:#111;font-family:Arial,sans-serif;font-size:11px;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+.gutschrift-page *{color:#111}
+
+.gs-topline{font-size:8.5px;color:#555!important;border-bottom:1px solid #ddd;padding-bottom:5px;margin-bottom:12px}
+.gs-topline span{float:right;color:#555!important}
+.gs-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+.gs-logo{font-family:'Arial Black',Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:-1px}
+.gs-logo span{color:#FDE154!important}
+.gs-logo-sub{font-size:8.5px;color:#888!important;letter-spacing:1px;text-transform:uppercase;margin-top:1px}
+.gs-dates{text-align:right;font-size:11px;line-height:1.8}
+.gs-dates .lbl{color:#888!important}
+.gs-sender{font-size:8.5px;color:#888!important;border-bottom:1px dotted #ccc;padding-bottom:4px;margin-bottom:10px}
+.gs-empf-name{font-size:12px;font-weight:700;margin-bottom:2px}
+.gs-empf-addr{font-size:11px;color:#444!important;line-height:1.7;margin-bottom:2px}
+.gs-empf-steuer{font-size:9.5px;color:#888!important;margin-bottom:14px}
+.gs-beleg-title{font-size:19px;font-weight:700;margin-bottom:2px}
+.gs-beleg-sub{font-size:11px;color:#666!important;margin-bottom:12px}
+
+.gs-table{width:100%;border-collapse:collapse;font-size:11px}
+.gs-table td{padding:6px 10px}
+.gs-table .row-prov td{border-bottom:1px solid #eee}
+.gs-table .row-prov td:first-child{color:#E07800!important}
+.gs-table .row-brutto td{border-bottom:2px solid #aaa;font-weight:700}
+.gs-table .row-sg td{background:#f8f8f2;border-bottom:1px solid #e5e5e5;color:#555!important;font-weight:600}
+.gs-table .row-sg-ust td{background:#f8f8f2;color:#9a3412!important;font-weight:600;font-size:10px}
+.gs-table .row-sg-hint td{background:#f8f8f2;color:#888!important;font-size:9px;padding:2px 10px 6px}
+.gs-table .row-netto td{border-top:2px solid #111;border-bottom:1px solid #eee;color:#555!important}
+.gs-table .row-ust td{background:#fffbeb;border-bottom:1px solid #fde68a;color:#92400e!important;font-weight:600}
+.gs-table .row-auszahlung td{background:#f0fdf4;font-weight:800;font-size:13px}
+.gs-table .row-auszahlung td:last-child{color:#166534!important}
+.gs-table .right{text-align:right}
+
+.gs-sidebar-title{font-size:10px;font-weight:700;color:#E07800!important;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid #eee}
+.gs-sidebar-table{width:100%;border-collapse:collapse;font-size:10px}
+.gs-sidebar-table td{padding:4px 7px}
+.gs-sidebar-table .lbl{border-bottom:1px solid #eee;color:#555!important}
+.gs-sidebar-table .ust{color:#92400e!important}
+.gs-sidebar-table .total td{background:#f0fdf4;font-weight:700}
+.gs-sidebar-table .total td:last-child{color:#166534!important}
+.gs-sidebar-table .sg-total td{background:#fff7ed;font-weight:700;color:#92400e!important}
+
+.gs-footer{position:absolute;bottom:10mm;left:16mm;right:16mm;border-top:1px solid #ddd;padding-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
+.gs-footer-col{font-size:8px;color:#666!important;line-height:1.6}
+.gs-footer-col b{font-size:9px;color:#111!important;display:block;margin-bottom:2px}
+
+.gs-hinweis{margin-top:16px;font-size:10px;color:#555!important;line-height:1.6;border-top:1px solid #eee;padding-top:10px}
+
+/* Page 2 */
+.gs-p2-header{font-size:8.5px;color:#555!important;border-bottom:1px solid #ddd;padding-bottom:5px;margin-bottom:12px}
+.gs-p2-name{font-size:17px;font-weight:700;margin-bottom:14px}
+.gs-p2-name span{font-size:11px;color:#888!important;font-weight:400}
+.gs-p2-section{color:#E07800!important;font-weight:700;font-size:11px;margin-bottom:7px;border-bottom:1px solid #eee;padding-bottom:3px}
+
+.gs-detail-table{width:100%;border-collapse:collapse;font-size:10.5px}
+.gs-detail-table th{padding:5px 8px;border-bottom:2px solid #ddd;text-align:left;font-size:9px;text-transform:uppercase;color:#888!important;background:#f5f5f5}
+.gs-detail-table th:last-child{text-align:right}
+.gs-detail-table td{padding:5px 8px;border-bottom:1px solid #eee;font-size:10px}
+.gs-detail-table td:first-child{color:#555!important}
+.gs-detail-table td:last-child{text-align:right;font-weight:600}
+.gs-detail-table .sum-row td{font-weight:700;border-top:2px solid #333;background:#f9f9f9}
+.gs-detail-table .sg-row td{background:#f8f8f2;color:#555!important}
+.gs-detail-table .sg-row td:last-child{color:#9a3412!important}
+.gs-detail-table .netto-row td{border-top:1px solid #ddd;color:#555!important}
+.gs-detail-table .ust-row td{background:#fffbeb;color:#92400e!important}
+.gs-detail-table .ust-row td:last-child{font-weight:700}
+.gs-detail-table .brutto-row td{background:#f0fdf4;border-top:2px solid #166534;font-weight:800;font-size:12px}
+.gs-detail-table .brutto-row td:last-child{font-size:13px;font-weight:900;color:#166534!important}
+
+.zurückgestellt-badge{font-size:9px;background:#30363d;color:#8b949e;padding:1px 6px;border-radius:3px;margin-left:6px}
+
+.empty-state{text-align:center;padding:60px 20px;color:#484f58}
+.empty-state .icon{font-size:48px;margin-bottom:12px}
+.empty-state h3{font-size:16px;color:#8b949e;margin-bottom:6px}
+.empty-state p{font-size:13px}
+
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;color:#8b949e}
+.spinner{width:20px;height:20px;border:2px solid #30363d;border-top-color:#F5C500;border-radius:50%;animation:spin .6s linear infinite;margin-right:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.toast{position:fixed;bottom:24px;right:24px;background:#161b22;border:1px solid #21262d;border-radius:10px;padding:12px 20px;font-size:13px;color:#c9d1d9;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,.5);animation:slideUp .3s ease}
+.toast.success{border-color:#238636;color:#3fb950}
+.toast.error{border-color:#da3633;color:#f85149}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* Responsive */
+@media(max-width:768px){
+  .app-header{padding:12px 16px}
+  .stats-row{padding:12px 16px;gap:10px}
+  .stat-card{min-width:120px;padding:10px 14px}
+  .stat-value{font-size:18px}
+  .main-grid{padding:0 16px 16px;grid-template-columns:1fr}
+  .detail-body{flex-direction:column}
+  .edit-panel{width:100%;min-width:unset;max-height:50vh;border-right:none;border-bottom:1px solid #21262d}
+  .preview-panel{padding:10px}
+  .gutschrift-page{width:100%;min-height:auto;padding:8mm;transform-origin:top left}
+  .controls-bar{width:100%;justify-content:flex-end}
+}
+@media(max-width:480px){
+  .stats-row{flex-direction:column}
+  .stat-card{min-width:unset}
+  .detail-header{flex-direction:column;gap:8px;align-items:flex-start}
+  .edit-panel{padding:12px}
+  .pos-row{flex-wrap:wrap}
+}
+
+@media print{
+  body{background:#fff}
+  .app-header,.stats-row,.main-grid,.edit-panel,.detail-header,.detail-overlay{display:none!important}
+  .preview-panel{background:#fff;padding:0}
+  .gutschrift-page{box-shadow:none;page-break-after:always}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+// ── Config ──
+const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const HEADERS = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+
+// ── Helpers ──
+const fmt = (n) => new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+const fmtEur = (n) => fmt(n) + ' €';
+const periodenLabel = (p) => { const [y, m] = p.split('/'); const mon = ['','Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']; return `${mon[parseInt(m)]} ${y}`; };
+const genKuerzel = (name) => { const parts = name.trim().split(/\s+/); if (parts.length >= 2) return (parts[0][0] + parts[parts.length-1][0]).toUpperCase(); return name.slice(0,2).toUpperCase(); };
+const genBelegnummer = (periode, kuerzel) => `${periode.replace('/', '-')}-${kuerzel}`;
+
+// ── Supabase helpers ──
+const sbGet = async (table, query = '') => {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, { headers: HEADERS });
+  if (!r.ok) throw new Error(`GET ${table}: ${r.status}`);
+  return r.json();
+};
+const sbPost = async (table, data) => {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: 'POST', headers: { ...HEADERS, 'Prefer': 'return=representation' }, body: JSON.stringify(data) });
+  if (!r.ok) { const t = await r.text(); throw new Error(`POST ${table}: ${t}`); }
+  return r.json();
+};
+const sbPatch = async (table, query, data) => {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, { method: 'PATCH', headers: { ...HEADERS, 'Prefer': 'return=representation' }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error(`PATCH ${table}: ${r.status}`);
+  return r.json();
+};
+const sbDelete = async (table, query) => {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, { method: 'DELETE', headers: HEADERS });
+  if (!r.ok) throw new Error(`DELETE ${table}: ${r.status}`);
+};
+
+// ── Berechnungs-Engine ──
+function berechneAbrechnung(positionen, systemgebuehr, istHgb) {
+  const aktivePos = positionen.filter(p => p.aktiv && !p.zurueckgestellt);
+  const provPos = aktivePos.filter(p => ['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
+  const extraPos = aktivePos.filter(p => ['einmalzahlung','abzug','sonstiges'].includes(p.typ));
+
+  const bruttoProvisionen = provPos.reduce((s, p) => s + (p.override_betrag != null ? p.override_betrag : p.original_betrag), 0);
+  const einmalSumme = extraPos.reduce((s, p) => s + (p.override_betrag != null ? p.override_betrag : p.original_betrag), 0);
+
+  let sgNetto = 0, sgUst = 0;
+  if (istHgb && systemgebuehr) {
+    sgNetto = Math.min(bruttoProvisionen * (systemgebuehr.prozent / 100), systemgebuehr.max_netto);
+    sgUst = sgNetto * (systemgebuehr.ust_satz / 100);
+  }
+
+  const nettobetrag = bruttoProvisionen - sgNetto + einmalSumme;
+  const ustSatz = istHgb ? 19.0 : 0;
+  const ustBetrag = nettobetrag * (ustSatz / 100);
+  const auszahlung = nettobetrag + ustBetrag;
+
+  return {
+    anzahlSales: provPos.filter(p => p.typ === 'provision').length,
+    bruttoProvisionen,
+    sgNetto: Math.round(sgNetto * 100) / 100,
+    sgUst: Math.round(sgUst * 100) / 100,
+    einmalSumme,
+    nettobetrag: Math.round(nettobetrag * 100) / 100,
+    ustSatz,
+    ustBetrag: Math.round(ustBetrag * 100) / 100,
+    auszahlung: Math.round(auszahlung * 100) / 100
+  };
+}
+
+// ── Toast ──
+let toastTimer = null;
+function ToastProvider({ children }) {
+  const [toast, setToast] = useState(null);
+  window.__showToast = (msg, type = 'success') => {
+    clearTimeout(toastTimer);
+    setToast({ msg, type });
+    toastTimer = setTimeout(() => setToast(null), 3000);
+  };
+  return <>
+    {children}
+    {toast && <div className={`toast ${toast.type}`}>{toast.msg}</div>}
+  </>;
+}
+
+// ── Gutschrift Preview Component ──
+function GutschriftPreview({ abrechnung, positionen, systemgebuehr }) {
+  const ab = abrechnung;
+  const ber = berechneAbrechnung(positionen, systemgebuehr, ab.beschaeftigungsart === 'hgb');
+  const aktiveProvPos = positionen.filter(p => p.aktiv && !p.zurueckgestellt && ['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
+  const aktiveExtraPos = positionen.filter(p => p.aktiv && !p.zurueckgestellt && ['einmalzahlung','abzug','sonstiges'].includes(p.typ));
+  const kuerzel = ab.kuerzel || genKuerzel(ab.mitarbeiter_name);
+  const belegnr = genBelegnummer(ab.periode, kuerzel);
+  const istHgb = ab.beschaeftigungsart === 'hgb';
+  const heute = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  return <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+    {/* SEITE 1 */}
+    <div className="gutschrift-page" id={`gs-page1-${ab.id || 'new'}`}>
+      <div className="gs-topline">
+        Telecommunication · eBusiness · Solar &amp; Wärmepumpe · Sales-Promotion
+        <span>USt-IdNr.: DE363829401 · Steuernummer: 320/5706/4015</span>
+      </div>
+      <div className="gs-header">
+        <div>
+          <div className="gs-logo">bee<span>-doo</span></div>
+          <div className="gs-logo-sub">Energy for you</div>
+        </div>
+        <div className="gs-dates">
+          <div><span className="lbl">Datum:&nbsp;</span><b>{heute}</b></div>
+          <div><span className="lbl">Leistungszeitraum:&nbsp;</span><b>{ab.periode}</b></div>
+        </div>
+      </div>
+      <div className="gs-sender">bee-doo GmbH · Am Stadtholz 39 · D-33609 Bielefeld</div>
+      <div className="gs-empf-name">{ab.mitarbeiter_name}</div>
+      <div className="gs-empf-addr">—<br/>—</div>
+      <div className="gs-empf-steuer">{istHgb ? 'HGB §84 Handelsvertreter' : 'Angestellt'}</div>
+
+      <div className="gs-beleg-title">{istHgb ? 'Gutschrift' : 'Entgeltabrechnung'}-Belegnummer: {belegnr}</div>
+      <div className="gs-beleg-sub">{ab.mitarbeiter_name} · Leistungszeitraum {periodenLabel(ab.periode)}</div>
+      <div style={{borderTop:'1px solid #eee',marginBottom:'12px'}}></div>
+
+      <div style={{display:'grid',gridTemplateColumns:'56% 42%',gap:'2%'}}>
+        <div>
+          <table className="gs-table"><tbody>
+            <tr className="row-prov"><td style={{color:'#E07800'}}>Provisionen ({ber.anzahlSales} Sales – Vermittlung Solar/WP)</td><td className="right">{fmtEur(ber.bruttoProvisionen)}</td></tr>
+            {aktiveExtraPos.map((p, i) => <tr key={i} className="row-prov"><td style={{color: (p.override_betrag != null ? p.override_betrag : p.original_betrag) >= 0 ? '#E07800' : '#9a3412'}}>{p.kunde || p.notiz || p.typ}</td><td className="right">{fmtEur(p.override_betrag != null ? p.override_betrag : p.original_betrag)}</td></tr>)}
+            <tr className="row-brutto"><td>Brutto-Provisionen</td><td className="right">{fmtEur(ber.bruttoProvisionen + ber.einmalSumme)}</td></tr>
+            {istHgb && <>
+              <tr className="row-sg"><td>🖥️ ./. Systemgebühr Netto (3% · max. 200 €)</td><td className="right">-{fmtEur(ber.sgNetto)}</td></tr>
+              <tr className="row-sg-ust"><td>🖥️ ./. USt 19% auf Systemgebühr (Rechnung bee-doo)</td><td className="right">-{fmtEur(ber.sgUst)}</td></tr>
+              <tr className="row-sg-hint"><td colSpan={2}>Netto {fmtEur(ber.sgNetto)} + 19% MwSt {fmtEur(ber.sgUst)} = Brutto {fmtEur(ber.sgNetto + ber.sgUst)} · bee-doo GmbH stellt separate Rechnung aus · Ziff. 4.2 HVV</td></tr>
+            </>}
+            <tr className="row-netto"><td>Nettobetrag</td><td className="right">{fmtEur(ber.nettobetrag)}</td></tr>
+            {istHgb && <tr className="row-ust"><td>+ Umsatzsteuer 19% (Provisionen)</td><td className="right">+ {fmtEur(ber.ustBetrag)}</td></tr>}
+            <tr className="row-auszahlung"><td>AUSZAHLUNGSSUMME {istHgb ? '(Brutto)' : '(Netto)'}</td><td className="right">{fmtEur(ber.auszahlung)}</td></tr>
+          </tbody></table>
+        </div>
+        <div>
+          <div className="gs-sidebar-title">Sales {periodenLabel(ab.periode)}</div>
+          <table className="gs-sidebar-table"><tbody>
+            <tr><td className="lbl">Abgerechnete Sales</td><td style={{textAlign:'right',fontWeight:700}}>{ber.anzahlSales}</td></tr>
+            <tr><td className="lbl">Provisionen Netto</td><td style={{textAlign:'right'}}>{fmtEur(ber.nettobetrag)}</td></tr>
+            {istHgb && <tr><td className="lbl ust">+ USt 19%</td><td style={{textAlign:'right',color:'#92400e'}}>+ {fmtEur(ber.ustBetrag)}</td></tr>}
+            <tr className="total"><td>Auszahlung</td><td style={{textAlign:'right'}}>{fmtEur(ber.auszahlung)}</td></tr>
+          </tbody></table>
+
+          {istHgb && ber.sgNetto > 0 && <>
+            <div className="gs-sidebar-title" style={{marginTop:'14px'}}>Systemgebühr (sep. Rechnung)</div>
+            <table className="gs-sidebar-table"><tbody>
+              <tr><td className="lbl">Netto</td><td style={{textAlign:'right'}}>{fmtEur(ber.sgNetto)}</td></tr>
+              <tr><td className="lbl ust">+ USt 19%</td><td style={{textAlign:'right',color:'#9a3412'}}>+ {fmtEur(ber.sgUst)}</td></tr>
+              <tr className="sg-total"><td>Brutto Systemgebühr</td><td style={{textAlign:'right'}}>{fmtEur(ber.sgNetto + ber.sgUst)}</td></tr>
+            </tbody></table>
+          </>}
+        </div>
+      </div>
+
+      <div className="gs-hinweis">
+        {istHgb
+          ? `Diese Gutschrift gem. §14 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers. Nettobetrag Provisionen: ${fmtEur(ber.nettobetrag)} · zzgl. 19% USt: ${fmtEur(ber.ustBetrag)} · Bruttobetrag: ${fmtEur(ber.auszahlung)}. Die Systemgebühr (Netto ${fmtEur(ber.sgNetto)} + 19% USt ${fmtEur(ber.sgUst)} = Brutto ${fmtEur(ber.sgNetto + ber.sgUst)}) wird gesondert per Rechnung der bee-doo GmbH abgerechnet.`
+          : `Entgeltabrechnung für ${ab.mitarbeiter_name}. Nettobetrag Provisionen: ${fmtEur(ber.nettobetrag)}.`
+        }
+      </div>
+
+      <div className="gs-footer">
+        <div className="gs-footer-col"><b>Firmensitz</b>bee-doo GmbH<br/>Am Stadtholz 39<br/>D-33609 Bielefeld</div>
+        <div className="gs-footer-col"><b>Kontakt</b>www.bee-doo.de<br/>info@bee-doo.de<br/>Fon: 0800 22 33 664</div>
+        <div className="gs-footer-col"><b>Bankverbindung</b>IBAN DE90 2545 0110<br/>0031 0399 85<br/>BIC NOLADE21SWB</div>
+        <div className="gs-footer-col"><b>Geschäftsführer</b>Patrick Grabowski<br/>Olaf Schader<br/>HRB 43210 Bielefeld</div>
+      </div>
+    </div>
+
+    {/* SEITE 2 – Einzelpositionen */}
+    <div className="gutschrift-page" id={`gs-page2-${ab.id || 'new'}`}>
+      <div className="gs-p2-header">Provisionen {periodenLabel(ab.periode)}</div>
+      <div className="gs-p2-name">{ab.mitarbeiter_name} <span>({kuerzel})</span></div>
+      <div className="gs-p2-section">Einzelpositionen</div>
+      <table className="gs-detail-table">
+        <thead><tr><th>Auftrag</th><th>Kunde</th><th>Art</th><th>Netto</th></tr></thead>
+        <tbody>
+          {aktiveProvPos.map((p, i) => <tr key={i}>
+            <td>{p.auftrag_nr || '—'}</td>
+            <td style={{fontWeight: p.override_betrag != null ? 600 : 400}}>{p.kunde || '—'}</td>
+            <td>{p.produkt || p.typ}</td>
+            <td style={{color: p.override_betrag != null ? '#B45309' : undefined}}>{fmtEur(p.override_betrag != null ? p.override_betrag : p.original_betrag)}</td>
+          </tr>)}
+          {aktiveExtraPos.map((p, i) => <tr key={`e${i}`} style={{background:'#fffbeb'}}>
+            <td>—</td>
+            <td>{p.kunde || p.notiz || p.typ}</td>
+            <td>{p.typ === 'einmalzahlung' ? 'Einmalzahlung' : p.typ === 'abzug' ? 'Abzug' : 'Sonstiges'}</td>
+            <td>{fmtEur(p.override_betrag != null ? p.override_betrag : p.original_betrag)}</td>
+          </tr>)}
+          <tr className="sum-row"><td colSpan={3}>Netto-Summe Provisionen</td><td>{fmtEur(ber.bruttoProvisionen + ber.einmalSumme)}</td></tr>
+          {istHgb && <tr className="sg-row"><td colSpan={3}>./. Systemgebühr Netto + USt ({fmtEur(ber.sgNetto)} + {fmtEur(ber.sgUst)})</td><td>-{fmtEur(ber.sgNetto + ber.sgUst)}</td></tr>}
+          <tr className="netto-row"><td colSpan={3}>Nettobetrag (Auszahlungsbasis)</td><td>{fmtEur(ber.nettobetrag)}</td></tr>
+          {istHgb && <tr className="ust-row"><td colSpan={3}>+ USt 19% auf Provisionen</td><td>+ {fmtEur(ber.ustBetrag)}</td></tr>}
+          <tr className="brutto-row"><td colSpan={3}>BRUTTO-AUSZAHLUNG</td><td>{fmtEur(ber.auszahlung)}</td></tr>
+        </tbody>
+      </table>
+
+      {ab.stb_kommentar && <div style={{marginTop:16,padding:10,background:'#fff8e1',border:'1px solid #fde68a',borderRadius:4,fontSize:10}}>
+        <b style={{color:'#92400e'}}>Kommentar Steuerberater:</b><br/>{ab.stb_kommentar}
+      </div>}
+
+      <div className="gs-footer">
+        <div className="gs-footer-col"><b>Firmensitz</b>bee-doo GmbH<br/>Am Stadtholz 39<br/>D-33609 Bielefeld</div>
+        <div className="gs-footer-col"><b>Kontakt</b>www.bee-doo.de<br/>info@bee-doo.de<br/>Fon: 0800 22 33 664</div>
+        <div className="gs-footer-col"><b>Bankverbindung</b>IBAN DE90 2545 0110<br/>0031 0399 85<br/>BIC NOLADE21SWB</div>
+        <div className="gs-footer-col"><b>Geschäftsführer</b>Patrick Grabowski<br/>Olaf Schader<br/>HRB 43210 Bielefeld</div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ── Edit Panel ──
+function EditPanel({ abrechnung, positionen, setPositionen, systemgebuehr, onSave, onFreigeben, onPdf, onClose, setAbrechnung }) {
+  const ab = abrechnung;
+  const ber = berechneAbrechnung(positionen, systemgebuehr, ab.beschaeftigungsart === 'hgb');
+  const provPos = positionen.filter(p => ['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
+  const extraPos = positionen.filter(p => ['einmalzahlung','abzug','sonstiges'].includes(p.typ));
+
+  const togglePos = (idx) => {
+    if (ab.status === 'freigegeben' || ab.status === 'ausgezahlt') return;
+    const np = [...positionen]; np[idx] = { ...np[idx], aktiv: !np[idx].aktiv }; setPositionen(np);
+  };
+  const setOverride = (idx, val) => {
+    if (ab.status === 'freigegeben' || ab.status === 'ausgezahlt') return;
+    const np = [...positionen]; np[idx] = { ...np[idx], override_betrag: val === '' ? null : parseFloat(val.replace(',', '.')) || 0 }; setPositionen(np);
+  };
+  const zurueckstellen = (idx) => {
+    if (ab.status === 'freigegeben' || ab.status === 'ausgezahlt') return;
+    const np = [...positionen]; np[idx] = { ...np[idx], zurueckgestellt: !np[idx].zurueckgestellt, aktiv: np[idx].zurueckgestellt ? true : false }; setPositionen(np);
+  };
+
+  const addExtra = (typ) => {
+    setPositionen([...positionen, { typ, auftrag_nr: '', kunde: '', produkt: '', original_betrag: 0, override_betrag: null, aktiv: true, zurueckgestellt: false, notiz: '', isNew: true }]);
+  };
+  const removeExtra = (idx) => {
+    const np = [...positionen]; np.splice(idx, 1); setPositionen(np);
+  };
+  const updateExtra = (idx, field, val) => {
+    const np = [...positionen]; np[idx] = { ...np[idx], [field]: field === 'original_betrag' ? (parseFloat(val.replace(',','.')) || 0) : val }; setPositionen(np);
+  };
+
+  const isLocked = ab.status === 'freigegeben' || ab.status === 'ausgezahlt';
+
+  return <div className="edit-panel">
+    {/* Status Bar */}
+    <div className="edit-section">
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+        <span className={`badge badge-${ab.status === 'probeabrechnung' ? 'probe' : ab.status}`}>{
+          ab.status === 'entwurf' ? '📝 Entwurf' : ab.status === 'probeabrechnung' ? '🔍 Probeabrechnung' : ab.status === 'freigegeben' ? '✅ Freigegeben' : '💸 Ausgezahlt'
+        }</span>
+        <span style={{fontSize:11,color:'#8b949e'}}>{ab.mitarbeiter_name}</span>
+      </div>
+
+      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        <button className="btn btn-primary btn-sm" onClick={onSave} disabled={isLocked}>💾 Speichern</button>
+        {ab.status !== 'freigegeben' && ab.status !== 'ausgezahlt' && <button className="btn btn-success btn-sm" onClick={onFreigeben}>✅ Freigeben</button>}
+        {ab.status === 'freigegeben' && <button className="btn btn-sm" style={{background:'#1f6feb',color:'#fff'}} onClick={() => {
+          setAbrechnung(prev => ({...prev, status: 'ausgezahlt', ausgezahlt_am: new Date().toISOString()}));
+          setTimeout(onSave, 100);
+        }}>💸 Als ausgezahlt markieren</button>}
+        <button className="btn btn-secondary btn-sm" onClick={onPdf}>📄 PDF</button>
+      </div>
+    </div>
+
+    {/* Zusammenfassung */}
+    <div className="edit-section">
+      <div className="edit-section-title">💰 Zusammenfassung</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+        <div style={{background:'#161b22',padding:8,borderRadius:6,border:'1px solid #21262d'}}>
+          <div style={{fontSize:10,color:'#8b949e'}}>Sales</div>
+          <div style={{fontSize:18,fontWeight:700,color:'#F5C500'}}>{ber.anzahlSales}</div>
+        </div>
+        <div style={{background:'#161b22',padding:8,borderRadius:6,border:'1px solid #21262d'}}>
+          <div style={{fontSize:10,color:'#8b949e'}}>Auszahlung</div>
+          <div style={{fontSize:16,fontWeight:700,color:'#3fb950'}}>{fmtEur(ber.auszahlung)}</div>
+        </div>
+      </div>
+    </div>
+
+    {/* Provisionen */}
+    <div className="edit-section">
+      <div className="edit-section-title">📋 Provisionen ({provPos.filter(p=>p.aktiv && !p.zurueckgestellt).length}/{provPos.length})</div>
+      {provPos.map((p, i) => {
+        const globalIdx = positionen.indexOf(p);
+        return <div key={i} className={`pos-row ${!p.aktiv ? 'inactive' : ''}`}>
+          <button className={`toggle-btn ${p.aktiv ? 'active' : 'inactive-toggle'}`} onClick={() => togglePos(globalIdx)} disabled={isLocked} title={p.aktiv ? 'Deaktivieren' : 'Aktivieren'} />
+          <div className="pos-kunde" style={{fontSize:11}}>
+            {p.kunde || '—'}
+            {p.zurueckgestellt && <span className="zurückgestellt-badge">zurückgestellt</span>}
+          </div>
+          <div className="pos-betrag" style={p.override_betrag != null ? {color:'#F5C500'} : {}}>
+            {!isLocked ? <input className="override-input" value={p.override_betrag != null ? p.override_betrag : p.original_betrag} onChange={(e) => setOverride(globalIdx, e.target.value)} title="Betrag überschreiben" />
+              : <span>{fmtEur(p.override_betrag != null ? p.override_betrag : p.original_betrag)}</span>}
+          </div>
+          {!isLocked && <button className="btn btn-sm" style={{padding:'2px 6px',fontSize:10,background:p.zurueckgestellt?'#238636':'#30363d',color:p.zurueckgestellt?'#fff':'#8b949e'}} onClick={() => zurueckstellen(globalIdx)} title="Zurückstellen/Wiederherstellen">⏸</button>}
+        </div>;
+      })}
+    </div>
+
+    {/* Einmalzahlungen / Abzüge */}
+    <div className="edit-section">
+      <div className="edit-section-title">➕ Einmalzahlungen / Abzüge</div>
+      {extraPos.map((p, i) => {
+        const globalIdx = positionen.indexOf(p);
+        return <div key={i} className="extra-row">
+          <input className="extra-input" placeholder="Bezeichnung" value={p.kunde || p.notiz || ''} onChange={(e) => updateExtra(globalIdx, 'kunde', e.target.value)} disabled={isLocked} />
+          <input className="extra-input extra-amount" placeholder="Betrag" value={p.original_betrag || ''} onChange={(e) => updateExtra(globalIdx, 'original_betrag', e.target.value)} disabled={isLocked} />
+          <select className="extra-input" style={{width:90}} value={p.typ} onChange={(e) => updateExtra(globalIdx, 'typ', e.target.value)} disabled={isLocked}>
+            <option value="einmalzahlung">+ Zahlung</option>
+            <option value="abzug">− Abzug</option>
+            <option value="sonstiges">Sonstiges</option>
+          </select>
+          {!isLocked && <button className="btn btn-danger btn-sm btn-icon" onClick={() => removeExtra(globalIdx)}>✕</button>}
+        </div>;
+      })}
+      {!isLocked && <div style={{display:'flex',gap:6}}>
+        <button className="btn btn-secondary btn-sm" onClick={() => addExtra('einmalzahlung')}>+ Zahlung</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => addExtra('abzug')}>− Abzug</button>
+      </div>}
+    </div>
+
+    {/* Notizen */}
+    <div className="edit-section">
+      <div className="edit-section-title">📝 Interne Notizen</div>
+      <textarea className="notes-area" placeholder="Notizen zur Abrechnung..." value={ab.notizen || ''} onChange={(e) => setAbrechnung(prev => ({...prev, notizen: e.target.value}))} disabled={isLocked} />
+    </div>
+    <div className="edit-section">
+      <div className="edit-section-title">📎 Kommentar für Steuerberater</div>
+      <textarea className="notes-area" placeholder="Kommentar für den Steuerberater..." value={ab.stb_kommentar || ''} onChange={(e) => setAbrechnung(prev => ({...prev, stb_kommentar: e.target.value}))} disabled={isLocked} />
+    </div>
+  </div>;
+}
+
+// ── Detail View (Modal) ──
+function DetailView({ abrechnungId, periode, vtName, vtData, systemgebuehr, onClose, onRefresh }) {
+  const [abrechnung, setAbrechnung] = useState(null);
+  const [positionen, setPositionen] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const previewRef = useRef(null);
+
+  useEffect(() => { loadData(); }, [abrechnungId]);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      if (abrechnungId) {
+        const [abrArr, posArr] = await Promise.all([
+          sbGet('pay_abrechnungen', `id=eq.${abrechnungId}`),
+          sbGet('pay_abrechnungen_positionen', `abrechnung_id=eq.${abrechnungId}&order=erstellt_am.asc`)
+        ]);
+        if (abrArr.length) { setAbrechnung(abrArr[0]); setPositionen(posArr); }
+      } else {
+        // Create new from vtData
+        const kuerzel = genKuerzel(vtName);
+        const newAbr = { periode, mitarbeiter_name: vtName, kuerzel, beschaeftigungsart: 'hgb', status: 'entwurf', notizen: '', stb_kommentar: '' };
+        const newPos = (vtData || []).map(d => ({
+          typ: 'provision', auftrag_nr: '', kunde: d.kunde, produkt: d.produkt, original_betrag: d.netto, override_betrag: null, aktiv: true, zurueckgestellt: false, notiz: '', isNew: true
+        }));
+        setAbrechnung(newAbr);
+        setPositionen(newPos);
+      }
+    } catch (e) { console.error(e); window.__showToast?.('Fehler beim Laden: ' + e.message, 'error'); }
+    setLoading(false);
+  };
+
+  const handleSave = async () => {
+    try {
+      const ber = berechneAbrechnung(positionen, systemgebuehr, abrechnung.beschaeftigungsart === 'hgb');
+      const abrData = {
+        ...abrechnung,
+        anzahl_sales: ber.anzahlSales,
+        brutto_provisionen: ber.bruttoProvisionen,
+        systemgebuehr_netto: ber.sgNetto,
+        systemgebuehr_ust: ber.sgUst,
+        einmalzahlungen_summe: ber.einmalSumme,
+        nettobetrag: ber.nettobetrag,
+        ust_satz: ber.ustSatz,
+        ust_betrag: ber.ustBetrag,
+        auszahlungssumme: ber.auszahlung,
+        belegnummer: genBelegnummer(abrechnung.periode, abrechnung.kuerzel || genKuerzel(abrechnung.mitarbeiter_name)),
+        geaendert_am: new Date().toISOString()
+      };
+
+      let savedAbr;
+      if (abrechnung.id) {
+        const { id, erstellt_am, ...updateData } = abrData;
+        savedAbr = await sbPatch('pay_abrechnungen', `id=eq.${abrechnung.id}`, updateData);
+        savedAbr = savedAbr[0];
+        // Delete old positions and recreate
+        await sbDelete('pay_abrechnungen_positionen', `abrechnung_id=eq.${abrechnung.id}`);
+      } else {
+        const { id, ...insertData } = abrData;
+        savedAbr = await sbPost('pay_abrechnungen', insertData);
+        savedAbr = savedAbr[0];
+      }
+
+      // Save positions
+      const posData = positionen.map(p => ({
+        abrechnung_id: savedAbr.id,
+        typ: p.typ, auftrag_nr: p.auftrag_nr, kunde: p.kunde, produkt: p.produkt,
+        original_betrag: p.original_betrag, override_betrag: p.override_betrag,
+        aktiv: p.aktiv, zurueckgestellt: p.zurueckgestellt, notiz: p.notiz
+      }));
+      if (posData.length) {
+        const savedPos = await sbPost('pay_abrechnungen_positionen', posData);
+        setPositionen(savedPos);
+      }
+
+      setAbrechnung(savedAbr);
+      window.__showToast?.('✅ Abrechnung gespeichert');
+      onRefresh?.();
+    } catch (e) { console.error(e); window.__showToast?.('Fehler: ' + e.message, 'error'); }
+  };
+
+  const handleFreigeben = async () => {
+    if (!confirm(`Abrechnung für ${abrechnung.mitarbeiter_name} (${abrechnung.periode}) freigeben?\n\nDanach sind keine Änderungen mehr möglich!`)) return;
+    setAbrechnung(prev => ({ ...prev, status: 'freigegeben', freigegeben_am: new Date().toISOString(), freigegeben_von: 'Patrick Grabowski' }));
+    setTimeout(handleSave, 100);
+  };
+
+  const handlePdf = async () => {
+    const pages = previewRef.current?.querySelectorAll('.gutschrift-page');
+    if (!pages?.length) return;
+    window.__showToast?.('PDF wird erstellt...');
+    try {
+      const kuerzel = abrechnung.kuerzel || genKuerzel(abrechnung.mitarbeiter_name);
+      const filename = `Gutschrift_${abrechnung.periode.replace('/','-')}_${kuerzel}.pdf`;
+      const container = document.createElement('div');
+      pages.forEach(p => { const clone = p.cloneNode(true); container.appendChild(clone); });
+      await html2pdf().set({
+        margin: 0, filename, image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'], before: '.gutschrift-page' }
+      }).from(container).save();
+      window.__showToast?.('✅ PDF heruntergeladen');
+    } catch (e) { console.error(e); window.__showToast?.('PDF-Fehler: ' + e.message, 'error'); }
+  };
+
+  if (loading) return <div className="detail-overlay"><div className="detail-container"><div className="loading"><div className="spinner"/>Lade Abrechnung...</div></div></div>;
+  if (!abrechnung) return null;
+
+  return <div className="detail-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="detail-container">
+      <div className="detail-header">
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>← Zurück</button>
+          <span style={{fontWeight:700,fontSize:15}}>{abrechnung.mitarbeiter_name}</span>
+          <span className={`badge badge-${abrechnung.status === 'probeabrechnung' ? 'probe' : abrechnung.status}`}>{abrechnung.status}</span>
+        </div>
+        <div style={{fontSize:12,color:'#8b949e'}}>Periode: {periodenLabel(abrechnung.periode)}</div>
+      </div>
+      <div className="detail-body">
+        <EditPanel abrechnung={abrechnung} positionen={positionen} setPositionen={setPositionen} systemgebuehr={systemgebuehr} onSave={handleSave} onFreigeben={handleFreigeben} onPdf={handlePdf} onClose={onClose} setAbrechnung={setAbrechnung} />
+        <div className="preview-panel" ref={previewRef}>
+          <GutschriftPreview abrechnung={abrechnung} positionen={positionen} systemgebuehr={systemgebuehr} />
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ── Main App ──
+function App() {
+  const [periode, setPeriode] = useState('2025/11');
+  const [perioden] = useState(['2025/11','2025/12','2026/01','2026/02']);
+  const [abrechnungen, setAbrechnungen] = useState([]);
+  const [auszahlungen, setAuszahlungen] = useState([]);
+  const [systemgebuehr, setSystemgebuehr] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedVt, setSelectedVt] = useState(null);
+
+  const loadPeriode = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [abrArr, auszArr, sgArr] = await Promise.all([
+        sbGet('pay_abrechnungen', `periode=eq.${periode}&order=mitarbeiter_name.asc`),
+        sbGet('pay_auszahlungen_historie', `periode=eq.${periode}&order=vertriebler.asc`),
+        sbGet('pay_systemgebuehr', 'aktiv=eq.true&limit=1')
+      ]);
+      setAbrechnungen(abrArr);
+      setAuszahlungen(auszArr);
+      setSystemgebuehr(sgArr[0] || null);
+    } catch (e) { console.error(e); window.__showToast?.('Fehler: ' + e.message, 'error'); }
+    setLoading(false);
+  }, [periode]);
+
+  useEffect(() => { loadPeriode(); }, [loadPeriode]);
+
+  // Group auszahlungen by VT
+  const vtGroups = useMemo(() => {
+    const groups = {};
+    auszahlungen.forEach(a => {
+      const name = a.vertriebler;
+      if (!groups[name]) groups[name] = { name, items: [], total: 0 };
+      groups[name].items.push(a);
+      groups[name].total += parseFloat(a.netto) || 0;
+    });
+    // Merge with existing abrechnungen
+    abrechnungen.forEach(ab => {
+      if (!groups[ab.mitarbeiter_name]) {
+        groups[ab.mitarbeiter_name] = { name: ab.mitarbeiter_name, items: [], total: ab.brutto_provisionen || 0 };
+      }
+      groups[ab.mitarbeiter_name].abrechnung = ab;
+    });
+    return Object.values(groups).sort((a, b) => b.total - a.total);
+  }, [auszahlungen, abrechnungen]);
+
+  const totalAuszahlung = abrechnungen.reduce((s, a) => s + (parseFloat(a.auszahlungssumme) || 0), 0);
+  const freigegebene = abrechnungen.filter(a => a.status === 'freigegeben' || a.status === 'ausgezahlt').length;
+
+  const handleAlleErstellen = async () => {
+    if (!confirm(`Probeabrechnungen für alle ${vtGroups.filter(g => !g.abrechnung).length} VTs erstellen?`)) return;
+    window.__showToast?.('Erstelle Abrechnungen...');
+    let count = 0;
+    for (const g of vtGroups) {
+      if (g.abrechnung) continue;
+      try {
+        const kuerzel = genKuerzel(g.name);
+        const posData = g.items.map(item => ({
+          typ: 'provision', kunde: item.kunde || '—', produkt: item.produkt || 'Solar/WP',
+          original_betrag: parseFloat(item.netto) || 0, aktiv: true, zurueckgestellt: false
+        }));
+        const ber = berechneAbrechnung(posData.map(p => ({...p, override_betrag: null})), systemgebuehr, true);
+        const abrData = {
+          periode, mitarbeiter_name: g.name, kuerzel, beschaeftigungsart: 'hgb', status: 'entwurf',
+          anzahl_sales: ber.anzahlSales, brutto_provisionen: ber.bruttoProvisionen,
+          systemgebuehr_netto: ber.sgNetto, systemgebuehr_ust: ber.sgUst,
+          nettobetrag: ber.nettobetrag, ust_satz: ber.ustSatz, ust_betrag: ber.ustBetrag,
+          auszahlungssumme: ber.auszahlung, belegnummer: genBelegnummer(periode, kuerzel)
+        };
+        const saved = await sbPost('pay_abrechnungen', abrData);
+        if (posData.length && saved[0]) {
+          await sbPost('pay_abrechnungen_positionen', posData.map(p => ({ ...p, abrechnung_id: saved[0].id })));
+        }
+        count++;
+      } catch (e) { console.error(g.name, e); }
+    }
+    window.__showToast?.(`✅ ${count} Abrechnungen erstellt`);
+    loadPeriode();
+  };
+
+  return <ToastProvider>
+    <div className="app-header">
+      <div className="logo-area">
+        <div>
+          <div className="logo-text">bee<span>-doo</span> PAY</div>
+          <div className="logo-sub">Probeabrechnung</div>
+        </div>
+      </div>
+      <div className="controls-bar">
+        <select className="sel-period" value={periode} onChange={(e) => setPeriode(e.target.value)}>
+          {perioden.map(p => <option key={p} value={p}>{periodenLabel(p)}</option>)}
+        </select>
+        {vtGroups.filter(g => !g.abrechnung).length > 0 && <button className="btn btn-primary" onClick={handleAlleErstellen}>⚡ Alle erstellen ({vtGroups.filter(g => !g.abrechnung).length})</button>}
+        <a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>🏠</a>
+      </div>
+    </div>
+
+    <div className="stats-row">
+      <div className="stat-card">
+        <div className="stat-label">Periode</div>
+        <div className="stat-value">{periodenLabel(periode)}</div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-label">Vertriebler</div>
+        <div className="stat-value gold">{vtGroups.length}</div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-label">Abrechnungen</div>
+        <div className="stat-value">{abrechnungen.length} <span style={{fontSize:12,color:'#8b949e'}}>/ {vtGroups.length}</span></div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-label">Freigegeben</div>
+        <div className="stat-value green">{freigegebene}</div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-label">Gesamtsumme</div>
+        <div className="stat-value gold">{fmtEur(totalAuszahlung)}</div>
+      </div>
+    </div>
+
+    {loading ? <div className="loading"><div className="spinner"/>Lade Daten...</div> :
+      vtGroups.length === 0 ? <div className="empty-state"><div className="icon">📭</div><h3>Keine Daten für {periodenLabel(periode)}</h3><p>Für diese Periode liegen noch keine Auszahlungsdaten vor.</p></div> :
+      <div className="main-grid">
+        {vtGroups.map(g => {
+          const ab = g.abrechnung;
+          const kuerzel = ab?.kuerzel || genKuerzel(g.name);
+          const status = ab?.status || 'neu';
+          return <div key={g.name} className="vt-card" onClick={() => setSelectedVt({ name: g.name, abrechnungId: ab?.id, data: g.items })}>
+            <div className="vt-card-header">
+              <span className="vt-name">{g.name}</span>
+              <span className="vt-kuerzel">{kuerzel}</span>
+            </div>
+            <div className="vt-sales">{g.items.length} Positionen</div>
+            <div className="vt-betrag">{fmtEur(ab ? ab.auszahlungssumme : g.total)}</div>
+            <div className="vt-card-footer">
+              <span className={`badge ${status === 'neu' ? 'badge-entwurf' : status === 'entwurf' ? 'badge-entwurf' : status === 'probeabrechnung' ? 'badge-probe' : status === 'freigegeben' ? 'badge-freigegeben' : 'badge-ausgezahlt'}`}>
+                {status === 'neu' ? '⬜ Neu' : status === 'entwurf' ? '📝 Entwurf' : status === 'probeabrechnung' ? '🔍 Probe' : status === 'freigegeben' ? '✅ Freigegeben' : '💸 Ausgezahlt'}
+              </span>
+              <span style={{fontSize:11,color:'#484f58'}}>{ab ? `${ab.anzahl_sales || 0} Sales` : ''}</span>
+            </div>
+          </div>;
+        })}
+      </div>
+    }
+
+    {selectedVt && <DetailView
+      abrechnungId={selectedVt.abrechnungId}
+      periode={periode}
+      vtName={selectedVt.name}
+      vtData={selectedVt.data}
+      systemgebuehr={systemgebuehr}
+      onClose={() => setSelectedVt(null)}
+      onRefresh={loadPeriode}
+    />}
+  </ToastProvider>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
