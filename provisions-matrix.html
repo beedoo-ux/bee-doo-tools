@@ -475,8 +475,187 @@ function TabDuplikate({ duplikate, setDuplikate, toast }) {
   </div>;
 }
 
+// ═══ Tab: Provisions-Historie (Stichtagsprinzip) ═══
+function TabHistorie({ historie, setHistorie, toast }) {
+  const [adding, setAdding] = useState(false);
+  const [delId, setDelId] = useState(null);
+  const [filter, setFilter] = useState("alle");
+  const [testDate, setTestDate] = useState("");
+  const [testVT, setTestVT] = useState("");
+  const [newRow, setNewRow] = useState({ mitarbeiter_name:"", gueltig_ab:"2026-01-01", gueltig_bis:"", basis_betrag:1400, staffel_betrag:1700, staffel_schwelle:8, eigenlead_betrag:800, empfehlung_betrag:500, speicher_betrag:0, stufenbonus_berechtigt:true, ist_flat_rate:false, notiz:"" });
+
+  const save = async (h) => {
+    try {
+      await db.patch("pay_provisions_historie", `id=eq.${h.id}`, {
+        mitarbeiter_name:h.mitarbeiter_name, gueltig_ab:h.gueltig_ab, gueltig_bis:h.gueltig_bis||null,
+        basis_betrag:h.basis_betrag, staffel_betrag:h.staffel_betrag, staffel_schwelle:h.staffel_schwelle,
+        eigenlead_betrag:h.eigenlead_betrag, empfehlung_betrag:h.empfehlung_betrag, speicher_betrag:h.speicher_betrag,
+        stufenbonus_berechtigt:h.stufenbonus_berechtigt, ist_flat_rate:h.ist_flat_rate, notiz:h.notiz
+      });
+      toast("Gespeichert", "ok");
+    } catch(e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const add = async () => {
+    try {
+      const payload = { ...newRow, gueltig_bis: newRow.gueltig_bis||null, stufenbonus_berechtigt:!!newRow.stufenbonus_berechtigt, ist_flat_rate:!!newRow.ist_flat_rate };
+      const res = await db.post("pay_provisions_historie", payload);
+      setHistorie(prev => [...prev, res[0]]);
+      setAdding(false); toast("Hinzugefügt", "ok");
+    } catch(e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const remove = async (id) => {
+    try { await db.del("pay_provisions_historie", `id=eq.${id}`); setHistorie(prev => prev.filter(h => h.id !== id)); setDelId(null); toast("Gelöscht", "ok"); }
+    catch(e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const upd = (id, k, v) => setHistorie(prev => prev.map(h => h.id === id ? { ...h, [k]: v } : h));
+
+  // Group by VT name
+  const grouped = {};
+  historie.forEach(h => { if(!grouped[h.mitarbeiter_name]) grouped[h.mitarbeiter_name]=[]; grouped[h.mitarbeiter_name].push(h); });
+  Object.values(grouped).forEach(arr => arr.sort((a,b) => a.gueltig_ab?.localeCompare(b.gueltig_ab)));
+
+  // VTs with multiple periods (= Änderungen)
+  const multiPeriod = Object.entries(grouped).filter(([,arr]) => arr.length > 1);
+  const singlePeriod = Object.entries(grouped).filter(([,arr]) => arr.length === 1);
+
+  // Stichtags-Rechner
+  const findRate = (vtName, date) => {
+    const entries = grouped[vtName];
+    if (!entries) return null;
+    const sorted = [...entries].sort((a,b) => b.gueltig_ab.localeCompare(a.gueltig_ab));
+    for (const e of sorted) {
+      const ab = e.gueltig_ab?.slice(0,10);
+      const bis = e.gueltig_bis?.slice(0,10);
+      if (date >= ab && (!bis || date <= bis)) return e;
+    }
+    return sorted[sorted.length - 1]; // Fallback: ältester Eintrag
+  };
+  const testResult = testDate && testVT ? findRate(testVT, testDate) : null;
+
+  const filtered = filter === "alle" ? Object.entries(grouped) : filter === "geaendert" ? multiPeriod : singlePeriod;
+  const vtNames = Object.keys(grouped).sort();
+
+  return <div>
+    {delId && <ConfirmModal msg="Historie-Eintrag wirklich löschen?" onOk={() => remove(delId)} onCancel={() => setDelId(null)} />}
+
+    {/* Stichtags-Rechner */}
+    <div style={{ background:"var(--s2)", border:"1px solid var(--y)33", borderRadius:10, padding:16, marginBottom:16 }}>
+      <div style={{ fontWeight:700, fontSize:14, color:"var(--y)", marginBottom:10 }}>📅 Stichtags-Rechner – Welcher Satz gilt?</div>
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end" }}>
+        <div>
+          <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Vertriebler</div>
+          <select value={testVT} onChange={e=>setTestVT(e.target.value)} style={{ width:220 }}>
+            <option value="">– wählen –</option>
+            {vtNames.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>DatumErstellt (Auftrag)</div>
+          <input type="date" value={testDate} onChange={e=>setTestDate(e.target.value)} style={{ width:160 }} />
+        </div>
+        {testResult && <div style={{ background:testResult.ist_flat_rate?"#F5C50018":"var(--s3)", border:`1px solid ${testResult.ist_flat_rate?"var(--y)":"var(--bd)"}`, borderRadius:8, padding:"8px 14px" }}>
+          <div style={{ fontSize:11, color:"var(--ts)" }}>Gültiger Satz:</div>
+          <div style={{ fontWeight:700, fontSize:16, color:testResult.ist_flat_rate?"var(--y)":"var(--g)" }}>
+            {eur(testResult.basis_betrag)} {testResult.ist_flat_rate ? "flat" : `/ ${eur(testResult.staffel_betrag)} ab ${testResult.staffel_schwelle}`}
+          </div>
+          <div style={{ fontSize:10, color:"var(--ts)", marginTop:2 }}>{testResult.notiz}</div>
+        </div>}
+      </div>
+    </div>
+
+    {/* Filter + Add */}
+    <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"center" }}>
+      {[["alle","Alle","var(--ts)"],["geaendert",`⚡ Mit Änderungen (${multiPeriod.length})`,"var(--y)"],["standard","Standard","var(--b)"]].map(([k,l,c]) =>
+        <button key={k} onClick={()=>setFilter(k)} style={{ background:filter===k?`${c}22`:"var(--s3)", color:filter===k?c:"var(--ts)", border:`1px solid ${filter===k?`${c}44`:"var(--bd)"}`, borderRadius:6, padding:"5px 12px", fontSize:12, fontWeight:600 }}>{l}</button>
+      )}
+      <div style={{ flex:1 }} />
+      <Btn label="+ Neue Periode / Erhöhung" onClick={()=>setAdding(true)} icon="📈" />
+    </div>
+
+    {/* Add form */}
+    {adding && <div style={{ background:"var(--y)08", border:"1px solid var(--y)33", borderRadius:10, padding:16, marginBottom:16 }} className="fade-in">
+      <div style={{ fontWeight:700, fontSize:13, color:"var(--y)", marginBottom:10 }}>Neue Provisions-Periode anlegen</div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))", gap:8 }}>
+        {[["Mitarbeiter","mitarbeiter_name","text"],["Gültig ab","gueltig_ab","date"],["Gültig bis (leer=offen)","gueltig_bis","date"],
+          ["Basis €/Sale","basis_betrag","number"],["Staffel €/Sale","staffel_betrag","number"],["Staffel ab (999=keine)","staffel_schwelle","number"],
+          ["Eigenlead €","eigenlead_betrag","number"],["Empfehlung €","empfehlung_betrag","number"],["Speicher €","speicher_betrag","number"],
+          ["Notiz","notiz","text"]
+        ].map(([lbl,key,type]) => <div key={key}>
+          <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>{lbl}</div>
+          <EditCell value={newRow[key]} onChange={v => setNewRow(p=>({...p,[key]:v}))} type={type} />
+        </div>)}
+        <div>
+          <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Flat Rate?</div>
+          <EditCell value={newRow.ist_flat_rate?"ja":"nein"} onChange={v=>setNewRow(p=>({...p,ist_flat_rate:v==="ja"}))} type="select" options={[{value:"ja",label:"Ja – Flat"},{value:"nein",label:"Nein – Staffel"}]} />
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:8, marginTop:12 }}>
+        <Btn label="Anlegen" color="var(--g)" onClick={add} icon="✓" />
+        <Btn label="Abbrechen" color="var(--ts)" onClick={()=>setAdding(false)} />
+      </div>
+    </div>}
+
+    {/* Timeline per VT */}
+    <div style={{ display:"grid", gap:12 }}>
+      {filtered.sort((a,b) => a[0].localeCompare(b[0])).map(([name, entries]) => {
+        const hasChange = entries.length > 1;
+        return <div key={name} style={{ background:"var(--s2)", border:`1px solid ${hasChange?"var(--y)33":"var(--bd)"}`, borderRadius:10, padding:14, borderLeft:hasChange?"3px solid var(--y)":"3px solid var(--bd)" }} className="fade-in">
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontWeight:700, fontSize:14 }}>{name}</span>
+              {hasChange && <span className="badge b-y">⚡ {entries.length} Perioden</span>}
+              {entries.some(e=>e.ist_flat_rate) && <span className="badge b-o">Flat Rate</span>}
+            </div>
+          </div>
+
+          {/* Timeline entries */}
+          <div style={{ display:"grid", gap:6 }}>
+            {entries.map((h, i) => <div key={h.id} style={{ display:"grid", gridTemplateColumns:"1fr 1fr auto", gap:8, alignItems:"center", background:i===entries.length-1?"var(--s3)":"var(--s1)", borderRadius:6, padding:"8px 12px", border:`1px solid ${i===entries.length-1?"var(--y)22":"var(--bd)"}` }}>
+              <div>
+                <div style={{ display:"flex", gap:6, alignItems:"center", marginBottom:4 }}>
+                  <span style={{ fontSize:11, color:"var(--ts)", fontWeight:600 }}>
+                    {h.gueltig_ab?.slice(0,10)} → {h.gueltig_bis?.slice(0,10) || "offen"}
+                  </span>
+                  {i === entries.length-1 && <span className="badge b-g" style={{ fontSize:9 }}>AKTUELL</span>}
+                </div>
+                <div style={{ fontSize:12, color:"var(--ts)" }}>{h.notiz || "–"}</div>
+              </div>
+              <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:9, color:"var(--ts)", textTransform:"uppercase" }}>Basis</div>
+                  <div style={{ fontWeight:700, color:h.ist_flat_rate?"var(--y)":"var(--tx)" }}>{eur(h.basis_betrag)}</div>
+                </div>
+                {!h.ist_flat_rate && <div style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:9, color:"var(--ts)", textTransform:"uppercase" }}>Staffel</div>
+                  <div style={{ fontWeight:600 }}>{eur(h.staffel_betrag)} ab {h.staffel_schwelle}</div>
+                </div>}
+                {+h.eigenlead_betrag > 0 && <div style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:9, color:"var(--ts)", textTransform:"uppercase" }}>Eigenlead</div>
+                  <div style={{ fontWeight:600, color:"var(--t)" }}>{eur(h.eigenlead_betrag)}</div>
+                </div>}
+              </div>
+              <div style={{ display:"flex", gap:4 }}>
+                <Btn label="💾" color="var(--g)" onClick={()=>save(h)} small />
+                <Btn label="🗑️" color="var(--r)" onClick={()=>setDelId(h.id)} small />
+              </div>
+            </div>)}
+          </div>
+        </div>;
+      })}
+    </div>
+
+    {/* Info-Box */}
+    <div style={{ marginTop:16, background:"var(--s2)", border:"1px solid var(--bd)", borderRadius:8, padding:12 }}>
+      <div style={{ fontSize:12, fontWeight:600, color:"var(--y)", marginBottom:4 }}>ℹ️ Stichtagsprinzip</div>
+      <div style={{ fontSize:11, color:"var(--ts)", lineHeight:1.6 }}>
+        Der Provisionssatz wird durch das <b style={{ color:"var(--tx)" }}>DatumErstellt</b> des Auftrags bestimmt, nicht durch den Auszahlungszeitpunkt. Wenn ein Auftrag z.B. am 15.12.2025 erstellt wurde, aber erst im Feb 2026 auszahlungsrelevant wird, gilt der Satz der am 15.12.2025 aktiv war. Bei Provisionserhöhungen: neue Periode anlegen mit gueltig_ab = Änderungsdatum und beim alten Eintrag gueltig_bis = Tag davor setzen.
+      </div>
+    </div>
+  </div>;
+}
+
 // ═══ Tab: Übersicht (Dashboard) ═══
-function TabOverview({ regeln, sonder, stufen, teamBonus, sperr, duplikate }) {
+function TabOverview({ regeln, sonder, stufen, teamBonus, sperr, duplikate, historie }) {
   const stats = [
     { label: "Provisions-Regeln", val: regeln.length, icon: "📋", color: "var(--b)", sub: `${regeln.filter(r => r.staffel_schwelle < 999).length} mit Staffel` },
     { label: "Sonderprovisionen", val: sonder.length, icon: "⭐", color: "var(--y)", sub: `${sonder.filter(s => s.aktiv).length} aktiv` },
@@ -484,6 +663,7 @@ function TabOverview({ regeln, sonder, stufen, teamBonus, sperr, duplikate }) {
     { label: "Team-Bonus", val: teamBonus.length, icon: "👥", color: "var(--t)", sub: teamBonus.map(t => `${t.mitarbeiter_name}: ${eur(t.betrag_pro_sale)}/Sale`).join(", ") || "–" },
     { label: "Sperrlisten", val: sperr.length, icon: "🔒", color: "var(--r)", sub: `${sperr.filter(s => s.status === "gesperrt").length} gesperrt, ${sperr.filter(s => s.status === "ausgezahlt").length} ausgezahlt` },
     { label: "Duplikate", val: duplikate.length, icon: "⚠️", color: "var(--o)", sub: `${duplikate.filter(d => d.status === "entscheidung_noetig" || d.status === "offen").length} offen` },
+    { label: "Provisions-Historie", val: historie.length, icon: "📜", color: "var(--p)", sub: (() => { const g={}; historie.forEach(h=>{if(!g[h.mitarbeiter_name])g[h.mitarbeiter_name]=0;g[h.mitarbeiter_name]++;}); const multi=Object.values(g).filter(c=>c>1).length; return `${Object.keys(g).length} VTs, ${multi} mit Änderungen`; })() },
   ];
 
   return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
@@ -512,21 +692,23 @@ function App() {
   const [teamBonus, setTeamBonus] = useState([]);
   const [sperrData, setSperrData] = useState([]);
   const [duplikateData, setDuplikateData] = useState([]);
+  const [historieData, setHistorieData] = useState([]);
 
   const toast = (msg, type = "ok") => { setToastMsg(msg); setToastType(type); setTimeout(() => setToastMsg(null), 3000); };
 
   useEffect(() => {
     (async () => {
       try {
-        const [r, s, st, tb, sp, dp] = await Promise.all([
+        const [r, s, st, tb, sp, dp, hi] = await Promise.all([
           db.get("provisions_regeln", "?aktiv=eq.true&order=modell_name.asc"),
           db.get("pay_sonderprovisionen", "?order=mitarbeiter_name.asc").catch(() => []),
           db.get("pay_stufenbonus", "?order=min_anlagen.asc").catch(() => []),
           db.get("pay_team_bonus", "?order=mitarbeiter_name.asc").catch(() => []),
           db.get("pay_sperrlisten", "?order=auftrag_nr.asc").catch(() => []),
           db.get("pay_duplikate", "?order=kunde_name.asc").catch(() => []),
+          db.get("pay_provisions_historie", "?order=mitarbeiter_name.asc,gueltig_ab.asc").catch(() => []),
         ]);
-        setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp);
+        setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp); setHistorieData(hi);
         setLoading(false);
       } catch (e) {
         setError(e.message);
@@ -543,6 +725,7 @@ function App() {
     { key: "team", label: "👥 Team-Bonus", color: "var(--t)" },
     { key: "sperr", label: "🔒 Sperrlisten", color: "var(--r)" },
     { key: "duplikate", label: "⚠️ Duplikate", color: "var(--o)" },
+    { key: "historie", label: "📜 Historie", color: "var(--p)" },
   ];
 
   const tabDescriptions = {
@@ -553,6 +736,7 @@ function App() {
     team: `${teamBonus.length} Team-Bonus-Regeln – €/Sale für Team-Leiter`,
     sperr: `${sperrData.length} Sperrlisten-Einträge – Grundbuch, MA-Abbruch, CRM-Storno`,
     duplikate: `${duplikateData.length} Duplikat-Verdachtsfälle – gleicher Kunde + kWp + PLZ`,
+    historie: `${historieData.length} Provisions-Perioden – Stichtagsprinzip: DatumErstellt bestimmt den Satz`,
   };
 
   if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", flexDirection: "column", gap: 16 }}>
@@ -605,13 +789,14 @@ function App() {
 
       {/* Content */}
       <div className="fade-in" key={tab}>
-        {tab === "uebersicht" && <TabOverview regeln={regeln} sonder={sonder} stufen={stufen} teamBonus={teamBonus} sperr={sperrData} duplikate={duplikateData} />}
+        {tab === "uebersicht" && <TabOverview regeln={regeln} sonder={sonder} stufen={stufen} teamBonus={teamBonus} sperr={sperrData} duplikate={duplikateData} historie={historieData} />}
         {tab === "regeln" && <TabRegeln regeln={regeln} setRegeln={setRegeln} toast={toast} />}
         {tab === "sonder" && <TabSonder sonder={sonder} setSonder={setSonder} toast={toast} />}
         {tab === "stufen" && <TabStufen stufen={stufen} setStufen={setStufen} toast={toast} />}
         {tab === "team" && <TabTeam team={teamBonus} setTeam={setTeamBonus} toast={toast} />}
         {tab === "sperr" && <TabSperr sperr={sperrData} setSperr={setSperrData} toast={toast} />}
         {tab === "duplikate" && <TabDuplikate duplikate={duplikateData} setDuplikate={setDuplikateData} toast={toast} />}
+        {tab === "historie" && <TabHistorie historie={historieData} setHistorie={setHistorieData} toast={toast} />}
       </div>
     </div>
 
