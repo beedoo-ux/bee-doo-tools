@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>bee-doo PAY – Provisions-Matrix</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0c14;--s1:#0f1119;--s2:#14161f;--s3:#1a1d27;--s4:#222531;--bd:#2a2d37;--tx:#e2e4ea;--ts:#8b95a5;--y:#F5C500;--g:#34d399;--r:#f87171;--b:#60a5fa;--o:#fb923c;--t:#2dd4bf;--p:#a78bfa}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--s1)}
+::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
+input,select,textarea{font-family:inherit;font-size:13px;background:var(--s1);color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:6px 10px;outline:none;transition:border .2s}
+input:focus,select:focus,textarea:focus{border-color:var(--y)}
+select{cursor:pointer}
+button{font-family:inherit;cursor:pointer;border:none;outline:none;transition:all .2s}
+table{width:100%;border-collapse:collapse}
+th{background:var(--s3);color:var(--ts);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;padding:10px 12px;text-align:left;position:sticky;top:0;z-index:2;border-bottom:2px solid var(--bd)}
+td{padding:8px 12px;border-bottom:1px solid var(--bd);font-size:13px;vertical-align:middle}
+tr:hover td{background:var(--s2)}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.b-y{background:#F5C50018;color:var(--y)}
+.b-g{background:#34d39918;color:var(--g)}
+.b-r{background:#f8717118;color:var(--r)}
+.b-b{background:#60a5fa18;color:var(--b)}
+.b-o{background:#fb923c18;color:var(--o)}
+.b-t{background:#2dd4bf18;color:var(--t)}
+.b-p{background:#a78bfa18;color:var(--p)}
+.eur{font-variant-numeric:tabular-nums;text-align:right;font-weight:600}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .3s ease}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin .8s linear infinite}
+@media(max-width:768px){
+  .desktop-only{display:none!important}
+  .tab-bar{flex-wrap:wrap;gap:4px!important}
+  .tab-btn{font-size:11px!important;padding:6px 10px!important}
+  th,td{padding:6px 8px;font-size:11px}
+  .hdr-title{font-size:16px!important}
+}
+@media(max-width:480px){
+  .tab-btn{font-size:10px!important;padding:5px 8px!important}
+  th,td{padding:4px 6px;font-size:10px}
+  input,select{font-size:11px;padding:4px 7px}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ═══ Config ═══
+const SB = "https://hqzpemfaljxcysyqssng.supabase.co";
+const AK = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const H = { apikey: AK, Authorization: `Bearer ${AK}`, "Content-Type": "application/json" };
+
+const db = {
+  get: async (t, q = "") => { const r = await fetch(`${SB}/rest/v1/${t}${q}`, { headers: H }); if (!r.ok) throw new Error(await r.text()); return r.json(); },
+  post: async (t, b) => { const r = await fetch(`${SB}/rest/v1/${t}`, { method: "POST", headers: { ...H, Prefer: "return=representation" }, body: JSON.stringify(b) }); if (!r.ok) throw new Error(await r.text()); return r.json(); },
+  patch: async (t, w, b) => { const r = await fetch(`${SB}/rest/v1/${t}?${w}`, { method: "PATCH", headers: { ...H, Prefer: "return=representation" }, body: JSON.stringify(b) }); if (!r.ok) throw new Error(await r.text()); return r.json(); },
+  del: async (t, w) => { const r = await fetch(`${SB}/rest/v1/${t}?${w}`, { method: "DELETE", headers: H }); if (!r.ok) throw new Error(await r.text()); }
+};
+
+const eur = v => v == null ? "–" : Number(v).toLocaleString("de-DE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " €";
+const ts = () => new Date().toISOString();
+
+// ═══ Components ═══
+function Toast({ msg, type }) {
+  if (!msg) return null;
+  const c = type === "ok" ? "var(--g)" : type === "err" ? "var(--r)" : "var(--y)";
+  return <div style={{ position: "fixed", bottom: 20, right: 20, background: "var(--s3)", border: `1px solid ${c}`, color: c, padding: "10px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 999, boxShadow: "0 8px 24px #0008" }} className="fade-in">{msg}</div>;
+}
+
+function Btn({ label, color, onClick, small, disabled, icon }) {
+  return <button disabled={disabled} onClick={onClick} style={{ background: disabled ? "var(--bd)" : `${color || "var(--y)"}18`, color: disabled ? "var(--ts)" : color || "var(--y)", border: `1px solid ${disabled ? "var(--bd)" : `${color || "var(--y)"}44`}`, borderRadius: 6, padding: small ? "4px 10px" : "7px 16px", fontSize: small ? 11 : 13, fontWeight: 600, opacity: disabled ? .5 : 1 }}>{icon && <span style={{ marginRight: 4 }}>{icon}</span>}{label}</button>;
+}
+
+function EditCell({ value, onChange, type = "text", options, width, align }) {
+  if (type === "select") {
+    return <select value={value || ""} onChange={e => onChange(e.target.value)} style={{ width: width || "100%", textAlign: align }}>
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>;
+  }
+  return <input type={type === "number" ? "number" : "text"} value={value ?? ""} onChange={e => onChange(type === "number" ? (e.target.value === "" ? null : +e.target.value) : e.target.value)} style={{ width: width || "100%", textAlign: align || (type === "number" ? "right" : "left") }} />;
+}
+
+function ConfirmModal({ msg, onOk, onCancel }) {
+  return <div style={{ position: "fixed", inset: 0, background: "#000a", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+    <div style={{ background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 12, padding: 24, maxWidth: 400, width: "90%" }} className="fade-in">
+      <div style={{ fontSize: 14, marginBottom: 16, lineHeight: 1.5 }}>{msg}</div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <Btn label="Abbrechen" color="var(--ts)" onClick={onCancel} small />
+        <Btn label="Löschen" color="var(--r)" onClick={onOk} small icon="🗑️" />
+      </div>
+    </div>
+  </div>;
+}
+
+// ═══ Tab: Provisions-Regeln ═══
+function TabRegeln({ regeln, setRegeln, toast }) {
+  const save = async (r) => {
+    try {
+      await db.patch("provisions_regeln", `id=eq.${r.id}`, {
+        basis_betrag_sale: r.basis_betrag_sale, staffel_betrag_sale: r.staffel_betrag_sale,
+        staffel_schwelle: r.staffel_schwelle, betrag_eigenlead: r.betrag_eigenlead,
+        betrag_empfehlung: r.betrag_empfehlung, betrag_speicher: r.betrag_speicher,
+        betrag_termin_sf: r.betrag_termin_sf, betrag_lead: r.betrag_lead,
+        betrag_sondereinsatz: r.betrag_sondereinsatz, rueckwirkend: r.rueckwirkend,
+        geaendert_am: ts()
+      });
+      toast("Regel gespeichert", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const upd = (id, k, v) => setRegeln(prev => prev.map(r => r.id === id ? { ...r, [k]: v } : r));
+
+  return <div>
+    <div style={{ display: "grid", gap: 16 }}>
+      {regeln.map(r => <div key={r.id} style={{ background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 16 }} className="fade-in">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--y)" }}>{r.modell_name}</div>
+            <span className="badge b-b">{r.mitarbeiter_typ}</span>
+          </div>
+          <Btn label="Speichern" onClick={() => save(r)} small icon="💾" />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 8 }}>
+          {[
+            ["Basis €/Sale", "basis_betrag_sale", "number"],
+            ["Staffel €/Sale", "staffel_betrag_sale", "number"],
+            ["Staffel ab", "staffel_schwelle", "number"],
+            ["Eigenlead €", "betrag_eigenlead", "number"],
+            ["Empfehlung €", "betrag_empfehlung", "number"],
+            ["Speicher €", "betrag_speicher", "number"],
+            ["Termin SF €", "betrag_termin_sf", "number"],
+            ["Lead €", "betrag_lead", "number"],
+            ["Sondereinsatz €", "betrag_sondereinsatz", "number"],
+          ].map(([lbl, key, type]) => <div key={key}>
+            <div style={{ fontSize: 10, color: "var(--ts)", marginBottom: 3, textTransform: "uppercase", fontWeight: 600 }}>{lbl}</div>
+            <EditCell value={r[key]} onChange={v => upd(r.id, key, v)} type={type} />
+          </div>)}
+          <div>
+            <div style={{ fontSize: 10, color: "var(--ts)", marginBottom: 3, textTransform: "uppercase", fontWeight: 600 }}>Rückwirkend</div>
+            <EditCell value={r.rueckwirkend ? "ja" : "nein"} onChange={v => upd(r.id, "rueckwirkend", v === "ja")} type="select" options={[{ value: "ja", label: "✓ Ja" }, { value: "nein", label: "✗ Nein" }]} />
+          </div>
+        </div>
+      </div>)}
+    </div>
+  </div>;
+}
+
+// ═══ Tab: Sonderprovisionen ═══
+function TabSonder({ sonder, setSonder, toast }) {
+  const [adding, setAdding] = useState(false);
+  const [newRow, setNewRow] = useState({ mitarbeiter_name: "", typ: "flat_rate", betrag: 0, beschreibung: "", gueltig_ab: "2026-01-01" });
+  const [delId, setDelId] = useState(null);
+
+  const save = async (s) => {
+    try {
+      await db.patch("pay_sonderprovisionen", `id=eq.${s.id}`, {
+        mitarbeiter_name: s.mitarbeiter_name, typ: s.typ, betrag: s.betrag,
+        beschreibung: s.beschreibung, gueltig_ab: s.gueltig_ab, gueltig_bis: s.gueltig_bis,
+        aktiv: s.aktiv, geaendert_am: ts()
+      });
+      toast("Gespeichert", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const add = async () => {
+    try {
+      const res = await db.post("pay_sonderprovisionen", { ...newRow, aktiv: true });
+      setSonder(prev => [...prev, res[0]]);
+      setAdding(false);
+      setNewRow({ mitarbeiter_name: "", typ: "flat_rate", betrag: 0, beschreibung: "", gueltig_ab: "2026-01-01" });
+      toast("Hinzugefügt", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const remove = async (id) => {
+    try {
+      await db.del("pay_sonderprovisionen", `id=eq.${id}`);
+      setSonder(prev => prev.filter(s => s.id !== id));
+      setDelId(null);
+      toast("Gelöscht", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const upd = (id, k, v) => setSonder(prev => prev.map(s => s.id === id ? { ...s, [k]: v } : s));
+
+  const typLabels = { flat_rate: "Flat Rate", eigenlead_override: "Eigenlead Override", empfehlung_override: "Empfehlung Override", speicher_override: "Speicher Override" };
+  const typOpts = Object.entries(typLabels).map(([v, l]) => ({ value: v, label: l }));
+
+  return <div>
+    {delId && <ConfirmModal msg="Sonderprovision wirklich löschen?" onOk={() => remove(delId)} onCancel={() => setDelId(null)} />}
+    <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>
+      <Btn label="+ Neue Sonderprovision" onClick={() => setAdding(true)} icon="⭐" />
+    </div>
+    <div style={{ overflowX: "auto" }}>
+      <table>
+        <thead><tr>
+          <th>Mitarbeiter</th><th>Typ</th><th style={{ textAlign: "right" }}>Betrag</th>
+          <th>Beschreibung</th><th>Gültig ab</th><th>Gültig bis</th><th>Aktiv</th><th style={{ width: 100 }}>Aktionen</th>
+        </tr></thead>
+        <tbody>
+          {adding && <tr style={{ background: "var(--y)08" }}>
+            <td><EditCell value={newRow.mitarbeiter_name} onChange={v => setNewRow(p => ({ ...p, mitarbeiter_name: v }))} /></td>
+            <td><EditCell value={newRow.typ} onChange={v => setNewRow(p => ({ ...p, typ: v }))} type="select" options={typOpts} /></td>
+            <td><EditCell value={newRow.betrag} onChange={v => setNewRow(p => ({ ...p, betrag: v }))} type="number" /></td>
+            <td><EditCell value={newRow.beschreibung} onChange={v => setNewRow(p => ({ ...p, beschreibung: v }))} /></td>
+            <td><EditCell value={newRow.gueltig_ab} onChange={v => setNewRow(p => ({ ...p, gueltig_ab: v }))} type="date" /></td>
+            <td>–</td>
+            <td><span className="badge b-g">Ja</span></td>
+            <td style={{ display: "flex", gap: 4 }}>
+              <Btn label="✓" color="var(--g)" onClick={add} small />
+              <Btn label="✗" color="var(--r)" onClick={() => setAdding(false)} small />
+            </td>
+          </tr>}
+          {sonder.map(s => <tr key={s.id}>
+            <td style={{ fontWeight: 600 }}>{s.mitarbeiter_name}</td>
+            <td><EditCell value={s.typ} onChange={v => upd(s.id, "typ", v)} type="select" options={typOpts} width="140px" /></td>
+            <td><EditCell value={s.betrag} onChange={v => upd(s.id, "betrag", v)} type="number" width="90px" /></td>
+            <td><EditCell value={s.beschreibung} onChange={v => upd(s.id, "beschreibung", v)} /></td>
+            <td><EditCell value={s.gueltig_ab?.slice(0, 10)} onChange={v => upd(s.id, "gueltig_ab", v)} /></td>
+            <td><EditCell value={s.gueltig_bis?.slice(0, 10) || ""} onChange={v => upd(s.id, "gueltig_bis", v || null)} /></td>
+            <td><span className={`badge ${s.aktiv ? "b-g" : "b-r"}`} style={{ cursor: "pointer" }} onClick={() => upd(s.id, "aktiv", !s.aktiv)}>{s.aktiv ? "✓ Ja" : "✗ Nein"}</span></td>
+            <td style={{ display: "flex", gap: 4 }}>
+              <Btn label="💾" color="var(--g)" onClick={() => save(s)} small />
+              <Btn label="🗑️" color="var(--r)" onClick={() => setDelId(s.id)} small />
+            </td>
+          </tr>)}
+          {!sonder.length && !adding && <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--ts)", padding: 24 }}>Keine Sonderprovisionen vorhanden</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  </div>;
+}
+
+// ═══ Tab: Stufenbonus ═══
+function TabStufen({ stufen, setStufen, toast }) {
+  const [adding, setAdding] = useState(false);
+  const [newRow, setNewRow] = useState({ stufe_name: "", min_anlagen: 10, bonus_betrag: 2000, gilt_fuer: "hgb_vertriebler_haupt" });
+
+  const save = async (s) => {
+    try {
+      await db.patch("pay_stufenbonus", `id=eq.${s.id}`, { stufe_name: s.stufe_name, min_anlagen: s.min_anlagen, bonus_betrag: s.bonus_betrag, gilt_fuer: s.gilt_fuer, aktiv: s.aktiv });
+      toast("Gespeichert", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const add = async () => {
+    try {
+      const res = await db.post("pay_stufenbonus", { ...newRow, aktiv: true });
+      setStufen(prev => [...prev, res[0]]);
+      setAdding(false); toast("Hinzugefügt", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const upd = (id, k, v) => setStufen(prev => prev.map(s => s.id === id ? { ...s, [k]: v } : s));
+
+  return <div>
+    <div style={{ marginBottom: 12 }}><Btn label="+ Neue Stufe" onClick={() => setAdding(true)} icon="🏆" /></div>
+    <div style={{ overflowX: "auto" }}>
+      <table>
+        <thead><tr><th>Stufe</th><th style={{ textAlign: "right" }}>Min. Anlagen</th><th style={{ textAlign: "right" }}>Bonus</th><th>Gilt für</th><th>Aktiv</th><th style={{ width: 80 }}>Aktion</th></tr></thead>
+        <tbody>
+          {adding && <tr style={{ background: "var(--y)08" }}>
+            <td><EditCell value={newRow.stufe_name} onChange={v => setNewRow(p => ({ ...p, stufe_name: v }))} /></td>
+            <td><EditCell value={newRow.min_anlagen} onChange={v => setNewRow(p => ({ ...p, min_anlagen: v }))} type="number" width="80px" /></td>
+            <td><EditCell value={newRow.bonus_betrag} onChange={v => setNewRow(p => ({ ...p, bonus_betrag: v }))} type="number" width="100px" /></td>
+            <td><EditCell value={newRow.gilt_fuer} onChange={v => setNewRow(p => ({ ...p, gilt_fuer: v }))} /></td>
+            <td><span className="badge b-g">Ja</span></td>
+            <td><Btn label="✓" color="var(--g)" onClick={add} small /> <Btn label="✗" color="var(--r)" onClick={() => setAdding(false)} small /></td>
+          </tr>}
+          {stufen.map(s => <tr key={s.id}>
+            <td><EditCell value={s.stufe_name} onChange={v => upd(s.id, "stufe_name", v)} width="120px" /></td>
+            <td><EditCell value={s.min_anlagen} onChange={v => upd(s.id, "min_anlagen", v)} type="number" width="80px" /></td>
+            <td className="eur" style={{ color: "var(--y)" }}><EditCell value={s.bonus_betrag} onChange={v => upd(s.id, "bonus_betrag", v)} type="number" width="100px" align="right" /></td>
+            <td><EditCell value={s.gilt_fuer} onChange={v => upd(s.id, "gilt_fuer", v)} width="180px" /></td>
+            <td><span className={`badge ${s.aktiv ? "b-g" : "b-r"}`} style={{ cursor: "pointer" }} onClick={() => upd(s.id, "aktiv", !s.aktiv)}>{s.aktiv ? "✓" : "✗"}</span></td>
+            <td><Btn label="💾" color="var(--g)" onClick={() => save(s)} small /></td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+  </div>;
+}
+
+// ═══ Tab: Team-Bonus ═══
+function TabTeam({ team, setTeam, toast }) {
+  const [adding, setAdding] = useState(false);
+  const [newRow, setNewRow] = useState({ mitarbeiter_name: "", betrag_pro_sale: 200, bezugsgruppe: "alle_vt", team_mitglieder: "", gueltig_ab: "2026-01-01" });
+
+  const save = async (t) => {
+    try {
+      const tm = typeof t.team_mitglieder === "string" ? (t.team_mitglieder ? t.team_mitglieder.split(",").map(s => s.trim()) : null) : t.team_mitglieder;
+      await db.patch("pay_team_bonus", `id=eq.${t.id}`, {
+        mitarbeiter_name: t.mitarbeiter_name, betrag_pro_sale: t.betrag_pro_sale,
+        bezugsgruppe: t.bezugsgruppe, team_mitglieder: tm,
+        gueltig_ab: t.gueltig_ab, aktiv: t.aktiv
+      });
+      toast("Gespeichert", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const add = async () => {
+    try {
+      const tm = newRow.team_mitglieder ? newRow.team_mitglieder.split(",").map(s => s.trim()) : null;
+      const res = await db.post("pay_team_bonus", { ...newRow, team_mitglieder: tm, aktiv: true });
+      setTeam(prev => [...prev, res[0]]);
+      setAdding(false); toast("Hinzugefügt", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const upd = (id, k, v) => setTeam(prev => prev.map(t => t.id === id ? { ...t, [k]: v } : t));
+
+  const grpOpts = [{ value: "alle_vt", label: "Alle VT" }, { value: "eigenes_team", label: "Eigenes Team" }, { value: "custom", label: "Custom" }];
+
+  return <div>
+    <div style={{ marginBottom: 12 }}><Btn label="+ Neuer Team-Bonus" onClick={() => setAdding(true)} icon="👥" /></div>
+    <div style={{ overflowX: "auto" }}>
+      <table>
+        <thead><tr><th>Mitarbeiter</th><th style={{ textAlign: "right" }}>€/Sale</th><th>Bezugsgruppe</th><th>Team-Mitglieder</th><th>Gültig ab</th><th>Aktiv</th><th style={{ width: 80 }}>Aktion</th></tr></thead>
+        <tbody>
+          {adding && <tr style={{ background: "var(--y)08" }}>
+            <td><EditCell value={newRow.mitarbeiter_name} onChange={v => setNewRow(p => ({ ...p, mitarbeiter_name: v }))} /></td>
+            <td><EditCell value={newRow.betrag_pro_sale} onChange={v => setNewRow(p => ({ ...p, betrag_pro_sale: v }))} type="number" width="80px" /></td>
+            <td><EditCell value={newRow.bezugsgruppe} onChange={v => setNewRow(p => ({ ...p, bezugsgruppe: v }))} type="select" options={grpOpts} /></td>
+            <td><EditCell value={newRow.team_mitglieder} onChange={v => setNewRow(p => ({ ...p, team_mitglieder: v }))} /></td>
+            <td><EditCell value={newRow.gueltig_ab} onChange={v => setNewRow(p => ({ ...p, gueltig_ab: v }))} /></td>
+            <td><span className="badge b-g">Ja</span></td>
+            <td><Btn label="✓" color="var(--g)" onClick={add} small /></td>
+          </tr>}
+          {team.map(t => <tr key={t.id}>
+            <td style={{ fontWeight: 600 }}>{t.mitarbeiter_name}</td>
+            <td className="eur" style={{ color: "var(--y)" }}><EditCell value={t.betrag_pro_sale} onChange={v => upd(t.id, "betrag_pro_sale", v)} type="number" width="80px" align="right" /></td>
+            <td><EditCell value={t.bezugsgruppe} onChange={v => upd(t.id, "bezugsgruppe", v)} type="select" options={grpOpts} width="140px" /></td>
+            <td style={{ fontSize: 11, color: "var(--ts)" }}>
+              {Array.isArray(t.team_mitglieder) ? t.team_mitglieder.join(", ") : (t.team_mitglieder || "–")}
+            </td>
+            <td>{t.gueltig_ab?.slice(0, 10)}</td>
+            <td><span className={`badge ${t.aktiv ? "b-g" : "b-r"}`} style={{ cursor: "pointer" }} onClick={() => upd(t.id, "aktiv", !t.aktiv)}>{t.aktiv ? "✓" : "✗"}</span></td>
+            <td><Btn label="💾" color="var(--g)" onClick={() => save(t)} small /></td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+  </div>;
+}
+
+// ═══ Tab: Sperrlisten ═══
+function TabSperr({ sperr, setSperr, toast }) {
+  const [adding, setAdding] = useState(false);
+  const [filter, setFilter] = useState("alle");
+  const [newRow, setNewRow] = useState({ auftrag_nr: "", kunde_name: "", vertriebler: "", typ: "grundbuch", status: "gesperrt", betrag: 0, notiz: "" });
+  const [delId, setDelId] = useState(null);
+
+  const save = async (s) => {
+    try {
+      await db.patch("pay_sperrlisten", `id=eq.${s.id}`, {
+        auftrag_nr: s.auftrag_nr, kunde_name: s.kunde_name, vertriebler: s.vertriebler,
+        typ: s.typ, status: s.status, betrag: s.betrag, notiz: s.notiz, geaendert_am: ts()
+      });
+      toast("Gespeichert", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const add = async () => {
+    try {
+      const res = await db.post("pay_sperrlisten", newRow);
+      setSperr(prev => [...prev, res[0]]);
+      setAdding(false); toast("Hinzugefügt", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const remove = async (id) => {
+    try { await db.del("pay_sperrlisten", `id=eq.${id}`); setSperr(prev => prev.filter(s => s.id !== id)); setDelId(null); toast("Gelöscht", "ok"); }
+    catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const upd = (id, k, v) => setSperr(prev => prev.map(s => s.id === id ? { ...s, [k]: v } : s));
+
+  const typOpts = [{ value: "grundbuch", label: "🔒 Grundbuch" }, { value: "montage_abbruch", label: "❌ MA-Abbruch" }, { value: "crm_storno", label: "⚠️ CRM-Storno" }, { value: "sonstige", label: "📌 Sonstige" }];
+  const statusOpts = [{ value: "gesperrt", label: "🔒 Gesperrt" }, { value: "ausgezahlt", label: "💰 Ausgezahlt" }, { value: "rueckforderung", label: "↩️ Rückford." }, { value: "geklaert", label: "✅ Geklärt" }];
+  const typLabel = { grundbuch: "🔒 Grundbuch", montage_abbruch: "❌ MA-Abbruch", crm_storno: "⚠️ CRM-Storno", sonstige: "📌 Sonstige" };
+  const statusLabel = { gesperrt: "b-r", ausgezahlt: "b-o", rueckforderung: "b-p", geklaert: "b-g" };
+
+  const filtered = filter === "alle" ? sperr : sperr.filter(s => s.typ === filter);
+  const counts = { alle: sperr.length, grundbuch: sperr.filter(s => s.typ === "grundbuch").length, montage_abbruch: sperr.filter(s => s.typ === "montage_abbruch").length, crm_storno: sperr.filter(s => s.typ === "crm_storno").length };
+
+  return <div>
+    {delId && <ConfirmModal msg="Sperrlisten-Eintrag wirklich löschen?" onOk={() => remove(delId)} onCancel={() => setDelId(null)} />}
+    <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+      {[["alle", "Alle", "var(--ts)"], ["grundbuch", "🔒 Grundbuch", "var(--r)"], ["montage_abbruch", "❌ MA-Abbruch", "var(--o)"], ["crm_storno", "⚠️ CRM-Storno", "var(--p)"]].map(([k, l, c]) =>
+        <button key={k} onClick={() => setFilter(k)} style={{ background: filter === k ? `${c}22` : "var(--s3)", color: filter === k ? c : "var(--ts)", border: `1px solid ${filter === k ? `${c}44` : "var(--bd)"}`, borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600 }}>
+          {l} <span style={{ background: `${c}22`, padding: "1px 6px", borderRadius: 4, fontSize: 10, marginLeft: 4 }}>{counts[k]}</span>
+        </button>
+      )}
+      <div style={{ flex: 1 }} />
+      <Btn label="+ Neue Sperre" onClick={() => setAdding(true)} color="var(--r)" icon="🔒" />
+    </div>
+    <div style={{ overflowX: "auto" }}>
+      <table>
+        <thead><tr><th>AN Nr.</th><th>Kunde</th><th>Vertriebler</th><th>Typ</th><th>Status</th><th style={{ textAlign: "right" }}>Betrag</th><th>Notiz</th><th style={{ width: 100 }}>Aktionen</th></tr></thead>
+        <tbody>
+          {adding && <tr style={{ background: "var(--r)08" }}>
+            <td><EditCell value={newRow.auftrag_nr} onChange={v => setNewRow(p => ({ ...p, auftrag_nr: v }))} width="70px" /></td>
+            <td><EditCell value={newRow.kunde_name} onChange={v => setNewRow(p => ({ ...p, kunde_name: v }))} /></td>
+            <td><EditCell value={newRow.vertriebler} onChange={v => setNewRow(p => ({ ...p, vertriebler: v }))} /></td>
+            <td><EditCell value={newRow.typ} onChange={v => setNewRow(p => ({ ...p, typ: v }))} type="select" options={typOpts} /></td>
+            <td><EditCell value={newRow.status} onChange={v => setNewRow(p => ({ ...p, status: v }))} type="select" options={statusOpts} /></td>
+            <td><EditCell value={newRow.betrag} onChange={v => setNewRow(p => ({ ...p, betrag: v }))} type="number" width="80px" /></td>
+            <td><EditCell value={newRow.notiz} onChange={v => setNewRow(p => ({ ...p, notiz: v }))} /></td>
+            <td><Btn label="✓" color="var(--g)" onClick={add} small /> <Btn label="✗" color="var(--r)" onClick={() => setAdding(false)} small /></td>
+          </tr>}
+          {filtered.map(s => <tr key={s.id}>
+            <td style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{s.auftrag_nr}</td>
+            <td>{s.kunde_name}</td>
+            <td>{s.vertriebler || "–"}</td>
+            <td><EditCell value={s.typ} onChange={v => upd(s.id, "typ", v)} type="select" options={typOpts} width="140px" /></td>
+            <td><EditCell value={s.status} onChange={v => upd(s.id, "status", v)} type="select" options={statusOpts} width="130px" /></td>
+            <td className="eur">{s.betrag > 0 ? eur(s.betrag) : "–"}</td>
+            <td style={{ fontSize: 11, color: "var(--ts)", maxWidth: 200 }}><EditCell value={s.notiz || ""} onChange={v => upd(s.id, "notiz", v)} /></td>
+            <td style={{ display: "flex", gap: 4 }}>
+              <Btn label="💾" color="var(--g)" onClick={() => save(s)} small />
+              <Btn label="🗑️" color="var(--r)" onClick={() => setDelId(s.id)} small />
+            </td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+  </div>;
+}
+
+// ═══ Tab: Duplikate ═══
+function TabDuplikate({ duplikate, setDuplikate, toast }) {
+  const [delId, setDelId] = useState(null);
+  const save = async (d) => {
+    try {
+      await db.patch("pay_duplikate", `id=eq.${d.id}`, { status: d.status, aktion: d.aktion, notiz: d.notiz, geaendert_am: ts() });
+      toast("Gespeichert", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const remove = async (id) => {
+    try { await db.del("pay_duplikate", `id=eq.${id}`); setDuplikate(prev => prev.filter(d => d.id !== id)); setDelId(null); toast("Gelöscht", "ok"); }
+    catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+  const upd = (id, k, v) => setDuplikate(prev => prev.map(d => d.id === id ? { ...d, [k]: v } : d));
+  const statusOpts = [{ value: "offen", label: "⚠️ Offen" }, { value: "geklaert", label: "✅ Geklärt" }, { value: "storniert", label: "❌ Storniert" }, { value: "entscheidung_noetig", label: "🔶 Entscheidung" }];
+  const statusColors = { offen: "b-o", geklaert: "b-g", storniert: "b-r", entscheidung_noetig: "b-y" };
+
+  return <div>
+    {delId && <ConfirmModal msg="Duplikat-Eintrag wirklich löschen?" onOk={() => remove(delId)} onCancel={() => setDelId(null)} />}
+    <div style={{ marginBottom: 8 }}>
+      <span style={{ fontSize: 12, color: "var(--ts)" }}>
+        {duplikate.filter(d => d.status === "entscheidung_noetig" || d.status === "offen").length} offen von {duplikate.length} Duplikaten
+      </span>
+    </div>
+    <div style={{ overflowX: "auto" }}>
+      <table>
+        <thead><tr><th>Kunde</th><th>PLZ</th><th style={{ textAlign: "right" }}>kWp</th><th>AN 1</th><th>AN 2</th><th>VT</th><th>Status</th><th>Aktion/Notiz</th><th style={{ width: 100 }}>Aktionen</th></tr></thead>
+        <tbody>
+          {duplikate.map(d => <tr key={d.id}>
+            <td style={{ fontWeight: 600 }}>{d.kunde_name}</td>
+            <td>{d.plz}</td>
+            <td className="eur">{d.kwp}</td>
+            <td style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{d.auftrag_nr_1}</td>
+            <td style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{d.auftrag_nr_2}</td>
+            <td>{d.vertriebler || "–"}</td>
+            <td><EditCell value={d.status} onChange={v => upd(d.id, "status", v)} type="select" options={statusOpts} width="140px" /></td>
+            <td><EditCell value={d.notiz || d.aktion || ""} onChange={v => upd(d.id, "notiz", v)} /></td>
+            <td style={{ display: "flex", gap: 4 }}>
+              <Btn label="💾" color="var(--g)" onClick={() => save(d)} small />
+              <Btn label="🗑️" color="var(--r)" onClick={() => setDelId(d.id)} small />
+            </td>
+          </tr>)}
+          {!duplikate.length && <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--ts)", padding: 24 }}>Keine Duplikate vorhanden</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  </div>;
+}
+
+// ═══ Tab: Übersicht (Dashboard) ═══
+function TabOverview({ regeln, sonder, stufen, teamBonus, sperr, duplikate }) {
+  const stats = [
+    { label: "Provisions-Regeln", val: regeln.length, icon: "📋", color: "var(--b)", sub: `${regeln.filter(r => r.staffel_schwelle < 999).length} mit Staffel` },
+    { label: "Sonderprovisionen", val: sonder.length, icon: "⭐", color: "var(--y)", sub: `${sonder.filter(s => s.aktiv).length} aktiv` },
+    { label: "Stufenbonus", val: stufen.length, icon: "🏆", color: "var(--g)", sub: stufen.map(s => `≥${s.min_anlagen}: ${eur(s.bonus_betrag)}`).join(", ") || "–" },
+    { label: "Team-Bonus", val: teamBonus.length, icon: "👥", color: "var(--t)", sub: teamBonus.map(t => `${t.mitarbeiter_name}: ${eur(t.betrag_pro_sale)}/Sale`).join(", ") || "–" },
+    { label: "Sperrlisten", val: sperr.length, icon: "🔒", color: "var(--r)", sub: `${sperr.filter(s => s.status === "gesperrt").length} gesperrt, ${sperr.filter(s => s.status === "ausgezahlt").length} ausgezahlt` },
+    { label: "Duplikate", val: duplikate.length, icon: "⚠️", color: "var(--o)", sub: `${duplikate.filter(d => d.status === "entscheidung_noetig" || d.status === "offen").length} offen` },
+  ];
+
+  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
+    {stats.map(s => <div key={s.label} style={{ background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 18, borderLeft: `3px solid ${s.color}` }} className="fade-in">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ fontSize: 13, color: "var(--ts)", fontWeight: 600 }}>{s.label}</span>
+        <span style={{ fontSize: 20 }}>{s.icon}</span>
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 700, color: s.color }}>{s.val}</div>
+      <div style={{ fontSize: 11, color: "var(--ts)", marginTop: 4 }}>{s.sub}</div>
+    </div>)}
+  </div>;
+}
+
+// ═══ Main App ═══
+function App() {
+  const [tab, setTab] = useState("uebersicht");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [toastMsg, setToastMsg] = useState(null);
+  const [toastType, setToastType] = useState("ok");
+
+  const [regeln, setRegeln] = useState([]);
+  const [sonder, setSonder] = useState([]);
+  const [stufen, setStufen] = useState([]);
+  const [teamBonus, setTeamBonus] = useState([]);
+  const [sperrData, setSperrData] = useState([]);
+  const [duplikateData, setDuplikateData] = useState([]);
+
+  const toast = (msg, type = "ok") => { setToastMsg(msg); setToastType(type); setTimeout(() => setToastMsg(null), 3000); };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [r, s, st, tb, sp, dp] = await Promise.all([
+          db.get("provisions_regeln", "?aktiv=eq.true&order=modell_name.asc"),
+          db.get("pay_sonderprovisionen", "?order=mitarbeiter_name.asc").catch(() => []),
+          db.get("pay_stufenbonus", "?order=min_anlagen.asc").catch(() => []),
+          db.get("pay_team_bonus", "?order=mitarbeiter_name.asc").catch(() => []),
+          db.get("pay_sperrlisten", "?order=auftrag_nr.asc").catch(() => []),
+          db.get("pay_duplikate", "?order=kunde_name.asc").catch(() => []),
+        ]);
+        setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp);
+        setLoading(false);
+      } catch (e) {
+        setError(e.message);
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const tabs = [
+    { key: "uebersicht", label: "📊 Übersicht", color: "var(--y)" },
+    { key: "regeln", label: "📋 Regeln", color: "var(--b)" },
+    { key: "sonder", label: "⭐ Sonderprovisionen", color: "var(--y)" },
+    { key: "stufen", label: "🏆 Stufenbonus", color: "var(--g)" },
+    { key: "team", label: "👥 Team-Bonus", color: "var(--t)" },
+    { key: "sperr", label: "🔒 Sperrlisten", color: "var(--r)" },
+    { key: "duplikate", label: "⚠️ Duplikate", color: "var(--o)" },
+  ];
+
+  const tabDescriptions = {
+    uebersicht: "Gesamtübersicht aller Provisions-Konfigurationen",
+    regeln: `${regeln.length} aktive Provisionsmodelle – Basis-Sätze, Staffel, Boni inline editieren`,
+    sonder: `${sonder.length} Sonderprovisionen – Flat Rates & Overrides pro Mitarbeiter`,
+    stufen: `${stufen.length} Stufenbonus-Definitionen – Bonus bei X+ Anlagen/Monat`,
+    team: `${teamBonus.length} Team-Bonus-Regeln – €/Sale für Team-Leiter`,
+    sperr: `${sperrData.length} Sperrlisten-Einträge – Grundbuch, MA-Abbruch, CRM-Storno`,
+    duplikate: `${duplikateData.length} Duplikat-Verdachtsfälle – gleicher Kunde + kWp + PLZ`,
+  };
+
+  if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", flexDirection: "column", gap: 16 }}>
+    <div style={{ width: 40, height: 40, border: "3px solid var(--bd)", borderTopColor: "var(--y)", borderRadius: "50%" }} className="spin" />
+    <div style={{ color: "var(--ts)", fontSize: 14 }}>Lade Provisions-Matrix…</div>
+  </div>;
+
+  if (error) return <div style={{ padding: 40, textAlign: "center" }}>
+    <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+    <div style={{ fontSize: 16, fontWeight: 600, color: "var(--r)", marginBottom: 8 }}>Fehler beim Laden</div>
+    <div style={{ fontSize: 13, color: "var(--ts)", maxWidth: 500, margin: "0 auto", lineHeight: 1.6 }}>{error}</div>
+    <div style={{ marginTop: 16, fontSize: 12, color: "var(--ts)", background: "var(--s2)", padding: 12, borderRadius: 8, maxWidth: 500, margin: "16px auto" }}>
+      Tabellen noch nicht erstellt? → SQL im <a href="https://supabase.com/dashboard" target="_blank" style={{ color: "var(--y)" }}>Supabase Dashboard</a> ausführen.
+    </div>
+  </div>;
+
+  return <div style={{ minHeight: "100vh", padding: "0 0 40px" }}>
+    {/* Header */}
+    <div style={{ background: "var(--s1)", borderBottom: "1px solid var(--bd)", padding: "16px 24px", position: "sticky", top: 0, zIndex: 10 }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 36, height: 36, background: "var(--y)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, color: "#000" }}>P</div>
+            <div>
+              <div className="hdr-title" style={{ fontWeight: 700, fontSize: 18, color: "var(--tx)" }}>Provisions-Matrix</div>
+              <div style={{ fontSize: 11, color: "var(--ts)" }}>bee-doo PAY – Alle Regeln, Sperren & Boni editierbar</div>
+            </div>
+          </div>
+          <a href="https://bee-doo-tools.vercel.app/" style={{ color: "var(--ts)", fontSize: 12, textDecoration: "none" }}>← Zurück zur Toolbox</a>
+        </div>
+      </div>
+    </div>
+
+    <div style={{ maxWidth: 1400, margin: "0 auto", padding: "16px 24px" }}>
+      {/* Tabs */}
+      <div className="tab-bar" style={{ display: "flex", gap: 6, marginBottom: 16, overflowX: "auto", paddingBottom: 4 }}>
+        {tabs.map(t => <button key={t.key} className="tab-btn" onClick={() => setTab(t.key)} style={{
+          background: tab === t.key ? `${t.color}18` : "var(--s2)",
+          color: tab === t.key ? t.color : "var(--ts)",
+          border: `1px solid ${tab === t.key ? `${t.color}44` : "var(--bd)"}`,
+          borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap",
+          borderBottom: tab === t.key ? `2px solid ${t.color}` : "2px solid transparent"
+        }}>{t.label}</button>)}
+      </div>
+
+      {/* Tab Description */}
+      <div style={{ fontSize: 12, color: "var(--ts)", marginBottom: 16, padding: "8px 12px", background: "var(--s2)", borderRadius: 6, borderLeft: `3px solid ${tabs.find(t => t.key === tab)?.color}` }}>
+        {tabDescriptions[tab]}
+      </div>
+
+      {/* Content */}
+      <div className="fade-in" key={tab}>
+        {tab === "uebersicht" && <TabOverview regeln={regeln} sonder={sonder} stufen={stufen} teamBonus={teamBonus} sperr={sperrData} duplikate={duplikateData} />}
+        {tab === "regeln" && <TabRegeln regeln={regeln} setRegeln={setRegeln} toast={toast} />}
+        {tab === "sonder" && <TabSonder sonder={sonder} setSonder={setSonder} toast={toast} />}
+        {tab === "stufen" && <TabStufen stufen={stufen} setStufen={setStufen} toast={toast} />}
+        {tab === "team" && <TabTeam team={teamBonus} setTeam={setTeamBonus} toast={toast} />}
+        {tab === "sperr" && <TabSperr sperr={sperrData} setSperr={setSperrData} toast={toast} />}
+        {tab === "duplikate" && <TabDuplikate duplikate={duplikateData} setDuplikate={setDuplikateData} toast={toast} />}
+      </div>
+    </div>
+
+    <Toast msg={toastMsg} type={toastType} />
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
