@@ -113,6 +113,72 @@ const sbP = async(t,d)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'P
 const sbU = async(t,q,d)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}?${q}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(d)});if(!r.ok)throw new Error(`PATCH ${t}:${r.status}`);return r.json();};
 const sbD = async(t,q)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}?${q}`,{method:'DELETE',headers:HDR});if(!r.ok)throw new Error(`DEL ${t}:${r.status}`);};
 
+async function generateAbrechnungen(periode, onProgress){
+  const [y,m] = periode.split('/');
+  const log = (msg) => onProgress?.(msg);
+  log('Lade Daten...');
+  const [regeln, stufen, mitarbeiter, auftraege, sgArr] = await Promise.all([
+    sbG('provisions_regeln','aktiv=eq.true'),
+    sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
+    sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig'),
+    sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&select=*'),
+    sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
+  ]);
+  const sgConfig = sgArr[0] || {prozent:3, max_netto:200, ust_satz:19};
+  const regelMap = {}; regeln.forEach(r => regelMap[r.mitarbeiter_typ] = r);
+  const typMap = {hgb_vertriebler_haupt:'hgb_vertriebler_haupt',hgb84:'hgb_vertriebler_haupt',angestellt_vt:'angestellt_vertriebler',angestellt_vertriebler:'angestellt_vertriebler',hgb_vertriebler_agentur:'hgb_vertriebler_agentur',vertriebler:'vertriebler',hgb_scouter:'hgb_scouter',angestellt_scouter:'angestellt_scouter'};
+  const vpById = {}; mitarbeiter.forEach(v => { vpById[v.id] = v; });
+  const byVP = {};
+  auftraege.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id] = []; byVP[a.vertriebler_id].push(a); });
+  const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=vertriebler_id,auftrags_datum');
+  const salesPerVPMonth = {};
+  allRelevant.forEach(a => { if(!a.vertriebler_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.vertriebler_id+'_'+om; salesPerVPMonth[key]=(salesPerVPMonth[key]||0)+1; });
+  log('Lösche alte Entwürfe...');
+  const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&status=in.(entwurf,probeabrechnung)&select=id`);
+  for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
+  let count = 0;
+  for(const vpId of Object.keys(byVP)){
+    const vp = vpById[vpId]; if(!vp) continue;
+    const orders = byVP[vpId]; if(!orders.length) continue;
+    const ruleTyp = typMap[vp.typ] || vp.typ;
+    const regel = regelMap[ruleTyp];
+    if(!regel){ log(`⚠️ ${vp.vorname} ${vp.nachname}: keine Regel für ${ruleTyp}`); continue; }
+    const isHGB = (vp.typ||'').includes('hgb');
+    const vpName = `${vp.vorname} ${vp.nachname}`;
+    log(`Berechne ${vpName}...`);
+    const ordersByMonth = {};
+    orders.forEach(o => { const d=o.auftrags_datum||''; const om=d.substring(0,4)+'/'+d.substring(5,7); if(!ordersByMonth[om])ordersByMonth[om]=[]; ordersByMonth[om].push(o); });
+    const positionen = []; let bruttoTotal = 0;
+    for(const [om, monthOrders] of Object.entries(ordersByMonth)){
+      const monthKey=vpId+'_'+om; const monthTotal=salesPerVPMonth[monthKey]||monthOrders.length;
+      const staffel=monthTotal>=regel.staffel_schwelle;
+      const baseBetrag=staffel?regel.staffel_betrag_sale:regel.basis_betrag_sale;
+      for(const o of monthOrders){
+        positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Solar ${o.kwp||0} kWp`,original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffel?' (Staffel)':''}`});
+        bruttoTotal+=baseBetrag;
+        const q=(o.lead_quelle||'').toLowerCase();
+        if(q.includes('eigenlead')&&regel.betrag_eigenlead>0){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:om}); bruttoTotal+=regel.betrag_eigenlead;}
+        if(q.includes('empfehlung')&&regel.betrag_empfehlung>0){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:om}); bruttoTotal+=regel.betrag_empfehlung;}
+        if(o.speichererweiterung&&regel.betrag_speicher>0){positionen.push({typ:'speicher',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Speicher-Bonus',original_betrag:regel.betrag_speicher,aktiv:true,zurueckgestellt:false,notiz:om}); bruttoTotal+=regel.betrag_speicher;}
+      }
+    }
+    let stufenBonus=0;
+    for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const [k,cnt] of Object.entries(salesPerVPMonth)){ if(!k.startsWith(vpId+'_')) continue; if(cnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } }
+    if(stufenBonus>0){ positionen.push({typ:'einmalzahlung',auftrag_nr:null,kunde:null,produkt:'Stufenbonus',original_betrag:stufenBonus,aktiv:true,zurueckgestellt:false,notiz:'Stufenbonus'}); bruttoTotal+=stufenBonus; }
+    const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
+    const sgUst=sgNetto*(sgConfig.ust_satz/100);
+    const ustSatz=isHGB&&vp.mwst_pflichtig?19:0;
+    const ustBetrag=bruttoTotal*(ustSatz/100);
+    const abr=await sbP('pay_abrechnungen',{periode,mitarbeiter_name:vpName,kuerzel:vp.kuerzel||gK(vpName),beschaeftigungsart:isHGB?'hgb':'angestellt',status:'entwurf',anzahl_sales:orders.length,brutto_provisionen:Math.round(bruttoTotal*100)/100,systemgebuehr_netto:Math.round(sgNetto*100)/100,systemgebuehr_ust:Math.round(sgUst*100)/100,nettobetrag:Math.round(bruttoTotal*100)/100,ust_satz:ustSatz,ust_betrag:Math.round(ustBetrag*100)/100,auszahlungssumme:Math.round((bruttoTotal+ustBetrag)*100)/100});
+    const abrId=Array.isArray(abr)?abr[0].id:abr.id;
+    const posData=positionen.map(p=>({...p,abrechnung_id:abrId}));
+    for(let i=0;i<posData.length;i+=50){await sbP('pay_abrechnungen_positionen',posData.slice(i,i+50));}
+    count++;
+  }
+  log(`✅ ${count} Abrechnungen generiert!`);
+  return count;
+}
+
 function calc(pos,sg,hgb){
   const ak=pos.filter(p=>p.aktiv&&!p.zurueckgestellt);
   const prov=ak.filter(p=>['provision','eigenlead','empfehlung','speicher'].includes(p.typ));
@@ -433,7 +499,7 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
 }
 
 function App(){
-  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);
+  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);
 
   useEffect(()=>{(async()=>{try{const d=await sbG('pay_auszahlungen_historie','select=periode&order=periode.desc');const u=[...new Set(d.map(x=>x.periode))];const now=new Date();const cp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;if(!u.includes(cp))u.unshift(cp);const sorted=u.sort().reverse();setPers(sorted);setPer(sorted[0]||cp);}catch(e){const now=new Date();const p=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;setPers([p]);setPer(p);}})();},[]);
 
@@ -447,9 +513,15 @@ function App(){
   for(const g of tc){try{const k=gK(g.name);const pd=g.items.map(item=>({typ:'provision',kunde:item.kunde||'—',produkt:item.produkt||'Solar/WP',original_betrag:parseFloat(item.netto)||0,aktiv:true,zurueckgestellt:false}));const b=calc(pd.map(p=>({...p,override_betrag:null})),sg,true);const s=await sbP('pay_abrechnungen',{periode:per,mitarbeiter_name:g.name,kuerzel:k,beschaeftigungsart:'hgb',status:'entwurf',anzahl_sales:b.sales,brutto_provisionen:b.bp,systemgebuehr_netto:b.sgN,systemgebuehr_ust:b.sgU,nettobetrag:b.net,ust_satz:b.uS,ust_betrag:b.uB,auszahlungssumme:b.aus,belegnummer:gBN(per,k,c+1)});if(pd.length&&s[0])await sbP('pay_abrechnungen_positionen',pd.map(p=>({...p,abrechnung_id:s[0].id})));c++;}catch(e){console.error(g.name,e);}}
   window.__t?.(`✅ ${c} Abrechnungen erstellt`);loadP();};
 
+  const doGenerate=async()=>{if(!per)return;if(!confirm(`Abrechnungen für ${pLabel(per)} generieren?\n\nBerechnet Provisionen aus allen offenen Aufträgen.\nVorhandene Entwürfe werden überschrieben.`))return;
+    setGenBusy(true);setGenMsg('Starte...');
+    try{const cnt=await generateAbrechnungen(per,(msg)=>setGenMsg(msg));window.__t?.(`✅ ${cnt} Abrechnungen generiert`);await loadP();}catch(e){window.__t?.('Fehler: '+e.message,'error');console.error(e);}
+    setGenBusy(false);setGenMsg('');};
+
   return<Toast>
     <div className="app-header"><div className="logo-area"><div><div className="logo-text">bee<span>-doo</span> PAY</div><div className="logo-sub">Probeabrechnung</div></div></div>
-    <div className="controls-bar">{pers.length>0&&<select className="sel-period" value={per} onChange={e=>setPer(e.target.value)}>{pers.map(p=><option key={p} value={p}>{pLabel(p)}</option>)}</select>}{vtG.filter(g=>!g.abrechnung).length>0&&<button className="btn btn-primary" onClick={alleErstellen}>⚡ Alle erstellen ({vtG.filter(g=>!g.abrechnung).length})</button>}<a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>🏠</a></div></div>
+    <div className="controls-bar">{pers.length>0&&<select className="sel-period" value={per} onChange={e=>setPer(e.target.value)}>{pers.map(p=><option key={p} value={p}>{pLabel(p)}</option>)}</select>}<button className="btn btn-primary" onClick={doGenerate} disabled={genBusy} style={{opacity:genBusy?.6:1}}>{genBusy?'⏳ Generiere...':'🔄 Abrechnungen generieren'}</button><a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>🏠</a></div></div>
+    {genMsg&&<div style={{padding:'8px 24px',background:'#161b22',borderBottom:'1px solid #21262d',fontSize:13,color:'#F5C500'}}>⏳ {genMsg}</div>}
     <div className="stats-row">
       <div className="stat-card"><div className="stat-label">Periode</div><div className="stat-value">{per?pLabel(per):'—'}</div></div>
       <div className="stat-card"><div className="stat-label">Vertriebler</div><div className="stat-value gold">{vtG.length}</div></div>
