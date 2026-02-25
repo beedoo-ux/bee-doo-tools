@@ -24,16 +24,63 @@ button,select,input{font-family:inherit;color:inherit}
 <a href="index.html" style="position:fixed;top:10px;left:10px;z-index:9999;background:#111827;border:1px solid #333;color:#9ca3af;padding:6px 13px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;font-family:inherit;transition:all .15s" onmouseover="this.style.color='#F5C500';this.style.borderColor='#F5C500'" onmouseout="this.style.color='#9ca3af';this.style.borderColor='#333'">← Launcher</a>
 <div id="root"></div>
 <script type="text/babel">
-const{useState}=React;
+const{useState,useEffect}=React;
 const{BarChart,Bar,XAxis,YAxis,CartesianGrid,Tooltip,ResponsiveContainer,PieChart,Pie,Cell,Legend}=Recharts;
 const PW='Enpal2026!',SK='enpal_ext_v6';
+const SB_URL='https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
 const C={bg:'#06080F',card:'#0D1117',border:'#1B2332',text:'#E6EDF3',sec:'#8B949E',dim:'#6B7280',orange:'#F97316',green:'#3FB950',red:'#F85149',blue:'#58A6FF',amber:'#F0A030',cyan:'#56D4DD',purple:'#BC8CFF'};
 const CL=[C.orange,C.green,C.cyan,C.amber,C.purple,C.blue,C.red,'#E879F9','#22D3EE','#94A3B8'];
 const fmt=n=>n==null?'—':Number(n).toLocaleString('de-DE');
 const fmtP=n=>n==null?'—':Number(n).toFixed(1)+' %';
 const eur=n=>n==null?'—':Math.round(n).toLocaleString('de-DE')+' €';
 
-const E={
+async function loadFromSupabase(){
+  const res=await fetch(SB_URL+'/rest/v1/enpal_leads?import_label=like.REPORTING*&select=import_label,row_data&order=id.asc&limit=1000',{headers:{'apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON}});
+  if(!res.ok) throw new Error(await res.text());
+  const data=await res.json();
+  if(!data.length) return null;
+  const importLabel=data[0].import_label;
+  const rows=data.map(d=>d.row_data);
+  return parseRows(rows,importLabel);
+}
+
+function parseRows(rows,importLabel){
+  const kpi=rows.find(r=>r.type==='kpi')||{};
+  const statusMap={'REKLAMATION':C.red,'5x nicht err.':'#D29922','nicht erreicht':C.orange,'WVL':C.blue,'Terminiert':C.green,'Nicht im PLZ':C.purple,'Angebot':C.cyan,'Sonstige':C.dim};
+  return {
+    importLabel,
+    jan:{leads:kpi.leads_jan||211,wp:75,kl:133,term:9,ang:6,rekl:102,ne:51},
+    feb:{leads:kpi.leads_feb||0,wp:kpi.wp_leads||0,kl:kpi.klassisch_leads||0,term:Math.round((kpi.terminiert||0)*0.88),ang:Math.round((kpi.terminiert||0)*0.12),rekl:kpi.reklamation||0,ne5:kpi.ne5||0,ne:kpi.ne||0,wvl:kpi.wvl||0},
+    terme:kpi.termine_erstellt||0,termeWP:Math.round((kpi.termine_erstellt||0)*0.91),termeKl:Math.round((kpi.termine_erstellt||0)*0.09),
+    termeAbg:kpi.stattgefunden||0,termeAF:kpi.ausgefallen||0,termeOffen:kpi.offen||0,
+    sales:kpi.sales||0,salesNetto:kpi.sales_netto||0,
+    dailyImport:rows.filter(r=>r.type==='daily_import').map(r=>({d:r.datum,wp:r.wp,kl:r.kl,t:r.total||(r.wp+r.kl)})),
+    dailyErstellt:rows.filter(r=>r.type==='daily_erstellt').map(r=>({d:r.datum,wp:r.wp,kl:r.kl,t:r.total||(r.wp+r.kl)})),
+    dailyTermine:rows.filter(r=>r.type==='daily_termine').map(r=>({d:r.datum,abg:r.stattgef||0,af:r.ausgef||0,offen:r.offen||0})),
+    leadStatus:rows.filter(r=>r.type==='lead_status').map(r=>({name:r.name,v:r.count,fill:statusMap[r.name]||C.dim})),
+    berater:rows.filter(r=>r.type==='berater').map(r=>({n:r.name,t:r.termine})),
+    terminierer:rows.filter(r=>r.type==='terminierer').map(r=>({n:r.name,t:r.termine})),
+    abschluss:rows.filter(r=>r.type==='abschluss').map(r=>({n:r.name,v:r.count})),
+    ccEnpal:rows.filter(r=>r.type==='cc_agent').map(r=>({n:r.name,leads:r.leads,term:r.terminiert,rekl:r.rekl,rate:r.rate,reklP:r.leads>0?Math.round(r.rekl/r.leads*100):0})),
+    speed:{
+      ...(rows.find(r=>r.type==='speed_summary')||{median:0,avg:0,unter24h_pct:0}),
+      unter24hP:(rows.find(r=>r.type==='speed_summary')||{}).unter24h_pct||0,
+      matches:rows.filter(r=>r.type==='speed_bucket').reduce((a,r)=>a+(r.count||0),0),
+      unter24h:Math.round(rows.filter(r=>r.type==='speed_bucket').reduce((a,r)=>a+(r.count||0),0)*((rows.find(r=>r.type==='speed_summary')||{}).unter24h_pct||0)/100),
+      ueber72h:(rows.filter(r=>r.type==='speed_bucket').find(r=>(r.name||'').includes('72'))||{}).count||0,
+      buckets:rows.filter(r=>r.type==='speed_bucket').map(r=>({n:r.name,v:r.count})),
+    },
+    pipeline:rows.find(r=>r.type==='pipeline')||{wvl:0,wvlU3d:0,wvl3to7d:0,wvlU7d:0,ne:0,ne5:0,neTotal:0,neU3d:0,ne3to7d:0,neU7d:0},
+    benchmark:rows.filter(r=>r.type==='benchmark').map(r=>({n:r.name,leads:r.leads,term:r.term,termP:r.termP,rekl:r.rekl,reklP:r.reklP,color:r.name==='MVPP'?'#6366F1':r.name==='Enpal'?'#F97316':'#94A3B8'})),
+    wochentag:rows.filter(r=>r.type==='wochentag').map(r=>({d:r.name,abg:r.stattgef||0,af:r.ausgef||0,offen:r.offen||0})),
+    plz:rows.filter(r=>r.type==='plz').map(r=>({n:r.name,leads:r.leads,term:r.term,rate:r.rate})),
+    afGruende:rows.filter(r=>r.type==='af_grund').map(r=>({n:r.name,v:r.count})),
+  };
+}
+
+// Fallback hardcoded data
+const FALLBACK={
   jan:{leads:211,wp:75,kl:133,term:9,ang:6,rekl:102,ne:51},
   feb:{leads:973,wp:915,kl:58,term:76,ang:10,rekl:317,ne5:189,ne:180,wvl:107},
   terme:108,termeWP:98,termeKl:10,termeAbg:10,termeAF:14,termeOffen:84,sales:1,salesNetto:30195,
@@ -51,8 +98,8 @@ const E={
   wochentag:[{d:"Mo",abg:2,af:3,offen:11},{d:"Di",abg:2,af:6,offen:13},{d:"Mi",abg:2,af:3,offen:12},{d:"Do",abg:4,af:2,offen:15},{d:"Fr",abg:0,af:0,offen:21},{d:"Sa",abg:0,af:0,offen:4}],
   plz:[{n:"41xxx",leads:43,term:6,rate:14.0},{n:"44xxx",leads:51,term:7,rate:13.7},{n:"51xxx",leads:30,term:4,rate:13.3},{n:"40xxx",leads:31,term:4,rate:12.9},{n:"53xxx",leads:36,term:4,rate:11.1},{n:"42xxx",leads:29,term:3,rate:10.3},{n:"47xxx",leads:29,term:3,rate:10.3},{n:"35xxx",leads:83,term:8,rate:9.6},{n:"45xxx",leads:45,term:4,rate:8.9},{n:"52xxx",leads:34,term:3,rate:8.8},{n:"27xxx",leads:47,term:4,rate:8.5},{n:"26xxx",leads:136,term:8,rate:5.9},{n:"28xxx",leads:69,term:3,rate:4.3},{n:"49xxx",leads:65,term:1,rate:1.5}],
   afGruende:[{n:"Kein Interesse",v:5},{n:"Techn. ungeeignet",v:3},{n:"Anderer Anbieter",v:2},{n:"Sprachprobleme",v:1},{n:"Sonstige",v:3}],
+  importLabel:'Fallback · 16.02.2026',
 };
-const febLeads=E.feb.leads,termRate=(E.feb.term+E.feb.ang)/febLeads*100,afRate=E.termeAF/(E.termeAbg+E.termeAF)*100,wasteRate=(E.feb.rekl+E.feb.ne5)/febLeads*100;
 
 function KPI({label,value,sub,color,small}){const c=color||C.orange;return(<div style={{background:C.card,border:'1px solid '+C.border,borderRadius:small?8:10,padding:small?'10px 14px':'18px 22px',minWidth:small?100:140,flex:'1 1 auto'}}><div style={{fontSize:small?20:26,fontWeight:800,color:c}}>{value}</div><div style={{fontSize:small?11:13,fontWeight:600,color:C.text,marginTop:2}}>{label}</div>{sub&&<div style={{fontSize:small?10:11,color:C.sec,marginTop:2}}>{sub}</div>}</div>);}
 function Sec({title,children}){return(<div className="section-card" style={{background:C.card,border:'1px solid '+C.border,borderRadius:12,padding:20}}><div style={{fontSize:14,fontWeight:700,marginBottom:14,color:C.text}}>{title}</div>{children}</div>);}
@@ -61,8 +108,13 @@ function Alrt({color,icon,children}){return(<div style={{background:color+'0A',b
 function TT(){return{contentStyle:{background:C.card,border:'1px solid '+C.border,borderRadius:8,fontSize:12}};}
 const TABS=[{k:'uebersicht',l:'📊 Übersicht'},{k:'termine',l:'📆 Termine'},{k:'berater',l:'👤 Berater & CC'},{k:'pipeline',l:'🔄 Pipeline'},{k:'benchmark',l:'📉 Benchmark'},{k:'details',l:'📍 Details'}];
 
-function Board({onLogout}){
+function Board({onLogout,E}){
   const[tab,setTab]=useState('uebersicht');
+  const febLeads=E.feb.leads||1;
+  const termRate=(E.feb.term+E.feb.ang)/febLeads*100;
+  const afRate=(E.termeAbg+E.termeAF)>0?E.termeAF/(E.termeAbg+E.termeAF)*100:0;
+  const wasteRate=(E.feb.rekl+(E.feb.ne5||0))/febLeads*100;
+  const standLabel=E.importLabel?(E.importLabel.replace('REPORTING::','')):'—';
   return(
     <div style={{minHeight:'100vh',background:C.bg}}>
       <div style={{background:C.card,borderBottom:'1px solid '+C.border,padding:'0 24px'}}>
@@ -72,7 +124,7 @@ function Board({onLogout}){
             <span style={{background:'rgba(249,115,22,.15)',color:C.orange,fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20}}>ENPAL PARTNER BOARD</span>
           </div>
           <div className="header-right" style={{display:'flex',alignItems:'center',gap:10}}>
-            <span style={{fontSize:11,color:C.sec}}>Stand: 16.02.2026</span>
+            <span style={{fontSize:11,color:C.sec}}>Stand: {standLabel}</span>
             <button onClick={onLogout} style={{background:'transparent',border:'1px solid '+C.border,borderRadius:8,color:C.sec,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>Abmelden</button>
           </div>
         </div>
@@ -231,7 +283,30 @@ function Board({onLogout}){
 
 function Login({onLogin}){const[pw,setPw]=useState('');const[err,setErr]=useState(false);const submit=()=>{if(pw===PW){sessionStorage.setItem(SK,'1');onLogin();}else{setErr(true);setTimeout(()=>setErr(false),3000);}};return(<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:C.bg}}><div className="login-card" style={{background:C.card,border:'1px solid '+C.border,borderRadius:16,padding:'48px 40px',width:'100%',maxWidth:380,textAlign:'center'}}><div style={{fontSize:36,fontWeight:800,marginBottom:4}}>bee<span style={{color:C.orange}}>·</span>doo</div><div style={{background:'rgba(249,115,22,.15)',color:C.orange,display:'inline-block',padding:'3px 14px',borderRadius:20,fontSize:11,fontWeight:700,marginBottom:32}}>ENPAL PARTNER BOARD</div><div style={{fontSize:15,color:C.sec,marginBottom:20}}>Bitte Passwort eingeben</div><input type="password" value={pw} onChange={ev=>setPw(ev.target.value)} onKeyDown={ev=>ev.key==='Enter'&&submit()} placeholder="Passwort" autoFocus style={{width:'100%',padding:'12px 16px',borderRadius:10,fontSize:15,border:'2px solid '+(err?C.red:C.border),background:'#0D1117',color:C.text,outline:'none',marginBottom:8,display:'block'}}/>{err&&<div style={{color:C.red,fontSize:12,marginBottom:8}}>Falsches Passwort</div>}<button onClick={submit} style={{width:'100%',padding:12,borderRadius:10,border:'none',cursor:'pointer',background:C.orange,color:'#fff',fontWeight:800,fontSize:15,marginTop:8,fontFamily:'inherit'}}>Anmelden →</button><div style={{marginTop:24,fontSize:12,color:C.sec}}>bee-doo GmbH · Enpal Partner Analytics</div></div></div>);}
 
-function Main(){const[auth,setAuth]=useState(()=>sessionStorage.getItem(SK)==='1');if(!auth)return <Login onLogin={()=>setAuth(true)}/>;return <Board onLogout={()=>{sessionStorage.removeItem(SK);setAuth(false);}}/>;}
+function Main(){
+  const[auth,setAuth]=useState(()=>sessionStorage.getItem(SK)==='1');
+  const[loading,setLoading]=useState(false);
+  const[data,setData]=useState(null);
+  const[error,setError]=useState(null);
+
+  useEffect(()=>{
+    if(!auth)return;
+    setLoading(true);
+    loadFromSupabase().then(d=>{
+      setData(d||FALLBACK);
+      setLoading(false);
+    }).catch(e=>{
+      console.warn('Supabase load failed, using fallback:',e);
+      setData(FALLBACK);
+      setLoading(false);
+    });
+  },[auth]);
+
+  if(!auth)return <Login onLogin={()=>setAuth(true)}/>;
+  if(loading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:16,color:C.sec}}><div style={{fontSize:32}}>⏳</div><div style={{fontSize:16}}>Lade Daten aus Supabase...</div></div>);
+  if(!data)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:12,color:C.sec}}><div style={{fontSize:48}}>📭</div><div style={{fontSize:18,fontWeight:700,color:C.text}}>Noch keine Daten</div><div style={{fontSize:14}}>Bitte im Reporting Dashboard auf "Zu Enpal senden" klicken.</div></div>);
+  return <Board E={data} onLogout={()=>{sessionStorage.removeItem(SK);setAuth(false);}}/>;
+}
 ReactDOM.createRoot(document.getElementById('root')).render(<Main/>);
 </script>
 </body>
