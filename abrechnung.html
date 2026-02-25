@@ -456,7 +456,15 @@ function BereinigungPanel({onClose}){
           }
         }
       }
-      setSperr(sp);setDup(dp);
+      setSperr(sp);
+      // Enrich duplikate with beedoo_fortschritt
+      if(dp.length>0){
+        const allANs=[...new Set(dp.flatMap(d=>['AN-'+d.auftrag_nr_1,'AN-'+d.auftrag_nr_2]))];
+        const aufFort=await sbG('pay_auftraege',`auftrag_nr=in.(${allANs.join(',')})&select=auftrag_nr,beedoo_fortschritt,auftrags_datum,kwp`).catch(()=>[]);
+        const fortMap=Object.fromEntries(aufFort.map(a=>[a.auftrag_nr,a]));
+        dp.forEach(d=>{d._fort1=fortMap['AN-'+d.auftrag_nr_1];d._fort2=fortMap['AN-'+d.auftrag_nr_2];});
+      }
+      setDup(dp);
     }catch(e){window.__t?.('Fehler: '+e.message,'error');}
     setLd(false);
   },[]);
@@ -579,12 +587,14 @@ function BereinigungPanel({onClose}){
             </div>
             <div style={{display:'flex',gap:12,marginBottom:10,flexWrap:'wrap'}}>
               <div style={{flex:1,minWidth:150,padding:'8px 12px',background:'#21262d',borderRadius:8,border:'1px solid #30363d'}}>
-                <div style={{fontSize:10,color:'#8b949e',marginBottom:2}}>Auftrag 1</div>
+                <div style={{fontSize:10,color:'#8b949e',marginBottom:2}}>Auftrag 1{d._fort1?.auftrags_datum?` · ${d._fort1.auftrags_datum.substring(0,10)}`:''}{d._fort1?.kwp?` · ${d._fort1.kwp} kWp`:''}</div>
                 <div style={{fontSize:13,fontWeight:700,color:'#e6edf3'}}>AN {d.auftrag_nr_1}</div>
+                {d._fort1?.beedoo_fortschritt&&<div style={{fontSize:10,marginTop:4,padding:'2px 8px',background:'#1c2333',borderRadius:4,color:'#7dd3fc',display:'inline-block'}}>{d._fort1.beedoo_fortschritt}</div>}
               </div>
               <div style={{flex:1,minWidth:150,padding:'8px 12px',background:'#21262d',borderRadius:8,border:'1px solid #30363d'}}>
-                <div style={{fontSize:10,color:'#8b949e',marginBottom:2}}>Auftrag 2</div>
+                <div style={{fontSize:10,color:'#8b949e',marginBottom:2}}>Auftrag 2{d._fort2?.auftrags_datum?` · ${d._fort2.auftrags_datum.substring(0,10)}`:''}{d._fort2?.kwp?` · ${d._fort2.kwp} kWp`:''}</div>
                 <div style={{fontSize:13,fontWeight:700,color:'#e6edf3'}}>AN {d.auftrag_nr_2}</div>
+                {d._fort2?.beedoo_fortschritt&&<div style={{fontSize:10,marginTop:4,padding:'2px 8px',background:'#1c2333',borderRadius:4,color:'#7dd3fc',display:'inline-block'}}>{d._fort2.beedoo_fortschritt}</div>}
               </div>
             </div>
             <div className="ber-item-actions">
