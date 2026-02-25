@@ -113,6 +113,7 @@ function Lane({title, tag, tagClass, laneClass, orders, vpMap, defaultOpen}) {
   });
   const sortedVTs = Object.entries(byVT).sort((a,b) => b[1].length - a[1].length);
   const totalKwp = orders.reduce((s,o) => s+(o.kwp||0), 0);
+  const bezahltCount = orders.filter(o => o.abgerechnet_monat).length;
 
   return <div className={`lane ${laneClass}`}>
     <div className="lane-header" onClick={() => setOpen(!open)}>
@@ -125,6 +126,7 @@ function Lane({title, tag, tagClass, laneClass, orders, vpMap, defaultOpen}) {
         <span><span className="num">{orders.length}</span> Aufträge</span>
         <span><span className="num">{sortedVTs.length}</span> VTs</span>
         <span><span className="num">{totalKwp.toFixed(1)}</span> kWp</span>
+        {bezahltCount > 0 && <span style={{color:'var(--r)',fontWeight:600}}>⚠️ {bezahltCount} ausgezahlt</span>}
       </div>
     </div>
     <div className={`lane-body ${open?'open':''}`}>
@@ -132,7 +134,7 @@ function Lane({title, tag, tagClass, laneClass, orders, vpMap, defaultOpen}) {
         <div className="vt-header">{name} <span className="cnt">({vtOrders.length} Aufträge)</span></div>
         {vtOrders.map(o => <div key={o.auftrag_nr} className="order-row">
           <div className="nr">{o.auftrag_nr}</div>
-          <div className="kunde">{o.kunde_name}</div>
+          <div className="kunde">{o.kunde_name}{o.abgerechnet_monat ? <span style={{marginLeft:8,fontSize:10,padding:'2px 7px',borderRadius:4,background:'#f8514925',color:'var(--r)',border:'1px solid #f8514940',fontWeight:600}}>💰 Ausgezahlt {o.abgerechnet_monat}/{o.abgerechnet_jahr}</span> : o.hasOwnProperty('abgerechnet_monat') ? <span style={{marginLeft:8,fontSize:10,padding:'2px 7px',borderRadius:4,background:'#2ea04315',color:'var(--g)',border:'1px solid #2ea04330'}}>Nicht ausgezahlt</span> : null}</div>
           <div className="kwp">{o.kwp||0} kWp</div>
           <div className="datum">{o.auftrags_datum}</div>
         </div>)}
@@ -159,17 +161,34 @@ function App() {
 
   const load = useCallback(async(per) => {
     setLoading(true);
-    const [y,m] = per.split('/');
-    const periodeStart = `${y}-${m}-01`;
-    const lzD = new Date(parseInt(y),parseInt(m)-2,1);
-    const leistungsStart = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
-    const leistungsMonat = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}`;
+    const isGesamt = per === 'gesamt';
+    let periodeStart, leistungsStart, leistungsMonat;
+
+    if(!isGesamt) {
+      const [y,m] = per.split('/');
+      periodeStart = `${y}-${m}-01`;
+      const lzD = new Date(parseInt(y),parseInt(m)-2,1);
+      leistungsStart = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
+      leistungsMonat = `${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}`;
+    } else {
+      leistungsMonat = 'alle';
+    }
+
+    const auszQ = isGesamt
+      ? 'storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,lead_quelle'
+      : `storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,lead_quelle`;
+    const stornoQ = isGesamt
+      ? 'storniert=eq.true&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,abgerechnet_monat,abgerechnet_jahr'
+      : `storniert=eq.true&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,abgerechnet_monat,abgerechnet_jahr`;
+    const offenQ = isGesamt
+      ? 'zahlungsstatus=eq.offen&storniert=eq.false&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum'
+      : `zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`;
 
     const [mitarbeiter, auszahlbar, stornos, offene] = await Promise.all([
       sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ'),
-      sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,lead_quelle`),
-      sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
-      sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=lt.${periodeStart}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+      sbG('pay_auftraege', auszQ),
+      sbG('pay_auftraege', stornoQ),
+      sbG('pay_auftraege', offenQ),
     ]);
 
     const vpMap = {};
@@ -180,7 +199,7 @@ function App() {
     const nzByMonth = {};
     auszahlbar.forEach(o => {
       const om = (o.auftrags_datum||'').substring(0,7);
-      if(om === leistungsMonat) {
+      if(!isGesamt && om === leistungsMonat) {
         lzOrders.push(o);
       } else {
         if(!nzByMonth[om]) nzByMonth[om] = [];
@@ -188,12 +207,14 @@ function App() {
       }
     });
 
-    // Split stornos into LZ and other months
+    // Split stornos into LZ and other months — track bezahlt status
     const stLz = [];
     const stByMonth = {};
+    let stornoBezahlt = 0, stornoOffen = 0;
     stornos.forEach(o => {
+      if(o.abgerechnet_monat) stornoBezahlt++; else stornoOffen++;
       const om = (o.auftrags_datum||'').substring(0,7);
-      if(om === leistungsMonat) {
+      if(!isGesamt && om === leistungsMonat) {
         stLz.push(o);
       } else {
         if(!stByMonth[om]) stByMonth[om] = [];
@@ -206,7 +227,7 @@ function App() {
     const ofByMonth = {};
     offene.forEach(o => {
       const om = (o.auftrags_datum||'').substring(0,7);
-      if(om === leistungsMonat) {
+      if(!isGesamt && om === leistungsMonat) {
         ofLz.push(o);
       } else {
         if(!ofByMonth[om]) ofByMonth[om] = [];
@@ -219,9 +240,10 @@ function App() {
     const totalOfOther = Object.values(ofByMonth).reduce((s,arr) => s+arr.length, 0);
 
     setData({
-      vpMap, leistungsMonat,
+      vpMap, leistungsMonat, isGesamt,
       lzOrders, nzByMonth, totalNz,
       stLz, stByMonth, totalStOther,
+      stornoBezahlt, stornoOffen,
       ofLz, ofByMonth, totalOfOther,
       totalAuszahlbar: auszahlbar.length,
       totalStornos: stornos.length,
@@ -240,10 +262,11 @@ function App() {
     <div className="controls">
       <label style={{fontSize:13,color:'var(--ts)'}}>Abrechnungsmonat:</label>
       <select value={periode} onChange={e=>setPeriode(e.target.value)}>
+        <option value="gesamt">📊 Gesamt – alle Aufträge</option>
         {periodOptions.map(p=><option key={p} value={p}>{monName(p.replace('/','-'))}</option>)}
       </select>
       {data && <div className="info">
-        Leistungsmonat: <b style={{color:'var(--t)'}}>{monName(data.leistungsMonat)}</b> · Alles davor = Nachzahlung
+        {data.isGesamt ? 'Alle Aufträge über alle Monate' : <>Leistungsmonat: <b style={{color:'var(--t)'}}>{monName(data.leistungsMonat)}</b> · Alles davor = Nachzahlung</>}
       </div>}
     </div>
 
@@ -259,23 +282,26 @@ function App() {
         </div>
         <div className="scard">
           <div className="lbl">Leistungsmonat</div>
-          <div className="val" style={{color:'var(--g)'}}>{data.lzOrders.length}</div>
-          <div className="det">{monName(data.leistungsMonat)}</div>
+          <div className="val" style={{color:'var(--g)'}}>{data.isGesamt ? '–' : data.lzOrders.length}</div>
+          <div className="det">{data.isGesamt ? 'Nicht relevant in Gesamt' : monName(data.leistungsMonat)}</div>
         </div>
         <div className="scard">
-          <div className="lbl">Nachzahlungen</div>
-          <div className="val" style={{color:'var(--orange)'}}>{data.totalNz}</div>
-          <div className="det">aus {Object.keys(data.nzByMonth).length} Vormonat{Object.keys(data.nzByMonth).length!==1?'en':''}</div>
+          <div className="lbl">{data.isGesamt ? 'Monate' : 'Nachzahlungen'}</div>
+          <div className="val" style={{color:'var(--orange)'}}>{data.isGesamt ? Object.keys(data.nzByMonth).length : data.totalNz}</div>
+          <div className="det">{data.isGesamt ? `${data.totalAuszahlbar} Aufträge in ${Object.keys(data.nzByMonth).length} Monaten` : `aus ${Object.keys(data.nzByMonth).length} Vormonat${Object.keys(data.nzByMonth).length!==1?'en':''}`}</div>
         </div>
         <div className="scard">
-          <div className="lbl">NZ-Anteil</div>
-          <div className="val" style={{color:data.totalNz/data.totalAuszahlbar>0.2?'var(--r)':'var(--orange)'}}>{data.totalAuszahlbar ? (data.totalNz/data.totalAuszahlbar*100).toFixed(1) : 0}%</div>
-          <div className="det">{data.totalNz} von {data.totalAuszahlbar}</div>
+          <div className="lbl">{data.isGesamt ? 'Aufträge/Monat Ø' : 'NZ-Anteil'}</div>
+          <div className="val" style={{color:!data.isGesamt && data.totalNz/data.totalAuszahlbar>0.2?'var(--r)':'var(--orange)'}}>{data.isGesamt ? (Object.keys(data.nzByMonth).length ? Math.round(data.totalAuszahlbar/Object.keys(data.nzByMonth).length) : 0) : (data.totalAuszahlbar ? (data.totalNz/data.totalAuszahlbar*100).toFixed(1) : 0)}{data.isGesamt ? '' : '%'}</div>
+          <div className="det">{data.isGesamt ? 'Durchschnitt pro Monat' : `${data.totalNz} von ${data.totalAuszahlbar}`}</div>
         </div>
         <div className="scard">
           <div className="lbl">Stornos (alle)</div>
           <div className="val" style={{color:'var(--r)'}}>{data.totalStornos}</div>
-          <div className="det">LZ: {data.stLz.length} · Vormonate: {data.totalStOther}</div>
+          <div className="det" style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+            <span style={{color:'var(--r)'}}>⚠️ {data.stornoBezahlt} bereits ausgezahlt</span>
+            <span>{data.stornoOffen} nicht ausgezahlt</span>
+          </div>
         </div>
         <div className="scard">
           <div className="lbl">Offen (alle)</div>
@@ -290,8 +316,8 @@ function App() {
       </h2>
 
       <div className="lanes">
-        {/* Leistungsmonat */}
-        <Lane
+        {/* Leistungsmonat - nur wenn nicht Gesamt */}
+        {!data.isGesamt && <Lane
           title={`${monName(data.leistungsMonat)} – Leistungsmonat`}
           tag="Leistungsmonat"
           tagClass="tag-lz"
@@ -299,19 +325,19 @@ function App() {
           orders={data.lzOrders}
           vpMap={data.vpMap}
           defaultOpen={false}
-        />
+        />}
 
-        {/* Nachzahlungen per month */}
+        {/* Nachzahlungen per month (or all months in gesamt) */}
         {Object.entries(data.nzByMonth).sort((a,b) => b[0].localeCompare(a[0])).map(([month, orders]) =>
           <Lane
             key={month}
-            title={`${monName(month)} – Nachzahlung`}
-            tag={`Nachzahlung`}
-            tagClass="tag-nz"
-            laneClass="nz"
+            title={`${monName(month)}${data.isGesamt ? '' : ' – Nachzahlung'}`}
+            tag={data.isGesamt ? `${orders.length} Aufträge` : 'Nachzahlung'}
+            tagClass={data.isGesamt ? 'tag-lz' : 'tag-nz'}
+            laneClass={data.isGesamt ? 'lz' : 'nz'}
             orders={orders}
             vpMap={data.vpMap}
-            defaultOpen={true}
+            defaultOpen={!data.isGesamt}
           />
         )}
       </div>
@@ -322,7 +348,7 @@ function App() {
       </h2>
 
       <div className="lanes">
-        <Lane
+        {!data.isGesamt && <Lane
           title={`${monName(data.leistungsMonat)} – Stornos Leistungsmonat`}
           tag="Leistungsmonat"
           tagClass="tag-lz"
@@ -330,19 +356,20 @@ function App() {
           orders={data.stLz}
           vpMap={data.vpMap}
           defaultOpen={false}
-        />
-        {Object.entries(data.stByMonth).sort((a,b) => b[0].localeCompare(a[0])).map(([month, orders]) =>
-          <Lane
+        />}
+        {Object.entries(data.stByMonth).sort((a,b) => b[0].localeCompare(a[0])).map(([month, orders]) => {
+          const bezahlt = orders.filter(o => o.abgerechnet_monat).length;
+          return <Lane
             key={month}
-            title={`${monName(month)} – Stornos Vormonat`}
-            tag="Vormonat"
-            tagClass="tag-st"
+            title={`${monName(month)}${data.isGesamt ? '' : ' – Stornos Vormonat'}${bezahlt ? ` · ⚠️ ${bezahlt} ausgezahlt` : ''}`}
+            tag={data.isGesamt ? `${orders.length} Stornos` : 'Vormonat'}
+            tagClass={bezahlt ? 'tag-st' : data.isGesamt ? 'tag-st' : 'tag-st'}
             laneClass="st"
             orders={orders}
             vpMap={data.vpMap}
-            defaultOpen={true}
-          />
-        )}
+            defaultOpen={data.isGesamt ? false : true}
+          />;
+        })}
       </div>
 
       {/* ── OFFEN ── */}
@@ -351,7 +378,7 @@ function App() {
       </h2>
 
       <div className="lanes">
-        <Lane
+        {!data.isGesamt && <Lane
           title={`${monName(data.leistungsMonat)} – Offen Leistungsmonat`}
           tag="Leistungsmonat"
           tagClass="tag-lz"
@@ -359,17 +386,17 @@ function App() {
           orders={data.ofLz}
           vpMap={data.vpMap}
           defaultOpen={false}
-        />
+        />}
         {Object.entries(data.ofByMonth).sort((a,b) => b[0].localeCompare(a[0])).map(([month, orders]) =>
           <Lane
             key={month}
-            title={`${monName(month)} – Offen Vormonat`}
-            tag="Vormonat"
+            title={`${monName(month)}${data.isGesamt ? '' : ' – Offen Vormonat'}`}
+            tag={data.isGesamt ? `${orders.length} Offen` : 'Vormonat'}
             tagClass="tag-of"
             laneClass="of"
             orders={orders}
             vpMap={data.vpMap}
-            defaultOpen={true}
+            defaultOpen={!data.isGesamt}
           />
         )}
       </div>
