@@ -120,11 +120,14 @@ async function generateAbrechnungen(periode, onProgress){
   const [y,m] = periode.split('/');
   const log = (msg) => onProgress?.(msg);
   log('Lade Daten...');
+  // Abrechnungsmonat = periode (z.B. 2026/02). Leistungszeitraum = alles VOR diesem Monat.
+  // Nur Aufträge abrechnen deren DatumErstellt VOR dem Abrechnungsmonat liegt.
+  const periodeStart = `${y}-${m}-01`; // Aufträge VOR diesem Datum
   const [regeln, stufen, mitarbeiter, auftraege, sgArr] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
     sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig'),
-    sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&select=*'),
+    sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${periodeStart}&select=*`),
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
   ]);
   const sgConfig = sgArr[0] || {prozent:3, max_netto:200, ust_satz:19};
@@ -204,6 +207,9 @@ function GutschriftPreview({ab,pos,sg}){
   const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
   const isE=ab.status==='entwurf'||ab.status==='probeabrechnung';
   const isF=ab.status==='freigegeben'||ab.status==='ausgezahlt';
+  // Leistungszeitraum = Vormonat der Periode
+  const lzPer = (()=>{if(!ab.periode)return'—';const[py,pm]=ab.periode.split('/');const d=new Date(parseInt(py),parseInt(pm)-2,1);return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;})();
+  const lzLabel = pLabel(lzPer);
   const staffel=8,pct=Math.min((b.sales/staffel)*100,100),hatS=b.sales>=staffel;
   const verifyData=JSON.stringify({typ:'gutschrift',nr:bn,vt:ab.mitarbeiter_name,brutto:b.aus,netto:b.net,ust:b.uB,datum:heute,per:ab.periode});
   const qrUrl=`https://api.qrserver.com/v1/create-qr-code/?size=54x54&data=${encodeURIComponent(`https://bee-doo-tools.vercel.app/verify.html?d=${btoa(verifyData)}`)}&bgcolor=ffffff&color=1a1a2e&margin=1`;
@@ -234,7 +240,7 @@ function GutschriftPreview({ab,pos,sg}){
           <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
             <div style={{textAlign:'right',fontSize:11}}>
               <div><span style={{color:'rgba(255,255,255,.5)',fontSize:9}}>Datum</span><br/><b>{heute}</b></div>
-              <div style={{marginTop:4}}><span style={{color:'rgba(255,255,255,.5)',fontSize:9}}>Leistungszeitraum</span><br/><b>{pLabel(ab.periode)}</b></div>
+              <div style={{marginTop:4}}><span style={{color:'rgba(255,255,255,.5)',fontSize:9}}>Leistungszeitraum</span><br/><b>{lzLabel}</b></div>
             </div>
             <div style={{width:48,height:48,background:'#fff',borderRadius:5,padding:2,boxShadow:'0 2px 8px rgba(0,0,0,.3)',flexShrink:0}}>
               <img src={qrUrl} width={44} height={44} style={{display:'block',borderRadius:2}} alt="QR"/>
@@ -306,73 +312,96 @@ function GutschriftPreview({ab,pos,sg}){
       </div>
     </div>
 
-    {/* === SEITE 2 === */}
-    <div className="gs-page" style={{padding:'14mm 16mm 28mm'}}>
-      {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
-      <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
-        <span>Provisionen {pLabel(ab.periode)}</span><span style={{color:'#aaa'}}>{bn} · Seite 2</span>
-      </div>
-      <div style={{fontSize:17,fontWeight:700,marginBottom:14}}>{ab.mitarbeiter_name} <span style={{fontSize:11,color:'#888',fontWeight:400}}>({k})</span></div>
-      <div style={{color:'#E07800',fontWeight:700,fontSize:11,marginBottom:7,borderBottom:'1px solid #eee',paddingBottom:3}}>Einzelpositionen</div>
-      {(()=>{
-        /* Group positions by auftrag_nr for tree structure */
-        const groups = [];
-        const byAN = {};
-        aP.forEach(p => {
-          const an = p.auftrag_nr || '—';
-          if(!byAN[an]) { byAN[an] = {main:null,boni:[]}; groups.push(an); }
-          if(p.typ==='provision') byAN[an].main = p;
-          else byAN[an].boni.push(p);
-        });
-        let posNr = 0;
-        return <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
-          <thead><tr style={{background:'#f5f5f5'}}><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:24}}>Nr</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888'}}>Kunde / Position</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:80}}>Quelle</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'right',fontSize:8,textTransform:'uppercase',color:'#888',width:80}}>Betrag</th></tr></thead>
-          <tbody>
-          {groups.map(an => {
-            const g = byAN[an]; posNr++;
-            const m = g.main; if(!m) return null;
-            const boni = g.boni;
-            const posSum = (m.override_betrag!=null?m.override_betrag:m.original_betrag) + boni.reduce((s,b)=>s+(b.override_betrag!=null?b.override_betrag:b.original_betrag),0);
-            const hasBoni = boni.length > 0;
-            return <React.Fragment key={an}>
-              <tr style={{borderBottom:hasBoni?'none':'1px solid #eee'}}>
-                <td style={{padding:'5px 6px',color:'#aaa',fontSize:9,verticalAlign:'top'}}>{posNr}.</td>
-                <td style={{padding:'5px 6px'}} colSpan={hasBoni?1:1}>
-                  <div style={{fontWeight:600}}>{m.kunde||'—'}</div>
-                  <div style={{fontSize:8.5,color:'#888'}}>{m.produkt} · {m.notiz||''}</div>
-                </td>
-                <td style={{padding:'5px 6px',color:'#888',fontSize:9,verticalAlign:'top'}}>{an}</td>
-                <td style={{padding:'5px 6px',textAlign:'right',verticalAlign:'top'}}>{hasBoni?'':<span style={{fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(m.override_betrag!=null?m.override_betrag:m.original_betrag)}</span>}</td>
-              </tr>
-              {hasBoni && <>
-                <tr><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:'#666'}}>├─ Grundprovision</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:'#666',whiteSpace:'nowrap'}}>{fmtE(m.override_betrag!=null?m.override_betrag:m.original_betrag)}</td></tr>
-                {boni.map((b,bi) => <tr key={bi}><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:b.typ==='eigenlead'?'#B45309':b.typ==='empfehlung'?'#7C3AED':'#0369a1'}}>{bi===boni.length-1?'└─':'├─'} {b.produkt}</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:b.typ==='eigenlead'?'#B45309':b.typ==='empfehlung'?'#7C3AED':'#0369a1',whiteSpace:'nowrap'}}>+ {fmtE(b.override_betrag!=null?b.override_betrag:b.original_betrag)}</td></tr>)}
-                <tr style={{borderBottom:'1px solid #eee'}}><td></td><td colSpan={2} style={{padding:'2px 6px 5px 16px',fontSize:9,fontWeight:700,color:'#333'}}>Summe Pos. {posNr}</td><td style={{padding:'2px 6px 5px',textAlign:'right',fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{fmtE(posSum)}</td></tr>
+    {/* === SEITE 2+ (Einzelpositionen, paginiert) === */}
+    {(()=>{
+      /* Group positions by auftrag_nr for tree structure */
+      const groups = [];
+      const byAN = {};
+      aP.forEach(p => {
+        const an = p.auftrag_nr || '—';
+        if(!byAN[an]) { byAN[an] = {main:null,boni:[]}; groups.push(an); }
+        if(p.typ==='provision') byAN[an].main = p;
+        else byAN[an].boni.push(p);
+      });
+      
+      // Split groups into pages (ca. 22 groups per page, weniger auf Seite mit Summen)
+      const PER_PAGE = 22;
+      const pages = [];
+      for(let i=0; i<groups.length; i+=PER_PAGE){
+        pages.push(groups.slice(i, i+PER_PAGE));
+      }
+      if(pages.length===0) pages.push([]);
+      
+      let globalNr = 0;
+      
+      const THead = () => <thead><tr style={{background:'#f5f5f5'}}><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:24}}>Nr</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888'}}>Kunde / Position</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:80}}>Quelle</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'right',fontSize:8,textTransform:'uppercase',color:'#888',width:80}}>Betrag</th></tr></thead>;
+      
+      const PosRow = ({an, nr}) => {
+        const g = byAN[an]; if(!g||!g.main) return null;
+        const m = g.main; const boni = g.boni;
+        const posSum = (m.override_betrag!=null?m.override_betrag:m.original_betrag) + boni.reduce((s,b)=>s+(b.override_betrag!=null?b.override_betrag:b.original_betrag),0);
+        const hasBoni = boni.length > 0;
+        return <React.Fragment>
+          <tr style={{borderBottom:hasBoni?'none':'1px solid #eee'}}>
+            <td style={{padding:'5px 6px',color:'#aaa',fontSize:9,verticalAlign:'top'}}>{nr}.</td>
+            <td style={{padding:'5px 6px'}}><div style={{fontWeight:600}}>{m.kunde||'—'}</div><div style={{fontSize:8.5,color:'#888'}}>{m.produkt} · {m.notiz||''}</div></td>
+            <td style={{padding:'5px 6px',color:'#888',fontSize:9,verticalAlign:'top'}}>{an}</td>
+            <td style={{padding:'5px 6px',textAlign:'right',verticalAlign:'top'}}>{hasBoni?'':<span style={{fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(m.override_betrag!=null?m.override_betrag:m.original_betrag)}</span>}</td>
+          </tr>
+          {hasBoni && <>
+            <tr><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:'#666'}}>├─ Grundprovision</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:'#666',whiteSpace:'nowrap'}}>{fmtE(m.override_betrag!=null?m.override_betrag:m.original_betrag)}</td></tr>
+            {boni.map((bb,bi) => <tr key={bi}><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':'#0369a1'}}>{bi===boni.length-1?'└─':'├─'} {bb.produkt}</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':'#0369a1',whiteSpace:'nowrap'}}>+ {fmtE(bb.override_betrag!=null?bb.override_betrag:bb.original_betrag)}</td></tr>)}
+            <tr style={{borderBottom:'1px solid #eee'}}><td></td><td colSpan={2} style={{padding:'2px 6px 5px 16px',fontSize:9,fontWeight:700,color:'#333'}}>Summe Pos. {nr}</td><td style={{padding:'2px 6px 5px',textAlign:'right',fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{fmtE(posSum)}</td></tr>
+          </>}
+        </React.Fragment>;
+      };
+      
+      return pages.map((pageGroups, pi) => {
+        const isLastPage = pi === pages.length - 1;
+        const pageNum = pi + 2; // Seite 1 = Deckblatt
+        const startNr = globalNr;
+        
+        return <div key={`pos-page-${pi}`} className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
+          {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
+          <div style={{padding:'14mm 16mm 0',flex:1}}>
+            <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
+              <span>Provisionen {lzLabel}</span><span style={{color:'#aaa'}}>{bn} · Seite {pageNum}</span>
+            </div>
+            {pi===0&&<div style={{fontSize:17,fontWeight:700,marginBottom:14}}>{ab.mitarbeiter_name} <span style={{fontSize:11,color:'#888',fontWeight:400}}>({k})</span></div>}
+            {pi===0&&<div style={{color:'#E07800',fontWeight:700,fontSize:11,marginBottom:7,borderBottom:'1px solid #eee',paddingBottom:3}}>Einzelpositionen</div>}
+            {pi>0&&<div style={{color:'#888',fontSize:9,marginBottom:8}}>Fortsetzung Einzelpositionen</div>}
+            
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
+              <THead/>
+              <tbody>
+              {pageGroups.map((an,gi) => { globalNr = startNr + gi + 1; return <PosRow key={an} an={an} nr={startNr + gi + 1}/>; })}
+              
+              {isLastPage && <>
+                {aE.map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb',borderBottom:'1px solid #eee'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10}}>{p.kunde||p.notiz||p.typ} <span style={{fontSize:9,color:'#888'}}>({p.typ==='einmalzahlung'?'Einmalzahlung':p.typ==='abzug'?'Abzug':'Sonstiges'})</span></td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
+                <tr style={{fontWeight:700,borderTop:'2px solid #333',background:'#f9f9f9'}}><td></td><td colSpan={2} style={{padding:'6px 6px'}}>Netto-Summe</td><td style={{padding:'6px 6px',textAlign:'right',whiteSpace:'nowrap'}}>{fmtE(b.bp+b.es)}</td></tr>
+                <tr><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#555',borderTop:'1px solid #ddd'}}>Nettobetrag</td><td style={{padding:'4px 6px',textAlign:'right',borderTop:'1px solid #ddd',whiteSpace:'nowrap'}}>{fmtE(b.net)}</td></tr>
+                {hgb&&<tr style={{background:'#fffbeb'}}><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'4px 6px',textAlign:'right',color:'#92400e',fontWeight:700,whiteSpace:'nowrap'}}>+ {fmtE(b.uB)}</td></tr>}
+                <tr style={{background:'linear-gradient(135deg,#f0fdf4,#dcfce7)',borderTop:'2px solid #166534'}}><td></td><td colSpan={2} style={{padding:'7px 6px',fontWeight:800,fontSize:12}}>BRUTTO-AUSZAHLUNG</td><td style={{padding:'7px 6px',textAlign:'right',fontWeight:900,fontSize:13,color:'#166534',whiteSpace:'nowrap'}}>{fmtE(b.aus)}</td></tr>
               </>}
-            </React.Fragment>;
-          })}
-          {aE.map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb',borderBottom:'1px solid #eee'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10}}>{p.kunde||p.notiz||p.typ} <span style={{fontSize:9,color:'#888'}}>({p.typ==='einmalzahlung'?'Einmalzahlung':p.typ==='abzug'?'Abzug':'Sonstiges'})</span></td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
-          <tr style={{fontWeight:700,borderTop:'2px solid #333',background:'#f9f9f9'}}><td></td><td colSpan={2} style={{padding:'6px 6px'}}>Netto-Summe</td><td style={{padding:'6px 6px',textAlign:'right',whiteSpace:'nowrap'}}>{fmtE(b.bp+b.es)}</td></tr>
-          <tr><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#555',borderTop:'1px solid #ddd'}}>Nettobetrag</td><td style={{padding:'4px 6px',textAlign:'right',borderTop:'1px solid #ddd',whiteSpace:'nowrap'}}>{fmtE(b.net)}</td></tr>
-          {hgb&&<tr style={{background:'#fffbeb'}}><td></td><td colSpan={2} style={{padding:'4px 6px',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'4px 6px',textAlign:'right',color:'#92400e',fontWeight:700,whiteSpace:'nowrap'}}>+ {fmtE(b.uB)}</td></tr>}
-          <tr style={{background:'linear-gradient(135deg,#f0fdf4,#dcfce7)',borderTop:'2px solid #166534'}}><td></td><td colSpan={2} style={{padding:'7px 6px',fontWeight:800,fontSize:12}}>BRUTTO-AUSZAHLUNG</td><td style={{padding:'7px 6px',textAlign:'right',fontWeight:900,fontSize:13,color:'#166534',whiteSpace:'nowrap'}}>{fmtE(b.aus)}</td></tr>
-        </tbody>
-      </table>;
-      })()}
-
-      {ab.stb_kommentar&&<div style={{marginTop:16,padding:10,background:'#fff8e1',border:'1px solid #fde68a',borderRadius:4,fontSize:10}}><b style={{color:'#92400e'}}>📎 Kommentar Steuerberater:</b><br/>{ab.stb_kommentar}</div>}
-
-      <div style={{marginTop:20,display:'grid',gridTemplateColumns:'1fr 1fr',gap:30}}>
-        <div style={{textAlign:'center'}}><div style={{borderBottom:'1px solid #333',height:50,marginBottom:6}}></div><div style={{fontSize:9,color:'#888'}}>Datum, Unterschrift Geschäftsführer</div><div style={{fontSize:9,color:'#555',fontWeight:600}}>bee-doo GmbH</div></div>
-        <div style={{textAlign:'center'}}>
-          {isF&&<div style={{display:'inline-block',border:'2px solid #166534',color:'#166534',padding:'4px 12px',borderRadius:4,fontWeight:700,fontSize:11,transform:'rotate(-3deg)',marginTop:8}}>✓ FREIGEGEBEN</div>}
-          {isF&&<div style={{fontSize:9,color:'#166534',marginTop:4}}>{ab.freigegeben_von||'Patrick Grabowski'}<br/>{ab.freigegeben_am?new Date(ab.freigegeben_am).toLocaleDateString('de-DE'):heute}</div>}
-          {!isF&&<div style={{height:50,display:'flex',alignItems:'center',justifyContent:'center',color:'#ccc',fontSize:10,fontStyle:'italic'}}>Ausstehend</div>}
-          <div style={{fontSize:9,color:'#888'}}>Freigabe-Vermerk</div>
-        </div>
-      </div>
-      <FooterBlock/>
-    </div>
+              </tbody>
+            </table>
+            
+            {isLastPage && ab.stb_kommentar&&<div style={{marginTop:16,padding:10,background:'#fff8e1',border:'1px solid #fde68a',borderRadius:4,fontSize:10}}><b style={{color:'#92400e'}}>📎 Kommentar Steuerberater:</b><br/>{ab.stb_kommentar}</div>}
+            
+            {isLastPage && <div style={{marginTop:20,display:'grid',gridTemplateColumns:'1fr 1fr',gap:30}}>
+              <div style={{textAlign:'center'}}><div style={{borderBottom:'1px solid #333',height:50,marginBottom:6}}></div><div style={{fontSize:9,color:'#888'}}>Datum, Unterschrift Geschäftsführer</div><div style={{fontSize:9,color:'#555',fontWeight:600}}>bee-doo GmbH</div></div>
+              <div style={{textAlign:'center'}}>
+                {isF&&<div style={{display:'inline-block',border:'2px solid #166534',color:'#166534',padding:'4px 12px',borderRadius:4,fontWeight:700,fontSize:11,transform:'rotate(-3deg)',marginTop:8}}>✓ FREIGEGEBEN</div>}
+                {isF&&<div style={{fontSize:9,color:'#166534',marginTop:4}}>{ab.freigegeben_von||'Patrick Grabowski'}<br/>{ab.freigegeben_am?new Date(ab.freigegeben_am).toLocaleDateString('de-DE'):heute}</div>}
+                {!isF&&<div style={{height:50,display:'flex',alignItems:'center',justifyContent:'center',color:'#ccc',fontSize:10,fontStyle:'italic'}}>Ausstehend</div>}
+                <div style={{fontSize:9,color:'#888'}}>Freigabe-Vermerk</div>
+              </div>
+            </div>}
+          </div>
+          <FooterBlock/>
+        </div>;
+      });
+    })()}
 
     {/* === SEITE 3: SYSTEMGEBÜHR-RECHNUNG (nur HGB) === */}
     {hgb&&b.sgN>0&&<div className="gs-page" style={{padding:'14mm 16mm 28mm'}}>
@@ -399,7 +428,7 @@ function GutschriftPreview({ab,pos,sg}){
         <div style={{borderTop:'1px solid #eee',marginBottom:12}}></div>
 
         <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>Rechnung: Systemgebühr gem. Ziff. 4.2 HVV</div>
-        <div style={{fontSize:10,color:'#666',marginBottom:14}}>Leistungszeitraum: {pLabel(ab.periode)} · Bezug: Gutschrift {bn}</div>
+        <div style={{fontSize:10,color:'#666',marginBottom:14}}>Leistungszeitraum: {lzLabel} · Bezug: Gutschrift {bn}</div>
 
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,marginBottom:20}}>
           <thead><tr style={{background:'#f5f5f5'}}><th style={{padding:'8px 10px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:9,textTransform:'uppercase',color:'#888'}}>Beschreibung</th><th style={{padding:'8px 10px',borderBottom:'2px solid #ddd',textAlign:'right',fontSize:9,textTransform:'uppercase',color:'#888'}}>Betrag</th></tr></thead>
