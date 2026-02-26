@@ -1329,8 +1329,15 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
     window.__t?.('PDF wird erstellt...');
     try{
       const c=document.createElement('div');
-      pages.forEach(p=>{const cl=p.cloneNode(true);cl.style.boxShadow='none';c.appendChild(cl);});
-      await html2pdf().set({margin:0,filename:`Gutschrift_${ab.periode.replace('/','-')}_${ab.kuerzel||gK(ab.mitarbeiter_name)}.pdf`,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy'],before:'.gs-page'}}).from(c).save();
+      pages.forEach((p,i)=>{const cl=p.cloneNode(true);cl.style.boxShadow='none';cl.style.margin='0';cl.style.gap='0';if(i>0)cl.style.pageBreakBefore='always';c.appendChild(cl);});
+      // Dateiname: "Abrechnung Januar 2026 Max Mustermann.pdf"
+      const monate=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+      const lzParts=ab.periode?ab.periode.split('/'):[];
+      let lzMonat='',lzJahr='';
+      if(lzParts.length===2){const pY=parseInt(lzParts[0]),pM=parseInt(lzParts[1])-2;const lzD=new Date(pY,pM,1);lzMonat=monate[lzD.getMonth()];lzJahr=lzD.getFullYear();}
+      const safeName=(ab.mitarbeiter_name||'Unbekannt').replace(/[^a-zA-ZäöüÄÖÜß\s-]/g,'').trim();
+      const fname=`Abrechnung ${lzMonat} ${lzJahr} ${safeName}.pdf`;
+      await html2pdf().set({margin:0,filename:fname,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css']}}).from(c).save();
       window.__t?.('✅ PDF heruntergeladen');
     }catch(e){console.error('PDF Error:',e);window.__t?.('PDF-Fehler: '+e.message,'error');}
   };
