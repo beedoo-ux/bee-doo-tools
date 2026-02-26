@@ -172,7 +172,7 @@ async function generateAbrechnungen(periode, onProgress){
   ] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
-    sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig'),
+    sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig,auto_zuschuss'),
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=*`),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${leistungsStart}&select=*`),
@@ -531,6 +531,11 @@ async function generateAbrechnungen(periode, onProgress){
       bruttoTotal -= abzBetrag;
     });
     // Offen-Info (LZ + VM getrennt)
+    // Fahrzeugzuschuss (monatlich, aus pay_mitarbeiter.auto_zuschuss)
+    if(vp.auto_zuschuss && +vp.auto_zuschuss > 0){
+      positionen.push({typ:'sondereinsatz',auftrag_nr:null,kunde:null,produkt:'Fahrzeugzuschuss',original_betrag:+vp.auto_zuschuss,aktiv:true,zurueckgestellt:false,notiz:'monatlich'});
+      bruttoTotal += +vp.auto_zuschuss;
+    }
     const vpOffen = offenByVP[vpId] || [];
     vpOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
     // On Hold Info
@@ -617,6 +622,11 @@ async function generateAbrechnungen(periode, onProgress){
         bruttoTotal += terminBetrag;
         log(`  📅 ${scName}: ${terminCount} Termine × ${regel.betrag_termin_sf}€ = ${terminBetrag}€`);
       }
+    }
+    // Fahrzeugzuschuss (monatlich, aus pay_mitarbeiter.auto_zuschuss)
+    if(sc.auto_zuschuss && +sc.auto_zuschuss > 0){
+      positionen.push({typ:'sondereinsatz',auftrag_nr:null,kunde:null,produkt:'Fahrzeugzuschuss',original_betrag:+sc.auto_zuschuss,aktiv:true,zurueckgestellt:false,notiz:'monatlich'});
+      bruttoTotal += +sc.auto_zuschuss;
     }
     const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
     const sgUst=sgNetto*(sgConfig.ust_satz/100);
