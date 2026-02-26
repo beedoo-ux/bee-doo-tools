@@ -168,7 +168,7 @@ async function generateAbrechnungen(periode, onProgress){
   const leistungsStart = `${lzY}-${lzM}-01`;
   const leistungsEnd = periodeStart;
   log(`Leistungszeitraum: ${lzM}/${lzY}, Nachzügler vor ${lzM}/${lzY}`);
-  const [regeln, stufen, mitarbeiter, sgArr, auftrLZ, auftrNZ, stornoLZ, offenAll, sonderProv, teamBonus, sperrlisten, stornoAbzuege, staffelHistoryFreigegeben
+  const [regeln, stufen, mitarbeiter, sgArr, auftrLZ, auftrNZ, stornoLZ, offenAll, sonderProv, teamBonus, sperrlisten, stornoAbzuege, staffelHistoryFreigegeben, efsZeroProjekte
   ] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
@@ -183,6 +183,7 @@ async function generateAbrechnungen(periode, onProgress){
     sbG('pay_sperrlisten','select=*'),
     sbG('pay_auftraege',`storniert=eq.true&abgerechnet_monat=not.is.null&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,abgerechnet_monat,abgerechnet_jahr,storno_provision_zurueck`),
     sbG('pay_staffel_history',`monat=eq.${parseInt(m)}&jahr=eq.${parseInt(y)}&freigegeben=eq.true`),
+    sbG('efs_projekte','preismodell=eq.Zero&select=efs_id'),
   ]);
   // Sperrlisten: gesperrte AN-Nummern → nicht provisionieren
   const gesperrteANs = new Set();
@@ -245,7 +246,21 @@ async function generateAbrechnungen(periode, onProgress){
   const zeroCountRecords = auftraege.filter(a => a.produkt_typ === 'zero_count');
   const zeroByVP = {};
   zeroCountRecords.forEach(a => { if(a.vertriebler_id) zeroByVP[a.vertriebler_id] = parseInt(a.kwp) || 0; });
-  if(Object.keys(zeroByVP).length) log(`⚡ Zero-Daten: ${Object.keys(zeroByVP).length} Vertriebler, ${Object.values(zeroByVP).reduce((s,v)=>s+v,0)} Zero-Abschlüsse gesamt`);
+  // Zero aus EFS-Projekten erkennen (preismodell=Zero + efs_projekt_id verknüpft)
+  const zeroEFSIds = new Set((efsZeroProjekte||[]).map(e => e.efs_id));
+  if(zeroEFSIds.size) log(`⚡ EFS Zero-Projekte: ${zeroEFSIds.size} in efs_projekte`);
+  const zeroFromEFS = {};
+  auftraegeClean.forEach(a => {
+    if(a.efs_projekt_id && zeroEFSIds.has(a.efs_projekt_id)){
+      const vid = a.vertriebler_id;
+      if(vid){ zeroFromEFS[vid] = (zeroFromEFS[vid]||0) + 1; }
+    }
+  });
+  // Merge: EFS-Daten überschreiben manuell wenn vorhanden
+  for(const [vid, cnt] of Object.entries(zeroFromEFS)){
+    if(!zeroByVP[vid] || zeroByVP[vid] < cnt) zeroByVP[vid] = cnt;
+  }
+  if(Object.keys(zeroByVP).length) log(`⚡ Zero-Daten: ${Object.keys(zeroByVP).length} Vertriebler, ${Object.values(zeroByVP).reduce((s,v)=>s+v,0)} Zero-Abschlüsse gesamt (${Object.keys(zeroFromEFS).length} aus EFS)`);
   const gesperrteGefunden = auftraege.length - auftraegeClean.length;
   if(gesperrteGefunden>0) log(`⚠️ ${gesperrteGefunden} gesperrte Aufträge übersprungen`);
   // NZ-Duplikate auto-erkennen: gleicher Kunde + gleicher VT → in pay_duplikate schreiben
