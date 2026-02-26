@@ -426,6 +426,8 @@ async function generateAbrechnungen(periode, onProgress){
         // Empfehlungs-Bonus: bei NZ-Override immer aktiv, sonst nicht bei "kein Empfehlung"
         if(q.includes('empfehlung')&&regel.betrag_empfehlung>0&&(useNZOverride||!sonderNoEmpfehlung)){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_empfehlung;}
         if(o.speichererweiterung&&regel.betrag_speicher>0){const sxM=(o.notiz||'').match(/speicher_x(\d+)/);const sxAnz=sxM?parseInt(sxM[1]):1;const spBetrag=regel.betrag_speicher*sxAnz;positionen.push({typ:'speicher',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Speicher-Bonus${sxAnz>1?' ('+sxAnz+'×)':''}`,original_betrag:spBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=spBetrag;}
+        // Zero-Bonus: EFS preismodell=Zero → pro Auftrag
+        if(o.efs_projekt_id&&zeroEFSIds.has(o.efs_projekt_id)&&regel.betrag_zero>0){positionen.push({typ:'zero_bonus',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Zero-Bonus',original_betrag:regel.betrag_zero,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_zero;}
 
       }
     };
@@ -508,16 +510,6 @@ async function generateAbrechnungen(periode, onProgress){
       positionen.push({typ:'abzug',auftrag_nr:String(a.auftrag_nr),kunde:a.kunde_name,produkt:`Rückforderung – EFS ${statusLabel}`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:`Ausgezahlt ${a.abgerechnet_monat}/${a.abgerechnet_jahr}, jetzt EFS: ${a._efsStatus}`});
       log(`  ⚠️ ${vpName}: EFS-Rückforderung ${a.auftrag_nr} (${a.kunde_name}) – ${a._efsStatus}`);
     });
-    // Zero-Bonus
-    if(regel.betrag_zero > 0){
-      const zeroCount = zeroByVP[vpId] || 0;
-      if(zeroCount > 0){
-        const zeroBetrag = zeroCount * regel.betrag_zero;
-        positionen.push({typ:'zero_bonus',auftrag_nr:`ZERO-${lzY}-${lzM}`,kunde:`${zeroCount} Zero-Abschlüsse`,produkt:`Zero-Bonus (${zeroCount}× ${regel.betrag_zero}€)`,original_betrag:zeroBetrag,aktiv:true,zurueckgestellt:false,notiz:`${lzY}/${lzM}`});
-        bruttoTotal += zeroBetrag;
-        log(`  ⚡ ${vpName}: ${zeroCount} Zero × ${regel.betrag_zero}€ = ${zeroBetrag}€`);
-      }
-    }
     // Scout-Umleitung: nur Extra-Bonus (800€), Scout behält seine Provision
     const umlOrds = umleitungOrders[vpId] || [];
     if(umlOrds.length > 0){
@@ -587,6 +579,8 @@ async function generateAbrechnungen(periode, onProgress){
         if(q.includes('eigenlead')&&regel.betrag_eigenlead>0){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_eigenlead;}
         if(q.includes('empfehlung')&&regel.betrag_empfehlung>0){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_empfehlung;}
         if(o.speichererweiterung&&regel.betrag_speicher>0){const sxM=(o.notiz||'').match(/speicher_x(\d+)/);const sxAnz=sxM?parseInt(sxM[1]):1;const spBetrag=regel.betrag_speicher*sxAnz;positionen.push({typ:'speicher',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Speicher-Bonus${sxAnz>1?' ('+sxAnz+'×)':''}`,original_betrag:spBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=spBetrag;}
+        // Zero-Bonus: EFS preismodell=Zero → pro Auftrag
+        if(o.efs_projekt_id&&zeroEFSIds.has(o.efs_projekt_id)&&regel.betrag_zero>0){positionen.push({typ:'zero_bonus',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Zero-Bonus',original_betrag:regel.betrag_zero,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_zero;}
       }
     };
     const scByMonthLZ = {};
