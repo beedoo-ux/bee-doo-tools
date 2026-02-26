@@ -333,7 +333,18 @@ async function generateAbrechnungen(periode, onProgress){
   efsRevokedOrders.forEach(a => { if(a.scouter_id){if(!stornoByScout[a.scouter_id])stornoByScout[a.scouter_id]=[];stornoByScout[a.scouter_id].push(a);} });
   const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&select=vertriebler_id,scouter_id,auftrags_datum,auftrag_nr,notiz');
   // Paid active orders per VP per month → für rückwirkende Staffel-Korrektur
-  const paidActiveOrders = await sbG('pay_auftraege','storniert=eq.false&abgerechnet_monat=not.is.null&produkt_typ=not.in.(lead_count,termin_count,zero_count)&select=vertriebler_id,auftrags_datum,auftrag_nr,kunde_name,kwp,notiz');
+  const paidActiveOrders = await sbG('pay_auftraege','storniert=eq.false&abgerechnet_monat=not.is.null&produkt_typ=not.in.(lead_count,termin_count,zero_count)&select=vertriebler_id,auftrags_datum,auftrag_nr,kunde_name,kwp,notiz,efs_projekt_id,abgerechnet_monat,abgerechnet_jahr,storno_provision_zurueck');
+  // EFS Rückforderung: bereits ausgezahlte Aufträge die jetzt LAND_REGISTRY_CHECK/REVOKED sind
+  const efsRueckforderungen = [];
+  paidActiveOrders.forEach(a => {
+    if(!a.efs_projekt_id || !efsBlockedIds[a.efs_projekt_id]) return;
+    if(a.storno_provision_zurueck && a.storno_provision_zurueck > 0) return; // bereits zurückgefordert
+    const info = efsBlockedIds[a.efs_projekt_id];
+    efsRueckforderungen.push({...a, _efsStatus: info.status});
+  });
+  if(efsRueckforderungen.length) log(`⚠️ ${efsRueckforderungen.length} ausgezahlte Aufträge jetzt EFS-blockiert → Rückforderung!`);
+  const efsRueckByVP = {};
+  efsRueckforderungen.forEach(a => { if(a.vertriebler_id){ if(!efsRueckByVP[a.vertriebler_id]) efsRueckByVP[a.vertriebler_id]=[]; efsRueckByVP[a.vertriebler_id].push(a); }});
   // Filter on_hold from all counting
   const allRelevantClean = allRelevant.filter(a => !(a.notiz||'').includes('on_hold'));
   const paidActiveClean = paidActiveOrders.filter(a => !(a.notiz||'').includes('on_hold'));
@@ -481,6 +492,13 @@ async function generateAbrechnungen(periode, onProgress){
         positionen.push({typ:'abzug',auftrag_nr:an,kunde:info.kunde,produkt:`Rückforderung – ${info.typ||'Sperre'}`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:info.notiz||'Rückforderung prüfen'});
       }
     }
+    // EFS-Rückforderung: ausgezahlte Aufträge die jetzt LAND_REGISTRY_CHECK/REVOKED sind
+    const vpEfsRueck = efsRueckforderungen.filter(a => a.vertriebler_id === vpId);
+    vpEfsRueck.forEach(a => {
+      const statusLabel = a._efsStatus === 'REVOKED' ? 'Widerruf (REVOKED)' : 'Grundbuchprüfung';
+      positionen.push({typ:'abzug',auftrag_nr:String(a.auftrag_nr),kunde:a.kunde_name,produkt:`Rückforderung – EFS ${statusLabel}`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:`Ausgezahlt ${a.abgerechnet_monat}/${a.abgerechnet_jahr}, jetzt EFS: ${a._efsStatus}`});
+      log(`  ⚠️ ${vpName}: EFS-Rückforderung ${a.auftrag_nr} (${a.kunde_name}) – ${a._efsStatus}`);
+    });
     // Zero-Bonus
     if(regel.betrag_zero > 0){
       const zeroCount = zeroByVP[vpId] || 0;
