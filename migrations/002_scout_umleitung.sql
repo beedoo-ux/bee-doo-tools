@@ -16,3 +16,4 @@ VALUES (
   '2026-01-01'
 )
 ON CONFLICT DO NOTHING;
+-- triggered
