@@ -833,7 +833,7 @@ function TabImport({ toast, mitarbeiterList }) {
       header: true, encoding: 'UTF-8', skipEmptyLines: true,
       complete: (res) => {
         const rows = res.data.filter(r => r['AN Nr.'] && r['AN Nr.'].trim());
-        const stats = { total: rows.length, ausgezahlt: 0, storno: 0, auszahlbar: 0, offen: 0, unmapped: new Set() };
+        const stats = { total: rows.length, ausgezahlt: 0, storno: 0, auszahlbar: 0, offen: 0, onHold: 0, unmapped: new Set() };
         const mapped = rows.map(r => {
           const status = (r['Auftragsstatus']||'').trim();
           const fort = (r['BeeDooFortschritt']||'').trim();
@@ -854,6 +854,15 @@ function TabImport({ toast, mitarbeiterList }) {
           const speicherRaw = (r['Speichererweiterung']||'').trim();
           const hasSpeicher = speicherRaw.length > 0;
           const speicherAnz = hasSpeicher ? (parseInt((speicherRaw.match(/^(\d+)\s*X/i)||[])[1]) || 1) : 0;
+          // On Hold Detection: "On hold" im WorkflowHistory ohne nachfolgende "Baustelle gestartet"
+          const wfHist = (r['WorkflowHistory']||'');
+          const wfParts = wfHist.split('- ');
+          let lastOnHoldIdx = -1, lastBaustelleIdx = -1;
+          wfParts.forEach((p,i) => { if(/on\s*hold/i.test(p)) lastOnHoldIdx=i; if(/Baustelle gestartet/i.test(p)) lastBaustelleIdx=i; });
+          const isOnHold = lastOnHoldIdx > -1 && lastBaustelleIdx <= lastOnHoldIdx;
+          const notizParts = [];
+          if(speicherAnz > 1) notizParts.push(`speicher_x${speicherAnz}`);
+          if(isOnHold) notizParts.push('on_hold');
           const datum = parseDt(r['DatumAngenommen']);
           const ausgezahlt = parseDt(r['Ausgezahlt am']);
           let abMonat = null, abJahr = null;
@@ -861,6 +870,7 @@ function TabImport({ toast, mitarbeiterList }) {
           if(isStorno) stats.storno++;
           else if(zahlungsstatus === 'anzahlung_eingegangen' && !ausgezahlt) stats.auszahlbar++;
           else if(!isStorno && !ausgezahlt) stats.offen++;
+          if(isOnHold && !isStorno) stats.onHold++;
           return {
             auftrag_nr: `AN-${(r['AN Nr.']||'').trim()}`, kunde_name: (r['Kunde']||'').trim() || null,
             kunde_adresse: (r['Kunde PLZ']||'').trim() || null, vertriebler_id: vtId, auftrags_datum: datum,
@@ -868,7 +878,7 @@ function TabImport({ toast, mitarbeiterList }) {
             zahlungsstatus, lead_quelle: leadQuelle, speichererweiterung: hasSpeicher,
             storniert: isStorno, produkt_typ: 'pv', beedoo_fortschritt: fort || null,
             termin_stattgefunden: status === 'Auftragsbestätigung erstellt',
-            notiz: speicherAnz > 1 ? `speicher_x${speicherAnz}` : null,
+            notiz: notizParts.length > 0 ? notizParts.join(' ') : null,
             abgerechnet_monat: abMonat, abgerechnet_jahr: abJahr,
           };
         });
@@ -898,7 +908,7 @@ function TabImport({ toast, mitarbeiterList }) {
         addLog(`📦 Batch ${Math.floor(i/100)+1}: ${batch.length} Aufträge`);
       }
       addLog(`✅ Import fertig: ${inserted} Aufträge`);
-      addLog(`   📋 ${preview.stats.auszahlbar} auszahlbar | 💰 ${preview.stats.ausgezahlt} ausgezahlt | ❌ ${preview.stats.storno} storniert | ⏳ ${preview.stats.offen} offen`);
+      addLog(`   📋 ${preview.stats.auszahlbar} auszahlbar | 💰 ${preview.stats.ausgezahlt} ausgezahlt | ❌ ${preview.stats.storno} storniert | ⏳ ${preview.stats.offen} offen | ⏸️ ${preview.stats.onHold} on hold`);
       toast('✅ ' + inserted + ' Aufträge importiert', 'ok');
     } catch(e) {
       addLog(`❌ Fehler: ${e.message}`);
@@ -941,6 +951,7 @@ function TabImport({ toast, mitarbeiterList }) {
           { label: 'Ausgezahlt', val: preview.stats.ausgezahlt, c: 'var(--y)' },
           { label: 'Storniert', val: preview.stats.storno, c: 'var(--r)' },
           { label: 'Offen', val: preview.stats.offen, c: 'var(--o)' },
+          { label: 'On Hold', val: preview.stats.onHold, c: '#6366f1' },
         ].map(s => <div key={s.label} style={{ background: 'var(--s3)', borderRadius: 8, padding: '10px 14px', borderLeft: `3px solid ${s.c}` }}>
           <div style={{ fontSize: 10, color: 'var(--ts)' }}>{s.label}</div>
           <div style={{ fontSize: 20, fontWeight: 700, color: s.c }}>{s.val}</div>
