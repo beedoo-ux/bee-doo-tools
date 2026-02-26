@@ -11,6 +11,10 @@ ALTER TABLE pay_mitarbeiter
 CREATE INDEX IF NOT EXISTS idx_infas_utm ON infas_adressen(utm32east, utm32north) 
   WHERE utm32east IS NOT NULL AND utm32north IS NOT NULL;
 
+-- Drop existing functions first (return type changes require DROP)
+DROP FUNCTION IF EXISTS count_infas_in_polygon(text);
+DROP FUNCTION IF EXISTS update_geo_cache(uuid, double precision, double precision);
+
 -- RPC function: count all 23.4M infas addresses inside a drawn polygon
 CREATE OR REPLACE FUNCTION count_infas_in_polygon(geojson_polygon text)
 RETURNS jsonb
