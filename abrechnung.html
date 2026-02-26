@@ -202,7 +202,7 @@ async function generateAbrechnungen(periode, onProgress){
   // Sonderprovisionen nach VP-ID indexieren
   const sonderByVP = {};
   sonderProv.forEach(sp => {
-    if(sp.typ === 'skip_abrechnung' || sp.typ === 'scout_umleitung') return; // nicht als Sonder-Rate
+    if(sp.typ === 'skip_abrechnung' || sp.typ === 'scout_umleitung' || sp.typ === 'scout_eigenlead') return; // nicht als Sonder-Rate
     if(sp.gueltig_ab && sp.gueltig_ab > leistungsEnd) return; // noch nicht gültig
     if(sp.gueltig_bis && sp.gueltig_bis < leistungsStart) return; // abgelaufen
     sonderByVP[sp.mitarbeiter_id] = sp;
@@ -213,6 +213,12 @@ async function generateAbrechnungen(periode, onProgress){
     try { const cfg = JSON.parse(sp.beschreibung); scoutUmleitungen.push({ziel_id:sp.mitarbeiter_id, scout_id:cfg.scout_id, betrag_extra:sp.betrag, scout_name:cfg.scout_name}); } catch(e) {}
   });
   if(scoutUmleitungen.length) log(`🔄 ${scoutUmleitungen.length} Scout-Umleitung(en) geladen`);
+  // Scout-Eigenlead Regeln: wenn bestimmter Scout → Eigenlead-Bonus für VT
+  const scoutEigenleadRegeln = [];
+  sonderProv.filter(sp => sp.typ === 'scout_eigenlead' && sp.aktiv).forEach(sp => {
+    try { const cfg = JSON.parse(sp.beschreibung); scoutEigenleadRegeln.push({vt_id:sp.mitarbeiter_id, scout_id:cfg.scout_id, betrag:sp.betrag, scout_name:cfg.scout_name}); } catch(e) {}
+  });
+  if(scoutEigenleadRegeln.length) log(`🎯 ${scoutEigenleadRegeln.length} Scout-Eigenlead-Regel(n) geladen`);
   // Skip-Abrechnung: VPs die übersprungen werden sollen
   const skipVPIds = new Set(sonderProv.filter(sp => sp.typ === 'skip_abrechnung' && sp.aktiv).map(sp => sp.mitarbeiter_id));
   if(skipVPIds.size) log(`⏸️ ${skipVPIds.size} Mitarbeiter übersprungen (skip_abrechnung)`);
@@ -414,6 +420,9 @@ async function generateAbrechnungen(periode, onProgress){
         const q=(o.lead_quelle||'').toLowerCase();
         // Eigenlead-Bonus: bei NZ-Override immer aktiv, sonst nicht bei "kein Eigenlead"
         if(q.includes('eigenlead')&&regel.betrag_eigenlead>0&&(useNZOverride||!sonderNoEigenlead)){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_eigenlead;}
+        // Scout-Eigenlead: bestimmter Scout → Eigenlead-Sonderprovision
+        const seRule = scoutEigenleadRegeln.find(r => r.vt_id === vpId && o.scouter_id === r.scout_id);
+        if(seRule){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Eigenlead-Sonder (Scout: ${seRule.scout_name})`,original_betrag:seRule.betrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=seRule.betrag;}
         // Empfehlungs-Bonus: bei NZ-Override immer aktiv, sonst nicht bei "kein Empfehlung"
         if(q.includes('empfehlung')&&regel.betrag_empfehlung>0&&(useNZOverride||!sonderNoEmpfehlung)){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_empfehlung;}
         if(o.speichererweiterung&&regel.betrag_speicher>0){const sxM=(o.notiz||'').match(/speicher_x(\d+)/);const sxAnz=sxM?parseInt(sxM[1]):1;const spBetrag=regel.betrag_speicher*sxAnz;positionen.push({typ:'speicher',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Speicher-Bonus${sxAnz>1?' ('+sxAnz+'×)':''}`,original_betrag:spBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=spBetrag;}
