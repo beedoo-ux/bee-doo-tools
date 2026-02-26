@@ -209,7 +209,7 @@ async function generateAbrechnungen(periode, onProgress){
   auftrNZ.forEach(a => a._nachzuegler = true);
   const auftraege = [...auftrLZ, ...auftrNZ];
   // Filter gesperrte Aufträge raus
-  const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')) && a.produkt_typ !== 'lead_count' && a.produkt_typ !== 'termin_count');
+  const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')) && a.produkt_typ !== 'lead_count' && a.produkt_typ !== 'termin_count' && a.produkt_typ !== 'zero_count');
   // Lead-Count Records separat extrahieren
   const leadCountRecords = auftraege.filter(a => a.produkt_typ === 'lead_count');
   const leadByScout = {};
@@ -220,6 +220,11 @@ async function generateAbrechnungen(periode, onProgress){
   const terminByScout = {};
   terminCountRecords.forEach(a => { if(a.scouter_id) terminByScout[a.scouter_id] = parseInt(a.kwp) || 0; });
   if(Object.keys(terminByScout).length) log(`📅 Termin-Daten: ${Object.keys(terminByScout).length} Scouter, ${Object.values(terminByScout).reduce((s,v)=>s+v,0)} Termine gesamt`);
+  // Zero-Count Records separat extrahieren
+  const zeroCountRecords = auftraege.filter(a => a.produkt_typ === 'zero_count');
+  const zeroByVP = {};
+  zeroCountRecords.forEach(a => { if(a.vertriebler_id) zeroByVP[a.vertriebler_id] = parseInt(a.kwp) || 0; });
+  if(Object.keys(zeroByVP).length) log(`⚡ Zero-Daten: ${Object.keys(zeroByVP).length} Vertriebler, ${Object.values(zeroByVP).reduce((s,v)=>s+v,0)} Zero-Abschlüsse gesamt`);
   const gesperrteGefunden = auftraege.length - auftraegeClean.length;
   if(gesperrteGefunden>0) log(`⚠️ ${gesperrteGefunden} gesperrte Aufträge übersprungen`);
   // NZ-Duplikate auto-erkennen: gleicher Kunde + gleicher VT → in pay_duplikate schreiben
@@ -264,7 +269,7 @@ async function generateAbrechnungen(periode, onProgress){
   stornoAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!stornoByVP[a.vertriebler_id]) stornoByVP[a.vertriebler_id] = []; stornoByVP[a.vertriebler_id].push(a); });
   const offenByVP = {};
   offenAll.forEach(a => { if(!a.vertriebler_id) return; if(!offenByVP[a.vertriebler_id]) offenByVP[a.vertriebler_id] = []; offenByVP[a.vertriebler_id].push(a); });
-  const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&produkt_typ=not.in.(lead_count,termin_count)&select=vertriebler_id,scouter_id,auftrags_datum,auftrag_nr');
+  const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&select=vertriebler_id,scouter_id,auftrags_datum,auftrag_nr');
   const salesPerVPMonth = {};
   allRelevant.forEach(a => { if(!a.vertriebler_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.vertriebler_id+'_'+om; salesPerVPMonth[key]=(salesPerVPMonth[key]||0)+1; });
   // Scout sales per month
@@ -278,7 +283,7 @@ async function generateAbrechnungen(periode, onProgress){
   for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
   let count = 0;
   // ALL VP IDs incl. team bonus recipients + sonderprov
-  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP)]);
+  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP)]);
   for(const vpId of allVPIds){
     const vp = vpById[vpId]; if(!vp) continue;
     const orders = byVP[vpId] || [];
@@ -369,6 +374,16 @@ async function generateAbrechnungen(periode, onProgress){
       const sperrEntry = sperrlisten.find(s => String(s.auftrag_nr||'')===an && s.status==='ausgezahlt');
       if(matchOrder || (sperrEntry && sperrEntry.vertriebler_name && sperrEntry.vertriebler_name.includes(vp.nachname))){
         positionen.push({typ:'abzug',auftrag_nr:an,kunde:info.kunde,produkt:`Rückforderung – ${info.typ||'Sperre'}`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:info.notiz||'Rückforderung prüfen'});
+      }
+    }
+    // Zero-Bonus
+    if(regel.betrag_zero > 0){
+      const zeroCount = zeroByVP[vpId] || 0;
+      if(zeroCount > 0){
+        const zeroBetrag = zeroCount * regel.betrag_zero;
+        positionen.push({typ:'zero_bonus',auftrag_nr:`ZERO-${lzY}-${lzM}`,kunde:`${zeroCount} Zero-Abschlüsse`,produkt:`Zero-Bonus (${zeroCount}× ${regel.betrag_zero}€)`,original_betrag:zeroBetrag,aktiv:true,zurueckgestellt:false,notiz:`${lzY}/${lzM}`});
+        bruttoTotal += zeroBetrag;
+        log(`  ⚡ ${vpName}: ${zeroCount} Zero × ${regel.betrag_zero}€ = ${zeroBetrag}€`);
       }
     }
     // Storno-Info (nur Leistungsmonat)
@@ -477,7 +492,7 @@ async function generateAbrechnungen(periode, onProgress){
 
 function calc(pos,sg,hgb){
   const ak=pos.filter(p=>p.aktiv&&!p.zurueckgestellt);
-  const prov=ak.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus','termin_bonus'].includes(p.typ));
+  const prov=ak.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus','termin_bonus','zero_bonus'].includes(p.typ));
   const extra=ak.filter(p=>['einmalzahlung','abzug','sonstiges','team_bonus'].includes(p.typ));
   const bp=prov.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   const es=extra.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
@@ -799,7 +814,7 @@ function BereinigungPanel({onClose}){
 
 function GutschriftPreview({ab,pos,sg}){
   const b=calc(pos,sg,(ab.beschaeftigungsart||'').includes('hgb'));
-  const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus','termin_bonus'].includes(p.typ));
+  const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus','termin_bonus','zero_bonus'].includes(p.typ));
   const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges'].includes(p.typ));
   const aTB=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&p.typ==='team_bonus');
   const aSt=pos.filter(p=>p.typ==='storno_info');
@@ -809,12 +824,14 @@ function GutschriftPreview({ab,pos,sg}){
   const aOfLZ=aOf;
   const aOfVM=[];
   const isNZPos = p => (p.notiz||'').includes('★NZ');
-  const aPLZ = aP.filter(p => !isNZPos(p) && p.typ!=='lead_bonus' && p.typ!=='termin_bonus');
-  const aPNZ = aP.filter(p => isNZPos(p) && p.typ!=='lead_bonus' && p.typ!=='termin_bonus');
+  const aPLZ = aP.filter(p => !isNZPos(p) && p.typ!=='lead_bonus' && p.typ!=='termin_bonus'&&p.typ!=='zero_bonus');
+  const aPNZ = aP.filter(p => isNZPos(p) && p.typ!=='lead_bonus' && p.typ!=='termin_bonus'&&p.typ!=='zero_bonus');
   const aLeadBonus = aP.filter(p => p.typ==='lead_bonus');
   const leadBonusTotal = aLeadBonus.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   const aTerminBonus = aP.filter(p => p.typ==='termin_bonus');
   const terminBonusTotal = aTerminBonus.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
+  const aZeroBonus = aP.filter(p => p.typ==='zero_bonus');
+  const zeroBonusTotal = aZeroBonus.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   const k=ab.kuerzel||gK(ab.mitarbeiter_name),bn=gBN(ab.periode,k,1),hgb=(ab.beschaeftigungsart||'').includes('hgb');
   const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
   const isE=ab.status==='entwurf'||ab.status==='probeabrechnung';
@@ -892,6 +909,7 @@ function GutschriftPreview({ab,pos,sg}){
               {aOfVM.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#8b949e'}}>Offen (Vormonate)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOfVM.length}</td></tr>}
               {leadBonusTotal>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#059669'}}>📋 Lead-Bonus ({aLeadBonus.length>0?aLeadBonus[0].kunde:''})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#059669',fontWeight:600}}>+ {fmtE(leadBonusTotal)}</td></tr>}
               {terminBonusTotal>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#2563eb'}}>📅 Termin-Bonus ({aTerminBonus.length>0?aTerminBonus[0].kunde:''})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#2563eb',fontWeight:600}}>+ {fmtE(terminBonusTotal)}</td></tr>}
+              {zeroBonusTotal>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#d97706'}}>⚡ Zero-Bonus ({aZeroBonus.length>0?aZeroBonus[0].kunde:''})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#d97706',fontWeight:600}}>+ {fmtE(zeroBonusTotal)}</td></tr>}
               <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#555'}}>Provisionen Netto</td><td style={{padding:'4px 7px',textAlign:'right'}}>{fmtE(b.net)}</td></tr>
               {hgb&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'4px 7px',textAlign:'right',color:'#92400e'}}>+ {fmtE(b.uB)}</td></tr>}
               <tr style={{background:'#f0fdf4'}}><td style={{padding:'4px 7px',fontWeight:700}}>Auszahlung</td><td style={{padding:'4px 7px',textAlign:'right',fontWeight:700,color:'#166534'}}>{fmtE(b.aus)}</td></tr>
@@ -946,7 +964,7 @@ function GutschriftPreview({ab,pos,sg}){
         arr.forEach(p => {
           const an = p.auftrag_nr || '—';
           if(!byAN[an]) { byAN[an] = {main:null,boni:[]}; groups.push(an); }
-          if(p.typ==='provision'||p.typ==='lead_bonus'||p.typ==='termin_bonus') byAN[an].main = p;
+          if(p.typ==='provision'||p.typ==='lead_bonus'||p.typ==='termin_bonus'||p.typ==='zero_bonus') byAN[an].main = p;
           else byAN[an].boni.push(p);
         });
         return {groups, byAN};
@@ -1015,7 +1033,7 @@ function GutschriftPreview({ab,pos,sg}){
           </tr>
           {hasBoni && <>
             <tr><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:'#666'}}>├─ Grundprovision</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:'#666',whiteSpace:'nowrap'}}>{fmtE(m.override_betrag!=null?m.override_betrag:m.original_betrag)}</td></tr>
-            {boni.map((bb,bi) => <tr key={bi}><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':bb.typ==='sondereinsatz'?'#0f766e':bb.typ==='lead_bonus'?'#059669':bb.typ==='termin_bonus'?'#2563eb':'#0369a1'}}>{bi===boni.length-1?'└─':'├─'} {bb.produkt}</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':bb.typ==='sondereinsatz'?'#0f766e':bb.typ==='lead_bonus'?'#059669':bb.typ==='termin_bonus'?'#2563eb':'#0369a1',whiteSpace:'nowrap'}}>+ {fmtE(bb.override_betrag!=null?bb.override_betrag:bb.original_betrag)}</td></tr>)}
+            {boni.map((bb,bi) => <tr key={bi}><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':bb.typ==='sondereinsatz'?'#0f766e':bb.typ==='lead_bonus'?'#059669':bb.typ==='termin_bonus'?'#2563eb':bb.typ==='zero_bonus'?'#d97706':'#0369a1'}}>{bi===boni.length-1?'└─':'├─'} {bb.produkt}</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':bb.typ==='sondereinsatz'?'#0f766e':bb.typ==='lead_bonus'?'#059669':bb.typ==='termin_bonus'?'#2563eb':bb.typ==='zero_bonus'?'#d97706':'#0369a1',whiteSpace:'nowrap'}}>+ {fmtE(bb.override_betrag!=null?bb.override_betrag:bb.original_betrag)}</td></tr>)}
             <tr style={{borderBottom:'1px solid #eee'}}><td></td><td colSpan={2} style={{padding:'2px 6px 5px 16px',fontSize:9,fontWeight:700,color:'#333'}}>Summe Pos. {nr}</td><td style={{padding:'2px 6px 5px',textAlign:'right',fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{fmtE(posSum)}</td></tr>
           </>}
         </React.Fragment>;
@@ -1235,7 +1253,7 @@ function GutschriftPreview({ab,pos,sg}){
 
 function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
   const b=calc(pos,sg,(ab.beschaeftigungsart||'').includes('hgb'));
-  const prov=pos.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus','termin_bonus'].includes(p.typ));
+  const prov=pos.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus','termin_bonus','zero_bonus'].includes(p.typ));
   const extra=pos.filter(p=>['einmalzahlung','abzug','sonstiges','team_bonus'].includes(p.typ));
   const lo=ab.status==='freigegeben'||ab.status==='ausgezahlt';
   const tgl=(i)=>{if(lo)return;const n=[...pos];n[i]={...n[i],aktiv:!n[i].aktiv};setPos(n);};
