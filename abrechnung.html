@@ -168,7 +168,7 @@ async function generateAbrechnungen(periode, onProgress){
   const leistungsStart = `${lzY}-${lzM}-01`;
   const leistungsEnd = periodeStart;
   log(`Leistungszeitraum: ${lzM}/${lzY}, Nachzügler vor ${lzM}/${lzY}`);
-  const [regeln, stufen, mitarbeiter, sgArr, auftrLZ, auftrNZ, stornoLZ, offenAll, sonderProv, teamBonus, sperrlisten, stornoAbzuege
+  const [regeln, stufen, mitarbeiter, sgArr, auftrLZ, auftrNZ, stornoLZ, offenAll, sonderProv, teamBonus, sperrlisten, stornoAbzuege, staffelHistoryFreigegeben
   ] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
@@ -182,6 +182,7 @@ async function generateAbrechnungen(periode, onProgress){
     sbG('pay_team_bonus','aktiv=eq.true'),
     sbG('pay_sperrlisten','select=*'),
     sbG('pay_auftraege',`storniert=eq.true&abgerechnet_monat=not.is.null&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,abgerechnet_monat,abgerechnet_jahr,storno_provision_zurueck`),
+    sbG('pay_staffel_history',`monat=eq.${parseInt(m)}&jahr=eq.${parseInt(y)}&freigegeben=eq.true`),
   ]);
   // Sperrlisten: gesperrte AN-Nummern → nicht provisionieren
   const gesperrteANs = new Set();
@@ -192,6 +193,10 @@ async function generateAbrechnungen(periode, onProgress){
     if(s.status==='ausgezahlt') rueckforderungANs.set(an, {kunde:s.kunde_name,typ:s.typ,notiz:s.notiz});
   });
   log(`Sperrliste: ${gesperrteANs.size} gesperrt, ${rueckforderungANs.size} Rückforderungen`);
+  // Freigegebene Staffel-Korrekturen nach VP-ID indexieren
+  const staffelByVP = {};
+  (staffelHistoryFreigegeben||[]).forEach(sh => { staffelByVP[sh.mitarbeiter_id] = sh; });
+  log(`📈 Staffel-History: ${Object.keys(staffelByVP).length} freigegebene Korrekturen für ${m}/${y}`);
   // Sonderprovisionen nach VP-ID indexieren
   const sonderByVP = {};
   sonderProv.forEach(sp => {
@@ -395,74 +400,25 @@ async function generateAbrechnungen(periode, onProgress){
       for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const [k,cnt] of Object.entries(salesPerVPMonth)){ if(!k.startsWith(vpId+'_')) continue; const lzCnt=cnt-(nzPerMonth[k]||0); if(lzCnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } }
     }
     if(stufenBonus>0){ positionen.push({typ:'einmalzahlung',auftrag_nr:null,kunde:null,produkt:'Stufenbonus',original_betrag:stufenBonus,aktiv:true,zurueckgestellt:false,notiz:'Stufenbonus'}); bruttoTotal+=stufenBonus; }
-    // === RÜCKWIRKENDE STAFFEL-KORREKTUR (NZ + Storno) ===
-    if(!sonderFlat && !sonderNZBetrag){
-      // --- NZ Nachzahlung: NZ aus altem Monat → Staffel/Stufe rückwirkend ---
-      if(ordersNZ.length > 0){
-        const nzByMo = {};
-        ordersNZ.forEach(o => { const om=(o.auftrags_datum||'').substring(0,4)+'/'+(o.auftrags_datum||'').substring(5,7); if(!nzByMo[om])nzByMo[om]=[]; nzByMo[om].push(o); });
-        for(const [om, nzOrd] of Object.entries(nzByMo)){
-          const pk=vpId+'_'+om;
-          const paidCnt=paidPerVPMonth[pk]||0;
-          const newTotal=paidCnt+nzOrd.length;
-          const wasStaffel=paidCnt>=regel.staffel_schwelle;
-          const isStaffel=newTotal>=regel.staffel_schwelle;
-          // Staffel-Nachzahlung: vorher Basis, jetzt Staffel → Differenz für alle bezahlten
-          if(!wasStaffel && isStaffel && paidCnt>0){
-            const diff=regel.staffel_betrag_sale-regel.basis_betrag_sale;
-            const nz=paidCnt*diff;
-            const paidDetails=(paidDetailsByVPMonth[pk]||[]).map(d=>`${d.auftrag_nr} (${d.kunde_name})`).join(', ');
-            positionen.push({typ:'staffel_nachzahlung',auftrag_nr:null,kunde:`${paidCnt} Aufträge aus ${pLabel(om)}`,produkt:`Staffel-Nachzahlung (${paidCnt}× ${fmt(diff)}€)`,original_betrag:nz,aktiv:true,zurueckgestellt:false,notiz:`NZ→${newTotal} Sales ≥${regel.staffel_schwelle}: ${paidDetails}`});
-            bruttoTotal+=nz;
-            log(`  📈 ${vpName}: Staffel-NZ ${om}: ${paidCnt}→${newTotal}, +${fmt(nz)}€`);
-          }
-          // Stufenbonus-Nachzahlung
-          if(!sonderNoStufen){
-            let oldSt=0,newSt=0;
-            for(const st of stufen){ if(st.gilt_fuer!==ruleTyp)continue; if(paidCnt>=st.min_anlagen&&st.bonus_betrag>oldSt)oldSt=st.bonus_betrag; if(newTotal>=st.min_anlagen&&st.bonus_betrag>newSt)newSt=st.bonus_betrag; }
-            if(newSt>oldSt){
-              const sd=newSt-oldSt;
-              positionen.push({typ:'staffel_nachzahlung',auftrag_nr:null,kunde:`Stufenbonus ${pLabel(om)}`,produkt:`Stufenbonus-Nachzahlung (+${fmt(sd)}€)`,original_betrag:sd,aktiv:true,zurueckgestellt:false,notiz:`NZ→${newTotal} Sales: Stufe ${fmt(oldSt)}→${fmt(newSt)}€`});
-              bruttoTotal+=sd;
-              log(`  🏆 ${vpName}: Stufen-NZ ${om}: +${fmt(sd)}€`);
-            }
-          }
-        }
-      }
-      // --- Storno Rückforderung: Storno aus bezahltem Monat → Staffel/Stufe verloren ---
-      const vpStoAbzAll = stornoAbzByVP[vpId] || [];
-      const vpStoAbzNew = vpStoAbzAll.filter(s => !s.storno_provision_zurueck || s.storno_provision_zurueck<=0);
-      if(vpStoAbzNew.length > 0){
-        const stoByMo = {};
-        vpStoAbzNew.forEach(s => { const om=(s.auftrags_datum||'').substring(0,4)+'/'+(s.auftrags_datum||'').substring(5,7); if(!stoByMo[om])stoByMo[om]=[]; stoByMo[om].push(s); });
-        for(const [om, stornos] of Object.entries(stoByMo)){
-          const pk=vpId+'_'+om;
-          const remainPaid=paidPerVPMonth[pk]||0;
-          const origCount=remainPaid+stornos.length;
-          const wasStaffel=origCount>=regel.staffel_schwelle;
-          const isStaffel=remainPaid>=regel.staffel_schwelle;
-          // Staffel-Rückforderung: vorher Staffel, jetzt Basis → Differenz zurückfordern
-          if(wasStaffel && !isStaffel && remainPaid>0){
-            const diff=regel.staffel_betrag_sale-regel.basis_betrag_sale;
-            const rf=remainPaid*diff;
-            const paidDetails=(paidDetailsByVPMonth[pk]||[]).map(d=>`${d.auftrag_nr} (${d.kunde_name})`).join(', ');
-            positionen.push({typ:'staffel_rueckforderung',auftrag_nr:null,kunde:`${remainPaid} Aufträge aus ${pLabel(om)}`,produkt:`Staffel-Rückforderung (${remainPaid}× ${fmt(diff)}€)`,original_betrag:-rf,aktiv:true,zurueckgestellt:false,notiz:`Storno→${remainPaid} Sales <${regel.staffel_schwelle}: ${paidDetails}`});
-            bruttoTotal-=rf;
-            log(`  📉 ${vpName}: Staffel-Storno ${om}: ${origCount}→${remainPaid}, -${fmt(rf)}€`);
-          }
-          // Stufenbonus-Rückforderung
-          if(!sonderNoStufen){
-            let oldSt=0,newSt=0;
-            for(const st of stufen){ if(st.gilt_fuer!==ruleTyp)continue; if(origCount>=st.min_anlagen&&st.bonus_betrag>oldSt)oldSt=st.bonus_betrag; if(remainPaid>=st.min_anlagen&&st.bonus_betrag>newSt)newSt=st.bonus_betrag; }
-            if(oldSt>newSt){
-              const sd=oldSt-newSt;
-              positionen.push({typ:'staffel_rueckforderung',auftrag_nr:null,kunde:`Stufenbonus ${pLabel(om)}`,produkt:`Stufenbonus-Rückforderung (-${fmt(sd)}€)`,original_betrag:-sd,aktiv:true,zurueckgestellt:false,notiz:`Storno→${remainPaid} Sales: Stufe ${fmt(oldSt)}→${fmt(newSt)}€`});
-              bruttoTotal-=sd;
-              log(`  🏆⬇ ${vpName}: Stufen-Storno ${om}: -${fmt(sd)}€`);
-            }
-          }
-        }
-      }
+    // === RÜCKWIRKENDE STAFFEL-KORREKTUR (Freigabe-basiert aus Matrix) ===
+    const shEntry = staffelByVP[vpId];
+    if(shEntry && shEntry.korrektur_betrag && +shEntry.korrektur_betrag !== 0){
+      const isNZ = shEntry.korrektur_typ === 'nachzahlung';
+      const betrag = +shEntry.korrektur_betrag;
+      const typ = isNZ ? 'staffel_nachzahlung' : 'staffel_rueckforderung';
+      const vorzeichen = isNZ ? betrag : -Math.abs(betrag);
+      positionen.push({
+        typ: typ,
+        auftrag_nr: null,
+        kunde: shEntry.korrektur_grund || (isNZ ? 'Staffel-Nachzahlung' : 'Staffel-Rückforderung'),
+        produkt: `${isNZ ? 'Staffel-Nachzahlung' : 'Staffel-Rückforderung'} (freigegeben)`,
+        original_betrag: vorzeichen,
+        aktiv: true,
+        zurueckgestellt: false,
+        notiz: `Vormonat: ${shEntry.bezahlte_auftraege} Aufträge, Staffel: ${shEntry.staffel_erreicht?'ja':'nein'}, Stufenbonus: ${fmt(shEntry.stufenbonus_betrag||0)}€ – ${shEntry.korrektur_grund||''}`
+      });
+      if(isNZ) bruttoTotal += betrag; else bruttoTotal -= Math.abs(betrag);
+      log(`  ${isNZ ? '📈' : '📉'} ${vpName}: Staffel-Korrektur (FREIGEGEBEN): ${isNZ?'+':''}${fmt(vorzeichen)}€ – ${shEntry.korrektur_grund||''}`);
     }
     // Team-Bonus: Christoph Held → 200€ pro Sale ALLER VTs, Tayfun → 300€ pro Sale seines Teams
     const tb = teamBonusByVP[vpId];
