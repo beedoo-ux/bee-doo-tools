@@ -43,29 +43,6 @@ body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-heigh
 .kat-btn:hover{border-color:#484f58;color:#c9d1d9}
 .kat-btn.active{background:#F5C50018;border-color:#F5C500;color:#F5C500}
 .kat-btn.active-sc{background:#a78bfa18;border-color:#a78bfa;color:#a78bfa}
-.sc-tabs{display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid #21262d;padding-bottom:6px}
-.sc-tab{padding:5px 10px;border-radius:6px 6px 0 0;font-size:11px;font-weight:600;cursor:pointer;border:1px solid transparent;border-bottom:none;color:#8b949e;background:transparent;transition:all .15s}
-.sc-tab:hover{color:#e6edf3;background:#161b2280}
-.sc-tab.active{color:#a78bfa;border-color:#21262d;background:#0d1117;border-bottom:2px solid #a78bfa}
-.sc-tab .cnt{background:#21262d;padding:1px 6px;border-radius:8px;font-size:10px;margin-left:4px}
-.sc-tab.active .cnt{background:#a78bfa30;color:#a78bfa}
-.sc-detail-tbl{width:100%;border-collapse:collapse;font-size:11px}
-.sc-detail-tbl th{padding:5px 7px;text-align:left;font-size:9px;text-transform:uppercase;color:#8b949e;border-bottom:1px solid #21262d;letter-spacing:.3px;font-weight:600}
-.sc-detail-tbl td{padding:6px 7px;border-bottom:1px solid #161b22;color:#c9d1d9;font-size:11px}
-.sc-detail-tbl tr:hover{background:#161b2280}
-.sc-detail-tbl .kunde{font-weight:600;color:#e6edf3}
-.sc-detail-tbl .datum{color:#8b949e;font-size:10px}
-.sc-detail-tbl .tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600}
-.sc-detail-tbl .tag-sale{background:#23893620;color:#3fb950}
-.sc-detail-tbl .tag-termin{background:#58a6ff20;color:#58a6ff}
-.sc-detail-tbl .tag-storno{background:#f8514920;color:#f85149}
-.sc-detail-tbl .tag-offen{background:#d29922;color:#1c1c1c}
-.sc-detail-tbl .tag-lead{background:#a78bfa20;color:#a78bfa}
-.sc-stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
-.sc-stat{background:#161b22;padding:8px;border-radius:6px;border:1px solid #21262d;text-align:center}
-.sc-stat .val{font-size:18px;font-weight:700}
-.sc-stat .lbl{font-size:9px;color:#8b949e;margin-top:2px}
-.sc-empty{text-align:center;padding:20px;color:#484f58;font-size:12px}
 .vt-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .vt-name{font-size:15px;font-weight:700;color:#e6edf3}
 .vt-kuerzel{font-size:11px;color:#8b949e;background:#21262d;padding:2px 8px;border-radius:4px}
@@ -82,7 +59,6 @@ body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-heigh
 .detail-header{background:#161b22;border-bottom:1px solid #21262d;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
 .detail-body{display:flex;flex:1;overflow:hidden}
 .edit-panel{width:420px;min-width:380px;background:#0d1117;border-right:1px solid #21262d;overflow-y:auto;padding:16px;flex-shrink:0}
-.edit-panel-inner{background:#0d1117}
 .preview-panel{flex:1;overflow-y:auto;background:#2d2d2d;padding:20px;display:flex;justify-content:center}
 .edit-section{margin-bottom:16px}
 .edit-section-title{font-size:12px;font-weight:700;color:#F5C500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #21262d}
@@ -240,6 +216,12 @@ async function generateAbrechnungen(periode, onProgress){
   const auftraege = [...auftrLZ, ...auftrNZ];
   // Filter gesperrte Aufträge raus
   const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')) && a.produkt_typ !== 'lead_count' && a.produkt_typ !== 'termin_count' && a.produkt_typ !== 'zero_count');
+  // On Hold: Aufträge mit "on_hold" in notiz → nicht auszahlen, separat ausweisen
+  const onHoldOrders = auftraegeClean.filter(a => (a.notiz||'').includes('on_hold'));
+  const auftraegePayable = auftraegeClean.filter(a => !(a.notiz||'').includes('on_hold'));
+  if(onHoldOrders.length) log(`⏸️ ${onHoldOrders.length} Aufträge on hold (Montage > On hold) – werden nicht ausgezahlt`);
+  const onHoldByVP = {}; const onHoldBySC = {};
+  onHoldOrders.forEach(a => { if(a.vertriebler_id){if(!onHoldByVP[a.vertriebler_id])onHoldByVP[a.vertriebler_id]=[];onHoldByVP[a.vertriebler_id].push(a);} if(a.scouter_id){if(!onHoldBySC[a.scouter_id])onHoldBySC[a.scouter_id]=[];onHoldBySC[a.scouter_id].push(a);} });
   // Lead-Count Records separat extrahieren
   const leadCountRecords = auftraege.filter(a => a.produkt_typ === 'lead_count');
   const leadByScout = {};
@@ -258,7 +240,7 @@ async function generateAbrechnungen(periode, onProgress){
   const gesperrteGefunden = auftraege.length - auftraegeClean.length;
   if(gesperrteGefunden>0) log(`⚠️ ${gesperrteGefunden} gesperrte Aufträge übersprungen`);
   // NZ-Duplikate auto-erkennen: gleicher Kunde + gleicher VT → in pay_duplikate schreiben
-  const nzClean = auftraegeClean.filter(a=>a._nachzuegler);
+  const nzClean = auftraegePayable.filter(a=>a._nachzuegler);
   const nzByKey = {};
   nzClean.forEach(a=>{const k=`${(a.kunde_name||'').trim().toLowerCase()}__${a.vertriebler_id}`;if(!nzByKey[k])nzByKey[k]=[];nzByKey[k].push(a);});
   for(const [k,arr] of Object.entries(nzByKey)){
@@ -281,16 +263,16 @@ async function generateAbrechnungen(periode, onProgress){
   const offeneAuftr = offenAll;
   const stornoLZn = stornoLZ.length;
   const offenLZn = offenAll.length;
-  log(`${auftrLZ.length} LZ + ${auftrNZ.length} NZ | ${stornoLZn} Stornos | ${stornoAbzuege.length} Storno-Abzüge | ${offenLZn} Offen | ${sonderProv.length} Sonder | ${teamBonus.length} Team`);
+  log(`${auftrLZ.length} LZ + ${auftrNZ.length} NZ | ${stornoLZn} Stornos | ${stornoAbzuege.length} Storno-Abzüge | ${offenLZn} Offen | ${onHoldOrders.length} On Hold | ${sonderProv.length} Sonder | ${teamBonus.length} Team`);
   const sgConfig = sgArr[0] || {prozent:3, max_netto:200, ust_satz:19};
   const regelMap = {}; regeln.forEach(r => regelMap[r.mitarbeiter_typ] = r);
   const typMap = {hgb_vertriebler_haupt:'hgb_vertriebler_haupt',hgb84:'hgb_vertriebler_haupt',angestellt_vt:'angestellt_vertriebler',angestellt_vertriebler:'angestellt_vertriebler',hgb_vertriebler_agentur:'hgb_vertriebler_agentur',vertriebler:'vertriebler',hgb_scouter:'hgb_scouter',angestellt_scouter:'angestellt_scouter'};
   const vpById = {}; mitarbeiter.forEach(v => { vpById[v.id] = v; });
   const byVP = {};
-  auftraegeClean.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id] = []; byVP[a.vertriebler_id].push(a); });
+  auftraegePayable.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id] = []; byVP[a.vertriebler_id].push(a); });
   // Scout grouping: by scouter_id
   const byScout = {};
-  auftraegeClean.forEach(a => { if(!a.scouter_id) return; if(!byScout[a.scouter_id]) byScout[a.scouter_id] = []; byScout[a.scouter_id].push(a); });
+  auftraegePayable.forEach(a => { if(!a.scouter_id) return; if(!byScout[a.scouter_id]) byScout[a.scouter_id] = []; byScout[a.scouter_id].push(a); });
   const stornoByScout = {};
   stornoAuftr.forEach(a => { if(!a.scouter_id) return; if(!stornoByScout[a.scouter_id]) stornoByScout[a.scouter_id] = []; stornoByScout[a.scouter_id].push(a); });
   const offenByScout = {};
@@ -318,7 +300,7 @@ async function generateAbrechnungen(periode, onProgress){
   allRelevant.forEach(a => { if(!a.scouter_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.scouter_id+'_'+om; salesPerScoutMonth[key]=(salesPerScoutMonth[key]||0)+1; });
   // Total sales per VP (alle Monate) for Team-Bonus
   const totalSalesByVP = {};
-  auftraegeClean.forEach(a => { if(!a.vertriebler_id) return; totalSalesByVP[a.vertriebler_id]=(totalSalesByVP[a.vertriebler_id]||0)+1; });
+  auftraegePayable.forEach(a => { if(!a.vertriebler_id) return; totalSalesByVP[a.vertriebler_id]=(totalSalesByVP[a.vertriebler_id]||0)+1; });
   log('Lösche alte Entwürfe...');
   const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&status=in.(entwurf,probeabrechnung)&select=id`);
   for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
@@ -332,7 +314,7 @@ async function generateAbrechnungen(periode, onProgress){
     const vpOffen2 = offenByVP[vpId] || [];
     const hasSonder = !!sonderByVP[vpId];
     const hasTeamB = !!teamBonusByVP[vpId];
-    if(!orders.length && !vpStornos2.length && !vpOffen2.length && !hasTeamB) continue;
+    if(!orders.length && !vpStornos2.length && !vpOffen2.length && !(onHoldByVP[vpId]||[]).length && !hasTeamB) continue;
     const ruleTyp = typMap[vp.typ] || vp.typ;
     const regel = regelMap[ruleTyp];
     if(!regel){ log(`⚠️ ${vp.vorname} ${vp.nachname}: keine Regel für ${ruleTyp}`); continue; }
@@ -450,6 +432,9 @@ async function generateAbrechnungen(periode, onProgress){
     // Offen-Info (LZ + VM getrennt)
     const vpOffen = offenByVP[vpId] || [];
     vpOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
+    // On Hold Info
+    const vpOnHold = onHoldByVP[vpId] || [];
+    vpOnHold.forEach(o => { positionen.push({typ:'on_hold_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`On Hold – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
     const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
     const sgUst=sgNetto*(sgConfig.ust_satz/100);
     const ustSatz=isHGB&&vp.mwst_pflichtig?19:0;
@@ -506,6 +491,9 @@ async function generateAbrechnungen(periode, onProgress){
     scStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(s.auftrags_datum||'').substring(0,7)}); });
     // Offen-Info
     scOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
+    // On Hold Info (Scout)
+    const scOnHold = onHoldBySC[scId] || [];
+    scOnHold.forEach(o => { positionen.push({typ:'on_hold_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`On Hold – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
     // Lead-Bonus für Angestellt-Scouter
     if(!isHGB && regel.betrag_lead > 0){
       const leadCount = leadByScout[scId] || 0;
@@ -862,13 +850,14 @@ function BereinigungPanel({onClose}){
   </div>;
 }
 
-function GutschriftPreview({ab,pos,sg,scouterAuftr}){
+function GutschriftPreview({ab,pos,sg}){
   const b=calc(pos,sg,(ab.beschaeftigungsart||'').includes('hgb'));
   const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus','termin_bonus','zero_bonus'].includes(p.typ));
   const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges'].includes(p.typ));
   const aTB=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&p.typ==='team_bonus');
   const aSt=pos.filter(p=>p.typ==='storno_info');
   const aOf=pos.filter(p=>p.typ==='offen_info');
+  const aOH=pos.filter(p=>p.typ==='on_hold_info');
   const aStLZ=aSt;
   const aStVM=[];
   const aOfLZ=aOf;
@@ -957,6 +946,7 @@ function GutschriftPreview({ab,pos,sg,scouterAuftr}){
               {aStVM.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#da3633'}}>Storniert (Vormonate)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#da3633'}}>{aStVM.length}</td></tr>}
               {aOfLZ.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#8b949e'}}>Offen ({lzLabel})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOfLZ.length}</td></tr>}
               {aOfVM.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#8b949e'}}>Offen (Vormonate)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOfVM.length}</td></tr>}
+              {aOH.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#6366f1'}}>⏸️ On Hold (Montage)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#6366f1'}}>{aOH.length}</td></tr>}
               {leadBonusTotal>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#059669'}}>📋 Lead-Bonus ({aLeadBonus.length>0?aLeadBonus[0].kunde:''})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#059669',fontWeight:600}}>+ {fmtE(leadBonusTotal)}</td></tr>}
               {terminBonusTotal>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#2563eb'}}>📅 Termin-Bonus ({aTerminBonus.length>0?aTerminBonus[0].kunde:''})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#2563eb',fontWeight:600}}>+ {fmtE(terminBonusTotal)}</td></tr>}
               {zeroBonusTotal>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#d97706'}}>⚡ Zero-Bonus ({aZeroBonus.length>0?aZeroBonus[0].kunde:''})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#d97706',fontWeight:600}}>+ {fmtE(zeroBonusTotal)}</td></tr>}
@@ -1034,26 +1024,23 @@ function GutschriftPreview({ab,pos,sg,scouterAuftr}){
       nzG.groups.forEach(an => { const g=nzG.byAN[an]; if(g?.main?.kunde){ const k=g.main.kunde.trim().toLowerCase(); nzKundeCount[k]=(nzKundeCount[k]||0)+1; } });
       const isNZDupe = (kunde) => kunde && nzKundeCount[kunde.trim().toLowerCase()] > 1;
       
-      // Dynamic page break: count actual rows per group, max ~44 rows per page
+      // Dynamic page break: count actual rows per group, max ~38 rows per page
       const MAX_ROWS = 44;
       const LAST_PAGE_RESERVE = 4; // Summen + Unterschriften
       const pages = []; let currentPage = []; let rowCount = 0;
       allGroups.forEach((item, gi) => {
         if(item.src==='sep'){
-          // NZ header → IMMER neue Seite (neues Blatt) – auch wenn currentPage leer ist
+          // NZ header → immer neue Seite
           if(currentPage.length > 0){
-            pages.push(currentPage);
+            pages.push(currentPage); currentPage = []; rowCount = 0;
           }
-          currentPage = [item]; rowCount = 2;
+          currentPage.push(item); rowCount += 2;
           return;
         }
         const g = getG(item);
         const rows = 1 + (g.boni.length > 0 ? g.boni.length + 2 : 0);
-        // remainingItems: nur bis zum nächsten sep zählen (LZ/NZ getrennt)
-        const sepIdx = allGroups.slice(gi).findIndex(x=>x.src==='sep');
-        const sameSection = sepIdx>=0 ? allGroups.slice(gi, gi+sepIdx) : allGroups.slice(gi);
-        const remainingInSection = sameSection.filter(x=>x.src!=='sep');
-        const remainingRows = remainingInSection.reduce((s,x) => {const gg=getG(x); return s + 1 + (gg&&gg.boni.length > 0 ? gg.boni.length + 2 : 0);}, 0);
+        const remainingItems = allGroups.slice(gi).filter(x=>x.src!=='sep');
+        const remainingRows = remainingItems.reduce((s,x) => {const gg=getG(x); return s + 1 + (gg&&gg.boni.length > 0 ? gg.boni.length + 2 : 0);}, 0);
         const isNearEnd = remainingRows <= (MAX_ROWS - LAST_PAGE_RESERVE);
         const limit = isNearEnd ? (MAX_ROWS - LAST_PAGE_RESERVE) : MAX_ROWS;
         if(rowCount + rows > limit && currentPage.length > 0){
@@ -1066,13 +1053,10 @@ function GutschriftPreview({ab,pos,sg,scouterAuftr}){
       
       let globalNr = 0;
       
-      // Track which pages are NZ pages (contain NZ items or start after NZ separator)
-      const pageIsNZ = pages.map(pg => pg.some(item => item.src==='sep' || item.src==='nz'));
-      
       const THead = () => <thead><tr style={{background:'#f5f5f5'}}><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:24}}>Nr</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888'}}>Kunde / Position</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:80}}>Quelle</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'right',fontSize:8,textTransform:'uppercase',color:'#888',width:80}}>Betrag</th></tr></thead>;
       
       const PosRow = ({item, nr}) => {
-        if(item.src==='sep') return <tr key="nz-sep"><td colSpan={4} style={{padding:0,height:2}}></td></tr>;
+        if(item.src==='sep') return <tr><td colSpan={4} style={{padding:'12px 6px 4px',fontWeight:700,color:'#B45309',fontSize:10,borderBottom:'2px solid #f59e0b',background:'#fffbeb',textTransform:'uppercase',letterSpacing:'.5px'}}>📋 Nachzügler aus Vormonaten ({nzG.groups.length})</td></tr>;
         const g = getG(item); if(!g||!g.main) return null;
         const m = g.main; const boni = g.boni;
         const isNZ = item.src==='nz';
@@ -1099,21 +1083,16 @@ function GutschriftPreview({ab,pos,sg,scouterAuftr}){
         const isLastPage = pi === pages.length - 1;
         const pageNum = pi + 2; // Seite 1 = Deckblatt
         const startNr = globalNr;
-        const isNZPage = pageIsNZ[pi];
-        const isNZStart = pageGroups[0]?.src==='sep';
         
         return <div key={`pos-page-${pi}`} className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
           {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
           <div style={{padding:'14mm 16mm 0',flex:1}}>
             <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
-              <span>{isNZPage?`Nachzügler aus Vormonaten`:`Provisionen ${lzLabel}`}</span><span style={{color:'#aaa'}}>{bn} · Seite {pageNum}</span>
+              <span>{pageGroups[0]?.src==='sep'?`Nachzügler aus Vormonaten`:`Provisionen ${lzLabel}`}</span><span style={{color:'#aaa'}}>{bn} · Seite {pageNum}</span>
             </div>
-            {pi===0&&!isNZPage&&<div style={{fontSize:17,fontWeight:700,marginBottom:14}}>{ab.mitarbeiter_name} <span style={{fontSize:11,color:'#888',fontWeight:400}}>({k})</span></div>}
-            {pi===0&&!isNZPage&&<div style={{color:'#E07800',fontWeight:700,fontSize:11,marginBottom:7,borderBottom:'1px solid #eee',paddingBottom:3}}>Einzelpositionen – Leistungszeitraum {lzLabel}</div>}
-            {pi>0&&!isNZPage&&<div style={{color:'#888',fontSize:9,marginBottom:8}}>Fortsetzung Einzelpositionen</div>}
-            {isNZStart&&<div style={{fontSize:17,fontWeight:700,marginBottom:6}}>{ab.mitarbeiter_name} <span style={{fontSize:11,color:'#888',fontWeight:400}}>({k})</span></div>}
-            {isNZStart&&<div style={{color:'#B45309',fontWeight:700,fontSize:11,marginBottom:7,borderBottom:'2px solid #f59e0b',paddingBottom:3,background:'#fffbeb',padding:'4px 6px',borderRadius:3}}>📋 Nachzügler aus Vormonaten ({nzG.groups.length})</div>}
-            {isNZPage&&!isNZStart&&<div style={{color:'#B45309',fontSize:9,marginBottom:8}}>Fortsetzung Nachzügler aus Vormonaten</div>}
+            {pi===0&&<div style={{fontSize:17,fontWeight:700,marginBottom:14}}>{ab.mitarbeiter_name} <span style={{fontSize:11,color:'#888',fontWeight:400}}>({k})</span></div>}
+            {pi===0&&<div style={{color:'#E07800',fontWeight:700,fontSize:11,marginBottom:7,borderBottom:'1px solid #eee',paddingBottom:3}}>Einzelpositionen – Leistungszeitraum {lzLabel}</div>}
+            {pi>0&&<div style={{color:'#888',fontSize:9,marginBottom:8}}>Fortsetzung Einzelpositionen</div>}
             
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
               <THead/>
@@ -1197,11 +1176,12 @@ function GutschriftPreview({ab,pos,sg,scouterAuftr}){
     })}
 
     {/* === STORNIERTE + OFFENE AUFTRÄGE (eigene Seite(n)) === */}
-    {(aSt.length>0||aOf.length>0)&&(()=>{
+    {(aSt.length>0||aOf.length>0||aOH.length>0)&&(()=>{
       const items = [];
       if(aStLZ.length>0) items.push({title:`❌ Stornierte Aufträge – ${lzLabel}`,color:'#da3633',bg:'#fef2f2',border:'#fecaca',data:aStLZ});
       if(aOfLZ.length>0) items.push({title:`⏳ Offene Aufträge – ${lzLabel}`,color:'#6b7280',bg:'#f9fafb',border:'#e5e7eb',data:aOfLZ});
       if(aOfVM.length>0) items.push({title:`⏳ Offene Aufträge – Vormonate`,color:'#4b5563',bg:'#f9fafb',border:'#e5e7eb',data:aOfVM});
+      if(aOH.length>0) items.push({title:`⏸️ On Hold – Montage gestoppt`,color:'#6366f1',bg:'#eef2ff',border:'#c7d2fe',data:aOH});
       // Paginate: ~35 rows per page
       const allRows = [];
       items.forEach(cat => { allRows.push({type:'header',cat}); cat.data.forEach(p => allRows.push({type:'row',cat,p})); });
@@ -1224,362 +1204,18 @@ function GutschriftPreview({ab,pos,sg,scouterAuftr}){
               return <tr key={ri} style={{background:row.cat.bg,borderBottom:`1px solid ${row.cat.border}`}}>
                 <td style={{padding:'4px 6px',color:row.cat.color,fontSize:9,width:70}}>{p.auftrag_nr}</td>
                 <td style={{padding:'4px 6px',color:row.cat.color}}>{p.kunde||'—'}</td>
-                <td style={{padding:'4px 6px',color:row.cat.color,fontSize:8.5,width:90}}>{p.produkt?.replace('Storno – ','').replace('Offen – ','')}</td>
+                <td style={{padding:'4px 6px',color:row.cat.color,fontSize:8.5,width:90}}>{p.produkt?.replace('Storno – ','').replace('Offen – ','').replace('On Hold – ','')}</td>
                 <td style={{padding:'4px 6px',color:row.cat.color,fontSize:8.5,width:70,textAlign:'right'}}>{(p.notiz||'').replace(' ★VM','').replace(' ★NZ','')}</td>
               </tr>;
             })}
             </tbody>
           </table>
           {pi===infoPages.length-1&&<div style={{marginTop:14,padding:8,background:'#f0f0f0',borderRadius:4,fontSize:8.5,color:'#666'}}>
-            <b>Hinweis:</b> Stornierte und offene Aufträge werden nicht ausgezahlt und fließen nicht in die Staffelberechnung ein. Diese Übersicht dient der Transparenz.
+            <b>Hinweis:</b> Stornierte, offene und on-hold Aufträge werden nicht ausgezahlt und fließen nicht in die Staffelberechnung ein. On-Hold-Aufträge werden bei Wiederaufnahme der Montage (Baustelle gestartet) in der nächsten Abrechnung nachgeholt.
           </div>}
         </div>
         <FooterBlock/>
       </div>);
-    })()}
-
-    {/* === SCOUTER-LEISTUNGSÜBERSICHT (eigene Seite(n), nur Scouter) === */}
-    {(ab.beschaeftigungsart||'').includes('scouter')&&scouterAuftr&&(()=>{
-      const sa=scouterAuftr;
-      const vtN2=sa.vtMap||{};
-      const fDsc=d=>d?new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
-      const[pYsc,pMsc]=ab.periode?ab.periode.split('/').map(Number):[2026,1];
-      const lzDsc=new Date(pYsc,pMsc-2,1);
-      const lzMsc=`${lzDsc.getFullYear()}-${String(lzDsc.getMonth()+1).padStart(2,'0')}`;
-      const lzLblSc=lzDsc.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
-      const inLZsc=a=>(a.auftrags_datum||'').startsWith(lzMsc);
-      const salesLZ=sa.sales.filter(inLZsc);
-      const salesVM=sa.sales.filter(a=>!inLZsc(a));
-      const bn=ab.belegnummer||gBN(ab.periode,ab.kuerzel||gK(ab.mitarbeiter_name),1);
-
-      // ── Parse enpal_leads into structured data ──
-      const parseDEdt=(s)=>{if(!s)return null;const p=s.split(' ')[0].split('.');if(p.length!==3)return null;return new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));};
-      const fmtDEdt=(s)=>{const d=parseDEdt(s);return d?d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';};
-      const enpalAll=(sa.enpalLeads||[]).map(r=>{
-        const rd=r.row_data||{};
-        return {id:r.id,kunde:rd['Leadkunde']||'—',adresse:rd['Leadadresse']||'—',leadDatum:rd['DatumTerminerstellung']||'',terminDatum:rd['DatumTermin Beginn']||'',terminEnde:rd['DatumTermin Ende']||'',vertriebler:rd['Terminiert anName']||'—',status:rd['AktuellerStatus']||'—',terminstatus:rd['Terminstatus']||'',abschluss:rd['Abschlussstatus']||'',indikator:rd['Indikator']||'',ausfallGrund:rd['TerminausfallBegründung']||'',angebot:rd['Angebotsstatus']||'',leadId:rd['LEADID']||'',quelle:rd['Leadquelle']||''};
-      }).sort((a,b)=>{const da=parseDEdt(a.leadDatum),db=parseDEdt(b.leadDatum);if(!da&&!db)return 0;if(!da)return 1;if(!db)return -1;return da-db;});
-
-      // Filter by LZ month (based on DatumTerminerstellung)
-      const inLZenpal=(item)=>{const d=parseDEdt(item.leadDatum);if(!d)return false;const m=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;return m===lzMsc;};
-      const enpalLZ=enpalAll.filter(inLZenpal);
-      const enpalVM=enpalAll.filter(e=>!inLZenpal(e));
-
-      // Stattgefundene Termine = status Abgeschlossen
-      const termineStattgef=enpalAll.filter(e=>e.status==='Abgeschlossen');
-      // Ausgefallene Termine
-      const termineAusgef=enpalAll.filter(e=>e.status==='Ausgefallen');
-
-      // ── PDF Pages ──
-      const allScPages=[];
-      const ROWS=22;
-      const isE=ab.status==='entwurf'||ab.status==='probeabrechnung';
-      const ScPg=({children,title,subtitle,pageLabel})=><div className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
-        {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
-        <div style={{padding:'14mm 16mm 0',flex:1}}>
-          <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
-            <span>{pageLabel||'Scouter-Leistungsübersicht'} {lzLblSc}</span><span style={{color:'#aaa'}}>{bn} · Anlage</span>
-          </div>
-          {title&&<div style={{fontSize:15,fontWeight:700,marginBottom:4}}>{ab.mitarbeiter_name} <span style={{fontSize:10,color:'#888',fontWeight:400}}>– {title}</span></div>}
-          {subtitle&&<div style={{fontSize:9.5,color:'#666',marginBottom:12}}>{subtitle}</div>}
-          {children}
-        </div>
-        <FooterBlock/>
-      </div>;
-
-      // Table header/row style helpers
-      const thS={padding:'4px 6px',borderBottom:'2px solid #ccc',textAlign:'left',fontSize:7.5,textTransform:'uppercase',color:'#888',fontWeight:700};
-      const tdS={padding:'4px 6px',fontSize:9.5,borderBottom:'1px solid #eee'};
-      const tdBold={...tdS,fontWeight:600};
-
-      // ════════════════════════════════════════════════
-      // SECTION 1: ALLE LEADS
-      // ════════════════════════════════════════════════
-      const allLeads=[...enpalLZ,...enpalVM];
-      if(allLeads.length>0){
-        const pages=[];for(let i=0;i<allLeads.length;i+=ROWS){pages.push(allLeads.slice(i,i+ROWS));}
-        pages.forEach((pageItems,pi)=>{
-          allScPages.push(<ScPg key={`leads-${pi}`} title={pi===0?'Alle Leads':'Alle Leads (Forts.)'} subtitle={pi===0?`${allLeads.length} Leads gesamt · davon ${enpalLZ.length} im Leistungszeitraum ${lzLblSc}`:`Seite ${pi+1} von ${pages.length}`} pageLabel="Leads">
-            <div style={{fontSize:9,fontWeight:700,color:'#7c3aed',marginBottom:4,borderBottom:'2px solid #c4b5fd',paddingBottom:3}}>📋 LEADS ({allLeads.length})</div>
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <thead><tr style={{background:'#f5f3ff'}}>
-                <th style={{...thS,width:20,color:'#7c3aed'}}>Nr</th>
-                <th style={{...thS,color:'#7c3aed'}}>Kunde</th>
-                <th style={{...thS,color:'#7c3aed'}}>Adresse</th>
-                <th style={{...thS,width:52,color:'#7c3aed'}}>Lead-Datum</th>
-                <th style={{...thS,width:52,color:'#7c3aed'}}>Termin</th>
-                <th style={{...thS,color:'#7c3aed'}}>Vertriebler</th>
-                <th style={{...thS,width:60,color:'#7c3aed'}}>Status</th>
-              </tr></thead>
-              <tbody>{pageItems.map((l,li)=>{
-                const nr=pi*ROWS+li+1;
-                const isLZ=inLZenpal(l);
-                const stColor=l.status==='Abgeschlossen'?'#166534':l.status==='Ausgefallen'?'#dc2626':'#854d0e';
-                const stIcon=l.status==='Abgeschlossen'?'✅':l.status==='Ausgefallen'?'❌':'⏳';
-                return <tr key={li} style={{background:isLZ?'#faf5ff':'transparent'}}>
-                  <td style={{...tdS,color:'#888',fontSize:8}}>{nr}.</td>
-                  <td style={tdBold}>{l.kunde}</td>
-                  <td style={{...tdS,fontSize:8.5,color:'#555',maxWidth:100}}>{l.adresse}</td>
-                  <td style={{...tdS,fontSize:8.5}}>{fmtDEdt(l.leadDatum)}</td>
-                  <td style={{...tdS,fontSize:8.5}}>{fmtDEdt(l.terminDatum)}</td>
-                  <td style={{...tdS,fontSize:8.5,color:'#555'}}>{l.vertriebler}</td>
-                  <td style={{...tdS,fontSize:8,color:stColor,fontWeight:600}}>{stIcon} {l.status}</td>
-                </tr>;
-              })}</tbody>
-              {pi===pages.length-1&&<tfoot><tr style={{fontWeight:700,borderTop:'2px solid #7c3aed',background:'#f5f3ff'}}>
-                <td colSpan={4} style={{padding:'5px 6px',color:'#7c3aed',fontSize:9}}>Gesamt: {allLeads.length} Leads</td>
-                <td colSpan={3} style={{padding:'5px 6px',textAlign:'right',color:'#555',fontSize:8.5}}>
-                  ✅ {termineStattgef.length} stattgef. · ❌ {termineAusgef.length} ausgef. · ⏳ {allLeads.filter(e=>e.status==='Offen').length} offen
-                </td>
-              </tr></tfoot>}
-            </table>
-          </ScPg>);
-        });
-      }
-
-      // ════════════════════════════════════════════════
-      // SECTION 2: STATTGEFUNDENE TERMINE
-      // ════════════════════════════════════════════════
-      if(termineStattgef.length>0){
-        const pages2=[];for(let i=0;i<termineStattgef.length;i+=ROWS){pages2.push(termineStattgef.slice(i,i+ROWS));}
-        pages2.forEach((pageItems,pi)=>{
-          allScPages.push(<ScPg key={`termine-${pi}`} title={pi===0?'Stattgefundene Termine':'Stattgefundene Termine (Forts.)'} subtitle={pi===0?`${termineStattgef.length} Termine stattgefunden`:`Seite ${pi+1} von ${pages2.length}`} pageLabel="Termine">
-            <div style={{fontSize:9,fontWeight:700,color:'#2563eb',marginBottom:4,borderBottom:'2px solid #bfdbfe',paddingBottom:3}}>📅 STATTGEFUNDENE TERMINE ({termineStattgef.length})</div>
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <thead><tr style={{background:'#eff6ff'}}>
-                <th style={{...thS,width:20,color:'#2563eb'}}>Nr</th>
-                <th style={{...thS,color:'#2563eb'}}>Kunde</th>
-                <th style={{...thS,color:'#2563eb'}}>Adresse</th>
-                <th style={{...thS,width:52,color:'#2563eb'}}>Termin-Datum</th>
-                <th style={{...thS,color:'#2563eb'}}>Vertriebler</th>
-                <th style={{...thS,color:'#2563eb'}}>Ergebnis</th>
-              </tr></thead>
-              <tbody>{pageItems.map((t,ti)=>{
-                const nr=pi*ROWS+ti+1;
-                const ergFarbe=t.indikator.includes('Positiv')?'#166534':'#854d0e';
-                return <tr key={ti}>
-                  <td style={{...tdS,color:'#888',fontSize:8}}>{nr}.</td>
-                  <td style={tdBold}>{t.kunde}</td>
-                  <td style={{...tdS,fontSize:8.5,color:'#555',maxWidth:100}}>{t.adresse}</td>
-                  <td style={{...tdS,fontSize:8.5}}>{fmtDEdt(t.terminDatum)}</td>
-                  <td style={{...tdS,fontSize:8.5,color:'#555'}}>{t.vertriebler}</td>
-                  <td style={{...tdS,fontSize:8,color:ergFarbe,fontWeight:500}}>{t.abschluss||t.indikator||'—'}</td>
-                </tr>;
-              })}</tbody>
-              {pi===pages2.length-1&&<tfoot><tr style={{fontWeight:700,borderTop:'2px solid #2563eb',background:'#eff6ff'}}>
-                <td colSpan={6} style={{padding:'5px 6px',color:'#2563eb',fontSize:9}}>Gesamt: {termineStattgef.length} stattgefundene Termine</td>
-              </tr></tfoot>}
-            </table>
-          </ScPg>);
-        });
-      }
-
-      // ════════════════════════════════════════════════
-      // SECTION 3: AUSGEFALLENE TERMINE
-      // ════════════════════════════════════════════════
-      if(termineAusgef.length>0){
-        const pages3=[];for(let i=0;i<termineAusgef.length;i+=ROWS){pages3.push(termineAusgef.slice(i,i+ROWS));}
-        pages3.forEach((pageItems,pi)=>{
-          allScPages.push(<ScPg key={`ausgef-${pi}`} title={pi===0?'Ausgefallene Termine':'Ausgefallene Termine (Forts.)'} subtitle={pi===0?`${termineAusgef.length} Termine ausgefallen`:`Seite ${pi+1} von ${pages3.length}`} pageLabel="Ausgef. Termine">
-            <div style={{fontSize:9,fontWeight:700,color:'#dc2626',marginBottom:4,borderBottom:'2px solid #fecaca',paddingBottom:3}}>❌ AUSGEFALLENE TERMINE ({termineAusgef.length})</div>
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <thead><tr style={{background:'#fef2f2'}}>
-                <th style={{...thS,width:20,color:'#dc2626'}}>Nr</th>
-                <th style={{...thS,color:'#dc2626'}}>Kunde</th>
-                <th style={{...thS,color:'#dc2626'}}>Adresse</th>
-                <th style={{...thS,width:52,color:'#dc2626'}}>Termin-Datum</th>
-                <th style={{...thS,color:'#dc2626'}}>Vertriebler</th>
-                <th style={{...thS,color:'#dc2626'}}>Grund</th>
-              </tr></thead>
-              <tbody>{pageItems.map((t,ti)=>{
-                const nr=pi*ROWS+ti+1;
-                return <tr key={ti}>
-                  <td style={{...tdS,color:'#888',fontSize:8}}>{nr}.</td>
-                  <td style={tdBold}>{t.kunde}</td>
-                  <td style={{...tdS,fontSize:8.5,color:'#555',maxWidth:100}}>{t.adresse}</td>
-                  <td style={{...tdS,fontSize:8.5}}>{fmtDEdt(t.terminDatum)}</td>
-                  <td style={{...tdS,fontSize:8.5,color:'#555'}}>{t.vertriebler}</td>
-                  <td style={{...tdS,fontSize:7.5,color:'#888',maxWidth:130}}>{(t.ausfallGrund||t.indikator||'—').substring(0,80)}{(t.ausfallGrund||'').length>80?'…':''}</td>
-                </tr>;
-              })}</tbody>
-              {pi===pages3.length-1&&<tfoot><tr style={{fontWeight:700,borderTop:'2px solid #dc2626',background:'#fef2f2'}}>
-                <td colSpan={6} style={{padding:'5px 6px',color:'#dc2626',fontSize:9}}>Gesamt: {termineAusgef.length} ausgefallene Termine</td>
-              </tr></tfoot>}
-            </table>
-          </ScPg>);
-        });
-      }
-
-      // ════════════════════════════════════════════════
-      // SECTION 4: SALES / AUFTRÄGE (aus pay_auftraege)
-      // ════════════════════════════════════════════════
-      const SaleRow=({a,nr,bg,border,color})=><tr style={{background:bg,borderBottom:`1px solid ${border}`}}>
-        <td style={{...tdS,color:'#888',fontSize:8,width:20}}>{nr}.</td>
-        <td style={tdBold}>{a.kunde_name||'—'}</td>
-        <td style={{...tdS,fontSize:8.5,color:'#555'}}>{a.kunde_adresse||'—'}</td>
-        <td style={{...tdS,fontSize:9,color:'#555'}}>{vtN2[a.vertriebler_id]||'—'}</td>
-        <td style={{...tdS,fontSize:8.5}}>{fDsc(a.auftrags_datum)}</td>
-        <td style={{...tdS,fontSize:9.5,fontWeight:700,textAlign:'right',color}}>{a.kwp?a.kwp.toFixed(1)+' kWp':'—'}</td>
-        <td style={{...tdS,fontSize:8,color:'#555',textAlign:'center'}}>{a.lead_quelle||'—'}</td>
-      </tr>;
-      const SaleHead=({color,bg})=><thead><tr style={{background:bg}}>
-        <th style={{...thS,width:20,color}}>Nr</th>
-        <th style={{...thS,color}}>Kunde</th>
-        <th style={{...thS,color}}>Adresse</th>
-        <th style={{...thS,color}}>Vertriebler</th>
-        <th style={{...thS,width:52,color}}>Datum</th>
-        <th style={{...thS,width:48,textAlign:'right',color}}>kWp</th>
-        <th style={{...thS,width:40,textAlign:'center',color}}>Quelle</th>
-      </tr></thead>;
-
-      // Sales LZ
-      if(salesLZ.length>0){
-        const pgs=[];for(let i=0;i<salesLZ.length;i+=ROWS){pgs.push(salesLZ.slice(i,i+ROWS));}
-        const sKwp=salesLZ.reduce((s,a)=>s+(a.kwp||0),0);
-        pgs.forEach((items,pi)=>{
-          allScPages.push(<ScPg key={`sales-lz-${pi}`} title={pi===0?`Sales – ${lzLblSc}`:`Sales – ${lzLblSc} (Forts.)`} subtitle={pi===0?`${salesLZ.length} Aufträge · ${sKwp.toFixed(1)} kWp gesamt`:`Seite ${pi+1} von ${pgs.length}`} pageLabel="Sales">
-            <div style={{fontSize:9,fontWeight:700,color:'#166534',marginBottom:4,borderBottom:'2px solid #bbf7d0',paddingBottom:3}}>✅ SALES – {lzLblSc.toUpperCase()} ({salesLZ.length})</div>
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <SaleHead color="#166534" bg="#f0fdf4"/>
-              <tbody>{items.map((a,ai)=><SaleRow key={ai} a={a} nr={pi*ROWS+ai+1} bg="#f0fdf4" border="#bbf7d0" color="#166534"/>)}</tbody>
-              {pi===pgs.length-1&&<tfoot><tr style={{fontWeight:700,borderTop:'2px solid #166534',background:'#f0fdf4'}}>
-                <td colSpan={5} style={{padding:'5px 6px',color:'#166534',fontSize:9}}>Summe: {salesLZ.length} Sales</td>
-                <td style={{padding:'5px 6px',textAlign:'right',color:'#166534',fontSize:10,fontWeight:800}}>{sKwp.toFixed(1)} kWp</td>
-                <td></td>
-              </tr></tfoot>}
-            </table>
-          </ScPg>);
-        });
-      }
-
-      // Sales Vormonate
-      if(salesVM.length>0){
-        const pgs=[];for(let i=0;i<salesVM.length;i+=ROWS){pgs.push(salesVM.slice(i,i+ROWS));}
-        const sKwp=salesVM.reduce((s,a)=>s+(a.kwp||0),0);
-        pgs.forEach((items,pi)=>{
-          allScPages.push(<ScPg key={`sales-vm-${pi}`} title={pi===0?'Sales – Vormonate':'Sales – Vormonate (Forts.)'} subtitle={pi===0?`${salesVM.length} Aufträge aus Vormonaten · ${sKwp.toFixed(1)} kWp gesamt`:`Seite ${pi+1} von ${pgs.length}`} pageLabel="Sales Vormonate">
-            <div style={{fontSize:9,fontWeight:700,color:'#B45309',marginBottom:4,borderBottom:'2px solid #fde68a',paddingBottom:3}}>✅ SALES – VORMONATE ({salesVM.length})</div>
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <SaleHead color="#B45309" bg="#fffbeb"/>
-              <tbody>{items.map((a,ai)=><SaleRow key={ai} a={a} nr={pi*ROWS+ai+1} bg="#fffbeb" border="#fde68a" color="#B45309"/>)}</tbody>
-              {pi===pgs.length-1&&<tfoot><tr style={{fontWeight:700,borderTop:'2px solid #B45309',background:'#fffbeb'}}>
-                <td colSpan={5} style={{padding:'5px 6px',color:'#B45309',fontSize:9}}>Summe: {salesVM.length} Sales</td>
-                <td style={{padding:'5px 6px',textAlign:'right',color:'#B45309',fontSize:10,fontWeight:800}}>{sKwp.toFixed(1)} kWp</td>
-                <td></td>
-              </tr></tfoot>}
-            </table>
-          </ScPg>);
-        });
-      }
-
-      // Offene Aufträge
-      if(sa.offen.length>0){
-        const pgs=[];for(let i=0;i<sa.offen.length;i+=ROWS){pgs.push(sa.offen.slice(i,i+ROWS));}
-        pgs.forEach((items,pi)=>{
-          allScPages.push(<ScPg key={`offen-${pi}`} title={pi===0?'Offene Aufträge':'Offene Aufträge (Forts.)'} subtitle={pi===0?`${sa.offen.length} offene Aufträge`:`Seite ${pi+1} von ${pgs.length}`} pageLabel="Offen">
-            <div style={{fontSize:9,fontWeight:700,color:'#854d0e',marginBottom:4,borderBottom:'2px solid #fde68a',paddingBottom:3}}>⏳ OFFENE AUFTRÄGE ({sa.offen.length})</div>
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <SaleHead color="#854d0e" bg="#fffbeb"/>
-              <tbody>{items.map((a,ai)=><SaleRow key={ai} a={a} nr={pi*ROWS+ai+1} bg="#fffbeb" border="#fde68a" color="#854d0e"/>)}</tbody>
-            </table>
-          </ScPg>);
-        });
-      }
-
-      // Stornierte Aufträge
-      if(sa.stornos.length>0){
-        const pgs=[];for(let i=0;i<sa.stornos.length;i+=ROWS){pgs.push(sa.stornos.slice(i,i+ROWS));}
-        pgs.forEach((items,pi)=>{
-          allScPages.push(<ScPg key={`storno-${pi}`} title={pi===0?'Stornierte Aufträge':'Stornierte Aufträge (Forts.)'} subtitle={pi===0?`${sa.stornos.length} stornierte Aufträge`:`Seite ${pi+1} von ${pgs.length}`} pageLabel="Stornos">
-            <div style={{fontSize:9,fontWeight:700,color:'#dc2626',marginBottom:4,borderBottom:'2px solid #fecaca',paddingBottom:3}}>❌ STORNIERTE AUFTRÄGE ({sa.stornos.length})</div>
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <SaleHead color="#dc2626" bg="#fef2f2"/>
-              <tbody>{items.map((a,ai)=><SaleRow key={ai} a={a} nr={pi*ROWS+ai+1} bg="#fef2f2" border="#fecaca" color="#dc2626"/>)}</tbody>
-            </table>
-          </ScPg>);
-        });
-      }
-
-      // ════════════════════════════════════════════════
-      // LETZTE SEITE: ZUSAMMENFASSUNG
-      // ════════════════════════════════════════════════
-      const totalKwp=sa.sales.reduce((s,a)=>s+(a.kwp||0),0);
-      const avgKwp=sa.sales.length>0?(totalKwp/sa.sales.length).toFixed(1):'—';
-      const stornoRate=(sa.sales.length+sa.stornos.length)>0?((sa.stornos.length/(sa.sales.length+sa.stornos.length))*100).toFixed(1):'0';
-      const convRate=termineStattgef.length>0?((sa.sales.length/termineStattgef.length)*100).toFixed(1):'—';
-
-      allScPages.push(<ScPg key="zusammenfassung" title="Zusammenfassung" subtitle={`Leistungszeitraum: ${lzLblSc} · Gesamtübersicht aller Aktivitäten`} pageLabel="Zusammenfassung">
-        <div style={{fontSize:9,fontWeight:700,color:'#334155',marginBottom:6,borderBottom:'2px solid #cbd5e1',paddingBottom:3}}>📊 ZUSAMMENFASSUNG</div>
-        <table style={{width:'100%',borderCollapse:'collapse',marginBottom:16}}>
-          <thead><tr style={{background:'#f1f5f9'}}>
-            <th style={{...thS,color:'#475569'}}>Kennzahl</th>
-            <th style={{...thS,color:'#475569',textAlign:'center'}}>Leistungszeitraum</th>
-            <th style={{...thS,color:'#475569',textAlign:'center'}}>Gesamt</th>
-          </tr></thead>
-          <tbody>
-            <tr style={{borderBottom:'1px solid #e2e8f0'}}>
-              <td style={{...tdS,fontWeight:600,color:'#7c3aed'}}>📋 Leads generiert</td>
-              <td style={{...tdS,textAlign:'center',fontWeight:700,fontSize:13,color:'#7c3aed'}}>{enpalLZ.length}</td>
-              <td style={{...tdS,textAlign:'center',fontSize:11,color:'#555'}}>{allLeads.length}</td>
-            </tr>
-            <tr style={{borderBottom:'1px solid #e2e8f0'}}>
-              <td style={{...tdS,fontWeight:600,color:'#2563eb'}}>📅 Termine stattgefunden</td>
-              <td style={{...tdS,textAlign:'center',fontWeight:700,fontSize:13,color:'#2563eb'}}>{termineStattgef.filter(inLZenpal).length}</td>
-              <td style={{...tdS,textAlign:'center',fontSize:11,color:'#555'}}>{termineStattgef.length}</td>
-            </tr>
-            <tr style={{borderBottom:'1px solid #e2e8f0'}}>
-              <td style={{...tdS,fontWeight:600,color:'#dc2626'}}>❌ Termine ausgefallen</td>
-              <td style={{...tdS,textAlign:'center',fontWeight:700,fontSize:13,color:'#dc2626'}}>{termineAusgef.filter(inLZenpal).length}</td>
-              <td style={{...tdS,textAlign:'center',fontSize:11,color:'#555'}}>{termineAusgef.length}</td>
-            </tr>
-            <tr style={{borderBottom:'1px solid #e2e8f0',background:'#f0fdf4'}}>
-              <td style={{...tdS,fontWeight:700,color:'#166534'}}>✅ Sales abgeschlossen</td>
-              <td style={{...tdS,textAlign:'center',fontWeight:800,fontSize:14,color:'#166534'}}>{salesLZ.length}</td>
-              <td style={{...tdS,textAlign:'center',fontSize:11,fontWeight:600,color:'#166534'}}>{sa.sales.length}</td>
-            </tr>
-            <tr style={{borderBottom:'1px solid #e2e8f0'}}>
-              <td style={{...tdS,fontWeight:600,color:'#854d0e'}}>⏳ Offene Aufträge</td>
-              <td style={{...tdS,textAlign:'center',fontWeight:700,fontSize:13,color:'#854d0e'}}>{sa.offen.filter(inLZsc).length}</td>
-              <td style={{...tdS,textAlign:'center',fontSize:11,color:'#555'}}>{sa.offen.length}</td>
-            </tr>
-            <tr style={{borderBottom:'1px solid #e2e8f0'}}>
-              <td style={{...tdS,fontWeight:600,color:'#dc2626'}}>❌ Stornierte Aufträge</td>
-              <td style={{...tdS,textAlign:'center',fontWeight:700,fontSize:13,color:'#dc2626'}}>{sa.stornos.filter(a=>inLZsc(a)).length}</td>
-              <td style={{...tdS,textAlign:'center',fontSize:11,color:'#555'}}>{sa.stornos.length}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div style={{fontSize:9,fontWeight:700,color:'#334155',marginBottom:6,borderBottom:'2px solid #cbd5e1',paddingBottom:3}}>📈 KENNZAHLEN</div>
-        <table style={{width:'100%',borderCollapse:'collapse',marginBottom:16}}>
-          <tbody>
-            <tr style={{borderBottom:'1px solid #e2e8f0'}}>
-              <td style={{...tdS,fontWeight:600,color:'#555',width:'50%'}}>Gesamt kWp (Sales)</td>
-              <td style={{...tdS,fontWeight:700,fontSize:12}}>{totalKwp.toFixed(1)} kWp</td>
-            </tr>
-            <tr style={{borderBottom:'1px solid #e2e8f0'}}>
-              <td style={{...tdS,fontWeight:600,color:'#555'}}>Ø Anlagengröße</td>
-              <td style={{...tdS,fontWeight:700,fontSize:12}}>{avgKwp} kWp</td>
-            </tr>
-            <tr style={{borderBottom:'1px solid #e2e8f0'}}>
-              <td style={{...tdS,fontWeight:600,color:'#555'}}>Abschlussquote (Termine → Sale)</td>
-              <td style={{...tdS,fontWeight:700,fontSize:12,color:parseFloat(convRate)>=20?'#166534':'#dc2626'}}>{convRate}%</td>
-            </tr>
-            <tr style={{borderBottom:'1px solid #e2e8f0'}}>
-              <td style={{...tdS,fontWeight:600,color:'#555'}}>Stornoquote</td>
-              <td style={{...tdS,fontWeight:700,fontSize:12,color:parseFloat(stornoRate)>30?'#dc2626':'#555'}}>{stornoRate}%</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div style={{marginTop:8,padding:10,background:'#f5f3ff',border:'1px solid #c4b5fd',borderRadius:5,fontSize:9,color:'#5b21b6',lineHeight:1.6}}>
-          <b>📊 Gesamtübersicht {ab.mitarbeiter_name}:</b><br/>
-          {allLeads.length} Leads generiert → {termineStattgef.length} Termine stattgefunden → {sa.sales.length} Sales ({totalKwp.toFixed(1)} kWp).<br/>
-          {termineAusgef.length} Termine ausgefallen · {sa.offen.length} offene Aufträge · {sa.stornos.length} Stornos.
-        </div>
-      </ScPg>);
-
-      return allScPages;
     })()}
 
     {/* === SYSTEMGEBÜHR-RECHNUNG (nur HGB) === */}
@@ -1668,7 +1304,7 @@ function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
   const rmE=(i)=>{const n=[...pos];n.splice(i,1);setPos(n);};
   const upE=(i,f,v)=>{const n=[...pos];n[i]={...n[i],[f]:f==='original_betrag'?(parseFloat(v.replace(',','.'))||0):v};setPos(n);};
 
-  return <div className="edit-panel-inner">
+  return <div className="edit-panel">
     <div className="edit-section">
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
         <span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status==='entwurf'?'📝 Entwurf':ab.status==='probeabrechnung'?'🔍 Probe':ab.status==='freigegeben'?'✅ Freigegeben':'💸 Ausgezahlt'}</span>
@@ -1712,325 +1348,15 @@ function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
   </div>;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   SCOUTER DETAIL PANEL – Leads, Termine, Sales im Detail
-   ═══════════════════════════════════════════════════════════════════ */
-function ScouterDetailPanel({scouterId,periode}){
-  const[tab,setTab]=useState('overview');
-  const[auftraege,setAuftraege]=useState([]);
-  const[stornos,setStornos]=useState([]);
-  const[offen,setOffen]=useState([]);
-  const[leadRecords,setLeadRecords]=useState([]);
-  const[terminRecords,setTerminRecords]=useState([]);
-  const[vtMap,setVtMap]=useState({});
-  const[allOrders,setAllOrders]=useState([]);
-  const[ldg,setLdg]=useState(true);
-
-  useEffect(()=>{if(!scouterId)return;(async()=>{
-    setLdg(true);
-    try{
-      const[pY,pM]=periode.split('/').map(Number);
-      const lzD=new Date(pY,pM-2,1);
-      const lzStart=`${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
-      const lzEndD=new Date(lzD.getFullYear(),lzD.getMonth()+1,0);
-      const lzEnd=`${lzEndD.getFullYear()}-${String(lzEndD.getMonth()+1).padStart(2,'0')}-${String(lzEndD.getDate()).padStart(2,'0')}`;
-
-      const[sales,storno,off,leads,terms,allOrd,vts]=await Promise.all([
-        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&order=auftrags_datum.desc`),
-        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&storniert=eq.true&order=auftrags_datum.desc`),
-        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&storniert=eq.false&zahlungsstatus=eq.offen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&order=auftrags_datum.desc`),
-        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&produkt_typ=eq.lead_count&order=auftrags_datum.desc`),
-        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&produkt_typ=eq.termin_count&order=auftrags_datum.desc`),
-        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&produkt_typ=not.in.(lead_count,termin_count,zero_count)&order=auftrags_datum.desc`),
-        sbG('pay_mitarbeiter',`typ=not.like.*scouter*&select=id,vorname,nachname`)
-      ]);
-      setAuftraege(sales||[]);
-      setStornos(storno||[]);
-      setOffen(off||[]);
-      setLeadRecords(leads||[]);
-      setTerminRecords(terms||[]);
-      setAllOrders(allOrd||[]);
-      const vm={};(vts||[]).forEach(v=>{vm[v.id]=`${v.vorname} ${v.nachname}`;});
-      setVtMap(vm);
-    }catch(e){console.error('ScouterDetail load',e);}
-    setLdg(false);
-  })();},[scouterId,periode]);
-
-  const fD = d => d ? new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—';
-  const fDLong = d => d ? new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'long',year:'numeric'}) : '—';
-  const mName = d => {if(!d)return'—';const dt=new Date(d);return dt.toLocaleDateString('de-DE',{month:'short',year:'2-digit'});};
-
-  const[filterLZ,setFilterLZ]=useState(false);
-  const[pY2,pM2]=periode?periode.split('/').map(Number):[2026,1];
-  const lzD2=new Date(pY2,pM2-2,1);
-  const lzMonth=`${lzD2.getFullYear()}-${String(lzD2.getMonth()+1).padStart(2,'0')}`;
-  const lzLabel2=lzD2.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
-  const inLZ = a => (a.auftrags_datum||'').startsWith(lzMonth);
-  const filtered = (arr) => filterLZ ? arr.filter(inLZ) : arr;
-
-  // KPIs
-  const totalLeads = leadRecords.reduce((s,r)=>s+(r.kwp||0),0);
-  const totalTermine = terminRecords.reduce((s,r)=>s+(r.kwp||0),0);
-  const salesTotal = auftraege.length;
-  const salesLZ = auftraege.filter(inLZ).length;
-  const stornoTotal = stornos.length;
-  const offenTotal = offen.length;
-  const leadsLZ = leadRecords.filter(inLZ).reduce((s,r)=>s+(r.kwp||0),0);
-  const termineLZ = terminRecords.filter(inLZ).reduce((s,r)=>s+(r.kwp||0),0);
-  const convRate = totalTermine > 0 ? ((salesTotal / totalTermine) * 100).toFixed(1) : '—';
-  const stornoRate = (salesTotal + stornoTotal) > 0 ? ((stornoTotal / (salesTotal + stornoTotal)) * 100).toFixed(1) : '0';
-  const avgKwp = salesTotal > 0 ? (auftraege.reduce((s,a)=>s+(a.kwp||0),0)/salesTotal).toFixed(1) : '—';
-
-  // Monthly data for chart (last 6 months)
-  const monthlyData = useMemo(()=>{
-    const months = [];
-    for(let i=5;i>=0;i--){
-      const d=new Date(pY2,pM2-2-i,1);
-      const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      const label=d.toLocaleDateString('de-DE',{month:'short'});
-      const mSales=auftraege.filter(a=>(a.auftrags_datum||'').startsWith(key)).length;
-      const mStorno=stornos.filter(a=>(a.auftrags_datum||'').startsWith(key)).length;
-      const mOffen=offen.filter(a=>(a.auftrags_datum||'').startsWith(key)).length;
-      const mLeads=leadRecords.filter(r=>(r.auftrags_datum||'').startsWith(key)).reduce((s,r)=>s+(r.kwp||0),0);
-      const mTermine=terminRecords.filter(r=>(r.auftrags_datum||'').startsWith(key)).reduce((s,r)=>s+(r.kwp||0),0);
-      months.push({key,label,sales:mSales,storno:mStorno,offen:mOffen,leads:mLeads,termine:mTermine});
-    }
-    return months;
-  },[auftraege,stornos,offen,leadRecords,terminRecords,pY2,pM2]);
-
-  const maxBar = Math.max(...monthlyData.map(m=>Math.max(m.sales,m.leads,m.termine)),1);
-
-  // Top Vertriebler by sales count
-  const vtSales = useMemo(()=>{
-    const map={};
-    auftraege.forEach(a=>{if(a.vertriebler_id){const n=vtMap[a.vertriebler_id]||'Unbekannt';if(!map[n])map[n]=0;map[n]++;}});
-    return Object.entries(map).sort((a,b)=>b[1]-a[1]);
-  },[auftraege,vtMap]);
-
-  if(ldg) return <div className="edit-section"><div className="loading" style={{padding:15}}><div className="spinner"/>Lade Scouter-Details...</div></div>;
-
-  return <div className="edit-section" style={{borderTop:'1px solid #a78bfa40',paddingTop:12}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-      <div className="edit-section-title" style={{color:'#a78bfa',margin:0}}>🔍 Scouter-Details</div>
-      <label style={{fontSize:10,color:'#8b949e',cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
-        <input type="checkbox" checked={filterLZ} onChange={e=>setFilterLZ(e.target.checked)} style={{accentColor:'#a78bfa'}}/>
-        Nur LZ ({lzLabel2})
-      </label>
-    </div>
-
-    <div className="sc-tabs" style={{flexWrap:'wrap'}}>
-      <button className={`sc-tab${tab==='overview'?' active':''}`} onClick={()=>setTab('overview')}>📊 Übersicht</button>
-      <button className={`sc-tab${tab==='leads'?' active':''}`} onClick={()=>setTab('leads')}>📋 Leads<span className="cnt">{filterLZ?leadsLZ:totalLeads}</span></button>
-      <button className={`sc-tab${tab==='termine'?' active':''}`} onClick={()=>setTab('termine')}>📅 Termine<span className="cnt">{filterLZ?termineLZ:totalTermine}</span></button>
-      <button className={`sc-tab${tab==='sales'?' active':''}`} onClick={()=>setTab('sales')}>✅ Sales<span className="cnt">{filterLZ?salesLZ:salesTotal}</span></button>
-      <button className={`sc-tab${tab==='offen'?' active':''}`} onClick={()=>setTab('offen')}>⏳ Offen<span className="cnt">{filtered(offen).length}</span></button>
-      <button className={`sc-tab${tab==='stornos'?' active':''}`} onClick={()=>setTab('stornos')}>❌ Stornos<span className="cnt">{filtered(stornos).length}</span></button>
-    </div>
-
-    {/* ═══ OVERVIEW TAB ═══ */}
-    {tab==='overview'&&<div>
-      <div className="sc-stat-row" style={{gridTemplateColumns:'repeat(3,1fr)',marginBottom:8}}>
-        <div className="sc-stat"><div className="val" style={{color:'#a78bfa',fontSize:20}}>{filterLZ?leadsLZ:totalLeads}</div><div className="lbl">Leads</div></div>
-        <div className="sc-stat"><div className="val" style={{color:'#58a6ff',fontSize:20}}>{filterLZ?termineLZ:totalTermine}</div><div className="lbl">Termine</div></div>
-        <div className="sc-stat"><div className="val" style={{color:'#3fb950',fontSize:20}}>{filterLZ?salesLZ:salesTotal}</div><div className="lbl">Sales</div></div>
-      </div>
-      <div className="sc-stat-row" style={{gridTemplateColumns:'repeat(4,1fr)',marginBottom:12}}>
-        <div className="sc-stat"><div className="val" style={{color:'#d29922'}}>{offenTotal}</div><div className="lbl">Offen</div></div>
-        <div className="sc-stat"><div className="val" style={{color:'#f85149'}}>{stornoTotal}</div><div className="lbl">Stornos</div></div>
-        <div className="sc-stat"><div className="val" style={{color:'#3fb950'}}>{convRate}%</div><div className="lbl">Abschlussquote</div></div>
-        <div className="sc-stat"><div className="val" style={{color:'#f85149'}}>{stornoRate}%</div><div className="lbl">Stornoquote</div></div>
-      </div>
-      {/* Mini Chart */}
-      <div style={{background:'#0d1117',border:'1px solid #21262d',borderRadius:8,padding:10,marginBottom:10}}>
-        <div style={{fontSize:10,color:'#8b949e',marginBottom:8,fontWeight:600}}>📈 Monatsverlauf (6 Monate)</div>
-        <div style={{display:'flex',gap:4,alignItems:'flex-end',height:80}}>
-          {monthlyData.map((m,i)=>{
-            const isLZ=m.key===lzMonth;
-            return <div key={m.key} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-              <div style={{display:'flex',gap:1,alignItems:'flex-end',height:60,width:'100%'}}>
-                <div title={`${m.leads} Leads`} style={{flex:1,background:'#a78bfa40',borderRadius:'2px 2px 0 0',height:`${Math.max((m.leads/maxBar)*60,2)}px`,minHeight:2}}/>
-                <div title={`${m.termine} Termine`} style={{flex:1,background:'#58a6ff60',borderRadius:'2px 2px 0 0',height:`${Math.max((m.termine/maxBar)*60,2)}px`,minHeight:2}}/>
-                <div title={`${m.sales} Sales`} style={{flex:1,background:'#3fb95080',borderRadius:'2px 2px 0 0',height:`${Math.max((m.sales/maxBar)*60,2)}px`,minHeight:2}}/>
-              </div>
-              <div style={{fontSize:8,color:isLZ?'#F5C500':'#8b949e',fontWeight:isLZ?700:400}}>{m.label}</div>
-            </div>;
-          })}
-        </div>
-        <div style={{display:'flex',gap:12,justifyContent:'center',marginTop:6}}>
-          <span style={{fontSize:8,color:'#a78bfa'}}>■ Leads</span>
-          <span style={{fontSize:8,color:'#58a6ff'}}>■ Termine</span>
-          <span style={{fontSize:8,color:'#3fb950'}}>■ Sales</span>
-        </div>
-      </div>
-      {/* Funnel */}
-      <div style={{background:'#0d1117',border:'1px solid #21262d',borderRadius:8,padding:10,marginBottom:10}}>
-        <div style={{fontSize:10,color:'#8b949e',marginBottom:8,fontWeight:600}}>🔄 Conversion-Funnel (Gesamt)</div>
-        {[
-          {label:'Leads generiert',val:totalLeads,color:'#a78bfa',pct:100},
-          {label:'Termine gesetzt',val:totalTermine,color:'#58a6ff',pct:totalLeads>0?(totalTermine/totalLeads*100):0},
-          {label:'Sales abgeschlossen',val:salesTotal,color:'#3fb950',pct:totalLeads>0?(salesTotal/totalLeads*100):0}
-        ].map((f,i)=><div key={i} style={{marginBottom:6}}>
-          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginBottom:2}}>
-            <span style={{color:'#c9d1d9'}}>{f.label}</span>
-            <span style={{color:f.color,fontWeight:700}}>{f.val} <span style={{color:'#8b949e',fontWeight:400}}>({f.pct.toFixed(0)}%)</span></span>
-          </div>
-          <div style={{height:6,background:'#21262d',borderRadius:3,overflow:'hidden'}}>
-            <div style={{height:'100%',width:`${Math.min(f.pct,100)}%`,background:f.color,borderRadius:3,transition:'width .3s'}}/>
-          </div>
-        </div>)}
-      </div>
-      {/* Top Vertriebler */}
-      {vtSales.length>0&&<div style={{background:'#0d1117',border:'1px solid #21262d',borderRadius:8,padding:10}}>
-        <div style={{fontSize:10,color:'#8b949e',marginBottom:6,fontWeight:600}}>🏆 Top Vertriebler (Sales mit diesem Scout)</div>
-        {vtSales.slice(0,5).map(([name,cnt],i)=><div key={name} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:11,borderBottom:i<Math.min(vtSales.length,5)-1?'1px solid #161b22':'none'}}>
-          <span style={{color:'#c9d1d9'}}>{i+1}. {name}</span>
-          <span style={{color:'#3fb950',fontWeight:600}}>{cnt} Sales</span>
-        </div>)}
-      </div>}
-    </div>}
-
-    {/* ═══ LEADS TAB ═══ */}
-    {tab==='leads'&&<div>
-      {filtered(leadRecords).length===0?<div className="sc-empty">Keine Lead-Records gefunden</div>:
-      <div style={{maxHeight:400,overflowY:'auto'}}>
-        <table className="sc-detail-tbl"><thead><tr><th>Monat</th><th>Anzahl Leads</th><th style={{textAlign:'right'}}>Provision</th></tr></thead><tbody>
-          {filtered(leadRecords).map((r,i)=>{
-            const cnt=r.kwp||0;
-            const monat=mName(r.auftrags_datum);
-            return <tr key={r.id||i}>
-              <td style={{fontWeight:600,color:'#e6edf3'}}>{monat}</td>
-              <td><div style={{display:'flex',alignItems:'center',gap:6}}>
-                <div style={{background:'#a78bfa20',height:8,borderRadius:4,width:`${Math.min((cnt/Math.max(...leadRecords.map(lr=>lr.kwp||0),1))*100,100)}%`,minWidth:8}}/>
-                <span style={{fontWeight:700,color:'#a78bfa'}}>{cnt}</span>
-              </div></td>
-              <td style={{textAlign:'right',color:'#c9d1d9',fontSize:10}}>{r.kunde_name||'—'}</td>
-            </tr>;
-          })}
-          <tr style={{borderTop:'2px solid #21262d',fontWeight:700}}>
-            <td style={{color:'#a78bfa'}}>Gesamt</td>
-            <td style={{color:'#a78bfa',fontWeight:800}}>{filtered(leadRecords).reduce((s,r)=>s+(r.kwp||0),0)} Leads</td>
-            <td></td>
-          </tr>
-        </tbody></table>
-      </div>}
-    </div>}
-
-    {/* ═══ TERMINE TAB ═══ */}
-    {tab==='termine'&&<div>
-      {filtered(terminRecords).length===0?<div className="sc-empty">Keine Termin-Records gefunden</div>:
-      <div style={{maxHeight:400,overflowY:'auto'}}>
-        <table className="sc-detail-tbl"><thead><tr><th>Monat</th><th>Anzahl Termine</th><th style={{textAlign:'right'}}>Details</th></tr></thead><tbody>
-          {filtered(terminRecords).map((r,i)=>{
-            const cnt=r.kwp||0;
-            const monat=mName(r.auftrags_datum);
-            return <tr key={r.id||i}>
-              <td style={{fontWeight:600,color:'#e6edf3'}}>{monat}</td>
-              <td><div style={{display:'flex',alignItems:'center',gap:6}}>
-                <div style={{background:'#58a6ff20',height:8,borderRadius:4,width:`${Math.min((cnt/Math.max(...terminRecords.map(tr=>tr.kwp||0),1))*100,100)}%`,minWidth:8}}/>
-                <span style={{fontWeight:700,color:'#58a6ff'}}>{cnt}</span>
-              </div></td>
-              <td style={{textAlign:'right',color:'#c9d1d9',fontSize:10}}>{r.kunde_name||'—'}</td>
-            </tr>;
-          })}
-          <tr style={{borderTop:'2px solid #21262d',fontWeight:700}}>
-            <td style={{color:'#58a6ff'}}>Gesamt</td>
-            <td style={{color:'#58a6ff',fontWeight:800}}>{filtered(terminRecords).reduce((s,r)=>s+(r.kwp||0),0)} Termine</td>
-            <td></td>
-          </tr>
-        </tbody></table>
-      </div>}
-    </div>}
-
-    {/* ═══ SALES TAB ═══ */}
-    {tab==='sales'&&<div>
-      {filtered(auftraege).length===0?<div className="sc-empty">Keine Sales gefunden</div>:
-      <div style={{maxHeight:450,overflowY:'auto'}}>
-        <table className="sc-detail-tbl"><thead><tr><th style={{width:24}}>Nr</th><th>Kunde</th><th>Vertriebler</th><th>Datum</th><th>kWp</th><th>Quelle</th><th style={{textAlign:'right'}}>Wert</th></tr></thead><tbody>
-          {filtered(auftraege).map((a,i)=><tr key={a.id||i}>
-            <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
-            <td className="kunde">{a.kunde_name||'—'}<div style={{fontSize:9,color:'#8b949e'}}>{a.kunde_adresse||''}</div></td>
-            <td style={{fontSize:10,color:'#d2a8ff'}}>{vtMap[a.vertriebler_id]||<span style={{color:'#484f58'}}>—</span>}</td>
-            <td className="datum">{fD(a.auftrags_datum)}</td>
-            <td style={{fontWeight:600}}>{a.kwp?a.kwp.toFixed(1):'-'}</td>
-            <td><span className={`tag tag-${(a.lead_quelle||'').includes('eigenlead')?'lead':(a.lead_quelle||'').includes('empfehlung')?'termin':'sale'}`}>{a.lead_quelle||'—'}</span></td>
-            <td style={{textAlign:'right',fontWeight:600,color:'#3fb950',whiteSpace:'nowrap'}}>{a.netto_auftragswert?fmtE(a.netto_auftragswert/100):'—'}</td>
-          </tr>)}
-          <tr style={{borderTop:'2px solid #21262d',fontWeight:700}}>
-            <td></td>
-            <td style={{color:'#3fb950'}}>Gesamt: {filtered(auftraege).length} Sales</td>
-            <td></td>
-            <td></td>
-            <td style={{color:'#e6edf3'}}>{filtered(auftraege).reduce((s,a)=>s+(a.kwp||0),0).toFixed(1)}</td>
-            <td></td>
-            <td style={{textAlign:'right',color:'#3fb950',fontWeight:800}}>{fmtE(filtered(auftraege).reduce((s,a)=>s+(a.netto_auftragswert||0),0)/100)}</td>
-          </tr>
-        </tbody></table>
-      </div>}
-    </div>}
-
-    {/* ═══ OFFEN TAB ═══ */}
-    {tab==='offen'&&<div>
-      {filtered(offen).length===0?<div className="sc-empty">Keine offenen Aufträge</div>:
-      <div style={{maxHeight:400,overflowY:'auto'}}>
-        <table className="sc-detail-tbl"><thead><tr><th style={{width:24}}>Nr</th><th>Kunde</th><th>Vertriebler</th><th>Datum</th><th>kWp</th><th>Status</th></tr></thead><tbody>
-          {filtered(offen).map((a,i)=><tr key={a.id||i}>
-            <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
-            <td className="kunde">{a.kunde_name||'—'}<div style={{fontSize:9,color:'#8b949e'}}>{a.kunde_adresse||''}</div></td>
-            <td style={{fontSize:10,color:'#d2a8ff'}}>{vtMap[a.vertriebler_id]||'—'}</td>
-            <td className="datum">{fD(a.auftrags_datum)}</td>
-            <td>{a.kwp?a.kwp.toFixed(1):'-'}</td>
-            <td><span className="tag tag-offen">{a.beedoo_fortschritt||'offen'}</span></td>
-          </tr>)}
-        </tbody></table>
-      </div>}
-    </div>}
-
-    {/* ═══ STORNOS TAB ═══ */}
-    {tab==='stornos'&&<div>
-      {filtered(stornos).length===0?<div className="sc-empty">Keine Stornos</div>:
-      <div style={{maxHeight:400,overflowY:'auto'}}>
-        <table className="sc-detail-tbl"><thead><tr><th style={{width:24}}>Nr</th><th>Kunde</th><th>Vertriebler</th><th>Datum</th><th>Storno</th><th>Grund</th></tr></thead><tbody>
-          {filtered(stornos).map((a,i)=><tr key={a.id||i}>
-            <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
-            <td className="kunde">{a.kunde_name||'—'}</td>
-            <td style={{fontSize:10,color:'#d2a8ff'}}>{vtMap[a.vertriebler_id]||'—'}</td>
-            <td className="datum">{fD(a.auftrags_datum)}</td>
-            <td className="datum" style={{color:'#f85149'}}>{fD(a.storno_datum)}</td>
-            <td style={{fontSize:10,color:'#f85149',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={a.storno_grund||''}>{a.storno_grund||'—'}</td>
-          </tr>)}
-        </tbody></table>
-      </div>}
-    </div>}
-  </div>;
-}
-
 function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
   const[ab,setAb]=useState(null);const[pos,setPos]=useState([]);const[ld,setLd]=useState(true);const ref=useRef(null);
-  const[scouterAuftr,setScouterAuftr]=useState(null);
   useEffect(()=>{load();},[aId]);
   const load=async()=>{setLd(true);try{
     // VP-Stammdaten laden
     const nameParts=vtN.trim().split(/\s+/);const vn=nameParts[0];const nn=nameParts.slice(1).join(' ');
     const vpArr=await sbG('pay_mitarbeiter',`vorname=eq.${encodeURIComponent(vn)}&nachname=eq.${encodeURIComponent(nn)}&limit=1`).catch(()=>[]);
     const vp=vpArr[0]||null;if(vp)window.__vpData=vp;
-    if(aId){const[a,p]=await Promise.all([sbG('pay_abrechnungen',`id=eq.${aId}`),sbG('pay_abrechnungen_positionen',`abrechnung_id=eq.${aId}&order=erstellt_am.asc`)]);if(a.length){setAb(a[0]);setPos(p);}}else{setAb({periode:per,mitarbeiter_name:vtN,kuerzel:vp?.kuerzel||gK(vtN),beschaeftigungsart:vp?.typ?.startsWith('hgb')?'hgb':'angestellt',status:'entwurf',notizen:'',stb_kommentar:''});setPos((vtD||[]).map(d=>({typ:'provision',auftrag_nr:'',kunde:d.kunde,produkt:d.produkt,original_betrag:d.netto,override_betrag:null,aktiv:true,zurueckgestellt:false,notiz:'',isNew:true})));}
-    // Scouter-Detaildaten für PDF laden
-    if(vp&&(vp.typ||'').includes('scouter')){try{
-      const scId=vp.id;
-      const scoutFullName=`${vp.vorname} ${vp.nachname}`;
-      const[scSales,scStornos,scOffen,scLeads,scTermine,scVts,enpalRaw]=await Promise.all([
-        sbG('pay_auftraege',`scouter_id=eq.${scId}&storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&order=auftrags_datum.desc`),
-        sbG('pay_auftraege',`scouter_id=eq.${scId}&storniert=eq.true&order=auftrags_datum.desc`),
-        sbG('pay_auftraege',`scouter_id=eq.${scId}&storniert=eq.false&zahlungsstatus=eq.offen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&order=auftrags_datum.desc`),
-        sbG('pay_auftraege',`scouter_id=eq.${scId}&produkt_typ=eq.lead_count&order=auftrags_datum.desc`),
-        sbG('pay_auftraege',`scouter_id=eq.${scId}&produkt_typ=eq.termin_count&order=auftrags_datum.desc`),
-        sbG('pay_mitarbeiter',`typ=not.like.*scouter*&select=id,vorname,nachname`),
-        sbG('enpal_leads',`row_data=cs.${encodeURIComponent(JSON.stringify({"MVPP - NAME":scoutFullName}))}&select=id,row_data&order=id.asc&limit=500`).catch(()=>[])
-      ]);
-      const vtNameMap={};(scVts||[]).forEach(v=>{vtNameMap[v.id]=`${v.vorname} ${v.nachname}`;});
-      setScouterAuftr({sales:scSales||[],stornos:scStornos||[],offen:scOffen||[],leads:scLeads||[],termine:scTermine||[],vtMap:vtNameMap,enpalLeads:enpalRaw||[]});
-    }catch(e){console.error('ScouterAuftr load:',e);}}
-  }catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);};
+    if(aId){const[a,p]=await Promise.all([sbG('pay_abrechnungen',`id=eq.${aId}`),sbG('pay_abrechnungen_positionen',`abrechnung_id=eq.${aId}&order=erstellt_am.asc`)]);if(a.length){setAb(a[0]);setPos(p);}}else{setAb({periode:per,mitarbeiter_name:vtN,kuerzel:vp?.kuerzel||gK(vtN),beschaeftigungsart:vp?.typ?.startsWith('hgb')?'hgb':'angestellt',status:'entwurf',notizen:'',stb_kommentar:''});setPos((vtD||[]).map(d=>({typ:'provision',auftrag_nr:'',kunde:d.kunde,produkt:d.produkt,original_betrag:d.netto,override_betrag:null,aktiv:true,zurueckgestellt:false,notiz:'',isNew:true})));}}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);};
 
   const save=async()=>{try{const b=calc(pos,sg,(ab.beschaeftigungsart||'').includes('hgb'));const d={...ab,anzahl_sales:b.sales,brutto_provisionen:b.bp,systemgebuehr_netto:b.sgN,systemgebuehr_ust:b.sgU,einmalzahlungen_summe:b.es,nettobetrag:b.net,ust_satz:b.uS,ust_betrag:b.uB,auszahlungssumme:b.aus,belegnummer:gBN(ab.periode,ab.kuerzel||gK(ab.mitarbeiter_name),1),geaendert_am:new Date().toISOString()};
   let s;if(ab.id){const{id,erstellt_am,...u}=d;s=(await sbU('pay_abrechnungen',`id=eq.${ab.id}`,u))[0];await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${ab.id}`);}else{const{id,...ins}=d;s=(await sbP('pay_abrechnungen',ins))[0];}
@@ -2044,25 +1370,7 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
     window.__t?.('PDF wird erstellt...');
     try{
       const c=document.createElement('div');
-      pages.forEach((p,i)=>{
-        if(i>0){
-          // Expliziter Seitenumbruch-Marker für html2pdf
-          const brk=document.createElement('div');
-          brk.className='html2pdf__page-break';
-          brk.style.pageBreakBefore='always';
-          brk.style.pageBreakAfter='always';
-          brk.style.height='0';
-          brk.style.overflow='hidden';
-          c.appendChild(brk);
-        }
-        const cl=p.cloneNode(true);
-        cl.style.boxShadow='none';
-        cl.style.margin='0';
-        cl.style.gap='0';
-        cl.style.pageBreakInside='avoid';
-        cl.style.pageBreakAfter='always';
-        c.appendChild(cl);
-      });
+      pages.forEach((p,i)=>{const cl=p.cloneNode(true);cl.style.boxShadow='none';cl.style.margin='0';cl.style.gap='0';if(i>0)cl.style.pageBreakBefore='always';c.appendChild(cl);});
       // Dateiname: "Abrechnung Januar 2026 Max Mustermann.pdf"
       const monate=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
       const lzParts=ab.periode?ab.periode.split('/'):[];
@@ -2070,26 +1378,19 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
       if(lzParts.length===2){const pY=parseInt(lzParts[0]),pM=parseInt(lzParts[1])-2;const lzD=new Date(pY,pM,1);lzMonat=monate[lzD.getMonth()];lzJahr=lzD.getFullYear();}
       const safeName=(ab.mitarbeiter_name||'Unbekannt').replace(/[^a-zA-ZäöüÄÖÜß\s-]/g,'').trim();
       const fname=`Abrechnung ${lzMonat} ${lzJahr} ${safeName}.pdf`;
-      await html2pdf().set({margin:0,filename:fname,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['avoid-all','css','legacy'],avoid:'.gs-page'}}).from(c).save();
+      await html2pdf().set({margin:0,filename:fname,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css']}}).from(c).save();
       window.__t?.('✅ PDF heruntergeladen');
     }catch(e){console.error('PDF Error:',e);window.__t?.('PDF-Fehler: '+e.message,'error');}
   };
 
   if(ld)return<div className="detail-overlay"><div className="detail-container"><div className="loading"><div className="spinner"/>Lade...</div></div></div>;
   if(!ab)return null;
-  const isScouter=(ab.beschaeftigungsart||'').includes('scouter');
-  const scouterId=window.__vpData?.id||null;
   return<div className="detail-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div className="detail-container">
-      <div className="detail-header"><div style={{display:'flex',alignItems:'center',gap:12}}><button className="btn btn-secondary btn-sm" onClick={onClose}>← Zurück</button><span style={{fontWeight:700,fontSize:15}}>{ab.mitarbeiter_name}</span><span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status}</span>{isScouter&&<span style={{fontSize:9,padding:'2px 8px',borderRadius:4,background:'#a78bfa20',color:'#a78bfa',fontWeight:600}}>🔵 Scout</span>}</div><div style={{fontSize:12,color:'#8b949e'}}>{pLabel(ab.periode)}</div></div>
+      <div className="detail-header"><div style={{display:'flex',alignItems:'center',gap:12}}><button className="btn btn-secondary btn-sm" onClick={onClose}>← Zurück</button><span style={{fontWeight:700,fontSize:15}}>{ab.mitarbeiter_name}</span><span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status}</span></div><div style={{fontSize:12,color:'#8b949e'}}>{pLabel(ab.periode)}</div></div>
       <div className="detail-body">
-        <div className="edit-panel" style={{display:'flex',flexDirection:'column',padding:0,overflow:'hidden'}}>
-          <div style={{flex:1,overflowY:'auto',padding:16}}>
-            <EditPanel ab={ab} pos={pos} setPos={setPos} sg={sg} onSave={save} onFrei={frei} onPdf={pdf} onClose={onClose} setAb={setAb}/>
-            {isScouter&&scouterId&&<ScouterDetailPanel scouterId={scouterId} periode={ab.periode}/>}
-          </div>
-        </div>
-        <div className="preview-panel" ref={ref}><GutschriftPreview ab={ab} pos={pos} sg={sg} scouterAuftr={scouterAuftr}/></div>
+        <EditPanel ab={ab} pos={pos} setPos={setPos} sg={sg} onSave={save} onFrei={frei} onPdf={pdf} onClose={onClose} setAb={setAb}/>
+        <div className="preview-panel" ref={ref}><GutschriftPreview ab={ab} pos={pos} sg={sg}/></div>
       </div>
     </div>
   </div>;
