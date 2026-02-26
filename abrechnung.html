@@ -448,14 +448,14 @@ async function generateAbrechnungen(periode, onProgress){
       for(const [om, mo] of Object.entries(ordersByMonthNZ)) processOrders(mo, om, true);
     }
     // Stufenbonus (nicht bei "kein Stufenbonus" in Sonder-Beschreibung)
-    // REGEL: Stufenbonus zählt NUR LZ-Aufträge, NICHT Nachzügler
+    // REGEL: Stufenbonus zählt NUR LZ-Aufträge des aktuellen Leistungszeitraums
     const sonderNoStufen = sonder?.beschreibung?.toLowerCase().includes('kein stufenbonus');
     let stufenBonus=0;
     if(!sonderNoStufen){
-      // NZ-Aufträge pro Monat zählen um sie von salesPerVPMonth abzuziehen
-      const nzPerMonth={};
-      ordersNZ.forEach(o=>{ const om=(o.auftrags_datum||'').substring(0,4)+'/'+(o.auftrags_datum||'').substring(5,7); const k=vpId+'_'+om; nzPerMonth[k]=(nzPerMonth[k]||0)+1; });
-      for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const [k,cnt] of Object.entries(salesPerVPMonth)){ if(!k.startsWith(vpId+'_')) continue; const lzCnt=cnt-(nzPerMonth[k]||0); if(lzCnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } }
+      // Nur aktuelle LZ-Monate zählen (nicht bereits abgerechnete Vormonate)
+      const lzMonthKeys = new Set();
+      ordersLZ.forEach(o=>{ const om=(o.auftrags_datum||'').substring(0,4)+'/'+(o.auftrags_datum||'').substring(5,7); lzMonthKeys.add(vpId+'_'+om); });
+      for(const s of stufen){ if(s.gilt_fuer!==ruleTyp) continue; for(const k of lzMonthKeys){ const cnt=salesPerVPMonth[k]||0; if(cnt>=s.min_anlagen&&s.bonus_betrag>stufenBonus) stufenBonus=s.bonus_betrag; } }
     }
     if(stufenBonus>0){ positionen.push({typ:'einmalzahlung',auftrag_nr:null,kunde:null,produkt:'Stufenbonus',original_betrag:stufenBonus,aktiv:true,zurueckgestellt:false,notiz:'Stufenbonus'}); bruttoTotal+=stufenBonus; }
     // === RÜCKWIRKENDE STAFFEL-KORREKTUR (Freigabe-basiert aus Matrix) ===
