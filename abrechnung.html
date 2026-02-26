@@ -565,12 +565,24 @@ async function generateAbrechnungen(periode, onProgress){
     const ustBetrag=bruttoTotal*(ustSatz/100);
     const abr=await sbP('pay_abrechnungen',{periode,mitarbeiter_name:vpName,kuerzel:vp.kuerzel||gK(vpName),beschaeftigungsart:isHGB?'hgb':'angestellt',status:'entwurf',anzahl_sales:orders.length,brutto_provisionen:Math.round(bruttoTotal*100)/100,systemgebuehr_netto:Math.round(sgNetto*100)/100,systemgebuehr_ust:Math.round(sgUst*100)/100,nettobetrag:Math.round(bruttoTotal*100)/100,ust_satz:ustSatz,ust_betrag:Math.round(ustBetrag*100)/100,auszahlungssumme:Math.round((bruttoTotal+ustBetrag)*100)/100});
     const abrId=Array.isArray(abr)?abr[0].id:abr.id;
-    const posData=positionen.map(p=>{const {_teamDetail,_betragProSale,...rest}=p;return{...rest,abrechnung_id:abrId};});
+    const posData=positionen.map(p=>{const {_teamDetail,_betragProSale,_leadDetails,_betragProLead,_terminDetails,_betragProTermin,...rest}=p;return{...rest,abrechnung_id:abrId};});
     for(let i=0;i<posData.length;i+=50){await sbP('pay_abrechnungen_positionen',posData.slice(i,i+50));}
     count++;
   }
   // ═══ SCOUTER ABRECHNUNGEN ═══
   log('Berechne Scouter...');
+  // Lead/Termin Einzeldaten aus Google Sheet laden
+  const SHEET_ID='1NP2uP1lctwkaqS5ChNNJ12ps8fz7ra66p_akpxLkTX0';
+  const leadDetailByName={}, terminDetailByName={};
+  try{
+    const csvParse=(txt)=>{const rows=[];let row=[],cell='',inQ=false;for(let i=0;i<txt.length;i++){const c=txt[i];if(c==='"'){if(inQ&&txt[i+1]==='"'){cell+='"';i++;}else inQ=!inQ;}else if(c===','&&!inQ){row.push(cell);cell='';}else if(c==='\n'&&!inQ){row.push(cell);rows.push(row);row=[];cell='';}else cell+=c;}if(cell||row.length){row.push(cell);rows.push(row);}return rows;};
+    const [leadCsv,terminCsv]=await Promise.all([
+      fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Leads ${lzY}/${lzM}`).then(r=>r.text()).catch(()=>''),
+      fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Termine ${lzY}/${lzM}`).then(r=>r.text()).catch(()=>'')
+    ]);
+    if(leadCsv){const rows=csvParse(leadCsv);rows.slice(1).forEach(r=>{const scout=(r[0]||'').trim();if(!scout)return;if(!leadDetailByName[scout])leadDetailByName[scout]=[];leadDetailByName[scout].push({kunde:`${(r[5]||'')} ${(r[6]||'')}`.trim(),strasse:`${(r[7]||'')} ${(r[8]||'')}`.trim(),plz:r[9]||'',ort:r[10]||'',datum:(r[3]||'').substring(0,10)});});log(`📋 Lead-Details: ${Object.values(leadDetailByName).reduce((s,a)=>s+a.length,0)} Leads für ${Object.keys(leadDetailByName).length} Scouter`);}
+    if(terminCsv){const rows=csvParse(terminCsv);rows.slice(1).forEach(r=>{const scout=(r[4]||'').trim();const status=(r[15]||'').trim();if(!scout||scout==='-')return;if(!status.includes('SCOUT'))return;if(!terminDetailByName[scout])terminDetailByName[scout]=[];terminDetailByName[scout].push({kunde:(r[6]||'').trim(),adresse:(r[7]||'').trim(),datum:(r[13]||'').trim(),status});});log(`📅 Termin-Details: ${Object.values(terminDetailByName).reduce((s,a)=>s+a.length,0)} Termine für ${Object.keys(terminDetailByName).length} Scouter`);}
+  }catch(e){log(`⚠️ Lead/Termin-Details konnten nicht geladen werden: ${e.message}`);}
   const allScoutIds = new Set([...Object.keys(byScout), ...Object.keys(stornoByScout), ...Object.keys(offenByScout), ...Object.keys(leadByScout), ...Object.keys(terminByScout), ...Object.keys(szByVP)]);
   for(const scId of allScoutIds){
     const sc = vpById[scId]; if(!sc) continue;
@@ -626,9 +638,10 @@ async function generateAbrechnungen(periode, onProgress){
       const leadCount = leadByScout[scId] || 0;
       if(leadCount > 0){
         const leadBetrag = leadCount * regel.betrag_lead;
-        positionen.push({typ:'lead_bonus',auftrag_nr:`LEADS-${lzY}-${lzM}`,kunde:`${leadCount} Leads`,produkt:`Lead-Bonus (${leadCount}× ${regel.betrag_lead}€)`,original_betrag:leadBetrag,aktiv:true,zurueckgestellt:false,notiz:`${lzY}/${lzM}`});
+        const leadDetails = leadDetailByName[scName] || [];
+        positionen.push({typ:'lead_bonus',auftrag_nr:`LEADS-${lzY}-${lzM}`,kunde:`${leadCount} Leads`,produkt:`Lead-Bonus (${leadCount}× ${regel.betrag_lead}€)`,original_betrag:leadBetrag,aktiv:true,zurueckgestellt:false,notiz:JSON.stringify({ld:leadDetails,bpl:regel.betrag_lead,per:`${lzY}/${lzM}`}),_leadDetails:leadDetails,_betragProLead:regel.betrag_lead});
         bruttoTotal += leadBetrag;
-        log(`  📋 ${scName}: ${leadCount} Leads × ${regel.betrag_lead}€ = ${leadBetrag}€`);
+        log(`  📋 ${scName}: ${leadCount} Leads × ${regel.betrag_lead}€ = ${leadBetrag}€ (${leadDetails.length} Details)`);
       }
     }
     // Termin-Bonus (betrag_termin_sf)
@@ -636,9 +649,10 @@ async function generateAbrechnungen(periode, onProgress){
       const terminCount = terminByScout[scId] || 0;
       if(terminCount > 0){
         const terminBetrag = terminCount * regel.betrag_termin_sf;
-        positionen.push({typ:'termin_bonus',auftrag_nr:`TERMINE-${lzY}-${lzM}`,kunde:`${terminCount} Termine`,produkt:`Termin-Bonus (${terminCount}× ${regel.betrag_termin_sf}€)`,original_betrag:terminBetrag,aktiv:true,zurueckgestellt:false,notiz:`${lzY}/${lzM}`});
+        const terminDetails = terminDetailByName[scName] || [];
+        positionen.push({typ:'termin_bonus',auftrag_nr:`TERMINE-${lzY}-${lzM}`,kunde:`${terminCount} Termine`,produkt:`Termin-Bonus (${terminCount}× ${regel.betrag_termin_sf}€)`,original_betrag:terminBetrag,aktiv:true,zurueckgestellt:false,notiz:JSON.stringify({td:terminDetails,bpt:regel.betrag_termin_sf,per:`${lzY}/${lzM}`}),_terminDetails:terminDetails,_betragProTermin:regel.betrag_termin_sf});
         bruttoTotal += terminBetrag;
-        log(`  📅 ${scName}: ${terminCount} Termine × ${regel.betrag_termin_sf}€ = ${terminBetrag}€`);
+        log(`  📅 ${scName}: ${terminCount} Termine × ${regel.betrag_termin_sf}€ = ${terminBetrag}€ (${terminDetails.length} Details)`);
       }
     }
     // Sonderzulagen aus Sheet (Zugaben/Abzüge) – auch für Scouter
@@ -664,7 +678,7 @@ async function generateAbrechnungen(periode, onProgress){
     const ustBetrag=bruttoTotal*(ustSatz/100);
     const abr=await sbP('pay_abrechnungen',{periode,mitarbeiter_name:scName,kuerzel:sc.kuerzel||gK(scName),beschaeftigungsart:isHGB?'hgb_scouter':'angestellt_scouter',status:'entwurf',anzahl_sales:orders.length,brutto_provisionen:Math.round(bruttoTotal*100)/100,systemgebuehr_netto:Math.round(sgNetto*100)/100,systemgebuehr_ust:Math.round(sgUst*100)/100,nettobetrag:Math.round(bruttoTotal*100)/100,ust_satz:ustSatz,ust_betrag:Math.round(ustBetrag*100)/100,auszahlungssumme:Math.round((bruttoTotal+ustBetrag)*100)/100});
     const abrId=Array.isArray(abr)?abr[0].id:abr.id;
-    const posData=positionen.map(p=>({...p,abrechnung_id:abrId}));
+    const posData=positionen.map(p=>{const {_leadDetails,_betragProLead,_terminDetails,_betragProTermin,...rest}=p;return{...rest,abrechnung_id:abrId};});
     for(let i=0;i<posData.length;i+=50){await sbP('pay_abrechnungen_positionen',posData.slice(i,i+50));}
     count++;
   }
@@ -1341,6 +1355,96 @@ function GutschriftPreview({ab,pos,sg}){
         </div>
         <FooterBlock/>
       </div>;
+    })}
+
+    {/* === LEAD-BONUS DETAIL (eigene Seiten, paginiert) === */}
+    {aLeadBonus.map((lbp,lbi)=>{
+      let details=lbp._leadDetails||[];
+      let bpl=lbp._betragProLead||0;
+      if(!details.length&&lbp.notiz){try{const nd=JSON.parse(lbp.notiz);details=nd.ld||[];bpl=nd.bpl||0;}catch(e){}}
+      if(!details.length)return null;
+      const MAX_PER_PAGE=40;
+      const pages=[];for(let i=0;i<details.length;i+=MAX_PER_PAGE)pages.push(details.slice(i,i+MAX_PER_PAGE));
+      if(!pages.length)pages.push([]);
+      return pages.map((pageDetails,pi)=><div key={`lead-page-${lbi}-${pi}`} className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
+        {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
+        <div style={{padding:'14mm 16mm 0',flex:1}}>
+          <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
+            <span>Lead-Bonus Detail {lzLabel}{pages.length>1?` (${pi+1}/${pages.length})`:''}</span><span style={{color:'#aaa'}}>{bn} · Anlage</span>
+          </div>
+          {pi===0&&<div style={{fontSize:14,fontWeight:700,marginBottom:6}}>📋 Lead-Bonus – {ab.mitarbeiter_name}</div>}
+          {pi===0&&<div style={{fontSize:10,color:'#555',marginBottom:12}}>Leistungszeitraum: {lzLabel} · {details.length} Leads × {fmtE(bpl)} = {fmtE(lbp.override_betrag!=null?lbp.override_betrag:lbp.original_betrag)}</div>}
+          {pi>0&&<div style={{color:'#888',fontSize:9,marginBottom:8}}>Fortsetzung Lead-Liste</div>}
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:9}}>
+            <thead><tr style={{background:'#ecfdf5'}}>
+              <th style={{padding:'4px 6px',borderBottom:'2px solid #6ee7b7',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#059669',width:24}}>Nr</th>
+              <th style={{padding:'4px 6px',borderBottom:'2px solid #6ee7b7',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#059669'}}>Kunde</th>
+              <th style={{padding:'4px 6px',borderBottom:'2px solid #6ee7b7',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#059669'}}>Adresse</th>
+              <th style={{padding:'4px 6px',borderBottom:'2px solid #6ee7b7',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#059669',width:70}}>Datum</th>
+              <th style={{padding:'4px 6px',borderBottom:'2px solid #6ee7b7',textAlign:'right',fontSize:8,textTransform:'uppercase',color:'#059669',width:60}}>Betrag</th>
+            </tr></thead>
+            <tbody>
+              {pageDetails.map((d,di)=><tr key={di} style={{borderBottom:'1px solid #e5e7eb',background:di%2===0?'#f0fdf4':'transparent'}}>
+                <td style={{padding:'3px 6px',color:'#9ca3af',fontSize:8}}>{pi*MAX_PER_PAGE+di+1}.</td>
+                <td style={{padding:'3px 6px',fontWeight:500,fontSize:9}}>{d.kunde||'—'}</td>
+                <td style={{padding:'3px 6px',fontSize:8.5,color:'#555'}}>{d.strasse}{d.plz?`, ${d.plz} ${d.ort}`:''}</td>
+                <td style={{padding:'3px 6px',fontSize:8.5,color:'#666'}}>{d.datum||'—'}</td>
+                <td style={{padding:'3px 6px',textAlign:'right',fontSize:8.5,color:'#059669'}}>{fmtE(bpl)}</td>
+              </tr>)}
+              {pi===pages.length-1&&<tr style={{fontWeight:700,borderTop:'2px solid #059669',background:'#ecfdf5'}}>
+                <td></td><td colSpan={3} style={{padding:'5px 6px'}}>Gesamt ({details.length} Leads)</td>
+                <td style={{padding:'5px 6px',textAlign:'right',color:'#059669',fontSize:11}}>{fmtE(lbp.override_betrag!=null?lbp.override_betrag:lbp.original_betrag)}</td>
+              </tr>}
+            </tbody>
+          </table>
+        </div>
+        <FooterBlock/>
+      </div>);
+    })}
+
+    {/* === TERMIN-BONUS DETAIL (eigene Seiten, paginiert) === */}
+    {aTerminBonus.map((tbp2,tbi)=>{
+      let details=tbp2._terminDetails||[];
+      let bpt=tbp2._betragProTermin||0;
+      if(!details.length&&tbp2.notiz){try{const nd=JSON.parse(tbp2.notiz);details=nd.td||[];bpt=nd.bpt||0;}catch(e){}}
+      if(!details.length)return null;
+      const MAX_PER_PAGE=40;
+      const pages=[];for(let i=0;i<details.length;i+=MAX_PER_PAGE)pages.push(details.slice(i,i+MAX_PER_PAGE));
+      if(!pages.length)pages.push([]);
+      return pages.map((pageDetails,pi)=><div key={`termin-page-${tbi}-${pi}`} className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
+        {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
+        <div style={{padding:'14mm 16mm 0',flex:1}}>
+          <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
+            <span>Termin-Bonus Detail {lzLabel}{pages.length>1?` (${pi+1}/${pages.length})`:''}</span><span style={{color:'#aaa'}}>{bn} · Anlage</span>
+          </div>
+          {pi===0&&<div style={{fontSize:14,fontWeight:700,marginBottom:6}}>📅 Termin-Bonus – {ab.mitarbeiter_name}</div>}
+          {pi===0&&<div style={{fontSize:10,color:'#555',marginBottom:12}}>Leistungszeitraum: {lzLabel} · {details.length} Termine × {fmtE(bpt)} = {fmtE(tbp2.override_betrag!=null?tbp2.override_betrag:tbp2.original_betrag)}</div>}
+          {pi>0&&<div style={{color:'#888',fontSize:9,marginBottom:8}}>Fortsetzung Termin-Liste</div>}
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:9}}>
+            <thead><tr style={{background:'#eff6ff'}}>
+              <th style={{padding:'4px 6px',borderBottom:'2px solid #93c5fd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#2563eb',width:24}}>Nr</th>
+              <th style={{padding:'4px 6px',borderBottom:'2px solid #93c5fd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#2563eb'}}>Kunde</th>
+              <th style={{padding:'4px 6px',borderBottom:'2px solid #93c5fd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#2563eb'}}>Adresse</th>
+              <th style={{padding:'4px 6px',borderBottom:'2px solid #93c5fd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#2563eb',width:90}}>Datum</th>
+              <th style={{padding:'4px 6px',borderBottom:'2px solid #93c5fd',textAlign:'right',fontSize:8,textTransform:'uppercase',color:'#2563eb',width:60}}>Betrag</th>
+            </tr></thead>
+            <tbody>
+              {pageDetails.map((d,di)=><tr key={di} style={{borderBottom:'1px solid #e5e7eb',background:di%2===0?'#eff6ff':'transparent'}}>
+                <td style={{padding:'3px 6px',color:'#9ca3af',fontSize:8}}>{pi*MAX_PER_PAGE+di+1}.</td>
+                <td style={{padding:'3px 6px',fontWeight:500,fontSize:9}}>{d.kunde||'—'}</td>
+                <td style={{padding:'3px 6px',fontSize:8.5,color:'#555'}}>{d.adresse||'—'}</td>
+                <td style={{padding:'3px 6px',fontSize:8.5,color:'#666'}}>{d.datum||'—'}</td>
+                <td style={{padding:'3px 6px',textAlign:'right',fontSize:8.5,color:'#2563eb'}}>{fmtE(bpt)}</td>
+              </tr>)}
+              {pi===pages.length-1&&<tr style={{fontWeight:700,borderTop:'2px solid #2563eb',background:'#eff6ff'}}>
+                <td></td><td colSpan={3} style={{padding:'5px 6px'}}>Gesamt ({details.length} Termine)</td>
+                <td style={{padding:'5px 6px',textAlign:'right',color:'#2563eb',fontSize:11}}>{fmtE(tbp2.override_betrag!=null?tbp2.override_betrag:tbp2.original_betrag)}</td>
+              </tr>}
+            </tbody>
+          </table>
+        </div>
+        <FooterBlock/>
+      </div>);
     })}
 
     {/* === STAFFEL-KORREKTUR (eigene Seite) === */}
