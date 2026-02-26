@@ -43,6 +43,29 @@ body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-heigh
 .kat-btn:hover{border-color:#484f58;color:#c9d1d9}
 .kat-btn.active{background:#F5C50018;border-color:#F5C500;color:#F5C500}
 .kat-btn.active-sc{background:#a78bfa18;border-color:#a78bfa;color:#a78bfa}
+.sc-tabs{display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid #21262d;padding-bottom:6px}
+.sc-tab{padding:5px 10px;border-radius:6px 6px 0 0;font-size:11px;font-weight:600;cursor:pointer;border:1px solid transparent;border-bottom:none;color:#8b949e;background:transparent;transition:all .15s}
+.sc-tab:hover{color:#e6edf3;background:#161b2280}
+.sc-tab.active{color:#a78bfa;border-color:#21262d;background:#0d1117;border-bottom:2px solid #a78bfa}
+.sc-tab .cnt{background:#21262d;padding:1px 6px;border-radius:8px;font-size:10px;margin-left:4px}
+.sc-tab.active .cnt{background:#a78bfa30;color:#a78bfa}
+.sc-detail-tbl{width:100%;border-collapse:collapse;font-size:11px}
+.sc-detail-tbl th{padding:5px 7px;text-align:left;font-size:9px;text-transform:uppercase;color:#8b949e;border-bottom:1px solid #21262d;letter-spacing:.3px;font-weight:600}
+.sc-detail-tbl td{padding:6px 7px;border-bottom:1px solid #161b22;color:#c9d1d9;font-size:11px}
+.sc-detail-tbl tr:hover{background:#161b2280}
+.sc-detail-tbl .kunde{font-weight:600;color:#e6edf3}
+.sc-detail-tbl .datum{color:#8b949e;font-size:10px}
+.sc-detail-tbl .tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600}
+.sc-detail-tbl .tag-sale{background:#23893620;color:#3fb950}
+.sc-detail-tbl .tag-termin{background:#58a6ff20;color:#58a6ff}
+.sc-detail-tbl .tag-storno{background:#f8514920;color:#f85149}
+.sc-detail-tbl .tag-offen{background:#d29922;color:#1c1c1c}
+.sc-detail-tbl .tag-lead{background:#a78bfa20;color:#a78bfa}
+.sc-stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+.sc-stat{background:#161b22;padding:8px;border-radius:6px;border:1px solid #21262d;text-align:center}
+.sc-stat .val{font-size:18px;font-weight:700}
+.sc-stat .lbl{font-size:9px;color:#8b949e;margin-top:2px}
+.sc-empty{text-align:center;padding:20px;color:#484f58;font-size:12px}
 .vt-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .vt-name{font-size:15px;font-weight:700;color:#e6edf3}
 .vt-kuerzel{font-size:11px;color:#8b949e;background:#21262d;padding:2px 8px;border-radius:4px}
@@ -59,6 +82,7 @@ body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-heigh
 .detail-header{background:#161b22;border-bottom:1px solid #21262d;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
 .detail-body{display:flex;flex:1;overflow:hidden}
 .edit-panel{width:420px;min-width:380px;background:#0d1117;border-right:1px solid #21262d;overflow-y:auto;padding:16px;flex-shrink:0}
+.edit-panel-inner{background:#0d1117}
 .preview-panel{flex:1;overflow-y:auto;background:#2d2d2d;padding:20px;display:flex;justify-content:center}
 .edit-section{margin-bottom:16px}
 .edit-section-title{font-size:12px;font-weight:700;color:#F5C500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #21262d}
@@ -1010,23 +1034,26 @@ function GutschriftPreview({ab,pos,sg}){
       nzG.groups.forEach(an => { const g=nzG.byAN[an]; if(g?.main?.kunde){ const k=g.main.kunde.trim().toLowerCase(); nzKundeCount[k]=(nzKundeCount[k]||0)+1; } });
       const isNZDupe = (kunde) => kunde && nzKundeCount[kunde.trim().toLowerCase()] > 1;
       
-      // Dynamic page break: count actual rows per group, max ~38 rows per page
+      // Dynamic page break: count actual rows per group, max ~44 rows per page
       const MAX_ROWS = 44;
       const LAST_PAGE_RESERVE = 4; // Summen + Unterschriften
       const pages = []; let currentPage = []; let rowCount = 0;
       allGroups.forEach((item, gi) => {
         if(item.src==='sep'){
-          // NZ header → immer neue Seite
+          // NZ header → IMMER neue Seite (neues Blatt)
           if(currentPage.length > 0){
-            pages.push(currentPage); currentPage = []; rowCount = 0;
+            pages.push(currentPage);
           }
-          currentPage.push(item); rowCount += 2;
+          currentPage = [item]; rowCount = 2;
           return;
         }
         const g = getG(item);
         const rows = 1 + (g.boni.length > 0 ? g.boni.length + 2 : 0);
-        const remainingItems = allGroups.slice(gi).filter(x=>x.src!=='sep');
-        const remainingRows = remainingItems.reduce((s,x) => {const gg=getG(x); return s + 1 + (gg&&gg.boni.length > 0 ? gg.boni.length + 2 : 0);}, 0);
+        // remainingItems: nur bis zum nächsten sep zählen (LZ/NZ getrennt)
+        const sepIdx = allGroups.slice(gi).findIndex(x=>x.src==='sep');
+        const sameSection = sepIdx>=0 ? allGroups.slice(gi, gi+sepIdx) : allGroups.slice(gi);
+        const remainingInSection = sameSection.filter(x=>x.src!=='sep');
+        const remainingRows = remainingInSection.reduce((s,x) => {const gg=getG(x); return s + 1 + (gg&&gg.boni.length > 0 ? gg.boni.length + 2 : 0);}, 0);
         const isNearEnd = remainingRows <= (MAX_ROWS - LAST_PAGE_RESERVE);
         const limit = isNearEnd ? (MAX_ROWS - LAST_PAGE_RESERVE) : MAX_ROWS;
         if(rowCount + rows > limit && currentPage.length > 0){
@@ -1289,7 +1316,7 @@ function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
   const rmE=(i)=>{const n=[...pos];n.splice(i,1);setPos(n);};
   const upE=(i,f,v)=>{const n=[...pos];n[i]={...n[i],[f]:f==='original_betrag'?(parseFloat(v.replace(',','.'))||0):v};setPos(n);};
 
-  return <div className="edit-panel">
+  return <div className="edit-panel-inner">
     <div className="edit-section">
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
         <span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status==='entwurf'?'📝 Entwurf':ab.status==='probeabrechnung'?'🔍 Probe':ab.status==='freigegeben'?'✅ Freigegeben':'💸 Ausgezahlt'}</span>
@@ -1333,6 +1360,145 @@ function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
   </div>;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   SCOUTER DETAIL PANEL – Leads, Termine, Sales im Detail
+   ═══════════════════════════════════════════════════════════════════ */
+function ScouterDetailPanel({scouterId,periode}){
+  const[tab,setTab]=useState('sales');
+  const[auftraege,setAuftraege]=useState([]);
+  const[stornos,setStornos]=useState([]);
+  const[offen,setOffen]=useState([]);
+  const[termine,setTermine]=useState([]);
+  const[ldg,setLdg]=useState(true);
+
+  useEffect(()=>{if(!scouterId)return;(async()=>{
+    setLdg(true);
+    try{
+      // Leistungszeitraum aus Periode ableiten (Periode = Abrechnungsmonat, LZ = Vormonat)
+      const[pY,pM]=periode.split('/').map(Number);
+      const lzD=new Date(pY,pM-2,1);
+      const lzStart=`${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
+      const lzEndD=new Date(lzD.getFullYear(),lzD.getMonth()+1,0);
+      const lzEnd=`${lzEndD.getFullYear()}-${String(lzEndD.getMonth()+1).padStart(2,'0')}-${String(lzEndD.getDate()).padStart(2,'0')}`;
+
+      const[sales,storno,off,term]=await Promise.all([
+        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&order=auftrags_datum.desc`),
+        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&storniert=eq.true&order=auftrags_datum.desc`),
+        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&storniert=eq.false&zahlungsstatus=eq.offen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&order=auftrags_datum.desc`),
+        sbG('termine',`select=*&order=datum.desc&limit=200`)
+      ]);
+      setAuftraege(sales||[]);
+      setStornos(storno||[]);
+      setOffen(off||[]);
+      // Termine filtern: vertrieb_id ist im termine-table nicht scouter_id, also alle laden und nach Kontext zuordnen
+      // Alternativ: Termine aus pay_auftraege lead_count/termin_count records
+      const termRecords = await sbG('pay_auftraege',`scouter_id=eq.${scouterId}&produkt_typ=in.(lead_count,termin_count)&order=auftrags_datum.desc`);
+      setTermine(termRecords||[]);
+    }catch(e){console.error('ScouterDetail load',e);}
+    setLdg(false);
+  })();},[scouterId,periode]);
+
+  const fD = d => d ? new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—';
+
+  // Filter nach LZ/Gesamt
+  const[filterLZ,setFilterLZ]=useState(false);
+  const[pY2,pM2]=periode?periode.split('/').map(Number):[2026,1];
+  const lzD2=new Date(pY2,pM2-2,1);
+  const lzMonth=`${lzD2.getFullYear()}-${String(lzD2.getMonth()+1).padStart(2,'0')}`;
+  const inLZ = a => (a.auftrags_datum||'').startsWith(lzMonth);
+  const filtered = (arr) => filterLZ ? arr.filter(inLZ) : arr;
+
+  const salesLZ=auftraege.filter(inLZ).length;
+  const salesTotal=auftraege.length;
+  const stornoLZ=stornos.filter(inLZ).length;
+  const offenLZ=offen.filter(inLZ).length;
+
+  if(ldg) return <div className="edit-section"><div className="loading" style={{padding:15}}><div className="spinner"/>Lade Scouter-Details...</div></div>;
+
+  return <div className="edit-section" style={{borderTop:'1px solid #a78bfa40',paddingTop:12}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+      <div className="edit-section-title" style={{color:'#a78bfa',margin:0}}>🔍 Scouter-Details</div>
+      <label style={{fontSize:10,color:'#8b949e',cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
+        <input type="checkbox" checked={filterLZ} onChange={e=>setFilterLZ(e.target.checked)} style={{accentColor:'#a78bfa'}}/>
+        Nur Leistungszeitraum
+      </label>
+    </div>
+
+    <div className="sc-stat-row">
+      <div className="sc-stat"><div className="val" style={{color:'#3fb950'}}>{filterLZ?salesLZ:salesTotal}</div><div className="lbl">Sales</div></div>
+      <div className="sc-stat"><div className="val" style={{color:'#f85149'}}>{filterLZ?stornoLZ:stornos.length}</div><div className="lbl">Stornos</div></div>
+      <div className="sc-stat"><div className="val" style={{color:'#d29922'}}>{filterLZ?offenLZ:offen.length}</div><div className="lbl">Offen</div></div>
+      <div className="sc-stat"><div className="val" style={{color:'#58a6ff'}}>{termine.length}</div><div className="lbl">Termine/Leads</div></div>
+    </div>
+
+    <div className="sc-tabs">
+      <button className={`sc-tab${tab==='sales'?' active':''}`} onClick={()=>setTab('sales')}>✅ Sales<span className="cnt">{filtered(auftraege).length}</span></button>
+      <button className={`sc-tab${tab==='offen'?' active':''}`} onClick={()=>setTab('offen')}>⏳ Offen<span className="cnt">{filtered(offen).length}</span></button>
+      <button className={`sc-tab${tab==='stornos'?' active':''}`} onClick={()=>setTab('stornos')}>❌ Stornos<span className="cnt">{filtered(stornos).length}</span></button>
+      <button className={`sc-tab${tab==='termine'?' active':''}`} onClick={()=>setTab('termine')}>📋 Leads/Termine<span className="cnt">{termine.length}</span></button>
+    </div>
+
+    {tab==='sales'&&(filtered(auftraege).length===0?<div className="sc-empty">Keine Sales gefunden</div>:
+      <div style={{maxHeight:400,overflowY:'auto'}}>
+        <table className="sc-detail-tbl"><thead><tr><th>Nr</th><th>Kunde</th><th>Datum</th><th>kWp</th><th>Quelle</th><th>Wert</th></tr></thead><tbody>
+          {filtered(auftraege).map((a,i)=><tr key={a.id||i}>
+            <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
+            <td className="kunde">{a.kunde_name||'—'}</td>
+            <td className="datum">{fD(a.auftrags_datum)}</td>
+            <td>{a.kwp?a.kwp.toFixed(1):'-'}</td>
+            <td><span className={`tag tag-${(a.lead_quelle||'').includes('eigenlead')?'lead':'sale'}`}>{a.lead_quelle||'—'}</span></td>
+            <td style={{textAlign:'right',fontWeight:600,color:'#3fb950'}}>{a.netto_auftragswert?fmtE(a.netto_auftragswert/100):'—'}</td>
+          </tr>)}
+        </tbody></table>
+      </div>
+    )}
+
+    {tab==='offen'&&(filtered(offen).length===0?<div className="sc-empty">Keine offenen Aufträge</div>:
+      <div style={{maxHeight:400,overflowY:'auto'}}>
+        <table className="sc-detail-tbl"><thead><tr><th>Nr</th><th>Kunde</th><th>Datum</th><th>kWp</th><th>Quelle</th><th>Status</th></tr></thead><tbody>
+          {filtered(offen).map((a,i)=><tr key={a.id||i}>
+            <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
+            <td className="kunde">{a.kunde_name||'—'}</td>
+            <td className="datum">{fD(a.auftrags_datum)}</td>
+            <td>{a.kwp?a.kwp.toFixed(1):'-'}</td>
+            <td><span className={`tag tag-${(a.lead_quelle||'').includes('eigenlead')?'lead':'termin'}`}>{a.lead_quelle||'—'}</span></td>
+            <td><span className="tag tag-offen">offen</span></td>
+          </tr>)}
+        </tbody></table>
+      </div>
+    )}
+
+    {tab==='stornos'&&(filtered(stornos).length===0?<div className="sc-empty">Keine Stornos</div>:
+      <div style={{maxHeight:400,overflowY:'auto'}}>
+        <table className="sc-detail-tbl"><thead><tr><th>Nr</th><th>Kunde</th><th>Datum</th><th>kWp</th><th>Storno-Datum</th><th>Grund</th></tr></thead><tbody>
+          {filtered(stornos).map((a,i)=><tr key={a.id||i}>
+            <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
+            <td className="kunde">{a.kunde_name||'—'}</td>
+            <td className="datum">{fD(a.auftrags_datum)}</td>
+            <td>{a.kwp?a.kwp.toFixed(1):'-'}</td>
+            <td className="datum">{fD(a.storno_datum)}</td>
+            <td style={{fontSize:10,color:'#f85149'}}>{a.storno_grund||'—'}</td>
+          </tr>)}
+        </tbody></table>
+      </div>
+    )}
+
+    {tab==='termine'&&(termine.length===0?<div className="sc-empty">Keine Lead/Termin-Records</div>:
+      <div style={{maxHeight:400,overflowY:'auto'}}>
+        <table className="sc-detail-tbl"><thead><tr><th>Nr</th><th>Typ</th><th>Kunde</th><th>Datum</th><th>Anzahl</th></tr></thead><tbody>
+          {termine.map((t,i)=><tr key={t.id||i}>
+            <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
+            <td><span className={`tag ${t.produkt_typ==='lead_count'?'tag-lead':'tag-termin'}`}>{t.produkt_typ==='lead_count'?'Lead':'Termin'}</span></td>
+            <td className="kunde">{t.kunde_name||'—'}</td>
+            <td className="datum">{fD(t.auftrags_datum)}</td>
+            <td style={{fontWeight:600}}>{t.kwp||0}</td>
+          </tr>)}
+        </tbody></table>
+      </div>
+    )}
+  </div>;
+}
+
 function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
   const[ab,setAb]=useState(null);const[pos,setPos]=useState([]);const[ld,setLd]=useState(true);const ref=useRef(null);
   useEffect(()=>{load();},[aId]);
@@ -1370,11 +1536,18 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
 
   if(ld)return<div className="detail-overlay"><div className="detail-container"><div className="loading"><div className="spinner"/>Lade...</div></div></div>;
   if(!ab)return null;
+  const isScouter=(ab.beschaeftigungsart||'').includes('scouter');
+  const scouterId=window.__vpData?.id||null;
   return<div className="detail-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div className="detail-container">
-      <div className="detail-header"><div style={{display:'flex',alignItems:'center',gap:12}}><button className="btn btn-secondary btn-sm" onClick={onClose}>← Zurück</button><span style={{fontWeight:700,fontSize:15}}>{ab.mitarbeiter_name}</span><span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status}</span></div><div style={{fontSize:12,color:'#8b949e'}}>{pLabel(ab.periode)}</div></div>
+      <div className="detail-header"><div style={{display:'flex',alignItems:'center',gap:12}}><button className="btn btn-secondary btn-sm" onClick={onClose}>← Zurück</button><span style={{fontWeight:700,fontSize:15}}>{ab.mitarbeiter_name}</span><span className={`badge badge-${ab.status==='probeabrechnung'?'probe':ab.status}`}>{ab.status}</span>{isScouter&&<span style={{fontSize:9,padding:'2px 8px',borderRadius:4,background:'#a78bfa20',color:'#a78bfa',fontWeight:600}}>🔵 Scout</span>}</div><div style={{fontSize:12,color:'#8b949e'}}>{pLabel(ab.periode)}</div></div>
       <div className="detail-body">
-        <EditPanel ab={ab} pos={pos} setPos={setPos} sg={sg} onSave={save} onFrei={frei} onPdf={pdf} onClose={onClose} setAb={setAb}/>
+        <div className="edit-panel" style={{display:'flex',flexDirection:'column',padding:0,overflow:'hidden'}}>
+          <div style={{flex:1,overflowY:'auto',padding:16}}>
+            <EditPanel ab={ab} pos={pos} setPos={setPos} sg={sg} onSave={save} onFrei={frei} onPdf={pdf} onClose={onClose} setAb={setAb}/>
+            {isScouter&&scouterId&&<ScouterDetailPanel scouterId={scouterId} periode={ab.periode}/>}
+          </div>
+        </div>
         <div className="preview-panel" ref={ref}><GutschriftPreview ab={ab} pos={pos} sg={sg}/></div>
       </div>
     </div>
