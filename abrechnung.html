@@ -233,6 +233,10 @@ async function generateAbrechnungen(periode, onProgress){
   const auftraege = [...auftrLZ, ...auftrNZ];
   // Filter gesperrte Aufträge raus
   const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')) && a.produkt_typ !== 'lead_count' && a.produkt_typ !== 'termin_count' && a.produkt_typ !== 'zero_count' && a.produkt_typ !== 'sonderzulage');
+  // Finanzierung abgelehnt → ausschließen, es sei denn Barzahler
+  const finAbgelehnt = auftraegeClean.filter(a => {const f=(a.beedoo_fortschritt||'').toLowerCase(); return f.includes('finanzierung abgelehnt') && !f.includes('barzahler');});
+  const finAbgelehntANs = new Set(finAbgelehnt.map(a=>a.auftrag_nr));
+  if(finAbgelehnt.length) log(`🚫 ${finAbgelehnt.length} Aufträge mit "Finanzierung abgelehnt" ausgeschlossen: ${finAbgelehnt.map(a=>`${a.auftrag_nr} (${a.kunde_name})`).join(', ')}`);
   // Sonderzulagen aus Sheet (produkt_typ=sonderzulage) separat extrahieren
   const sonderzulagen = auftraege.filter(a => a.produkt_typ === 'sonderzulage');
   const szByVP = {};
@@ -243,7 +247,7 @@ async function generateAbrechnungen(periode, onProgress){
   (efsBlockedProjekte||[]).forEach(e => { efsBlockedIds[e.efs_id] = { status: e.simplified_status, kunde: e.kunde_name }; });
   const grundbuchOrders = auftraegeClean.filter(a => a.efs_projekt_id && efsBlockedIds[a.efs_projekt_id] && ['LAND_REGISTRY_CHECK','MISSING_PROPERTY_OWNERS'].includes(efsBlockedIds[a.efs_projekt_id].status));
   const efsRevokedOrders = auftraegeClean.filter(a => a.efs_projekt_id && efsBlockedIds[a.efs_projekt_id] && efsBlockedIds[a.efs_projekt_id].status === 'REVOKED');
-  const afterEFS = auftraegeClean.filter(a => !grundbuchOrders.includes(a) && !efsRevokedOrders.includes(a));
+  const afterEFS = auftraegeClean.filter(a => !grundbuchOrders.includes(a) && !efsRevokedOrders.includes(a) && !finAbgelehntANs.has(a.auftrag_nr));
   if(grundbuchOrders.length) log(`📋 ${grundbuchOrders.length} Aufträge in Grundbuchprüfung (LAND_REGISTRY_CHECK) – stehen als offen`);
   if(efsRevokedOrders.length) log(`🚫 ${efsRevokedOrders.length} Aufträge REVOKED in EFS – werden als Storno behandelt`);
   // On Hold: Aufträge mit "on_hold" in notiz → nicht auszahlen, separat ausweisen
@@ -304,9 +308,9 @@ async function generateAbrechnungen(periode, onProgress){
   const stornoAbzByVP = {};
   stornoAbzuege.forEach(a => { if(!a.vertriebler_id) return; if(!stornoAbzByVP[a.vertriebler_id]) stornoAbzByVP[a.vertriebler_id]=[]; stornoAbzByVP[a.vertriebler_id].push(a); });
   // Offen: LZ vs VM markieren
-  const offeneAuftr = offenAll;
+  const offeneAuftr = offenAll.filter(a => !finAbgelehntANs.has(a.auftrag_nr));
   const stornoLZn = stornoLZ.length;
-  const offenLZn = offenAll.length;
+  const offenLZn = offeneAuftr.length;
   log(`${auftrLZ.length} LZ + ${auftrNZ.length} NZ | ${stornoLZn} Stornos | ${stornoAbzuege.length} Storno-Abzüge | ${offenLZn} Offen | ${onHoldOrders.length} On Hold | ${sonderProv.length} Sonder | ${teamBonus.length} Team`);
   const sgConfig = sgArr[0] || {prozent:3, max_netto:200, ust_satz:19};
   const regelMap = {}; regeln.forEach(r => regelMap[r.mitarbeiter_typ] = r);
@@ -320,7 +324,7 @@ async function generateAbrechnungen(periode, onProgress){
   const stornoByScout = {};
   stornoAuftr.forEach(a => { if(!a.scouter_id) return; if(!stornoByScout[a.scouter_id]) stornoByScout[a.scouter_id] = []; stornoByScout[a.scouter_id].push(a); });
   const offenByScout = {};
-  offenAll.forEach(a => { if(!a.scouter_id) return; if(!offenByScout[a.scouter_id]) offenByScout[a.scouter_id] = []; offenByScout[a.scouter_id].push(a); });
+  offeneAuftr.forEach(a => { if(!a.scouter_id) return; if(!offenByScout[a.scouter_id]) offenByScout[a.scouter_id] = []; offenByScout[a.scouter_id].push(a); });
   // Scout-Umleitung: Fremd-Aufträge zählen (nur LZ!) → Ziel-VT bekommt Extra-Bonus
   const umleitungOrders = {};
   scoutUmleitungen.forEach(u => {
@@ -335,7 +339,7 @@ async function generateAbrechnungen(periode, onProgress){
   const stornoByVP = {};
   stornoAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!stornoByVP[a.vertriebler_id]) stornoByVP[a.vertriebler_id] = []; stornoByVP[a.vertriebler_id].push(a); });
   const offenByVP = {};
-  offenAll.forEach(a => { if(!a.vertriebler_id) return; if(!offenByVP[a.vertriebler_id]) offenByVP[a.vertriebler_id] = []; offenByVP[a.vertriebler_id].push(a); });
+  offeneAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!offenByVP[a.vertriebler_id]) offenByVP[a.vertriebler_id] = []; offenByVP[a.vertriebler_id].push(a); });
   // Grundbuch-Aufträge → als offen anzeigen (mit Kennzeichnung)
   grundbuchOrders.forEach(a => { a._grundbuch = true; if(a.vertriebler_id){if(!offenByVP[a.vertriebler_id])offenByVP[a.vertriebler_id]=[];offenByVP[a.vertriebler_id].push(a);} });
   grundbuchOrders.forEach(a => { if(a.scouter_id){if(!offenByScout[a.scouter_id])offenByScout[a.scouter_id]=[];offenByScout[a.scouter_id].push(a);} });
