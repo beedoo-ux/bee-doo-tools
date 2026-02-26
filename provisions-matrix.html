@@ -751,18 +751,34 @@ function TabHistorie({ historie, setHistorie, toast }) {
 }
 
 // ═══ Tab: Übersicht (Dashboard) ═══
-function TabOverview({ regeln, sonder, stufen, teamBonus, sperr, duplikate, historie }) {
+function TabOverview({ regeln, sonder, setSonder, stufen, teamBonus, sperr, duplikate, historie, mitarbeiterList, toast }) {
+  const skipIds = new Set(sonder.filter(s => s.typ === 'skip_abrechnung' && s.aktiv).map(s => s.mitarbeiter_id));
+  const toggleSkip = async (ma) => {
+    const name = `${ma.vorname} ${ma.nachname}`;
+    const existing = sonder.find(s => s.typ === 'skip_abrechnung' && s.mitarbeiter_id === ma.id);
+    if (existing) {
+      await db.patch("pay_sonderprovisionen", `id=eq.${existing.id}`, { aktiv: !existing.aktiv });
+      setSonder(prev => prev.map(s => s.id === existing.id ? { ...s, aktiv: !s.aktiv } : s));
+      toast(existing.aktiv ? `✅ ${name} wird wieder abgerechnet` : `⏸️ ${name} wird übersprungen`);
+    } else {
+      const res = await db.post("pay_sonderprovisionen", { mitarbeiter_name: name, mitarbeiter_id: ma.id, typ: "skip_abrechnung", betrag: 0, beschreibung: "Keine Abrechnung erstellen", aktiv: true, gueltig_ab: new Date().toISOString().substring(0, 10) });
+      setSonder(prev => [...prev, ...(Array.isArray(res) ? res : [res])]);
+      toast(`⏸️ ${name} wird übersprungen`);
+    }
+  };
   const stats = [
     { label: "Provisions-Regeln", val: regeln.length, icon: "📋", color: "var(--b)", sub: `${regeln.filter(r => r.staffel_schwelle < 999).length} mit Staffel` },
-    { label: "Sonderprovisionen", val: sonder.length, icon: "⭐", color: "var(--y)", sub: `${sonder.filter(s => s.aktiv).length} aktiv` },
+    { label: "Sonderprovisionen", val: sonder.filter(s=>s.typ!=='skip_abrechnung').length, icon: "⭐", color: "var(--y)", sub: `${sonder.filter(s => s.aktiv&&s.typ!=='skip_abrechnung').length} aktiv` },
     { label: "Stufenbonus", val: stufen.length, icon: "🏆", color: "var(--g)", sub: stufen.map(s => `≥${s.min_anlagen}: ${eur(s.bonus_betrag)}`).join(", ") || "–" },
     { label: "Team-Bonus", val: teamBonus.length, icon: "👥", color: "var(--t)", sub: teamBonus.map(t => `${t.mitarbeiter_name}: ${eur(t.betrag_pro_sale)}/Sale`).join(", ") || "–" },
     { label: "Sperrlisten", val: sperr.length, icon: "🔒", color: "var(--r)", sub: `${sperr.filter(s => s.status === "gesperrt").length} gesperrt, ${sperr.filter(s => s.status === "ausgezahlt").length} ausgezahlt` },
     { label: "Duplikate", val: duplikate.length, icon: "⚠️", color: "var(--o)", sub: `${duplikate.filter(d => d.status === "entscheidung_noetig" || d.status === "offen").length} offen` },
     { label: "Provisions-Historie", val: historie.length, icon: "📜", color: "var(--p)", sub: (() => { const g={}; historie.forEach(h=>{if(!g[h.mitarbeiter_name])g[h.mitarbeiter_name]=0;g[h.mitarbeiter_name]++;}); const multi=Object.values(g).filter(c=>c>1).length; return `${Object.keys(g).length} VTs, ${multi} mit Änderungen`; })() },
+    { label: "Übersprungen", val: skipIds.size, icon: "⏸️", color: "var(--r)", sub: skipIds.size > 0 ? `${skipIds.size} VTs ohne Abrechnung` : "Alle werden abgerechnet" },
   ];
 
-  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
+  return <div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
     {stats.map(s => <div key={s.label} style={{ background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 18, borderLeft: `3px solid ${s.color}` }} className="fade-in">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <span style={{ fontSize: 13, color: "var(--ts)", fontWeight: 600 }}>{s.label}</span>
@@ -771,6 +787,33 @@ function TabOverview({ regeln, sonder, stufen, teamBonus, sperr, duplikate, hist
       <div style={{ fontSize: 28, fontWeight: 700, color: s.color }}>{s.val}</div>
       <div style={{ fontSize: 11, color: "var(--ts)", marginTop: 4 }}>{s.sub}</div>
     </div>)}
+    </div>
+
+    <div style={{ marginTop: 20, background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--tx)" }}>⏸️ Abrechnung überspringen</div>
+          <div style={{ fontSize: 11, color: "var(--ts)", marginTop: 2 }}>Deaktivierte Partner werden bei der Generierung übersprungen</div>
+        </div>
+        {skipIds.size > 0 && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, background: "var(--r)", color: "#fff", fontWeight: 600 }}>{skipIds.size} übersprungen</span>}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 8 }}>
+        {mitarbeiterList.map(ma => {
+          const isSkipped = skipIds.has(ma.id);
+          const isHGB = (ma.typ||'').includes('hgb');
+          const isScouter = (ma.typ||'').includes('scouter');
+          return <div key={ma.id} onClick={() => toggleSkip(ma)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, cursor: "pointer", background: isSkipped ? "#da363315" : "var(--bg)", border: `1px solid ${isSkipped ? "#da363340" : "var(--bd)"}`, transition: "all .15s" }}>
+            <div style={{ width: 36, height: 20, borderRadius: 10, background: isSkipped ? "#da3633" : "#238636", position: "relative", transition: "background .2s", flexShrink: 0 }}>
+              <div style={{ width: 16, height: 16, borderRadius: 8, background: "#fff", position: "absolute", top: 2, left: isSkipped ? 2 : 18, transition: "left .2s" }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: isSkipped ? "#f85149" : "var(--tx)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ma.vorname} {ma.nachname}</div>
+              <div style={{ fontSize: 10, color: "var(--ts)" }}>{isScouter ? "Scout" : (isHGB ? "HGB §84" : "Angestellt")}</div>
+            </div>
+          </div>;
+        })}
+      </div>
+    </div>
   </div>;
 }
 
@@ -1099,7 +1142,7 @@ function App() {
 
       {/* Content */}
       <div className="fade-in" key={tab}>
-        {tab === "uebersicht" && <TabOverview regeln={regeln} sonder={sonder} stufen={stufen} teamBonus={teamBonus} sperr={sperrData} duplikate={duplikateData} historie={historieData} />}
+        {tab === "uebersicht" && <TabOverview regeln={regeln} sonder={sonder} setSonder={setSonder} stufen={stufen} teamBonus={teamBonus} sperr={sperrData} duplikate={duplikateData} historie={historieData} mitarbeiterList={mitarbeiterList} toast={toast} />}
         {tab === "regeln" && <TabRegeln regeln={regeln} setRegeln={setRegeln} toast={toast} />}
         {tab === "sonder" && <TabSonder sonder={sonder} setSonder={setSonder} toast={toast} mitarbeiterList={mitarbeiterList} />}
         {tab === "stufen" && <TabStufen stufen={stufen} setStufen={setStufen} toast={toast} />}
