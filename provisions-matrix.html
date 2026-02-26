@@ -851,7 +851,9 @@ function TabImport({ toast, mitarbeiterList }) {
           else if(ql.includes('omega')) leadQuelle = 'mvpp';
           else if(ql.includes('sadd')) leadQuelle = 'sadd';
           else if(ql.includes('mvpp')) leadQuelle = 'mvpp';
-          const speicher = (r['Speichererweiterung']||'').trim().toLowerCase();
+          const speicherRaw = (r['Speichererweiterung']||'').trim();
+          const hasSpeicher = speicherRaw.length > 0;
+          const speicherAnz = hasSpeicher ? (parseInt((speicherRaw.match(/^(\d+)\s*X/i)||[])[1]) || 1) : 0;
           const datum = parseDt(r['DatumAngenommen']);
           const ausgezahlt = parseDt(r['Ausgezahlt am']);
           let abMonat = null, abJahr = null;
@@ -863,9 +865,10 @@ function TabImport({ toast, mitarbeiterList }) {
             auftrag_nr: `AN-${(r['AN Nr.']||'').trim()}`, kunde_name: (r['Kunde']||'').trim() || null,
             kunde_adresse: (r['Kunde PLZ']||'').trim() || null, vertriebler_id: vtId, auftrags_datum: datum,
             kwp: parseKwp(r['Angebot KWP']), netto_auftragswert: parseMoney(r['AN-WertNetto']),
-            zahlungsstatus, lead_quelle: leadQuelle, speichererweiterung: ['ja','true','1','x'].includes(speicher),
+            zahlungsstatus, lead_quelle: leadQuelle, speichererweiterung: hasSpeicher,
             storniert: isStorno, produkt_typ: 'pv', beedoo_fortschritt: fort || null,
             termin_stattgefunden: status === 'Auftragsbestätigung erstellt',
+            notiz: speicherAnz > 1 ? `speicher_x${speicherAnz}` : null,
             abgerechnet_monat: abMonat, abgerechnet_jahr: abJahr,
           };
         });
