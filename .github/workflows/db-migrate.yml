@@ -12,27 +12,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run SQL via Supabase Management API
+      - name: Run all SQL migrations
         env:
           MGMT_TOKEN: ${{ secrets.SUPABASE_MGMT_TOKEN }}
         run: |
-          SQL=$(cat migrations/001_geocache_postgis.sql)
-          
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://api.supabase.com/v1/projects/hqzpemfaljxcysyqssng/database/query" \
-            -H "Authorization: Bearer $MGMT_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(echo "$SQL" | python3 -c "import json,sys; print(json.dumps({'query': sys.stdin.read()}))")")
-          
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | head -n -1)
-          
-          echo "HTTP: $HTTP_CODE"
-          echo "Response: $BODY"
-          
-          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-            echo "✅ Migration erfolgreich"
-          else
-            echo "❌ Migration fehlgeschlagen: $BODY"
-            exit 1
-          fi
+          for SQLFILE in migrations/*.sql; do
+            echo "📦 Running: $SQLFILE"
+            SQL=$(cat "$SQLFILE")
+            
+            RESPONSE=$(curl -s -w "
+%{http_code}" -X POST \
+              "https://api.supabase.com/v1/projects/hqzpemfaljxcysyqssng/database/query" \
+              -H "Authorization: Bearer $MGMT_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$(echo "$SQL" | python3 -c "import json,sys; print(json.dumps({'query': sys.stdin.read()}))")")
+            
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -n -1)
+            
+            echo "HTTP: $HTTP_CODE"
+            echo "Response: $BODY"
+            
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+              echo "✅ $SQLFILE erfolgreich"
+            else
+              echo "❌ $SQLFILE fehlgeschlagen: $BODY"
+              exit 1
+            fi
+          done
