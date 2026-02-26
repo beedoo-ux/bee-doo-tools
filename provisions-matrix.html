@@ -221,9 +221,19 @@ function TabRegeln({ regeln, setRegeln, toast }) {
 // ═══ Tab: Sonderprovisionen ═══
 function TabSonder({ sonder, setSonder, toast, mitarbeiterList }) {
   const [adding, setAdding] = useState(false);
-  const [newRow, setNewRow] = useState({ mitarbeiter_name: "", mitarbeiter_id: "", typ: "flat_rate", betrag: 0, beschreibung: "", gueltig_ab: "2026-01-01" });
+  const [newRow, setNewRow] = useState({ mitarbeiter_name: "", mitarbeiter_id: "", typ: "flat_rate", betrag: 0, beschreibung: "", gueltig_ab: "2026-01-01", _scout_id: "", _scout_name: "" });
   const maOptions = mitarbeiterList.map(m => ({ value: m.id, label: `${m.vorname} ${m.nachname}` }));
+  const scoutOptions = mitarbeiterList.filter(m => (m.typ||'').includes('scouter')).map(m => ({ value: m.id, label: `${m.vorname} ${m.nachname}` }));
   const [delId, setDelId] = useState(null);
+
+  const isScoutTyp = (typ) => typ === 'scout_eigenlead' || typ === 'scout_umleitung';
+  const parseCfg = (s) => { try { return JSON.parse(s.beschreibung||'{}'); } catch(e) { return {}; } };
+  const buildDesc = (typ, scout_id, scout_name, vtName) => {
+    const regel = typ === 'scout_eigenlead'
+      ? `Wenn ${scout_name} als MVPP Scout → +Eigenlead-Sonderprovision für ${vtName}`
+      : `Bei Fremd-VT: Scouter-Provision umleiten auf ${vtName} + extra pro Auftrag`;
+    return JSON.stringify({ scout_id, scout_name, regel });
+  };
 
   const save = async (s) => {
     try {
@@ -237,10 +247,15 @@ function TabSonder({ sonder, setSonder, toast, mitarbeiterList }) {
   };
   const add = async () => {
     try {
-      const res = await db.post("pay_sonderprovisionen", { ...newRow, aktiv: true });
+      const row = { ...newRow, aktiv: true };
+      if(isScoutTyp(row.typ) && row._scout_id) {
+        row.beschreibung = buildDesc(row.typ, row._scout_id, row._scout_name, row.mitarbeiter_name);
+      }
+      delete row._scout_id; delete row._scout_name;
+      const res = await db.post("pay_sonderprovisionen", row);
       setSonder(prev => [...prev, res[0]]);
       setAdding(false);
-      setNewRow({ mitarbeiter_name: "", typ: "flat_rate", betrag: 0, beschreibung: "", gueltig_ab: "2026-01-01" });
+      setNewRow({ mitarbeiter_name: "", typ: "flat_rate", betrag: 0, beschreibung: "", gueltig_ab: "2026-01-01", _scout_id: "", _scout_name: "" });
       toast("Hinzugefügt", "ok");
     } catch (e) { toast("Fehler: " + e.message, "err"); }
   };
@@ -253,6 +268,12 @@ function TabSonder({ sonder, setSonder, toast, mitarbeiterList }) {
     } catch (e) { toast("Fehler: " + e.message, "err"); }
   };
   const upd = (id, k, v) => setSonder(prev => prev.map(s => s.id === id ? { ...s, [k]: v } : s));
+  const updScout = (id, scoutId, scoutName, vtName) => {
+    setSonder(prev => prev.map(s => {
+      if(s.id !== id) return s;
+      return { ...s, beschreibung: buildDesc(s.typ, scoutId, scoutName, vtName) };
+    }));
+  };
 
   const typLabels = { flat_rate: "Flat Rate", eigenlead_override: "Eigenlead Override", empfehlung_override: "Empfehlung Override", speicher_override: "Speicher Override", scout_eigenlead: "Scout → Eigenlead", scout_umleitung: "Scout-Umleitung", skip_abrechnung: "Übersprungen" };
   const typOpts = Object.entries(typLabels).map(([v, l]) => ({ value: v, label: l }));
@@ -266,14 +287,17 @@ function TabSonder({ sonder, setSonder, toast, mitarbeiterList }) {
       <table>
         <thead><tr>
           <th>Mitarbeiter</th><th>Typ</th><th style={{ textAlign: "right" }}>Betrag</th>
-          <th>Beschreibung</th><th>Gültig ab</th><th>Gültig bis</th><th>Aktiv</th><th style={{ width: 100 }}>Aktionen</th>
+          <th>Beschreibung / Scout</th><th>Gültig ab</th><th>Gültig bis</th><th>Aktiv</th><th style={{ width: 100 }}>Aktionen</th>
         </tr></thead>
         <tbody>
           {adding && <tr style={{ background: "var(--y)08" }}>
             <td><SearchSelect value={newRow.mitarbeiter_name} onChange={name => { const ma = mitarbeiterList.find(m => `${m.vorname} ${m.nachname}` === name); setNewRow(p => ({ ...p, mitarbeiter_name: name, mitarbeiter_id: ma?.id || "" })); }} options={maOptions.map(o => ({ ...o, value: o.label }))} placeholder="Mitarbeiter wählen..." /></td>
             <td><EditCell value={newRow.typ} onChange={v => setNewRow(p => ({ ...p, typ: v }))} type="select" options={typOpts} /></td>
             <td><EditCell value={newRow.betrag} onChange={v => setNewRow(p => ({ ...p, betrag: v }))} type="number" /></td>
-            <td><EditCell value={newRow.beschreibung} onChange={v => setNewRow(p => ({ ...p, beschreibung: v }))} /></td>
+            <td>{isScoutTyp(newRow.typ)
+              ? <SearchSelect value={newRow._scout_name} onChange={name => { const sc = mitarbeiterList.find(m => `${m.vorname} ${m.nachname}` === name); setNewRow(p => ({ ...p, _scout_id: sc?.id||'', _scout_name: name })); }} options={scoutOptions.map(o => ({ ...o, value: o.label }))} placeholder="Scout wählen..." />
+              : <EditCell value={newRow.beschreibung} onChange={v => setNewRow(p => ({ ...p, beschreibung: v }))} />
+            }</td>
             <td><EditCell value={newRow.gueltig_ab} onChange={v => setNewRow(p => ({ ...p, gueltig_ab: v }))} type="date" /></td>
             <td>–</td>
             <td><span className="badge b-g">Ja</span></td>
@@ -284,6 +308,8 @@ function TabSonder({ sonder, setSonder, toast, mitarbeiterList }) {
           </tr>}
           {sonder.map(s => {
             const desc = (s.beschreibung||'').toLowerCase();
+            const isScout = isScoutTyp(s.typ);
+            const cfg = isScout ? parseCfg(s) : {};
             const flags = {
               kein_eigenlead: desc.includes('kein eigenlead'),
               kein_empfehlung: desc.includes('kein empfehlung'),
@@ -304,7 +330,13 @@ function TabSonder({ sonder, setSonder, toast, mitarbeiterList }) {
               <td style={{ fontWeight: 600 }}>{s.mitarbeiter_name}</td>
               <td><EditCell value={s.typ} onChange={v => upd(s.id, "typ", v)} type="select" options={typOpts} width="140px" /></td>
               <td><EditCell value={s.betrag} onChange={v => upd(s.id, "betrag", v)} type="number" width="90px" /></td>
-              <td><EditCell value={s.beschreibung} onChange={v => upd(s.id, "beschreibung", v)} /></td>
+              <td>{isScout
+                ? <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{fontSize:18}}>{s.typ==='scout_eigenlead'?'🔍':'🔀'}</span>
+                    <SearchSelect value={cfg.scout_name||''} onChange={name => { const sc = mitarbeiterList.find(m => `${m.vorname} ${m.nachname}` === name); if(sc) updScout(s.id, sc.id, name, s.mitarbeiter_name); }} options={scoutOptions.map(o => ({ ...o, value: o.label }))} placeholder="Scout wählen..." />
+                  </div>
+                : <EditCell value={s.beschreibung} onChange={v => upd(s.id, "beschreibung", v)} />
+              }</td>
               <td><EditCell value={s.gueltig_ab?.slice(0, 10)} onChange={v => upd(s.id, "gueltig_ab", v)} /></td>
               <td><EditCell value={s.gueltig_bis?.slice(0, 10) || ""} onChange={v => upd(s.id, "gueltig_bis", v || null)} /></td>
               <td><span className={`badge ${s.aktiv ? "b-g" : "b-r"}`} style={{ cursor: "pointer" }} onClick={() => upd(s.id, "aktiv", !s.aktiv)}>{s.aktiv ? "✓ Ja" : "✗ Nein"}</span></td>
@@ -314,14 +346,22 @@ function TabSonder({ sonder, setSonder, toast, mitarbeiterList }) {
               </td>
             </tr>
             <tr><td colSpan={8} style={{padding:'2px 8px 8px',borderBottom:'1px solid var(--bd)'}}>
-              <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-                <span style={{fontSize:10,color:'var(--ts)',marginRight:4}}>Bonus-Ausschlüsse:</span>
-                {[['kein_eigenlead','Eigenlead','🎯'],['kein_empfehlung','Empfehlung','🤝'],['kein_stufenbonus','Stufenbonus','🏆'],['kein_speicher','Speicher','🔋']].map(([flag,label,icon])=>
-                  <span key={flag} onClick={()=>toggleFlag(flag,label)} style={{cursor:'pointer',fontSize:11,padding:'3px 10px',borderRadius:6,fontWeight:600,
-                    background:flags[flag]?'#f8514920':'var(--c2)',color:flags[flag]?'var(--r)':'var(--ts)',
-                    border:`1px solid ${flags[flag]?'#f8514940':'var(--bd)'}`}}>{icon} {flags[flag]?'✗ Kein '+label:'✓ '+label}</span>
-                )}
-              </div>
+              {isScout
+                ? <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                    <span style={{fontSize:10,color:'var(--ts)'}}>Regel:</span>
+                    <span style={{fontSize:11,padding:'3px 10px',borderRadius:6,fontWeight:600,background:s.typ==='scout_eigenlead'?'#2563eb20':'#f8514920',color:s.typ==='scout_eigenlead'?'#93c5fd':'#f78166',border:`1px solid ${s.typ==='scout_eigenlead'?'#2563eb40':'#f8514940'}`}}>
+                      {s.typ==='scout_eigenlead' ? `🔍 ${cfg.scout_name||'?'} scouted → ${s.mitarbeiter_name} bekommt +${s.betrag}€ Eigenlead` : `🔀 ${cfg.scout_name||'?'} bei Fremd-VT → ${s.mitarbeiter_name} bekommt +${s.betrag}€ extra`}
+                    </span>
+                  </div>
+                : <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                    <span style={{fontSize:10,color:'var(--ts)',marginRight:4}}>Bonus-Ausschlüsse:</span>
+                    {[['kein_eigenlead','Eigenlead','🎯'],['kein_empfehlung','Empfehlung','🤝'],['kein_stufenbonus','Stufenbonus','🏆'],['kein_speicher','Speicher','🔋']].map(([flag,label,icon])=>
+                      <span key={flag} onClick={()=>toggleFlag(flag,label)} style={{cursor:'pointer',fontSize:11,padding:'3px 10px',borderRadius:6,fontWeight:600,
+                        background:flags[flag]?'#f8514920':'var(--c2)',color:flags[flag]?'var(--r)':'var(--ts)',
+                        border:`1px solid ${flags[flag]?'#f8514940':'var(--bd)'}`}}>{icon} {flags[flag]?'✗ Kein '+label:'✓ '+label}</span>
+                    )}
+                  </div>
+              }
             </td></tr>
             </React.Fragment>;
           })}
