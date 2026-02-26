@@ -375,9 +375,10 @@ async function generateAbrechnungen(periode, onProgress){
   // Scout sales per month
   const salesPerScoutMonth = {};
   allRelevantClean.forEach(a => { if(!a.scouter_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.scouter_id+'_'+om; salesPerScoutMonth[key]=(salesPerScoutMonth[key]||0)+1; });
-  // Total sales per VP (alle Monate) for Team-Bonus
+  // Total sales per VP (alle Monate) for Team-Bonus – mit Kunden-Details
   const totalSalesByVP = {};
-  auftraegePayable.forEach(a => { if(!a.vertriebler_id) return; totalSalesByVP[a.vertriebler_id]=(totalSalesByVP[a.vertriebler_id]||0)+1; });
+  const totalSalesDetailByVP = {};
+  auftraegePayable.forEach(a => { if(!a.vertriebler_id) return; totalSalesByVP[a.vertriebler_id]=(totalSalesByVP[a.vertriebler_id]||0)+1; if(!totalSalesDetailByVP[a.vertriebler_id]) totalSalesDetailByVP[a.vertriebler_id]=[]; totalSalesDetailByVP[a.vertriebler_id].push({kunde:a.kunde_name,an:a.auftrag_nr,kwp:a.kwp,datum:a.auftrags_datum}); });
   log('Lösche alte Entwürfe...');
   const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&status=in.(entwurf,probeabrechnung)&select=id`);
   for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
@@ -481,14 +482,14 @@ async function generateAbrechnungen(periode, onProgress){
     const tb = teamBonusByVP[vpId];
     if(tb){
       let teamSales = 0;
-      const teamDetail = []; // [{name, sales}]
+      const teamDetail = []; // [{name, sales, orders:[{kunde,an,kwp,datum}]}]
       if(tb.bezugsgruppe==='alle_vt'){
-        for(const [vid, cnt] of Object.entries(totalSalesByVP)){ if(vid!==vpId){ teamSales+=cnt; const tvp=vpById[vid]; if(tvp&&cnt>0) teamDetail.push({name:`${tvp.vorname} ${tvp.nachname}`,sales:cnt}); } }
+        for(const [vid, cnt] of Object.entries(totalSalesByVP)){ if(vid!==vpId){ teamSales+=cnt; const tvp=vpById[vid]; if(tvp&&cnt>0) teamDetail.push({name:`${tvp.vorname} ${tvp.nachname}`,sales:cnt,orders:totalSalesDetailByVP[vid]||[]}); } }
       } else if(tb.bezugsgruppe==='eigenes_team' && tb.team_mitglieder){
         const teamNames = (tb.team_mitglieder||[]).map(n=>n.toLowerCase());
         for(const [vid, cnt] of Object.entries(totalSalesByVP)){
           const tvp = vpById[vid];
-          if(tvp && teamNames.includes(`${tvp.vorname} ${tvp.nachname}`.toLowerCase())){ teamSales+=cnt; if(cnt>0) teamDetail.push({name:`${tvp.vorname} ${tvp.nachname}`,sales:cnt}); }
+          if(tvp && teamNames.includes(`${tvp.vorname} ${tvp.nachname}`.toLowerCase())){ teamSales+=cnt; if(cnt>0) teamDetail.push({name:`${tvp.vorname} ${tvp.nachname}`,sales:cnt,orders:totalSalesDetailByVP[vid]||[]}); }
         }
       }
       teamDetail.sort((a,b)=>b.sales-a.sales);
@@ -1025,7 +1026,8 @@ function GutschriftPreview({ab,pos,sg}){
   // Leistungszeitraum = Vormonat der Periode
   const lzPer = (()=>{if(!ab.periode)return'—';const[py,pm]=ab.periode.split('/');const d=new Date(parseInt(py),parseInt(pm)-2,1);return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;})();
   const lzLabel = pLabel(lzPer);
-  const staffel=8,pct=Math.min((b.sales/staffel)*100,100),hatS=b.sales>=staffel;
+  const salesLZ=aPLZ.filter(p=>p.typ==='provision').length;
+  const staffel=8,pct=Math.min((salesLZ/staffel)*100,100),hatS=salesLZ>=staffel;
   const verifyData=JSON.stringify({typ:'gutschrift',nr:bn,vt:ab.mitarbeiter_name,brutto:b.aus,netto:b.net,ust:b.uB,datum:heute,per:ab.periode});
   const qrUrl=`https://api.qrserver.com/v1/create-qr-code/?size=54x54&data=${encodeURIComponent(`https://bee-doo-tools.vercel.app/verify.html?d=${btoa(verifyData)}`)}&bgcolor=ffffff&color=1a1a2e&margin=1`;
   const giroIBAN='DE90254501100031039985';
@@ -1076,7 +1078,7 @@ function GutschriftPreview({ab,pos,sg}){
         <div style={{display:'grid',gridTemplateColumns:'56% 42%',gap:'2%'}}>
           <div>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}><tbody>
-              <tr><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:'#E07800'}}>Provisionen ({b.sales} Sales – Vermittlung Solar/WP)</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(b.bp)}</td></tr>
+              <tr><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:'#E07800'}}>Provisionen ({salesLZ} LZ{aPNZ.filter(p=>p.typ==='provision').length>0?` + ${aPNZ.filter(p=>p.typ==='provision').length} NZ`:''} Sales – Vermittlung Solar/WP)</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(b.bp)}</td></tr>
               {aE.map((p,i)=><tr key={i}><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:(p.override_betrag!=null?p.override_betrag:p.original_betrag)>=0?'#E07800':'#9a3412'}}>{p.kunde||p.notiz||p.typ}</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
               {aSKN.length>0&&<tr style={{background:'#f0fdf4'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #dcfce7',color:'#166534'}}>📈 Staffel-Nachzahlung ({aSKN.length})</td><td style={{padding:'6px 10px',borderBottom:'1px solid #dcfce7',textAlign:'right',color:'#166534',fontWeight:600}}>+ {fmtE(aSKN.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
               {aSKR.length>0&&<tr style={{background:'#fef2f2'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #fecaca',color:'#991b1b'}}>📉 Staffel-Rückforderung ({aSKR.length})</td><td style={{padding:'6px 10px',borderBottom:'1px solid #fecaca',textAlign:'right',color:'#991b1b',fontWeight:600}}>{fmtE(aSKR.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
@@ -1090,12 +1092,19 @@ function GutschriftPreview({ab,pos,sg}){
             <div style={{fontSize:10,fontWeight:700,color:'#E07800',marginBottom:5,paddingBottom:3,borderBottom:'1px solid #eee'}}>Sales {lzLabel}</div>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}><tbody>
               <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#555'}}>Abgerechnete Sales (LZ)</td><td style={{padding:'4px 7px',textAlign:'right',fontWeight:700}}>{aPLZ.filter(p=>p.typ==='provision').length}</td></tr>
+              {aPLZ.filter(p=>p.typ==='provision').length>0&&<tr><td colSpan={2} style={{padding:'2px 7px 6px',borderBottom:'1px solid #eee'}}><div style={{fontSize:8,color:'#666',lineHeight:1.5}}>{aPLZ.filter(p=>p.typ==='provision').map(p=>p.kunde||'—').join(' · ')}</div></td></tr>}
               {aPNZ.filter(p=>p.typ==='provision').length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#B45309'}}>+ Nachzügler (Vormonate)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#B45309',fontWeight:600}}>{aPNZ.filter(p=>p.typ==='provision').length}</td></tr>}
-              {aStLZ.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#da3633'}}>Storniert ({lzLabel})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#da3633'}}>{aStLZ.length}</td></tr>}
-              {aStVM.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#da3633'}}>Storniert (Vormonate)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#da3633'}}>{aStVM.length}</td></tr>}
-              {aOfLZ.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#8b949e'}}>Offen ({lzLabel})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOfLZ.length}</td></tr>}
-              {aOfVM.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#8b949e'}}>Offen (Vormonate)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOfVM.length}</td></tr>}
-              {aOH.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#6366f1'}}>⏸️ On Hold (Montage)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#6366f1'}}>{aOH.length}</td></tr>}
+              {aPNZ.filter(p=>p.typ==='provision').length>0&&<tr><td colSpan={2} style={{padding:'2px 7px 6px',borderBottom:'1px solid #eee'}}><div style={{fontSize:8,color:'#B45309',lineHeight:1.5}}>{aPNZ.filter(p=>p.typ==='provision').map(p=>p.kunde||'—').join(' · ')}</div></td></tr>}
+              {aStLZ.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'none',color:'#da3633'}}>Storniert ({lzLabel})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#da3633'}}>{aStLZ.length}</td></tr>}
+              {aStLZ.length>0&&<tr><td colSpan={2} style={{padding:'2px 7px 6px',borderBottom:'1px solid #eee'}}><div style={{fontSize:8,color:'#da3633',lineHeight:1.5}}>{aStLZ.map(p=>p.kunde||'—').join(' · ')}</div></td></tr>}
+              {aStVM.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'none',color:'#da3633'}}>Storniert (Vormonate)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#da3633'}}>{aStVM.length}</td></tr>}
+              {aStVM.length>0&&<tr><td colSpan={2} style={{padding:'2px 7px 6px',borderBottom:'1px solid #eee'}}><div style={{fontSize:8,color:'#da3633',lineHeight:1.5}}>{aStVM.map(p=>p.kunde||'—').join(' · ')}</div></td></tr>}
+              {aOfLZ.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'none',color:'#8b949e'}}>Offen ({lzLabel})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOfLZ.length}</td></tr>}
+              {aOfLZ.length>0&&<tr><td colSpan={2} style={{padding:'2px 7px 6px',borderBottom:'1px solid #eee'}}><div style={{fontSize:8,color:'#8b949e',lineHeight:1.5}}>{aOfLZ.map(p=>p.kunde||'—').join(' · ')}</div></td></tr>}
+              {aOfVM.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'none',color:'#8b949e'}}>Offen (Vormonate)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOfVM.length}</td></tr>}
+              {aOfVM.length>0&&<tr><td colSpan={2} style={{padding:'2px 7px 6px',borderBottom:'1px solid #eee'}}><div style={{fontSize:8,color:'#8b949e',lineHeight:1.5}}>{aOfVM.map(p=>p.kunde||'—').join(' · ')}</div></td></tr>}
+              {aOH.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'none',color:'#6366f1'}}>⏸️ On Hold (Montage)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#6366f1'}}>{aOH.length}</td></tr>}
+              {aOH.length>0&&<tr><td colSpan={2} style={{padding:'2px 7px 6px',borderBottom:'1px solid #eee'}}><div style={{fontSize:8,color:'#6366f1',lineHeight:1.5}}>{aOH.map(p=>p.kunde||'—').join(' · ')}</div></td></tr>}
               {aSKN.length>0&&<tr style={{background:'#f0fdf4'}}><td style={{padding:'4px 7px',borderBottom:'1px solid #dcfce7',color:'#166534'}}>📈 Staffel-Nachzahlung</td><td style={{padding:'4px 7px',textAlign:'right',color:'#166534',fontWeight:600}}>+{fmtE(aSKN.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
               {aSKR.length>0&&<tr style={{background:'#fef2f2'}}><td style={{padding:'4px 7px',borderBottom:'1px solid #fecaca',color:'#991b1b'}}>📉 Staffel-Rückforderung</td><td style={{padding:'4px 7px',textAlign:'right',color:'#991b1b',fontWeight:600}}>{fmtE(aSKR.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
               {leadBonusTotal>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#059669'}}>📋 Lead-Bonus ({aLeadBonus.length>0?aLeadBonus[0].kunde:''})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#059669',fontWeight:600}}>+ {fmtE(leadBonusTotal)}</td></tr>}
@@ -1112,18 +1121,18 @@ function GutschriftPreview({ab,pos,sg}){
 
             {hatS&&<div style={{marginTop:12,background:'linear-gradient(135deg,#fffbeb,#fef3c7)',border:'1px solid #f59e0b',borderRadius:6,padding:'8px 10px'}}>
               <div style={{fontSize:9,fontWeight:700,color:'#92400e',textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>⭐ Staffel-Bonus erreicht!</div>
-              <div style={{fontSize:10,color:'#78350f',fontWeight:600}}>{b.sales} Sales ≥ {staffel} → Erhöhte Rate aktiv</div>
+              <div style={{fontSize:10,color:'#78350f',fontWeight:600}}>{salesLZ} LZ-Sales ≥ {staffel} → Erhöhte Rate aktiv</div>
             </div>}
 
             <div style={{marginTop:10,background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:6,padding:'8px 10px'}}>
               <div style={{fontSize:9,color:'#475569',marginBottom:4,display:'flex',justifyContent:'space-between'}}>
                 <span>Staffel-Fortschritt</span>
-                <span style={{fontWeight:700,color:hatS?'#16a34a':'#475569'}}>{b.sales} / {staffel}</span>
+                <span style={{fontWeight:700,color:hatS?'#16a34a':'#475569'}}>{salesLZ} / {staffel}</span>
               </div>
               <div style={{height:8,background:'#e2e8f0',borderRadius:4,overflow:'hidden'}}>
                 <div style={{height:'100%',borderRadius:4,width:`${pct}%`,background:hatS?'linear-gradient(90deg,#22c55e,#16a34a)':'linear-gradient(90deg,#F5C500,#E07800)'}}></div>
               </div>
-              {!hatS&&<div style={{fontSize:8,color:'#94a3b8',marginTop:3,textAlign:'right'}}>Noch {staffel-b.sales} Sales bis zur nächsten Stufe</div>}
+              {!hatS&&<div style={{fontSize:8,color:'#94a3b8',marginTop:3,textAlign:'right'}}>Noch {staffel-salesLZ} LZ-Sales bis zur nächsten Stufe</div>}
             </div>
 
             <div style={{marginTop:10,background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:6,padding:'8px 10px',fontSize:9}}>
@@ -1302,17 +1311,25 @@ function GutschriftPreview({ab,pos,sg}){
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
             <thead><tr style={{background:'#eff6ff'}}>
               <th style={{padding:'6px 8px',borderBottom:'2px solid #93c5fd',textAlign:'left',fontSize:9,textTransform:'uppercase',color:'#1e40af',width:30}}>Nr</th>
-              <th style={{padding:'6px 8px',borderBottom:'2px solid #93c5fd',textAlign:'left',fontSize:9,textTransform:'uppercase',color:'#1e40af'}}>Team-Mitglied</th>
+              <th style={{padding:'6px 8px',borderBottom:'2px solid #93c5fd',textAlign:'left',fontSize:9,textTransform:'uppercase',color:'#1e40af'}}>Team-Mitglied / Kunde</th>
               <th style={{padding:'6px 8px',borderBottom:'2px solid #93c5fd',textAlign:'right',fontSize:9,textTransform:'uppercase',color:'#1e40af',width:80}}>Sales</th>
               <th style={{padding:'6px 8px',borderBottom:'2px solid #93c5fd',textAlign:'right',fontSize:9,textTransform:'uppercase',color:'#1e40af',width:100}}>Bonus</th>
             </tr></thead>
             <tbody>
-              {detail.map((d,di)=><tr key={di} style={{borderBottom:'1px solid #e5e7eb'}}>
-                <td style={{padding:'5px 8px',color:'#6b7280',fontSize:9}}>{di+1}.</td>
-                <td style={{padding:'5px 8px',fontWeight:500}}>{d.name}</td>
-                <td style={{padding:'5px 8px',textAlign:'right'}}>{d.sales}</td>
-                <td style={{padding:'5px 8px',textAlign:'right',fontWeight:600,color:'#1e40af'}}>{fmtE(d.sales*bps)}</td>
-              </tr>)}
+              {detail.map((d,di)=><React.Fragment key={di}>
+                <tr style={{background:'#f8fafc',borderBottom:'1px solid #dbeafe'}}>
+                  <td style={{padding:'5px 8px',color:'#1e40af',fontSize:9,fontWeight:700}}>{di+1}.</td>
+                  <td style={{padding:'5px 8px',fontWeight:700,color:'#1e40af'}}>{d.name}</td>
+                  <td style={{padding:'5px 8px',textAlign:'right',fontWeight:600}}>{d.sales} Sales</td>
+                  <td style={{padding:'5px 8px',textAlign:'right',fontWeight:700,color:'#1e40af'}}>{fmtE(d.sales*bps)}</td>
+                </tr>
+                {(d.orders||[]).map((o,oi)=><tr key={oi} style={{borderBottom:'1px solid #f0f0f0'}}>
+                  <td style={{padding:'2px 8px 2px 20px',color:'#9ca3af',fontSize:8}}>·</td>
+                  <td style={{padding:'2px 8px',fontSize:9,color:'#555'}}>{o.kunde||'—'} <span style={{color:'#9ca3af',fontSize:8}}>({o.an||''}{o.kwp?` · ${o.kwp} kWp`:''})</span></td>
+                  <td></td>
+                  <td style={{padding:'2px 8px',textAlign:'right',fontSize:8,color:'#6b7280'}}>{fmtE(bps)}</td>
+                </tr>)}
+              </React.Fragment>)}
               <tr style={{fontWeight:700,borderTop:'2px solid #1e40af',background:'#eff6ff'}}>
                 <td></td>
                 <td style={{padding:'6px 8px'}}>Gesamt</td>
