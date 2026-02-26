@@ -25,7 +25,7 @@ async function supabaseUpsert(rows) {
   let upserted = 0;
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
-    const resp = await fetch(`${SUPABASE_URL}/rest/v1/efs_projekte`, {
+    const resp = await fetch(`${SUPABASE_URL}/rest/v1/efs_projekte?on_conflict=efs_id`, {
       method: 'POST',
       headers: {
         apikey: SUPABASE_KEY,
