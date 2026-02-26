@@ -232,7 +232,12 @@ async function generateAbrechnungen(periode, onProgress){
   auftrNZ.forEach(a => a._nachzuegler = true);
   const auftraege = [...auftrLZ, ...auftrNZ];
   // Filter gesperrte Aufträge raus
-  const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')) && a.produkt_typ !== 'lead_count' && a.produkt_typ !== 'termin_count' && a.produkt_typ !== 'zero_count');
+  const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')) && a.produkt_typ !== 'lead_count' && a.produkt_typ !== 'termin_count' && a.produkt_typ !== 'zero_count' && a.produkt_typ !== 'sonderzulage');
+  // Sonderzulagen aus Sheet (produkt_typ=sonderzulage) separat extrahieren
+  const sonderzulagen = auftraege.filter(a => a.produkt_typ === 'sonderzulage');
+  const szByVP = {};
+  sonderzulagen.forEach(a => { const vid=a.vertriebler_id; if(!szByVP[vid])szByVP[vid]=[]; szByVP[vid].push(a); });
+  if(sonderzulagen.length) log(`📝 ${sonderzulagen.length} Sonderzulagen für ${Object.keys(szByVP).length} Mitarbeiter`);
   // EFS-Status: LAND_REGISTRY_CHECK/MISSING_PROPERTY_OWNERS → offen (Grundbuchprüfung), REVOKED → Storno
   const efsBlockedIds = {}; // efs_id → {status, kunde_name}
   (efsBlockedProjekte||[]).forEach(e => { efsBlockedIds[e.efs_id] = { status: e.simplified_status, kunde: e.kunde_name }; });
@@ -378,7 +383,7 @@ async function generateAbrechnungen(periode, onProgress){
   for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
   let count = 0;
   // ALL VP IDs incl. team bonus recipients + sonderprov
-  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP), ...Object.keys(umleitungOrders)]);
+  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP), ...Object.keys(umleitungOrders), ...Object.keys(szByVP)]);
   for(const vpId of allVPIds){
     const vp = vpById[vpId]; if(!vp) continue;
     if(skipVPIds.has(vpId)){ log(`⏸️ ${vp.vorname} ${vp.nachname} übersprungen (skip_abrechnung)`); continue; }
@@ -531,6 +536,18 @@ async function generateAbrechnungen(periode, onProgress){
       bruttoTotal -= abzBetrag;
     });
     // Offen-Info (LZ + VM getrennt)
+    // Sonderzulagen aus Sheet (Zugaben/Abzüge)
+    const vpSZ = szByVP[vpId] || [];
+    vpSZ.forEach(sz => {
+      const parts = (sz.notiz||'').split('|');
+      const vorzeichen = parts[0]?.startsWith('-') ? -1 : 1;
+      const betrag = parseFloat(parts[0]?.replace(/[^0-9.]/g,'')) || 0;
+      const beschreibung = parts[1] || sz.kunde_name || 'Sonderzulage';
+      const realBetrag = vorzeichen * betrag;
+      const typ = realBetrag >= 0 ? 'sondereinsatz' : 'abzug';
+      positionen.push({typ,auftrag_nr:sz.auftrag_nr,kunde:sz.kunde_name,produkt:beschreibung,original_betrag:realBetrag,aktiv:true,zurueckgestellt:false,notiz:'Sonderzulage 2026/01'});
+      bruttoTotal += realBetrag;
+    });
     // Fahrzeugzuschuss (monatlich, aus pay_mitarbeiter.auto_zuschuss)
     if(vp.auto_zuschuss && +vp.auto_zuschuss > 0){
       positionen.push({typ:'sondereinsatz',auftrag_nr:null,kunde:null,produkt:'Fahrzeugzuschuss',original_betrag:+vp.auto_zuschuss,aktiv:true,zurueckgestellt:false,notiz:'monatlich'});
@@ -553,7 +570,7 @@ async function generateAbrechnungen(periode, onProgress){
   }
   // ═══ SCOUTER ABRECHNUNGEN ═══
   log('Berechne Scouter...');
-  const allScoutIds = new Set([...Object.keys(byScout), ...Object.keys(stornoByScout), ...Object.keys(offenByScout), ...Object.keys(leadByScout), ...Object.keys(terminByScout)]);
+  const allScoutIds = new Set([...Object.keys(byScout), ...Object.keys(stornoByScout), ...Object.keys(offenByScout), ...Object.keys(leadByScout), ...Object.keys(terminByScout), ...Object.keys(szByVP)]);
   for(const scId of allScoutIds){
     const sc = vpById[scId]; if(!sc) continue;
     if(skipVPIds.has(scId)){ log(`⏸️ ${sc.vorname} ${sc.nachname} übersprungen (skip_abrechnung)`); continue; }
@@ -623,6 +640,18 @@ async function generateAbrechnungen(periode, onProgress){
         log(`  📅 ${scName}: ${terminCount} Termine × ${regel.betrag_termin_sf}€ = ${terminBetrag}€`);
       }
     }
+    // Sonderzulagen aus Sheet (Zugaben/Abzüge) – auch für Scouter
+    const scSZ = szByVP[scId] || [];
+    scSZ.forEach(sz => {
+      const parts = (sz.notiz||'').split('|');
+      const vorzeichen = parts[0]?.startsWith('-') ? -1 : 1;
+      const betrag = parseFloat(parts[0]?.replace(/[^0-9.]/g,'')) || 0;
+      const beschreibung = parts[1] || sz.kunde_name || 'Sonderzulage';
+      const realBetrag = vorzeichen * betrag;
+      const typ = realBetrag >= 0 ? 'sondereinsatz' : 'abzug';
+      positionen.push({typ,auftrag_nr:sz.auftrag_nr,kunde:sz.kunde_name,produkt:beschreibung,original_betrag:realBetrag,aktiv:true,zurueckgestellt:false,notiz:'Sonderzulage 2026/01'});
+      bruttoTotal += realBetrag;
+    });
     // Fahrzeugzuschuss (monatlich, aus pay_mitarbeiter.auto_zuschuss)
     if(sc.auto_zuschuss && +sc.auto_zuschuss > 0){
       positionen.push({typ:'sondereinsatz',auftrag_nr:null,kunde:null,produkt:'Fahrzeugzuschuss',original_betrag:+sc.auto_zuschuss,aktiv:true,zurueckgestellt:false,notiz:'monatlich'});
