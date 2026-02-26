@@ -1015,7 +1015,7 @@ function BereinigungPanel({onClose}){
 function GutschriftPreview({ab,pos,sg}){
   const b=calc(pos,sg,(ab.beschaeftigungsart||'').includes('hgb'));
   const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus','termin_bonus','zero_bonus'].includes(p.typ));
-  const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges'].includes(p.typ));
+  const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges','sondereinsatz'].includes(p.typ));
   const aTB=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&p.typ==='team_bonus');
   const aSt=pos.filter(p=>p.typ==='storno_info');
   const aOf=pos.filter(p=>p.typ==='offen_info');
@@ -1204,14 +1204,10 @@ function GutschriftPreview({ab,pos,sg}){
       
       // Dynamic page break: count actual rows per group, max ~38 rows per page
       const MAX_ROWS = 44;
-      const abzugCount = aE.filter(p=>p.typ==='abzug').length;
-      const einmalCount = aE.filter(p=>p.typ!=='abzug').length;
-      const tbCount = aTB.length;
-      const extraRows = abzugCount + einmalCount + tbCount + (abzugCount>0?1:0) + (einmalCount>0?1:0) + (tbCount>0?1:0);
-      const SUMMEN_ROWS = 6; // Netto + USt + Brutto + Unterschrift
-      const LAST_PAGE_RESERVE = SUMMEN_ROWS + extraRows;
-      // If extras need more than half a page, they get their own page
-      const extrasOnOwnPage = LAST_PAGE_RESERVE > (MAX_ROWS * 0.6);
+      const hasExtras = aE.length > 0 || aTB.length > 0;
+      // Extras (Abzüge, Sonderzulagen, Team-Bonus) IMMER auf eigene Seite wenn vorhanden
+      const extrasOnOwnPage = hasExtras;
+      const SUMMEN_ROWS = extrasOnOwnPage ? 2 : 8; // nur Zwischensumme vs. volle Summen+Unterschrift
       const pages = []; let currentPage = []; let rowCount = 0;
       allGroups.forEach((item, gi) => {
         if(item.src==='sep'){
@@ -1226,8 +1222,8 @@ function GutschriftPreview({ab,pos,sg}){
         const rows = 1 + (g.boni.length > 0 ? g.boni.length + 2 : 0);
         const remainingItems = allGroups.slice(gi).filter(x=>x.src!=='sep');
         const remainingRows = remainingItems.reduce((s,x) => {const gg=getG(x); return s + 1 + (gg&&gg.boni.length > 0 ? gg.boni.length + 2 : 0);}, 0);
-        const isNearEnd = remainingRows <= (MAX_ROWS - (extrasOnOwnPage ? SUMMEN_ROWS : LAST_PAGE_RESERVE));
-        const limit = isNearEnd ? (MAX_ROWS - (extrasOnOwnPage ? SUMMEN_ROWS : LAST_PAGE_RESERVE)) : MAX_ROWS;
+        const isNearEnd = remainingRows <= (MAX_ROWS - SUMMEN_ROWS);
+        const limit = isNearEnd ? (MAX_ROWS - SUMMEN_ROWS) : MAX_ROWS;
         if(rowCount + rows > limit && currentPage.length > 0){
           pages.push(currentPage); currentPage = []; rowCount = 0;
         }
@@ -1318,27 +1314,28 @@ function GutschriftPreview({ab,pos,sg}){
       });
     })()}
 
-    {/* === EXTRAS-SEITE (Abzüge + Summen, wenn Positionen voll) === */}
+    {/* === EXTRAS-SEITE (Abzüge, Sonderzulagen, Summen – eigene Seite) === */}
     {(()=>{
-      const abzugCount2 = aE.filter(p=>p.typ==='abzug').length;
-      const einmalCount2 = aE.filter(p=>p.typ!=='abzug').length;
-      const tbCount2 = aTB.length;
-      const extraRows2 = abzugCount2 + einmalCount2 + tbCount2 + (abzugCount2>0?1:0) + (einmalCount2>0?1:0) + (tbCount2>0?1:0);
-      const needsPage = extraRows2 + 6 > (44 * 0.6);
-      if(!needsPage) return null;
+      const hasExtrasPage = aE.length > 0 || aTB.length > 0;
+      if(!hasExtrasPage) return null;
       return <div className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
         {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
         <div style={{padding:'14mm 16mm 0',flex:1}}>
           <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
-            <span>Abzüge & Zusammenfassung</span><span style={{color:'#aaa'}}>{bn}</span>
+            <span>Sonderpositionen & Zusammenfassung</span><span style={{color:'#aaa'}}>{bn}</span>
           </div>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
             <thead><tr style={{background:'#f5f5f5'}}><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:24}}>Nr</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888'}}>Position</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:80}}>Details</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'right',fontSize:8,textTransform:'uppercase',color:'#888',width:80}}>Betrag</th></tr></thead>
             <tbody>
+              {/* Sonderzulagen (positive) */}
+              {aE.filter(p=>p.typ==='sondereinsatz').length>0 && <tr><td colSpan={4} style={{padding:'10px 6px 4px',fontWeight:700,color:'#166534',fontSize:10,borderBottom:'2px solid #bbf7d0',textTransform:'uppercase',letterSpacing:'.5px'}}>💰 Sonderzulagen ({aE.filter(p=>p.typ==='sondereinsatz').length})</td></tr>}
+              {aE.filter(p=>p.typ==='sondereinsatz').map((p,i)=><tr key={`sz${i}`} style={{background:'#f0fdf4',borderBottom:'1px solid #bbf7d0'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10,color:'#166534'}}>{p.produkt||p.kunde||'Sonderzulage'}</td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:700,color:'#166534',whiteSpace:'nowrap'}}>+ {fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
+              {/* Abzüge (negative) */}
               {aE.filter(p=>p.typ==='abzug').length>0 && <tr><td colSpan={4} style={{padding:'10px 6px 4px',fontWeight:700,color:'#dc2626',fontSize:10,borderBottom:'2px solid #fecaca',textTransform:'uppercase',letterSpacing:'.5px'}}>🔻 Abzüge ({aE.filter(p=>p.typ==='abzug').length})</td></tr>}
-              {aE.filter(p=>p.typ==='abzug').map((p,i)=><tr key={`abz${i}`} style={{background:'#fef2f2',borderBottom:'1px solid #fecaca'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10,color:'#dc2626'}}>{p.kunde||p.produkt||'Abzug'} <span style={{fontSize:9,color:'#888'}}>({p.produkt})</span></td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,color:'#dc2626',whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
-              {aE.filter(p=>p.typ!=='abzug').length>0 && <tr><td colSpan={4} style={{padding:'10px 6px 4px',fontWeight:700,color:'#334155',fontSize:10,borderBottom:'2px solid #334155',textTransform:'uppercase',letterSpacing:'.5px'}}>📎 Einmalzahlungen ({aE.filter(p=>p.typ!=='abzug').length})</td></tr>}
-              {aE.filter(p=>p.typ!=='abzug').map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb',borderBottom:'1px solid #eee'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10}}>{p.kunde||p.notiz||p.typ} <span style={{fontSize:9,color:'#888'}}>({p.typ==='einmalzahlung'?'Einmalzahlung':'Sonstiges'})</span></td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
+              {aE.filter(p=>p.typ==='abzug').map((p,i)=><tr key={`abz${i}`} style={{background:'#fef2f2',borderBottom:'1px solid #fecaca'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10,color:'#dc2626'}}>{p.produkt||p.kunde||'Abzug'}</td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,color:'#dc2626',whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
+              {/* Sonstige Einmalzahlungen */}
+              {aE.filter(p=>!['abzug','sondereinsatz'].includes(p.typ)).length>0 && <tr><td colSpan={4} style={{padding:'10px 6px 4px',fontWeight:700,color:'#334155',fontSize:10,borderBottom:'2px solid #334155',textTransform:'uppercase',letterSpacing:'.5px'}}>📎 Einmalzahlungen ({aE.filter(p=>!['abzug','sondereinsatz'].includes(p.typ)).length})</td></tr>}
+              {aE.filter(p=>!['abzug','sondereinsatz'].includes(p.typ)).map((p,i)=><tr key={`e${i}`} style={{background:'#fffbeb',borderBottom:'1px solid #eee'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10}}>{p.produkt||p.kunde||p.typ}</td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
               {aTB.length>0 && <tr><td colSpan={4} style={{padding:'10px 6px 4px',fontWeight:700,color:'#1e40af',fontSize:10,borderBottom:'2px solid #93c5fd',textTransform:'uppercase',letterSpacing:'.5px'}}>🏅 Team-Bonus ({aTB.length})</td></tr>}
               {aTB.map((p,i)=><tr key={`tb${i}`} style={{background:'#eff6ff',borderBottom:'1px solid #dbeafe'}}><td style={{padding:'4px 6px',color:'#aaa',fontSize:9}}>—</td><td colSpan={2} style={{padding:'4px 6px',fontSize:10,color:'#1e40af'}}>{p.produkt} <span style={{fontSize:8,color:'#6b7280'}}>(Details s. Anlage)</span></td><td style={{padding:'4px 6px',textAlign:'right',fontWeight:700,color:'#1e40af',whiteSpace:'nowrap'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
               <tr style={{fontWeight:700,borderTop:'2px solid #333',background:'#f9f9f9'}}><td></td><td colSpan={2} style={{padding:'6px 6px'}}>Netto-Summe</td><td style={{padding:'6px 6px',textAlign:'right',whiteSpace:'nowrap'}}>{fmtE(b.bp+b.es)}</td></tr>
