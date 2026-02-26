@@ -1066,10 +1066,13 @@ function GutschriftPreview({ab,pos,sg}){
       
       let globalNr = 0;
       
+      // Track which pages are NZ pages (contain NZ items or start after NZ separator)
+      const pageIsNZ = pages.map(pg => pg.some(item => item.src==='sep' || item.src==='nz'));
+      
       const THead = () => <thead><tr style={{background:'#f5f5f5'}}><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:24}}>Nr</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888'}}>Kunde / Position</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'left',fontSize:8,textTransform:'uppercase',color:'#888',width:80}}>Quelle</th><th style={{padding:'4px 6px',borderBottom:'2px solid #ddd',textAlign:'right',fontSize:8,textTransform:'uppercase',color:'#888',width:80}}>Betrag</th></tr></thead>;
       
       const PosRow = ({item, nr}) => {
-        if(item.src==='sep') return <tr><td colSpan={4} style={{padding:'12px 6px 4px',fontWeight:700,color:'#B45309',fontSize:10,borderBottom:'2px solid #f59e0b',background:'#fffbeb',textTransform:'uppercase',letterSpacing:'.5px'}}>📋 Nachzügler aus Vormonaten ({nzG.groups.length})</td></tr>;
+        if(item.src==='sep') return <tr key="nz-sep"><td colSpan={4} style={{padding:0,height:2}}></td></tr>;
         const g = getG(item); if(!g||!g.main) return null;
         const m = g.main; const boni = g.boni;
         const isNZ = item.src==='nz';
@@ -1096,16 +1099,21 @@ function GutschriftPreview({ab,pos,sg}){
         const isLastPage = pi === pages.length - 1;
         const pageNum = pi + 2; // Seite 1 = Deckblatt
         const startNr = globalNr;
+        const isNZPage = pageIsNZ[pi];
+        const isNZStart = pageGroups[0]?.src==='sep';
         
         return <div key={`pos-page-${pi}`} className="gs-page" style={{padding:0,display:'flex',flexDirection:'column'}}>
           {isE&&<div className="gs-watermark">{ab.status==='probeabrechnung'?'PROBEABRECHNUNG':'ENTWURF'}</div>}
           <div style={{padding:'14mm 16mm 0',flex:1}}>
             <div style={{fontSize:8.5,color:'#555',borderBottom:'1px solid #ddd',paddingBottom:5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
-              <span>{pageGroups[0]?.src==='sep'?`Nachzügler aus Vormonaten`:`Provisionen ${lzLabel}`}</span><span style={{color:'#aaa'}}>{bn} · Seite {pageNum}</span>
+              <span>{isNZPage?`Nachzügler aus Vormonaten`:`Provisionen ${lzLabel}`}</span><span style={{color:'#aaa'}}>{bn} · Seite {pageNum}</span>
             </div>
-            {pi===0&&<div style={{fontSize:17,fontWeight:700,marginBottom:14}}>{ab.mitarbeiter_name} <span style={{fontSize:11,color:'#888',fontWeight:400}}>({k})</span></div>}
-            {pi===0&&<div style={{color:'#E07800',fontWeight:700,fontSize:11,marginBottom:7,borderBottom:'1px solid #eee',paddingBottom:3}}>Einzelpositionen – Leistungszeitraum {lzLabel}</div>}
-            {pi>0&&<div style={{color:'#888',fontSize:9,marginBottom:8}}>Fortsetzung Einzelpositionen</div>}
+            {pi===0&&!isNZPage&&<div style={{fontSize:17,fontWeight:700,marginBottom:14}}>{ab.mitarbeiter_name} <span style={{fontSize:11,color:'#888',fontWeight:400}}>({k})</span></div>}
+            {pi===0&&!isNZPage&&<div style={{color:'#E07800',fontWeight:700,fontSize:11,marginBottom:7,borderBottom:'1px solid #eee',paddingBottom:3}}>Einzelpositionen – Leistungszeitraum {lzLabel}</div>}
+            {pi>0&&!isNZPage&&<div style={{color:'#888',fontSize:9,marginBottom:8}}>Fortsetzung Einzelpositionen</div>}
+            {isNZStart&&<div style={{fontSize:17,fontWeight:700,marginBottom:6}}>{ab.mitarbeiter_name} <span style={{fontSize:11,color:'#888',fontWeight:400}}>({k})</span></div>}
+            {isNZStart&&<div style={{color:'#B45309',fontWeight:700,fontSize:11,marginBottom:7,borderBottom:'2px solid #f59e0b',paddingBottom:3,background:'#fffbeb',padding:'4px 6px',borderRadius:3}}>📋 Nachzügler aus Vormonaten ({nzG.groups.length})</div>}
+            {isNZPage&&!isNZStart&&<div style={{color:'#B45309',fontSize:9,marginBottom:8}}>Fortsetzung Nachzügler aus Vormonaten</div>}
             
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
               <THead/>
@@ -1364,54 +1372,96 @@ function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
    SCOUTER DETAIL PANEL – Leads, Termine, Sales im Detail
    ═══════════════════════════════════════════════════════════════════ */
 function ScouterDetailPanel({scouterId,periode}){
-  const[tab,setTab]=useState('sales');
+  const[tab,setTab]=useState('overview');
   const[auftraege,setAuftraege]=useState([]);
   const[stornos,setStornos]=useState([]);
   const[offen,setOffen]=useState([]);
-  const[termine,setTermine]=useState([]);
+  const[leadRecords,setLeadRecords]=useState([]);
+  const[terminRecords,setTerminRecords]=useState([]);
+  const[vtMap,setVtMap]=useState({});
+  const[allOrders,setAllOrders]=useState([]);
   const[ldg,setLdg]=useState(true);
 
   useEffect(()=>{if(!scouterId)return;(async()=>{
     setLdg(true);
     try{
-      // Leistungszeitraum aus Periode ableiten (Periode = Abrechnungsmonat, LZ = Vormonat)
       const[pY,pM]=periode.split('/').map(Number);
       const lzD=new Date(pY,pM-2,1);
       const lzStart=`${lzD.getFullYear()}-${String(lzD.getMonth()+1).padStart(2,'0')}-01`;
       const lzEndD=new Date(lzD.getFullYear(),lzD.getMonth()+1,0);
       const lzEnd=`${lzEndD.getFullYear()}-${String(lzEndD.getMonth()+1).padStart(2,'0')}-${String(lzEndD.getDate()).padStart(2,'0')}`;
 
-      const[sales,storno,off,term]=await Promise.all([
+      const[sales,storno,off,leads,terms,allOrd,vts]=await Promise.all([
         sbG('pay_auftraege',`scouter_id=eq.${scouterId}&storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&order=auftrags_datum.desc`),
         sbG('pay_auftraege',`scouter_id=eq.${scouterId}&storniert=eq.true&order=auftrags_datum.desc`),
         sbG('pay_auftraege',`scouter_id=eq.${scouterId}&storniert=eq.false&zahlungsstatus=eq.offen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&order=auftrags_datum.desc`),
-        sbG('termine',`select=*&order=datum.desc&limit=200`)
+        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&produkt_typ=eq.lead_count&order=auftrags_datum.desc`),
+        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&produkt_typ=eq.termin_count&order=auftrags_datum.desc`),
+        sbG('pay_auftraege',`scouter_id=eq.${scouterId}&produkt_typ=not.in.(lead_count,termin_count,zero_count)&order=auftrags_datum.desc`),
+        sbG('pay_mitarbeiter',`typ=not.like.*scouter*&select=id,vorname,nachname`)
       ]);
       setAuftraege(sales||[]);
       setStornos(storno||[]);
       setOffen(off||[]);
-      // Termine filtern: vertrieb_id ist im termine-table nicht scouter_id, also alle laden und nach Kontext zuordnen
-      // Alternativ: Termine aus pay_auftraege lead_count/termin_count records
-      const termRecords = await sbG('pay_auftraege',`scouter_id=eq.${scouterId}&produkt_typ=in.(lead_count,termin_count)&order=auftrags_datum.desc`);
-      setTermine(termRecords||[]);
+      setLeadRecords(leads||[]);
+      setTerminRecords(terms||[]);
+      setAllOrders(allOrd||[]);
+      const vm={};(vts||[]).forEach(v=>{vm[v.id]=`${v.vorname} ${v.nachname}`;});
+      setVtMap(vm);
     }catch(e){console.error('ScouterDetail load',e);}
     setLdg(false);
   })();},[scouterId,periode]);
 
   const fD = d => d ? new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—';
+  const fDLong = d => d ? new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'long',year:'numeric'}) : '—';
+  const mName = d => {if(!d)return'—';const dt=new Date(d);return dt.toLocaleDateString('de-DE',{month:'short',year:'2-digit'});};
 
-  // Filter nach LZ/Gesamt
   const[filterLZ,setFilterLZ]=useState(false);
   const[pY2,pM2]=periode?periode.split('/').map(Number):[2026,1];
   const lzD2=new Date(pY2,pM2-2,1);
   const lzMonth=`${lzD2.getFullYear()}-${String(lzD2.getMonth()+1).padStart(2,'0')}`;
+  const lzLabel2=lzD2.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
   const inLZ = a => (a.auftrags_datum||'').startsWith(lzMonth);
   const filtered = (arr) => filterLZ ? arr.filter(inLZ) : arr;
 
-  const salesLZ=auftraege.filter(inLZ).length;
-  const salesTotal=auftraege.length;
-  const stornoLZ=stornos.filter(inLZ).length;
-  const offenLZ=offen.filter(inLZ).length;
+  // KPIs
+  const totalLeads = leadRecords.reduce((s,r)=>s+(r.kwp||0),0);
+  const totalTermine = terminRecords.reduce((s,r)=>s+(r.kwp||0),0);
+  const salesTotal = auftraege.length;
+  const salesLZ = auftraege.filter(inLZ).length;
+  const stornoTotal = stornos.length;
+  const offenTotal = offen.length;
+  const leadsLZ = leadRecords.filter(inLZ).reduce((s,r)=>s+(r.kwp||0),0);
+  const termineLZ = terminRecords.filter(inLZ).reduce((s,r)=>s+(r.kwp||0),0);
+  const convRate = totalTermine > 0 ? ((salesTotal / totalTermine) * 100).toFixed(1) : '—';
+  const stornoRate = (salesTotal + stornoTotal) > 0 ? ((stornoTotal / (salesTotal + stornoTotal)) * 100).toFixed(1) : '0';
+  const avgKwp = salesTotal > 0 ? (auftraege.reduce((s,a)=>s+(a.kwp||0),0)/salesTotal).toFixed(1) : '—';
+
+  // Monthly data for chart (last 6 months)
+  const monthlyData = useMemo(()=>{
+    const months = [];
+    for(let i=5;i>=0;i--){
+      const d=new Date(pY2,pM2-2-i,1);
+      const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const label=d.toLocaleDateString('de-DE',{month:'short'});
+      const mSales=auftraege.filter(a=>(a.auftrags_datum||'').startsWith(key)).length;
+      const mStorno=stornos.filter(a=>(a.auftrags_datum||'').startsWith(key)).length;
+      const mOffen=offen.filter(a=>(a.auftrags_datum||'').startsWith(key)).length;
+      const mLeads=leadRecords.filter(r=>(r.auftrags_datum||'').startsWith(key)).reduce((s,r)=>s+(r.kwp||0),0);
+      const mTermine=terminRecords.filter(r=>(r.auftrags_datum||'').startsWith(key)).reduce((s,r)=>s+(r.kwp||0),0);
+      months.push({key,label,sales:mSales,storno:mStorno,offen:mOffen,leads:mLeads,termine:mTermine});
+    }
+    return months;
+  },[auftraege,stornos,offen,leadRecords,terminRecords,pY2,pM2]);
+
+  const maxBar = Math.max(...monthlyData.map(m=>Math.max(m.sales,m.leads,m.termine)),1);
+
+  // Top Vertriebler by sales count
+  const vtSales = useMemo(()=>{
+    const map={};
+    auftraege.forEach(a=>{if(a.vertriebler_id){const n=vtMap[a.vertriebler_id]||'Unbekannt';if(!map[n])map[n]=0;map[n]++;}});
+    return Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  },[auftraege,vtMap]);
 
   if(ldg) return <div className="edit-section"><div className="loading" style={{padding:15}}><div className="spinner"/>Lade Scouter-Details...</div></div>;
 
@@ -1420,82 +1470,193 @@ function ScouterDetailPanel({scouterId,periode}){
       <div className="edit-section-title" style={{color:'#a78bfa',margin:0}}>🔍 Scouter-Details</div>
       <label style={{fontSize:10,color:'#8b949e',cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
         <input type="checkbox" checked={filterLZ} onChange={e=>setFilterLZ(e.target.checked)} style={{accentColor:'#a78bfa'}}/>
-        Nur Leistungszeitraum
+        Nur LZ ({lzLabel2})
       </label>
     </div>
 
-    <div className="sc-stat-row">
-      <div className="sc-stat"><div className="val" style={{color:'#3fb950'}}>{filterLZ?salesLZ:salesTotal}</div><div className="lbl">Sales</div></div>
-      <div className="sc-stat"><div className="val" style={{color:'#f85149'}}>{filterLZ?stornoLZ:stornos.length}</div><div className="lbl">Stornos</div></div>
-      <div className="sc-stat"><div className="val" style={{color:'#d29922'}}>{filterLZ?offenLZ:offen.length}</div><div className="lbl">Offen</div></div>
-      <div className="sc-stat"><div className="val" style={{color:'#58a6ff'}}>{termine.length}</div><div className="lbl">Termine/Leads</div></div>
-    </div>
-
-    <div className="sc-tabs">
-      <button className={`sc-tab${tab==='sales'?' active':''}`} onClick={()=>setTab('sales')}>✅ Sales<span className="cnt">{filtered(auftraege).length}</span></button>
+    <div className="sc-tabs" style={{flexWrap:'wrap'}}>
+      <button className={`sc-tab${tab==='overview'?' active':''}`} onClick={()=>setTab('overview')}>📊 Übersicht</button>
+      <button className={`sc-tab${tab==='leads'?' active':''}`} onClick={()=>setTab('leads')}>📋 Leads<span className="cnt">{filterLZ?leadsLZ:totalLeads}</span></button>
+      <button className={`sc-tab${tab==='termine'?' active':''}`} onClick={()=>setTab('termine')}>📅 Termine<span className="cnt">{filterLZ?termineLZ:totalTermine}</span></button>
+      <button className={`sc-tab${tab==='sales'?' active':''}`} onClick={()=>setTab('sales')}>✅ Sales<span className="cnt">{filterLZ?salesLZ:salesTotal}</span></button>
       <button className={`sc-tab${tab==='offen'?' active':''}`} onClick={()=>setTab('offen')}>⏳ Offen<span className="cnt">{filtered(offen).length}</span></button>
       <button className={`sc-tab${tab==='stornos'?' active':''}`} onClick={()=>setTab('stornos')}>❌ Stornos<span className="cnt">{filtered(stornos).length}</span></button>
-      <button className={`sc-tab${tab==='termine'?' active':''}`} onClick={()=>setTab('termine')}>📋 Leads/Termine<span className="cnt">{termine.length}</span></button>
     </div>
 
-    {tab==='sales'&&(filtered(auftraege).length===0?<div className="sc-empty">Keine Sales gefunden</div>:
+    {/* ═══ OVERVIEW TAB ═══ */}
+    {tab==='overview'&&<div>
+      <div className="sc-stat-row" style={{gridTemplateColumns:'repeat(3,1fr)',marginBottom:8}}>
+        <div className="sc-stat"><div className="val" style={{color:'#a78bfa',fontSize:20}}>{filterLZ?leadsLZ:totalLeads}</div><div className="lbl">Leads</div></div>
+        <div className="sc-stat"><div className="val" style={{color:'#58a6ff',fontSize:20}}>{filterLZ?termineLZ:totalTermine}</div><div className="lbl">Termine</div></div>
+        <div className="sc-stat"><div className="val" style={{color:'#3fb950',fontSize:20}}>{filterLZ?salesLZ:salesTotal}</div><div className="lbl">Sales</div></div>
+      </div>
+      <div className="sc-stat-row" style={{gridTemplateColumns:'repeat(4,1fr)',marginBottom:12}}>
+        <div className="sc-stat"><div className="val" style={{color:'#d29922'}}>{offenTotal}</div><div className="lbl">Offen</div></div>
+        <div className="sc-stat"><div className="val" style={{color:'#f85149'}}>{stornoTotal}</div><div className="lbl">Stornos</div></div>
+        <div className="sc-stat"><div className="val" style={{color:'#3fb950'}}>{convRate}%</div><div className="lbl">Abschlussquote</div></div>
+        <div className="sc-stat"><div className="val" style={{color:'#f85149'}}>{stornoRate}%</div><div className="lbl">Stornoquote</div></div>
+      </div>
+      {/* Mini Chart */}
+      <div style={{background:'#0d1117',border:'1px solid #21262d',borderRadius:8,padding:10,marginBottom:10}}>
+        <div style={{fontSize:10,color:'#8b949e',marginBottom:8,fontWeight:600}}>📈 Monatsverlauf (6 Monate)</div>
+        <div style={{display:'flex',gap:4,alignItems:'flex-end',height:80}}>
+          {monthlyData.map((m,i)=>{
+            const isLZ=m.key===lzMonth;
+            return <div key={m.key} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+              <div style={{display:'flex',gap:1,alignItems:'flex-end',height:60,width:'100%'}}>
+                <div title={`${m.leads} Leads`} style={{flex:1,background:'#a78bfa40',borderRadius:'2px 2px 0 0',height:`${Math.max((m.leads/maxBar)*60,2)}px`,minHeight:2}}/>
+                <div title={`${m.termine} Termine`} style={{flex:1,background:'#58a6ff60',borderRadius:'2px 2px 0 0',height:`${Math.max((m.termine/maxBar)*60,2)}px`,minHeight:2}}/>
+                <div title={`${m.sales} Sales`} style={{flex:1,background:'#3fb95080',borderRadius:'2px 2px 0 0',height:`${Math.max((m.sales/maxBar)*60,2)}px`,minHeight:2}}/>
+              </div>
+              <div style={{fontSize:8,color:isLZ?'#F5C500':'#8b949e',fontWeight:isLZ?700:400}}>{m.label}</div>
+            </div>;
+          })}
+        </div>
+        <div style={{display:'flex',gap:12,justifyContent:'center',marginTop:6}}>
+          <span style={{fontSize:8,color:'#a78bfa'}}>■ Leads</span>
+          <span style={{fontSize:8,color:'#58a6ff'}}>■ Termine</span>
+          <span style={{fontSize:8,color:'#3fb950'}}>■ Sales</span>
+        </div>
+      </div>
+      {/* Funnel */}
+      <div style={{background:'#0d1117',border:'1px solid #21262d',borderRadius:8,padding:10,marginBottom:10}}>
+        <div style={{fontSize:10,color:'#8b949e',marginBottom:8,fontWeight:600}}>🔄 Conversion-Funnel (Gesamt)</div>
+        {[
+          {label:'Leads generiert',val:totalLeads,color:'#a78bfa',pct:100},
+          {label:'Termine gesetzt',val:totalTermine,color:'#58a6ff',pct:totalLeads>0?(totalTermine/totalLeads*100):0},
+          {label:'Sales abgeschlossen',val:salesTotal,color:'#3fb950',pct:totalLeads>0?(salesTotal/totalLeads*100):0}
+        ].map((f,i)=><div key={i} style={{marginBottom:6}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginBottom:2}}>
+            <span style={{color:'#c9d1d9'}}>{f.label}</span>
+            <span style={{color:f.color,fontWeight:700}}>{f.val} <span style={{color:'#8b949e',fontWeight:400}}>({f.pct.toFixed(0)}%)</span></span>
+          </div>
+          <div style={{height:6,background:'#21262d',borderRadius:3,overflow:'hidden'}}>
+            <div style={{height:'100%',width:`${Math.min(f.pct,100)}%`,background:f.color,borderRadius:3,transition:'width .3s'}}/>
+          </div>
+        </div>)}
+      </div>
+      {/* Top Vertriebler */}
+      {vtSales.length>0&&<div style={{background:'#0d1117',border:'1px solid #21262d',borderRadius:8,padding:10}}>
+        <div style={{fontSize:10,color:'#8b949e',marginBottom:6,fontWeight:600}}>🏆 Top Vertriebler (Sales mit diesem Scout)</div>
+        {vtSales.slice(0,5).map(([name,cnt],i)=><div key={name} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:11,borderBottom:i<Math.min(vtSales.length,5)-1?'1px solid #161b22':'none'}}>
+          <span style={{color:'#c9d1d9'}}>{i+1}. {name}</span>
+          <span style={{color:'#3fb950',fontWeight:600}}>{cnt} Sales</span>
+        </div>)}
+      </div>}
+    </div>}
+
+    {/* ═══ LEADS TAB ═══ */}
+    {tab==='leads'&&<div>
+      {filtered(leadRecords).length===0?<div className="sc-empty">Keine Lead-Records gefunden</div>:
       <div style={{maxHeight:400,overflowY:'auto'}}>
-        <table className="sc-detail-tbl"><thead><tr><th>Nr</th><th>Kunde</th><th>Datum</th><th>kWp</th><th>Quelle</th><th>Wert</th></tr></thead><tbody>
+        <table className="sc-detail-tbl"><thead><tr><th>Monat</th><th>Anzahl Leads</th><th style={{textAlign:'right'}}>Provision</th></tr></thead><tbody>
+          {filtered(leadRecords).map((r,i)=>{
+            const cnt=r.kwp||0;
+            const monat=mName(r.auftrags_datum);
+            return <tr key={r.id||i}>
+              <td style={{fontWeight:600,color:'#e6edf3'}}>{monat}</td>
+              <td><div style={{display:'flex',alignItems:'center',gap:6}}>
+                <div style={{background:'#a78bfa20',height:8,borderRadius:4,width:`${Math.min((cnt/Math.max(...leadRecords.map(lr=>lr.kwp||0),1))*100,100)}%`,minWidth:8}}/>
+                <span style={{fontWeight:700,color:'#a78bfa'}}>{cnt}</span>
+              </div></td>
+              <td style={{textAlign:'right',color:'#c9d1d9',fontSize:10}}>{r.kunde_name||'—'}</td>
+            </tr>;
+          })}
+          <tr style={{borderTop:'2px solid #21262d',fontWeight:700}}>
+            <td style={{color:'#a78bfa'}}>Gesamt</td>
+            <td style={{color:'#a78bfa',fontWeight:800}}>{filtered(leadRecords).reduce((s,r)=>s+(r.kwp||0),0)} Leads</td>
+            <td></td>
+          </tr>
+        </tbody></table>
+      </div>}
+    </div>}
+
+    {/* ═══ TERMINE TAB ═══ */}
+    {tab==='termine'&&<div>
+      {filtered(terminRecords).length===0?<div className="sc-empty">Keine Termin-Records gefunden</div>:
+      <div style={{maxHeight:400,overflowY:'auto'}}>
+        <table className="sc-detail-tbl"><thead><tr><th>Monat</th><th>Anzahl Termine</th><th style={{textAlign:'right'}}>Details</th></tr></thead><tbody>
+          {filtered(terminRecords).map((r,i)=>{
+            const cnt=r.kwp||0;
+            const monat=mName(r.auftrags_datum);
+            return <tr key={r.id||i}>
+              <td style={{fontWeight:600,color:'#e6edf3'}}>{monat}</td>
+              <td><div style={{display:'flex',alignItems:'center',gap:6}}>
+                <div style={{background:'#58a6ff20',height:8,borderRadius:4,width:`${Math.min((cnt/Math.max(...terminRecords.map(tr=>tr.kwp||0),1))*100,100)}%`,minWidth:8}}/>
+                <span style={{fontWeight:700,color:'#58a6ff'}}>{cnt}</span>
+              </div></td>
+              <td style={{textAlign:'right',color:'#c9d1d9',fontSize:10}}>{r.kunde_name||'—'}</td>
+            </tr>;
+          })}
+          <tr style={{borderTop:'2px solid #21262d',fontWeight:700}}>
+            <td style={{color:'#58a6ff'}}>Gesamt</td>
+            <td style={{color:'#58a6ff',fontWeight:800}}>{filtered(terminRecords).reduce((s,r)=>s+(r.kwp||0),0)} Termine</td>
+            <td></td>
+          </tr>
+        </tbody></table>
+      </div>}
+    </div>}
+
+    {/* ═══ SALES TAB ═══ */}
+    {tab==='sales'&&<div>
+      {filtered(auftraege).length===0?<div className="sc-empty">Keine Sales gefunden</div>:
+      <div style={{maxHeight:450,overflowY:'auto'}}>
+        <table className="sc-detail-tbl"><thead><tr><th style={{width:24}}>Nr</th><th>Kunde</th><th>Vertriebler</th><th>Datum</th><th>kWp</th><th>Quelle</th><th style={{textAlign:'right'}}>Wert</th></tr></thead><tbody>
           {filtered(auftraege).map((a,i)=><tr key={a.id||i}>
             <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
-            <td className="kunde">{a.kunde_name||'—'}</td>
+            <td className="kunde">{a.kunde_name||'—'}<div style={{fontSize:9,color:'#8b949e'}}>{a.kunde_adresse||''}</div></td>
+            <td style={{fontSize:10,color:'#d2a8ff'}}>{vtMap[a.vertriebler_id]||<span style={{color:'#484f58'}}>—</span>}</td>
             <td className="datum">{fD(a.auftrags_datum)}</td>
-            <td>{a.kwp?a.kwp.toFixed(1):'-'}</td>
-            <td><span className={`tag tag-${(a.lead_quelle||'').includes('eigenlead')?'lead':'sale'}`}>{a.lead_quelle||'—'}</span></td>
-            <td style={{textAlign:'right',fontWeight:600,color:'#3fb950'}}>{a.netto_auftragswert?fmtE(a.netto_auftragswert/100):'—'}</td>
+            <td style={{fontWeight:600}}>{a.kwp?a.kwp.toFixed(1):'-'}</td>
+            <td><span className={`tag tag-${(a.lead_quelle||'').includes('eigenlead')?'lead':(a.lead_quelle||'').includes('empfehlung')?'termin':'sale'}`}>{a.lead_quelle||'—'}</span></td>
+            <td style={{textAlign:'right',fontWeight:600,color:'#3fb950',whiteSpace:'nowrap'}}>{a.netto_auftragswert?fmtE(a.netto_auftragswert/100):'—'}</td>
           </tr>)}
+          <tr style={{borderTop:'2px solid #21262d',fontWeight:700}}>
+            <td></td>
+            <td style={{color:'#3fb950'}}>Gesamt: {filtered(auftraege).length} Sales</td>
+            <td></td>
+            <td></td>
+            <td style={{color:'#e6edf3'}}>{filtered(auftraege).reduce((s,a)=>s+(a.kwp||0),0).toFixed(1)}</td>
+            <td></td>
+            <td style={{textAlign:'right',color:'#3fb950',fontWeight:800}}>{fmtE(filtered(auftraege).reduce((s,a)=>s+(a.netto_auftragswert||0),0)/100)}</td>
+          </tr>
         </tbody></table>
-      </div>
-    )}
+      </div>}
+    </div>}
 
-    {tab==='offen'&&(filtered(offen).length===0?<div className="sc-empty">Keine offenen Aufträge</div>:
+    {/* ═══ OFFEN TAB ═══ */}
+    {tab==='offen'&&<div>
+      {filtered(offen).length===0?<div className="sc-empty">Keine offenen Aufträge</div>:
       <div style={{maxHeight:400,overflowY:'auto'}}>
-        <table className="sc-detail-tbl"><thead><tr><th>Nr</th><th>Kunde</th><th>Datum</th><th>kWp</th><th>Quelle</th><th>Status</th></tr></thead><tbody>
+        <table className="sc-detail-tbl"><thead><tr><th style={{width:24}}>Nr</th><th>Kunde</th><th>Vertriebler</th><th>Datum</th><th>kWp</th><th>Status</th></tr></thead><tbody>
           {filtered(offen).map((a,i)=><tr key={a.id||i}>
             <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
-            <td className="kunde">{a.kunde_name||'—'}</td>
+            <td className="kunde">{a.kunde_name||'—'}<div style={{fontSize:9,color:'#8b949e'}}>{a.kunde_adresse||''}</div></td>
+            <td style={{fontSize:10,color:'#d2a8ff'}}>{vtMap[a.vertriebler_id]||'—'}</td>
             <td className="datum">{fD(a.auftrags_datum)}</td>
             <td>{a.kwp?a.kwp.toFixed(1):'-'}</td>
-            <td><span className={`tag tag-${(a.lead_quelle||'').includes('eigenlead')?'lead':'termin'}`}>{a.lead_quelle||'—'}</span></td>
-            <td><span className="tag tag-offen">offen</span></td>
+            <td><span className="tag tag-offen">{a.beedoo_fortschritt||'offen'}</span></td>
           </tr>)}
         </tbody></table>
-      </div>
-    )}
+      </div>}
+    </div>}
 
-    {tab==='stornos'&&(filtered(stornos).length===0?<div className="sc-empty">Keine Stornos</div>:
+    {/* ═══ STORNOS TAB ═══ */}
+    {tab==='stornos'&&<div>
+      {filtered(stornos).length===0?<div className="sc-empty">Keine Stornos</div>:
       <div style={{maxHeight:400,overflowY:'auto'}}>
-        <table className="sc-detail-tbl"><thead><tr><th>Nr</th><th>Kunde</th><th>Datum</th><th>kWp</th><th>Storno-Datum</th><th>Grund</th></tr></thead><tbody>
+        <table className="sc-detail-tbl"><thead><tr><th style={{width:24}}>Nr</th><th>Kunde</th><th>Vertriebler</th><th>Datum</th><th>Storno</th><th>Grund</th></tr></thead><tbody>
           {filtered(stornos).map((a,i)=><tr key={a.id||i}>
             <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
             <td className="kunde">{a.kunde_name||'—'}</td>
+            <td style={{fontSize:10,color:'#d2a8ff'}}>{vtMap[a.vertriebler_id]||'—'}</td>
             <td className="datum">{fD(a.auftrags_datum)}</td>
-            <td>{a.kwp?a.kwp.toFixed(1):'-'}</td>
-            <td className="datum">{fD(a.storno_datum)}</td>
-            <td style={{fontSize:10,color:'#f85149'}}>{a.storno_grund||'—'}</td>
+            <td className="datum" style={{color:'#f85149'}}>{fD(a.storno_datum)}</td>
+            <td style={{fontSize:10,color:'#f85149',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={a.storno_grund||''}>{a.storno_grund||'—'}</td>
           </tr>)}
         </tbody></table>
-      </div>
-    )}
-
-    {tab==='termine'&&(termine.length===0?<div className="sc-empty">Keine Lead/Termin-Records</div>:
-      <div style={{maxHeight:400,overflowY:'auto'}}>
-        <table className="sc-detail-tbl"><thead><tr><th>Nr</th><th>Typ</th><th>Kunde</th><th>Datum</th><th>Anzahl</th></tr></thead><tbody>
-          {termine.map((t,i)=><tr key={t.id||i}>
-            <td style={{color:'#8b949e',fontSize:10}}>{i+1}</td>
-            <td><span className={`tag ${t.produkt_typ==='lead_count'?'tag-lead':'tag-termin'}`}>{t.produkt_typ==='lead_count'?'Lead':'Termin'}</span></td>
-            <td className="kunde">{t.kunde_name||'—'}</td>
-            <td className="datum">{fD(t.auftrags_datum)}</td>
-            <td style={{fontWeight:600}}>{t.kwp||0}</td>
-          </tr>)}
-        </tbody></table>
-      </div>
-    )}
+      </div>}
+    </div>}
   </div>;
 }
 
