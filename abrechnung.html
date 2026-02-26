@@ -209,7 +209,12 @@ async function generateAbrechnungen(periode, onProgress){
   auftrNZ.forEach(a => a._nachzuegler = true);
   const auftraege = [...auftrLZ, ...auftrNZ];
   // Filter gesperrte Aufträge raus
-  const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')));
+  const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')) && a.produkt_typ !== 'lead_count');
+  // Lead-Count Records separat extrahieren
+  const leadCountRecords = auftraege.filter(a => a.produkt_typ === 'lead_count');
+  const leadByScout = {};
+  leadCountRecords.forEach(a => { if(a.scouter_id) leadByScout[a.scouter_id] = parseInt(a.kwp) || 0; });
+  if(Object.keys(leadByScout).length) log(`📋 Lead-Daten: ${Object.keys(leadByScout).length} Scouter, ${Object.values(leadByScout).reduce((s,v)=>s+v,0)} Leads gesamt`);
   const gesperrteGefunden = auftraege.length - auftraegeClean.length;
   if(gesperrteGefunden>0) log(`⚠️ ${gesperrteGefunden} gesperrte Aufträge übersprungen`);
   // NZ-Duplikate auto-erkennen: gleicher Kunde + gleicher VT → in pay_duplikate schreiben
@@ -254,7 +259,7 @@ async function generateAbrechnungen(periode, onProgress){
   stornoAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!stornoByVP[a.vertriebler_id]) stornoByVP[a.vertriebler_id] = []; stornoByVP[a.vertriebler_id].push(a); });
   const offenByVP = {};
   offenAll.forEach(a => { if(!a.vertriebler_id) return; if(!offenByVP[a.vertriebler_id]) offenByVP[a.vertriebler_id] = []; offenByVP[a.vertriebler_id].push(a); });
-  const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=vertriebler_id,scouter_id,auftrags_datum,auftrag_nr');
+  const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&produkt_typ=neq.lead_count&select=vertriebler_id,scouter_id,auftrags_datum,auftrag_nr');
   const salesPerVPMonth = {};
   allRelevant.forEach(a => { if(!a.vertriebler_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.vertriebler_id+'_'+om; salesPerVPMonth[key]=(salesPerVPMonth[key]||0)+1; });
   // Scout sales per month
@@ -387,14 +392,14 @@ async function generateAbrechnungen(periode, onProgress){
   }
   // ═══ SCOUTER ABRECHNUNGEN ═══
   log('Berechne Scouter...');
-  const allScoutIds = new Set([...Object.keys(byScout), ...Object.keys(stornoByScout), ...Object.keys(offenByScout)]);
+  const allScoutIds = new Set([...Object.keys(byScout), ...Object.keys(stornoByScout), ...Object.keys(offenByScout), ...Object.keys(leadByScout)]);
   for(const scId of allScoutIds){
     const sc = vpById[scId]; if(!sc) continue;
     if(!sc.typ.includes('scouter')) continue; // safety
     const orders = byScout[scId] || [];
     const scStornos = stornoByScout[scId] || [];
     const scOffen = offenByScout[scId] || [];
-    if(!orders.length && !scStornos.length && !scOffen.length) continue;
+    if(!orders.length && !scStornos.length && !scOffen.length && !(leadByScout[scId]>0)) continue;
     const ruleTyp = typMap[sc.typ] || sc.typ;
     const regel = regelMap[ruleTyp];
     if(!regel){ log(`⚠️ Scout ${sc.vorname} ${sc.nachname}: keine Regel für ${ruleTyp}`); continue; }
@@ -431,6 +436,16 @@ async function generateAbrechnungen(periode, onProgress){
     scStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(s.auftrags_datum||'').substring(0,7)}); });
     // Offen-Info
     scOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
+    // Lead-Bonus für Angestellt-Scouter
+    if(!isHGB && regel.betrag_lead > 0){
+      const leadCount = leadByScout[scId] || 0;
+      if(leadCount > 0){
+        const leadBetrag = leadCount * regel.betrag_lead;
+        positionen.push({typ:'lead_bonus',auftrag_nr:`LEADS-${lzY}-${lzM}`,kunde:`${leadCount} Leads`,produkt:`Lead-Bonus (${leadCount}× ${regel.betrag_lead}€)`,original_betrag:leadBetrag,aktiv:true,zurueckgestellt:false,notiz:`${lzY}/${lzM}`});
+        bruttoTotal += leadBetrag;
+        log(`  📋 ${scName}: ${leadCount} Leads × ${regel.betrag_lead}€ = ${leadBetrag}€`);
+      }
+    }
     const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
     const sgUst=sgNetto*(sgConfig.ust_satz/100);
     const ustSatz=isHGB&&sc.mwst_pflichtig?19:0;
@@ -447,7 +462,7 @@ async function generateAbrechnungen(periode, onProgress){
 
 function calc(pos,sg,hgb){
   const ak=pos.filter(p=>p.aktiv&&!p.zurueckgestellt);
-  const prov=ak.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz'].includes(p.typ));
+  const prov=ak.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus'].includes(p.typ));
   const extra=ak.filter(p=>['einmalzahlung','abzug','sonstiges','team_bonus'].includes(p.typ));
   const bp=prov.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   const es=extra.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
@@ -769,7 +784,7 @@ function BereinigungPanel({onClose}){
 
 function GutschriftPreview({ab,pos,sg}){
   const b=calc(pos,sg,(ab.beschaeftigungsart||'').includes('hgb'));
-  const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher','sondereinsatz'].includes(p.typ));
+  const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus'].includes(p.typ));
   const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges'].includes(p.typ));
   const aTB=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&p.typ==='team_bonus');
   const aSt=pos.filter(p=>p.typ==='storno_info');
@@ -779,8 +794,10 @@ function GutschriftPreview({ab,pos,sg}){
   const aOfLZ=aOf;
   const aOfVM=[];
   const isNZPos = p => (p.notiz||'').includes('★NZ');
-  const aPLZ = aP.filter(p => !isNZPos(p));
-  const aPNZ = aP.filter(p => isNZPos(p));
+  const aPLZ = aP.filter(p => !isNZPos(p) && p.typ!=='lead_bonus');
+  const aPNZ = aP.filter(p => isNZPos(p) && p.typ!=='lead_bonus');
+  const aLeadBonus = aP.filter(p => p.typ==='lead_bonus');
+  const leadBonusTotal = aLeadBonus.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   const k=ab.kuerzel||gK(ab.mitarbeiter_name),bn=gBN(ab.periode,k,1),hgb=(ab.beschaeftigungsart||'').includes('hgb');
   const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
   const isE=ab.status==='entwurf'||ab.status==='probeabrechnung';
@@ -856,6 +873,7 @@ function GutschriftPreview({ab,pos,sg}){
               {aStVM.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#da3633'}}>Storniert (Vormonate)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#da3633'}}>{aStVM.length}</td></tr>}
               {aOfLZ.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#8b949e'}}>Offen ({lzLabel})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOfLZ.length}</td></tr>}
               {aOfVM.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#8b949e'}}>Offen (Vormonate)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#8b949e'}}>{aOfVM.length}</td></tr>}
+              {leadBonusTotal>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#059669'}}>📋 Lead-Bonus ({aLeadBonus.length>0?aLeadBonus[0].kunde:''})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#059669',fontWeight:600}}>+ {fmtE(leadBonusTotal)}</td></tr>}
               <tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#555'}}>Provisionen Netto</td><td style={{padding:'4px 7px',textAlign:'right'}}>{fmtE(b.net)}</td></tr>
               {hgb&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#92400e'}}>+ USt 19%</td><td style={{padding:'4px 7px',textAlign:'right',color:'#92400e'}}>+ {fmtE(b.uB)}</td></tr>}
               <tr style={{background:'#f0fdf4'}}><td style={{padding:'4px 7px',fontWeight:700}}>Auszahlung</td><td style={{padding:'4px 7px',textAlign:'right',fontWeight:700,color:'#166534'}}>{fmtE(b.aus)}</td></tr>
@@ -902,13 +920,15 @@ function GutschriftPreview({ab,pos,sg}){
       const isNZPos = p => (p.notiz||'').includes('★NZ');
       const aPLZ = aP.filter(p => !isNZPos(p));
       const aPNZ = aP.filter(p => isNZPos(p));
+      // Lead-Bonus als eigene Gruppe
+      const aPLeads = aP.filter(p => p.typ==='lead_bonus');
       
       const makeGroups = (arr) => {
         const groups = []; const byAN = {};
         arr.forEach(p => {
           const an = p.auftrag_nr || '—';
           if(!byAN[an]) { byAN[an] = {main:null,boni:[]}; groups.push(an); }
-          if(p.typ==='provision') byAN[an].main = p;
+          if(p.typ==='provision'||p.typ==='lead_bonus') byAN[an].main = p;
           else byAN[an].boni.push(p);
         });
         return {groups, byAN};
@@ -977,7 +997,7 @@ function GutschriftPreview({ab,pos,sg}){
           </tr>
           {hasBoni && <>
             <tr><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:'#666'}}>├─ Grundprovision</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:'#666',whiteSpace:'nowrap'}}>{fmtE(m.override_betrag!=null?m.override_betrag:m.original_betrag)}</td></tr>
-            {boni.map((bb,bi) => <tr key={bi}><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':bb.typ==='sondereinsatz'?'#0f766e':'#0369a1'}}>{bi===boni.length-1?'└─':'├─'} {bb.produkt}</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':bb.typ==='sondereinsatz'?'#0f766e':'#0369a1',whiteSpace:'nowrap'}}>+ {fmtE(bb.override_betrag!=null?bb.override_betrag:bb.original_betrag)}</td></tr>)}
+            {boni.map((bb,bi) => <tr key={bi}><td></td><td colSpan={2} style={{padding:'1px 6px 1px 16px',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':bb.typ==='sondereinsatz'?'#0f766e':bb.typ==='lead_bonus'?'#059669':'#0369a1'}}>{bi===boni.length-1?'└─':'├─'} {bb.produkt}</td><td style={{padding:'1px 6px',textAlign:'right',fontSize:9,color:bb.typ==='eigenlead'?'#B45309':bb.typ==='empfehlung'?'#7C3AED':bb.typ==='sondereinsatz'?'#0f766e':bb.typ==='lead_bonus'?'#059669':'#0369a1',whiteSpace:'nowrap'}}>+ {fmtE(bb.override_betrag!=null?bb.override_betrag:bb.original_betrag)}</td></tr>)}
             <tr style={{borderBottom:'1px solid #eee'}}><td></td><td colSpan={2} style={{padding:'2px 6px 5px 16px',fontSize:9,fontWeight:700,color:'#333'}}>Summe Pos. {nr}</td><td style={{padding:'2px 6px 5px',textAlign:'right',fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{fmtE(posSum)}</td></tr>
           </>}
         </React.Fragment>;
@@ -1197,7 +1217,7 @@ function GutschriftPreview({ab,pos,sg}){
 
 function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
   const b=calc(pos,sg,(ab.beschaeftigungsart||'').includes('hgb'));
-  const prov=pos.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz'].includes(p.typ));
+  const prov=pos.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus'].includes(p.typ));
   const extra=pos.filter(p=>['einmalzahlung','abzug','sonstiges','team_bonus'].includes(p.typ));
   const lo=ab.status==='freigegeben'||ab.status==='ausgezahlt';
   const tgl=(i)=>{if(lo)return;const n=[...pos];n[i]={...n[i],aktiv:!n[i].aktiv};setPos(n);};
