@@ -199,6 +199,12 @@ async function generateAbrechnungen(periode, onProgress){
     if(sp.gueltig_bis && sp.gueltig_bis < leistungsStart) return; // abgelaufen
     sonderByVP[sp.mitarbeiter_id] = sp;
   });
+  // Scout-Umleitung Regeln parsen
+  const scoutUmleitungen = [];
+  sonderProv.filter(sp => sp.typ === 'scout_umleitung' && sp.aktiv).forEach(sp => {
+    try { const cfg = JSON.parse(sp.beschreibung); scoutUmleitungen.push({ziel_id:sp.mitarbeiter_id, scout_id:cfg.scout_id, betrag_extra:sp.betrag, scout_name:cfg.scout_name}); } catch(e) {}
+  });
+  if(scoutUmleitungen.length) log(`🔄 ${scoutUmleitungen.length} Scout-Umleitung(en) geladen`);
   // Team-Bonus indexieren
   const teamBonusByVP = {};
   teamBonus.forEach(tb => {
@@ -265,6 +271,18 @@ async function generateAbrechnungen(periode, onProgress){
   stornoAuftr.forEach(a => { if(!a.scouter_id) return; if(!stornoByScout[a.scouter_id]) stornoByScout[a.scouter_id] = []; stornoByScout[a.scouter_id].push(a); });
   const offenByScout = {};
   offenAll.forEach(a => { if(!a.scouter_id) return; if(!offenByScout[a.scouter_id]) offenByScout[a.scouter_id] = []; offenByScout[a.scouter_id].push(a); });
+  // Scout-Umleitung: Fremd-Aufträge aus Scout rausfiltern → für Ziel-VT sammeln
+  const umleitungOrders = {};
+  scoutUmleitungen.forEach(u => {
+    const scOrds = byScout[u.scout_id] || [];
+    const fremd = scOrds.filter(o => o.vertriebler_id !== u.ziel_id);
+    if(fremd.length > 0){
+      byScout[u.scout_id] = scOrds.filter(o => o.vertriebler_id === u.ziel_id);
+      if(!umleitungOrders[u.ziel_id]) umleitungOrders[u.ziel_id] = [];
+      fremd.forEach(o => umleitungOrders[u.ziel_id].push({order:o, betrag_extra:u.betrag_extra, scout_name:u.scout_name}));
+      log(`🔄 Scout-Umleitung: ${fremd.length} Aufträge von ${u.scout_name} → ${vpById[u.ziel_id]?.vorname||''} ${vpById[u.ziel_id]?.nachname||''}`);
+    }
+  });
   const stornoByVP = {};
   stornoAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!stornoByVP[a.vertriebler_id]) stornoByVP[a.vertriebler_id] = []; stornoByVP[a.vertriebler_id].push(a); });
   const offenByVP = {};
@@ -283,7 +301,7 @@ async function generateAbrechnungen(periode, onProgress){
   for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
   let count = 0;
   // ALL VP IDs incl. team bonus recipients + sonderprov
-  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP)]);
+  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP), ...Object.keys(umleitungOrders)]);
   for(const vpId of allVPIds){
     const vp = vpById[vpId]; if(!vp) continue;
     const orders = byVP[vpId] || [];
@@ -385,6 +403,18 @@ async function generateAbrechnungen(periode, onProgress){
         bruttoTotal += zeroBetrag;
         log(`  ⚡ ${vpName}: ${zeroCount} Zero × ${regel.betrag_zero}€ = ${zeroBetrag}€`);
       }
+    }
+    // Scout-Umleitung: umgeleitete Scouter-Provision + Extra-Bonus
+    const umlOrds = umleitungOrders[vpId] || [];
+    if(umlOrds.length > 0){
+      const scRegel = regelMap['angestellt_scouter'] || {basis_betrag_sale:200};
+      umlOrds.forEach(u => {
+        positionen.push({typ:'provision',auftrag_nr:u.order.auftrag_nr,kunde:u.order.kunde_name,produkt:`Scout-Umleitung (${u.scout_name}) – Solar ${u.order.kwp||0} kWp`,original_betrag:scRegel.basis_betrag_sale,aktiv:true,zurueckgestellt:false,notiz:`Umleitung von ${u.scout_name}`});
+        bruttoTotal += scRegel.basis_betrag_sale;
+        positionen.push({typ:'sondereinsatz',auftrag_nr:u.order.auftrag_nr,kunde:u.order.kunde_name,produkt:`Scout-Umleitung Bonus (${u.scout_name})`,original_betrag:u.betrag_extra,aktiv:true,zurueckgestellt:false,notiz:`Umleitung-Bonus`});
+        bruttoTotal += u.betrag_extra;
+      });
+      log(`  🔄 ${vpName}: ${umlOrds.length} Scout-Umleitungen × (${scRegel.basis_betrag_sale}€ + ${umlOrds[0].betrag_extra}€)`);
     }
     // Storno-Info (nur Leistungsmonat)
     const vpStornos = stornoByVP[vpId] || [];
