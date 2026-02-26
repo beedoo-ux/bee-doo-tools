@@ -195,6 +195,7 @@ async function generateAbrechnungen(periode, onProgress){
   // Sonderprovisionen nach VP-ID indexieren
   const sonderByVP = {};
   sonderProv.forEach(sp => {
+    if(sp.typ === 'skip_abrechnung' || sp.typ === 'scout_umleitung') return; // nicht als Sonder-Rate
     if(sp.gueltig_ab && sp.gueltig_ab > leistungsEnd) return; // noch nicht gültig
     if(sp.gueltig_bis && sp.gueltig_bis < leistungsStart) return; // abgelaufen
     sonderByVP[sp.mitarbeiter_id] = sp;
@@ -205,6 +206,9 @@ async function generateAbrechnungen(periode, onProgress){
     try { const cfg = JSON.parse(sp.beschreibung); scoutUmleitungen.push({ziel_id:sp.mitarbeiter_id, scout_id:cfg.scout_id, betrag_extra:sp.betrag, scout_name:cfg.scout_name}); } catch(e) {}
   });
   if(scoutUmleitungen.length) log(`🔄 ${scoutUmleitungen.length} Scout-Umleitung(en) geladen`);
+  // Skip-Abrechnung: VPs die übersprungen werden sollen
+  const skipVPIds = new Set(sonderProv.filter(sp => sp.typ === 'skip_abrechnung' && sp.aktiv).map(sp => sp.mitarbeiter_id));
+  if(skipVPIds.size) log(`⏸️ ${skipVPIds.size} Mitarbeiter übersprungen (skip_abrechnung)`);
   // Team-Bonus indexieren
   const teamBonusByVP = {};
   teamBonus.forEach(tb => {
@@ -322,6 +326,7 @@ async function generateAbrechnungen(periode, onProgress){
   const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP), ...Object.keys(umleitungOrders)]);
   for(const vpId of allVPIds){
     const vp = vpById[vpId]; if(!vp) continue;
+    if(skipVPIds.has(vpId)){ log(`⏸️ ${vp.vorname} ${vp.nachname} übersprungen (skip_abrechnung)`); continue; }
     const orders = byVP[vpId] || [];
     const vpStornos2 = stornoByVP[vpId] || [];
     const vpOffen2 = offenByVP[vpId] || [];
@@ -532,6 +537,7 @@ async function generateAbrechnungen(periode, onProgress){
   const allScoutIds = new Set([...Object.keys(byScout), ...Object.keys(stornoByScout), ...Object.keys(offenByScout), ...Object.keys(leadByScout), ...Object.keys(terminByScout)]);
   for(const scId of allScoutIds){
     const sc = vpById[scId]; if(!sc) continue;
+    if(skipVPIds.has(scId)){ log(`⏸️ ${sc.vorname} ${sc.nachname} übersprungen (skip_abrechnung)`); continue; }
     if(!sc.typ.includes('scouter')) continue; // safety
     const orders = byScout[scId] || [];
     const scStornos = stornoByScout[scId] || [];
