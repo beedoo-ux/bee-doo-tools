@@ -37,6 +37,12 @@ body{font-family:'DM Sans',sans-serif;background:#0a0a0f;color:#c9d1d9;min-heigh
 .vt-card:hover{border-color:#F5C500;transform:translateY(-2px)}
 .vt-card.hgb{border-left:3px solid #F5C500}
 .vt-card.angestellt{border-left:3px solid #58a6ff}
+.vt-card.scouter{border-left:3px solid #a78bfa;background:linear-gradient(135deg,#0d1117 0%,#1a1040 100%)}
+.kat-bar{display:flex;gap:8px;padding:0 24px 12px;flex-wrap:wrap}
+.kat-btn{padding:6px 16px;border-radius:20px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif}
+.kat-btn:hover{border-color:#484f58;color:#c9d1d9}
+.kat-btn.active{background:#F5C50018;border-color:#F5C500;color:#F5C500}
+.kat-btn.active-sc{background:#a78bfa18;border-color:#a78bfa;color:#a78bfa}
 .vt-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .vt-name{font-size:15px;font-weight:700;color:#e6edf3}
 .vt-kuerzel{font-size:11px;color:#8b949e;background:#21262d;padding:2px 8px;border-radius:4px}
@@ -170,8 +176,8 @@ async function generateAbrechnungen(periode, onProgress){
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=*`),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${leistungsStart}&select=*`),
-    sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
-    sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,scouter_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,scouter_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
     sbG('pay_sonderprovisionen','aktiv=eq.true'),
     sbG('pay_team_bonus','aktiv=eq.true'),
     sbG('pay_sperrlisten','select=*'),
@@ -237,13 +243,23 @@ async function generateAbrechnungen(periode, onProgress){
   const vpById = {}; mitarbeiter.forEach(v => { vpById[v.id] = v; });
   const byVP = {};
   auftraegeClean.forEach(a => { if(!a.vertriebler_id) return; if(!byVP[a.vertriebler_id]) byVP[a.vertriebler_id] = []; byVP[a.vertriebler_id].push(a); });
+  // Scout grouping: by scouter_id
+  const byScout = {};
+  auftraegeClean.forEach(a => { if(!a.scouter_id) return; if(!byScout[a.scouter_id]) byScout[a.scouter_id] = []; byScout[a.scouter_id].push(a); });
+  const stornoByScout = {};
+  stornoAuftr.forEach(a => { if(!a.scouter_id) return; if(!stornoByScout[a.scouter_id]) stornoByScout[a.scouter_id] = []; stornoByScout[a.scouter_id].push(a); });
+  const offenByScout = {};
+  offenAll.forEach(a => { if(!a.scouter_id) return; if(!offenByScout[a.scouter_id]) offenByScout[a.scouter_id] = []; offenByScout[a.scouter_id].push(a); });
   const stornoByVP = {};
   stornoAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!stornoByVP[a.vertriebler_id]) stornoByVP[a.vertriebler_id] = []; stornoByVP[a.vertriebler_id].push(a); });
   const offenByVP = {};
   offenAll.forEach(a => { if(!a.vertriebler_id) return; if(!offenByVP[a.vertriebler_id]) offenByVP[a.vertriebler_id] = []; offenByVP[a.vertriebler_id].push(a); });
-  const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=vertriebler_id,auftrags_datum');
+  const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&select=vertriebler_id,scouter_id,auftrags_datum,auftrag_nr');
   const salesPerVPMonth = {};
   allRelevant.forEach(a => { if(!a.vertriebler_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.vertriebler_id+'_'+om; salesPerVPMonth[key]=(salesPerVPMonth[key]||0)+1; });
+  // Scout sales per month
+  const salesPerScoutMonth = {};
+  allRelevant.forEach(a => { if(!a.scouter_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.scouter_id+'_'+om; salesPerScoutMonth[key]=(salesPerScoutMonth[key]||0)+1; });
   // Total sales per VP (alle Monate) for Team-Bonus
   const totalSalesByVP = {};
   auftraegeClean.forEach(a => { if(!a.vertriebler_id) return; totalSalesByVP[a.vertriebler_id]=(totalSalesByVP[a.vertriebler_id]||0)+1; });
@@ -366,6 +382,62 @@ async function generateAbrechnungen(periode, onProgress){
     const abr=await sbP('pay_abrechnungen',{periode,mitarbeiter_name:vpName,kuerzel:vp.kuerzel||gK(vpName),beschaeftigungsart:isHGB?'hgb':'angestellt',status:'entwurf',anzahl_sales:orders.length,brutto_provisionen:Math.round(bruttoTotal*100)/100,systemgebuehr_netto:Math.round(sgNetto*100)/100,systemgebuehr_ust:Math.round(sgUst*100)/100,nettobetrag:Math.round(bruttoTotal*100)/100,ust_satz:ustSatz,ust_betrag:Math.round(ustBetrag*100)/100,auszahlungssumme:Math.round((bruttoTotal+ustBetrag)*100)/100});
     const abrId=Array.isArray(abr)?abr[0].id:abr.id;
     const posData=positionen.map(p=>{const {_teamDetail,_betragProSale,...rest}=p;return{...rest,abrechnung_id:abrId};});
+    for(let i=0;i<posData.length;i+=50){await sbP('pay_abrechnungen_positionen',posData.slice(i,i+50));}
+    count++;
+  }
+  // ═══ SCOUTER ABRECHNUNGEN ═══
+  log('Berechne Scouter...');
+  const allScoutIds = new Set([...Object.keys(byScout), ...Object.keys(stornoByScout), ...Object.keys(offenByScout)]);
+  for(const scId of allScoutIds){
+    const sc = vpById[scId]; if(!sc) continue;
+    if(!sc.typ.includes('scouter')) continue; // safety
+    const orders = byScout[scId] || [];
+    const scStornos = stornoByScout[scId] || [];
+    const scOffen = offenByScout[scId] || [];
+    if(!orders.length && !scStornos.length && !scOffen.length) continue;
+    const ruleTyp = typMap[sc.typ] || sc.typ;
+    const regel = regelMap[ruleTyp];
+    if(!regel){ log(`⚠️ Scout ${sc.vorname} ${sc.nachname}: keine Regel für ${ruleTyp}`); continue; }
+    const isHGB = (sc.typ||'').includes('hgb');
+    const scName = `${sc.vorname} ${sc.nachname}`;
+    log(`Berechne Scout ${scName}...`);
+    const ordersLZ = orders.filter(o => !o._nachzuegler);
+    const ordersNZ = orders.filter(o => o._nachzuegler);
+    const positionen = []; let bruttoTotal = 0;
+    const processScoutOrders = (monthOrders, om, isNZ) => {
+      const monthKey=scId+'_'+om; const monthTotal=salesPerScoutMonth[monthKey]||monthOrders.length;
+      const staffel=monthTotal>=regel.staffel_schwelle;
+      const baseBetrag = staffel ? regel.staffel_betrag_sale : regel.basis_betrag_sale;
+      const nzTag = isNZ ? ' ★NZ' : '';
+      const staffelTag = staffel ? ' (Staffel)' : '';
+      for(const o of monthOrders){
+        positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Scout – Solar ${o.kwp||0} kWp`,original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffelTag}${nzTag}`});
+        bruttoTotal+=baseBetrag;
+        const q=(o.lead_quelle||'').toLowerCase();
+        if(q.includes('eigenlead')&&regel.betrag_eigenlead>0){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_eigenlead;}
+        if(q.includes('empfehlung')&&regel.betrag_empfehlung>0){positionen.push({typ:'empfehlung',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Empfehlungs-Bonus',original_betrag:regel.betrag_empfehlung,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_empfehlung;}
+        if(o.speichererweiterung&&regel.betrag_speicher>0){const sxM=(o.notiz||'').match(/speicher_x(\d+)/);const sxAnz=sxM?parseInt(sxM[1]):1;const spBetrag=regel.betrag_speicher*sxAnz;positionen.push({typ:'speicher',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Speicher-Bonus${sxAnz>1?' ('+sxAnz+'×)':''}`,original_betrag:spBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=spBetrag;}
+      }
+    };
+    const scByMonthLZ = {};
+    ordersLZ.forEach(o => { const d=o.auftrags_datum||''; const om=d.substring(0,4)+'/'+d.substring(5,7); if(!scByMonthLZ[om])scByMonthLZ[om]=[]; scByMonthLZ[om].push(o); });
+    for(const [om, mo] of Object.entries(scByMonthLZ)) processScoutOrders(mo, om, false);
+    if(ordersNZ.length > 0){
+      const scByMonthNZ = {};
+      ordersNZ.forEach(o => { const d=o.auftrags_datum||''; const om=d.substring(0,4)+'/'+d.substring(5,7); if(!scByMonthNZ[om])scByMonthNZ[om]=[]; scByMonthNZ[om].push(o); });
+      for(const [om, mo] of Object.entries(scByMonthNZ)) processScoutOrders(mo, om, true);
+    }
+    // Storno-Info
+    scStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(s.auftrags_datum||'').substring(0,7)}); });
+    // Offen-Info
+    scOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
+    const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
+    const sgUst=sgNetto*(sgConfig.ust_satz/100);
+    const ustSatz=isHGB&&sc.mwst_pflichtig?19:0;
+    const ustBetrag=bruttoTotal*(ustSatz/100);
+    const abr=await sbP('pay_abrechnungen',{periode,mitarbeiter_name:scName,kuerzel:sc.kuerzel||gK(scName),beschaeftigungsart:isHGB?'hgb_scouter':'angestellt_scouter',status:'entwurf',anzahl_sales:orders.length,brutto_provisionen:Math.round(bruttoTotal*100)/100,systemgebuehr_netto:Math.round(sgNetto*100)/100,systemgebuehr_ust:Math.round(sgUst*100)/100,nettobetrag:Math.round(bruttoTotal*100)/100,ust_satz:ustSatz,ust_betrag:Math.round(ustBetrag*100)/100,auszahlungssumme:Math.round((bruttoTotal+ustBetrag)*100)/100});
+    const abrId=Array.isArray(abr)?abr[0].id:abr.id;
+    const posData=positionen.map(p=>({...p,abrechnung_id:abrId}));
     for(let i=0;i<posData.length;i+=50){await sbP('pay_abrechnungen_positionen',posData.slice(i,i+50));}
     count++;
   }
@@ -696,7 +768,7 @@ function BereinigungPanel({onClose}){
 }
 
 function GutschriftPreview({ab,pos,sg}){
-  const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');
+  const b=calc(pos,sg,(ab.beschaeftigungsart||'').includes('hgb'));
   const aP=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['provision','eigenlead','empfehlung','speicher','sondereinsatz'].includes(p.typ));
   const aE=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['einmalzahlung','abzug','sonstiges'].includes(p.typ));
   const aTB=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&p.typ==='team_bonus');
@@ -709,7 +781,7 @@ function GutschriftPreview({ab,pos,sg}){
   const isNZPos = p => (p.notiz||'').includes('★NZ');
   const aPLZ = aP.filter(p => !isNZPos(p));
   const aPNZ = aP.filter(p => isNZPos(p));
-  const k=ab.kuerzel||gK(ab.mitarbeiter_name),bn=gBN(ab.periode,k,1),hgb=ab.beschaeftigungsart==='hgb';
+  const k=ab.kuerzel||gK(ab.mitarbeiter_name),bn=gBN(ab.periode,k,1),hgb=(ab.beschaeftigungsart||'').includes('hgb');
   const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
   const isE=ab.status==='entwurf'||ab.status==='probeabrechnung';
   const isF=ab.status==='freigegeben'||ab.status==='ausgezahlt';
@@ -1124,7 +1196,7 @@ function GutschriftPreview({ab,pos,sg}){
 }
 
 function EditPanel({ab,pos,setPos,sg,onSave,onFrei,onPdf,onClose,setAb}){
-  const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');
+  const b=calc(pos,sg,(ab.beschaeftigungsart||'').includes('hgb'));
   const prov=pos.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz'].includes(p.typ));
   const extra=pos.filter(p=>['einmalzahlung','abzug','sonstiges','team_bonus'].includes(p.typ));
   const lo=ab.status==='freigegeben'||ab.status==='ausgezahlt';
@@ -1189,7 +1261,7 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
     const vp=vpArr[0]||null;if(vp)window.__vpData=vp;
     if(aId){const[a,p]=await Promise.all([sbG('pay_abrechnungen',`id=eq.${aId}`),sbG('pay_abrechnungen_positionen',`abrechnung_id=eq.${aId}&order=erstellt_am.asc`)]);if(a.length){setAb(a[0]);setPos(p);}}else{setAb({periode:per,mitarbeiter_name:vtN,kuerzel:vp?.kuerzel||gK(vtN),beschaeftigungsart:vp?.typ?.startsWith('hgb')?'hgb':'angestellt',status:'entwurf',notizen:'',stb_kommentar:''});setPos((vtD||[]).map(d=>({typ:'provision',auftrag_nr:'',kunde:d.kunde,produkt:d.produkt,original_betrag:d.netto,override_betrag:null,aktiv:true,zurueckgestellt:false,notiz:'',isNew:true})));}}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);};
 
-  const save=async()=>{try{const b=calc(pos,sg,ab.beschaeftigungsart==='hgb');const d={...ab,anzahl_sales:b.sales,brutto_provisionen:b.bp,systemgebuehr_netto:b.sgN,systemgebuehr_ust:b.sgU,einmalzahlungen_summe:b.es,nettobetrag:b.net,ust_satz:b.uS,ust_betrag:b.uB,auszahlungssumme:b.aus,belegnummer:gBN(ab.periode,ab.kuerzel||gK(ab.mitarbeiter_name),1),geaendert_am:new Date().toISOString()};
+  const save=async()=>{try{const b=calc(pos,sg,(ab.beschaeftigungsart||'').includes('hgb'));const d={...ab,anzahl_sales:b.sales,brutto_provisionen:b.bp,systemgebuehr_netto:b.sgN,systemgebuehr_ust:b.sgU,einmalzahlungen_summe:b.es,nettobetrag:b.net,ust_satz:b.uS,ust_betrag:b.uB,auszahlungssumme:b.aus,belegnummer:gBN(ab.periode,ab.kuerzel||gK(ab.mitarbeiter_name),1),geaendert_am:new Date().toISOString()};
   let s;if(ab.id){const{id,erstellt_am,...u}=d;s=(await sbU('pay_abrechnungen',`id=eq.${ab.id}`,u))[0];await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${ab.id}`);}else{const{id,...ins}=d;s=(await sbP('pay_abrechnungen',ins))[0];}
   const pd=pos.map(p=>({abrechnung_id:s.id,typ:p.typ,auftrag_nr:p.auftrag_nr,kunde:p.kunde,produkt:p.produkt,original_betrag:p.original_betrag,override_betrag:p.override_betrag,aktiv:p.aktiv,zurueckgestellt:p.zurueckgestellt,notiz:p.notiz}));
   if(pd.length){const sp=await sbP('pay_abrechnungen_positionen',pd);setPos(sp);}setAb(s);window.__t?.('✅ Gespeichert');onRef?.();}catch(e){window.__t?.('Fehler: '+e.message,'error');}};
@@ -1221,14 +1293,17 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
 }
 
 function App(){
-  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);const[berOpen,setBerOpen]=useState(false);
+  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);const[berOpen,setBerOpen]=useState(false);const[katFilter,setKatFilter]=useState('alle');
 
   useEffect(()=>{(async()=>{try{const d=await sbG('pay_auszahlungen_historie','select=periode&order=periode.desc');const u=[...new Set(d.map(x=>x.periode))];const now=new Date();const cp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;if(!u.includes(cp))u.unshift(cp);const sorted=u.sort().reverse();setPers(sorted);setPer(sorted[0]||cp);}catch(e){const now=new Date();const p=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;setPers([p]);setPer(p);}})();},[]);
 
   const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1')]);setAbrs(a);setAusz(z);setSg(s[0]||null);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
   useEffect(()=>{loadP();},[loadP]);
 
-  const vtG=useMemo(()=>{const g={};ausz.forEach(a=>{const n=a.vertriebler;if(!g[n])g[n]={name:n,items:[],total:0};g[n].items.push(a);g[n].total+=parseFloat(a.netto)||0;});abrs.forEach(ab=>{if(!g[ab.mitarbeiter_name])g[ab.mitarbeiter_name]={name:ab.mitarbeiter_name,items:[],total:ab.brutto_provisionen||0};g[ab.mitarbeiter_name].abrechnung=ab;});return Object.values(g).sort((a,b)=>b.total-a.total);},[ausz,abrs]);
+  const vtG=useMemo(()=>{const g={};ausz.forEach(a=>{const n=a.vertriebler;if(!g[n])g[n]={name:n,items:[],total:0};g[n].items.push(a);g[n].total+=parseFloat(a.netto)||0;});abrs.forEach(ab=>{if(!g[ab.mitarbeiter_name])g[ab.mitarbeiter_name]={name:ab.mitarbeiter_name,items:[],total:ab.brutto_provisionen||0};g[ab.mitarbeiter_name].abrechnung=ab;g[ab.mitarbeiter_name].kategorie=(ab.beschaeftigungsart||'').includes('scouter')?'scouter':'vertriebler';});return Object.values(g).sort((a,b)=>b.total-a.total);},[ausz,abrs]);
+  const vtGFiltered=useMemo(()=>katFilter==='alle'?vtG:vtG.filter(g=>g.kategorie===katFilter),[vtG,katFilter]);
+  const vtCount=vtG.filter(g=>g.kategorie==='vertriebler').length;
+  const scCount=vtG.filter(g=>g.kategorie==='scouter').length;
   const totA=abrs.reduce((s,a)=>s+(parseFloat(a.auszahlungssumme)||0),0);const frg=abrs.filter(a=>a.status==='freigegeben'||a.status==='ausgezahlt').length;
 
   const alleErstellen=async()=>{const tc=vtG.filter(g=>!g.abrechnung);if(!confirm(`Probeabrechnungen für ${tc.length} VTs erstellen?`))return;window.__t?.('Erstelle...');let c=0;
@@ -1247,14 +1322,20 @@ function App(){
     {genMsg&&<div style={{padding:'8px 24px',background:'#161b22',borderBottom:'1px solid #21262d',fontSize:13,color:'#F5C500'}}>⏳ {genMsg}</div>}
     <div className="stats-row">
       <div className="stat-card"><div className="stat-label">Periode</div><div className="stat-value">{per?pLabel(per):'—'}</div></div>
-      <div className="stat-card"><div className="stat-label">Vertriebler</div><div className="stat-value gold">{vtG.length}</div></div>
-      <div className="stat-card"><div className="stat-label">Abrechnungen</div><div className="stat-value">{abrs.length} <span style={{fontSize:12,color:'#8b949e'}}>/ {vtG.length}</span></div></div>
+      <div className="stat-card"><div className="stat-label">Vertriebler</div><div className="stat-value gold">{vtCount}</div></div>
+      <div className="stat-card"><div className="stat-label">Scouter</div><div className="stat-value" style={{color:'#a78bfa'}}>{scCount}</div></div>
+      <div className="stat-card"><div className="stat-label">Abrechnungen</div><div className="stat-value">{abrs.length}</div></div>
       <div className="stat-card"><div className="stat-label">Freigegeben</div><div className="stat-value green">{frg}</div></div>
       <div className="stat-card"><div className="stat-label">Gesamtsumme</div><div className="stat-value gold">{fmtE(totA)}</div></div>
     </div>
-    {ld?<div className="loading"><div className="spinner"/>Lade...</div>:vtG.length===0?<div className="empty-state"><div className="icon">📭</div><h3>Keine Daten für {per?pLabel(per):'—'}</h3><p>Für diese Periode liegen noch keine Daten vor.</p></div>:
-    <div className="main-grid">{vtG.map(g=>{const ab=g.abrechnung;const k=ab?.kuerzel||gK(g.name);const st=ab?.status||'neu';const isHGB=ab?.beschaeftigungsart==='hgb';const typClass=isHGB?'hgb':'angestellt';return<div key={g.name} className={`vt-card ${typClass}`} onClick={()=>setSel({name:g.name,abrechnungId:ab?.id,data:g.items})}>
-      <div className="vt-card-header"><span className="vt-name">{g.name}</span><div style={{display:'flex',gap:6,alignItems:'center'}}><span style={{fontSize:9,padding:'2px 6px',borderRadius:3,background:isHGB?'#F5C50020':'#58a6ff20',color:isHGB?'#F5C500':'#58a6ff',fontWeight:600}}>{isHGB?'HGB §84':'Angestellt'}</span><span className="vt-kuerzel">{k}</span></div></div>
+    <div className="kat-bar">
+      <button className={`kat-btn${katFilter==='alle'?' active':''}`} onClick={()=>setKatFilter('alle')}>Alle ({vtG.length})</button>
+      <button className={`kat-btn${katFilter==='vertriebler'?' active':''}`} onClick={()=>setKatFilter('vertriebler')}>🟡 Vertriebler ({vtCount})</button>
+      <button className={`kat-btn${katFilter==='scouter'?' active-sc':''}`} onClick={()=>setKatFilter('scouter')}>🔵 Scouter ({scCount})</button>
+    </div>
+    {ld?<div className="loading"><div className="spinner"/>Lade...</div>:vtGFiltered.length===0?<div className="empty-state"><div className="icon">📭</div><h3>Keine Daten für {per?pLabel(per):'—'}{katFilter!=='alle'?` (${katFilter})`:''}  </h3><p>Für diese Periode liegen noch keine Daten vor.</p></div>:
+    <div className="main-grid">{vtGFiltered.map(g=>{const ab=g.abrechnung;const k=ab?.kuerzel||gK(g.name);const st=ab?.status||'neu';const isScouter=g.kategorie==='scouter';const isHGB=ab?.beschaeftigungsart?.includes('hgb');const typClass=isScouter?'scouter':(isHGB?'hgb':'angestellt');return<div key={g.name} className={`vt-card ${typClass}`} onClick={()=>setSel({name:g.name,abrechnungId:ab?.id,data:g.items})}>
+      <div className="vt-card-header"><span className="vt-name">{g.name}</span><div style={{display:'flex',gap:6,alignItems:'center'}}><span style={{fontSize:9,padding:'2px 6px',borderRadius:3,background:isScouter?'#a78bfa20':(isHGB?'#F5C50020':'#58a6ff20'),color:isScouter?'#a78bfa':(isHGB?'#F5C500':'#58a6ff'),fontWeight:600}}>{isScouter?'Scout':(isHGB?'HGB §84':'Angestellt')}</span><span className="vt-kuerzel">{k}</span></div></div>
       <div className="vt-sales">{ab?.anzahl_sales||0} Sales · {(ab?.brutto_provisionen||0).toLocaleString('de-DE')}&nbsp;€ Brutto</div>
       <div className="vt-betrag">{fmtE(ab?ab.auszahlungssumme:g.total)}</div>
       <div className="vt-card-footer"><span className={`badge ${st==='neu'?'badge-entwurf':st==='entwurf'?'badge-entwurf':st==='probeabrechnung'?'badge-probe':st==='freigegeben'?'badge-freigegeben':'badge-ausgezahlt'}`}>{st==='neu'?'⬜ Neu':st==='entwurf'?'📝 Entwurf':st==='probeabrechnung'?'🔍 Probe':st==='freigegeben'?'✅ Freigegeben':'💸 Ausgezahlt'}</span><span style={{fontSize:11,color:'#484f58'}}>{ab?`${ab.anzahl_sales||0} Sales`:''}</span></div>
