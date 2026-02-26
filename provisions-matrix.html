@@ -824,6 +824,284 @@ function TabOverview({ regeln, sonder, setSonder, stufen, teamBonus, sperr, dupl
   </div>;
 }
 
+// ═══ Tab: Staffel-History (Vormonat-Daten + Freigabe) ═══
+function TabStaffelHistory({ mitarbeiterList, toast }) {
+  const now = new Date();
+  const [selMonat, setSelMonat] = useState(now.getMonth() + 1);
+  const [selJahr, setSelJahr] = useState(now.getFullYear());
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(null);
+
+  // Load entries for selected month
+  const loadEntries = async () => {
+    setLoading(true);
+    try {
+      const data = await db.get("pay_staffel_history", `?monat=eq.${selMonat}&jahr=eq.${selJahr}&order=created_at.asc`);
+      setEntries(data || []);
+    } catch(e) { toast("Fehler: " + e.message, "err"); }
+    setLoading(false);
+  };
+  useEffect(() => { loadEntries(); }, [selMonat, selJahr]);
+
+  // Build MA lookup
+  const maById = {};
+  (mitarbeiterList||[]).forEach(ma => { maById[ma.id] = ma; });
+
+  // Get VTs that don't have an entry yet
+  const existingIds = new Set(entries.map(e => e.mitarbeiter_id));
+  const vtList = (mitarbeiterList||[]).filter(ma => !ma.typ?.includes('scouter'));
+
+  // Add new entry for a VT
+  const addEntry = async (ma) => {
+    const name = `${ma.vorname} ${ma.nachname}`;
+    try {
+      const payload = {
+        mitarbeiter_id: ma.id,
+        monat: selMonat,
+        jahr: selJahr,
+        bezahlte_auftraege: 0,
+        staffel_erreicht: false,
+        staffel_betrag: 0,
+        stufenbonus_betrag: 0,
+        korrektur_typ: null,
+        korrektur_betrag: 0,
+        korrektur_grund: null,
+        freigegeben: false
+      };
+      const res = await db.post("pay_staffel_history", payload);
+      setEntries(prev => [...prev, ...(Array.isArray(res) ? res : [res])]);
+      toast(`✅ ${name} hinzugefügt`);
+    } catch(e) { toast("Fehler: " + e.message, "err"); }
+  };
+
+  // Update field
+  const updateField = async (entry, field, value) => {
+    setSaving(entry.id + field);
+    try {
+      const patch = { [field]: value, updated_at: new Date().toISOString() };
+      await db.patch("pay_staffel_history", `id=eq.${entry.id}`, patch);
+      setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, ...patch } : e));
+    } catch(e) { toast("Fehler: " + e.message, "err"); }
+    setSaving(null);
+  };
+
+  // Toggle freigabe
+  const toggleFreigabe = async (entry) => {
+    const newVal = !entry.freigegeben;
+    setSaving(entry.id + "freigabe");
+    try {
+      const patch = {
+        freigegeben: newVal,
+        freigegeben_am: newVal ? new Date().toISOString() : null,
+        freigegeben_von: newVal ? "Matrix-UI" : null,
+        updated_at: new Date().toISOString()
+      };
+      await db.patch("pay_staffel_history", `id=eq.${entry.id}`, patch);
+      setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, ...patch } : e));
+      toast(newVal ? "✅ Freigegeben" : "⏸️ Freigabe zurückgenommen");
+    } catch(e) { toast("Fehler: " + e.message, "err"); }
+    setSaving(null);
+  };
+
+  // Delete entry
+  const removeEntry = async (entry) => {
+    try {
+      await db.del("pay_staffel_history", `id=eq.${entry.id}`);
+      setEntries(prev => prev.filter(e => e.id !== entry.id));
+      toast("🗑️ Gelöscht");
+    } catch(e) { toast("Fehler: " + e.message, "err"); }
+  };
+
+  // Add all VTs at once
+  const addAllVTs = async () => {
+    const missing = vtList.filter(ma => !existingIds.has(ma.id));
+    if(missing.length === 0) return toast("Alle VTs bereits vorhanden");
+    for(const ma of missing) await addEntry(ma);
+    toast(`✅ ${missing.length} VTs hinzugefügt`);
+  };
+
+  const monatLabel = (m, j) => {
+    const months = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+    return `${months[m-1]} ${j}`;
+  };
+
+  const freigegebene = entries.filter(e => e.freigegeben && e.korrektur_betrag > 0);
+  const offene = entries.filter(e => !e.freigegeben && e.korrektur_betrag > 0);
+
+  return <div>
+    {/* Monat-Auswahl */}
+    <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:16, flexWrap:"wrap" }}>
+      <div>
+        <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Abrechnungsmonat</div>
+        <div style={{ display:"flex", gap:6 }}>
+          <select value={selMonat} onChange={e => setSelMonat(+e.target.value)} style={{ width:100 }}>
+            {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"][m-1]}</option>)}
+          </select>
+          <select value={selJahr} onChange={e => setSelJahr(+e.target.value)} style={{ width:80 }}>
+            {[2025,2026,2027].map(j => <option key={j} value={j}>{j}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:8, alignItems:"flex-end" }}>
+        <Btn label="Alle VTs hinzufügen" icon="➕" onClick={addAllVTs} />
+        <Btn label="Aktualisieren" icon="🔄" onClick={loadEntries} />
+      </div>
+      {loading && <div style={{ fontSize:12, color:"var(--y)" }}>Laden…</div>}
+      <div style={{ flex:1 }} />
+      {freigegebene.length > 0 && <span style={{ fontSize:11, padding:"4px 12px", borderRadius:6, background:"#238636", color:"#fff", fontWeight:600 }}>✅ {freigegebene.length} freigegeben</span>}
+      {offene.length > 0 && <span style={{ fontSize:11, padding:"4px 12px", borderRadius:6, background:"#da3633", color:"#fff", fontWeight:600 }}>⏳ {offene.length} offen</span>}
+    </div>
+
+    {/* Info-Box */}
+    <div style={{ background:"var(--s2)", border:"1px solid var(--y)33", borderRadius:10, padding:14, marginBottom:16 }}>
+      <div style={{ fontSize:12, fontWeight:700, color:"var(--y)", marginBottom:6 }}>ℹ️ So funktioniert die Staffel-History</div>
+      <div style={{ fontSize:11, color:"var(--ts)", lineHeight:1.7 }}>
+        <b style={{ color:"var(--tx)" }}>1.</b> Für jeden VT die Daten aus dem <b style={{ color:"var(--tx)" }}>Vormonat</b> eintragen: Wie viele Aufträge wurden bezahlt? War die Staffel aktiv? Welcher Stufenbonus?<br/>
+        <b style={{ color:"var(--tx)" }}>2.</b> Wenn durch NZ oder Storno eine Staffel-Änderung eintritt → <b style={{ color:"var(--tx)" }}>Korrektur-Betrag</b> eingeben<br/>
+        <b style={{ color:"var(--tx)" }}>3.</b> Korrektur <b style={{ color:"#238636" }}>freigeben</b> – nur freigegebene Korrekturen fließen in die Abrechnung<br/>
+        <b style={{ color:"var(--tx)" }}>Wichtig:</b> Ohne Freigabe wird <b style={{ color:"var(--r)" }}>keine automatische Staffel-Korrektur</b> berechnet!
+      </div>
+    </div>
+
+    {/* Entries grid */}
+    {entries.length === 0 ? (
+      <div style={{ textAlign:"center", padding:40, color:"var(--ts)" }}>
+        <div style={{ fontSize:36, marginBottom:8 }}>📊</div>
+        <div style={{ fontSize:14, fontWeight:600 }}>Keine Einträge für {monatLabel(selMonat, selJahr)}</div>
+        <div style={{ fontSize:12, marginTop:4 }}>Klicke "Alle VTs hinzufügen" um Vormonat-Daten einzupflegen</div>
+      </div>
+    ) : (
+      <div style={{ display:"grid", gap:10 }}>
+        {entries.map(entry => {
+          const ma = maById[entry.mitarbeiter_id];
+          const name = ma ? `${ma.vorname} ${ma.nachname}` : entry.mitarbeiter_id?.substring(0,8);
+          const isHGB = ma?.typ?.includes('hgb');
+          const hasKorrektur = entry.korrektur_betrag && +entry.korrektur_betrag !== 0;
+          const isNZ = entry.korrektur_typ === 'nachzahlung';
+          const isRF = entry.korrektur_typ === 'rueckforderung';
+
+          return <div key={entry.id} style={{
+            background: "var(--s2)",
+            border: `1px solid ${entry.freigegeben ? "#23863666" : hasKorrektur ? "#da363366" : "var(--bd)"}`,
+            borderRadius: 10,
+            padding: 14,
+            borderLeft: `3px solid ${entry.freigegeben ? "#238636" : hasKorrektur ? "#da3633" : "var(--bd)"}`
+          }}>
+            {/* Header */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontWeight:700, fontSize:14, color:"var(--tx)" }}>{name}</span>
+                <span className="badge" style={{ background: isHGB ? "var(--y)22" : "var(--b)22", color: isHGB ? "var(--y)" : "var(--b)", fontSize:9 }}>{isHGB ? "HGB §84" : "Angestellt"}</span>
+                {entry.freigegeben && <span className="badge b-g" style={{ fontSize:9 }}>✅ FREIGEGEBEN</span>}
+              </div>
+              <Btn label="🗑️" color="var(--r)" onClick={() => removeEntry(entry)} small />
+            </div>
+
+            {/* Vormonat-Daten */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10, marginBottom: hasKorrektur || true ? 12 : 0 }}>
+              <div>
+                <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Bezahlte Aufträge (Vormonat)</div>
+                <input type="number" value={entry.bezahlte_auftraege||0}
+                  onChange={e => { const v=+e.target.value; setEntries(prev=>prev.map(x=>x.id===entry.id?{...x,bezahlte_auftraege:v}:x)); }}
+                  onBlur={e => updateField(entry, "bezahlte_auftraege", +e.target.value)}
+                  style={{ width:"100%", background:"var(--bg)", border:"1px solid var(--bd)", borderRadius:6, padding:"6px 10px", color:"var(--tx)", fontSize:16, fontWeight:700 }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Staffel erreicht?</div>
+                <div onClick={() => updateField(entry, "staffel_erreicht", !entry.staffel_erreicht)}
+                  style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", background:"var(--bg)", border:"1px solid var(--bd)", borderRadius:6, cursor:"pointer" }}>
+                  <div style={{ width:36, height:20, borderRadius:10, background: entry.staffel_erreicht ? "#238636" : "#484f58", position:"relative", transition:"background .2s" }}>
+                    <div style={{ width:16, height:16, borderRadius:8, background:"#fff", position:"absolute", top:2, left: entry.staffel_erreicht ? 18 : 2, transition:"left .2s" }} />
+                  </div>
+                  <span style={{ fontSize:13, fontWeight:600, color: entry.staffel_erreicht ? "#238636" : "var(--ts)" }}>{entry.staffel_erreicht ? "Ja (≥8)" : "Nein"}</span>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Staffel-Betrag (€/Sale)</div>
+                <input type="number" value={entry.staffel_betrag||0}
+                  onChange={e => { const v=+e.target.value; setEntries(prev=>prev.map(x=>x.id===entry.id?{...x,staffel_betrag:v}:x)); }}
+                  onBlur={e => updateField(entry, "staffel_betrag", +e.target.value)}
+                  style={{ width:"100%", background:"var(--bg)", border:"1px solid var(--bd)", borderRadius:6, padding:"6px 10px", color:"var(--tx)", fontSize:14, fontWeight:600 }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Stufenbonus (€)</div>
+                <input type="number" value={entry.stufenbonus_betrag||0}
+                  onChange={e => { const v=+e.target.value; setEntries(prev=>prev.map(x=>x.id===entry.id?{...x,stufenbonus_betrag:v}:x)); }}
+                  onBlur={e => updateField(entry, "stufenbonus_betrag", +e.target.value)}
+                  style={{ width:"100%", background:"var(--bg)", border:"1px solid var(--bd)", borderRadius:6, padding:"6px 10px", color:"var(--tx)", fontSize:14, fontWeight:600 }}
+                />
+              </div>
+            </div>
+
+            {/* Korrektur-Bereich */}
+            <div style={{ background: hasKorrektur ? (isNZ ? "#23863612" : "#da363312") : "var(--bg)", border:`1px solid ${hasKorrektur ? (isNZ ? "#23863644" : "#da363344") : "var(--bd)"}`, borderRadius:8, padding:12 }}>
+              <div style={{ fontSize:11, fontWeight:700, color: hasKorrektur ? (isNZ ? "#238636" : "#da3633") : "var(--ts)", marginBottom:8 }}>
+                {hasKorrektur ? (isNZ ? "📈 Staffel-Nachzahlung" : "📉 Staffel-Rückforderung") : "📊 Staffel-Korrektur (falls nötig)"}
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10, alignItems:"end" }}>
+                <div>
+                  <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Korrektur-Typ</div>
+                  <select value={entry.korrektur_typ||""} onChange={e => updateField(entry, "korrektur_typ", e.target.value || null)}
+                    style={{ width:"100%", background:"var(--bg)", border:"1px solid var(--bd)", borderRadius:6, padding:"6px 10px", color:"var(--tx)", fontSize:12 }}>
+                    <option value="">– Keine –</option>
+                    <option value="nachzahlung">📈 Nachzahlung</option>
+                    <option value="rueckforderung">📉 Rückforderung</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Korrektur-Betrag (€)</div>
+                  <input type="number" value={entry.korrektur_betrag||0} step="0.01"
+                    onChange={e => { const v=+e.target.value; setEntries(prev=>prev.map(x=>x.id===entry.id?{...x,korrektur_betrag:v}:x)); }}
+                    onBlur={e => updateField(entry, "korrektur_betrag", +e.target.value)}
+                    style={{ width:"100%", background:"var(--bg)", border:"1px solid var(--bd)", borderRadius:6, padding:"6px 10px", color: hasKorrektur ? (isNZ ? "#238636" : "#da3633") : "var(--tx)", fontSize:16, fontWeight:700 }}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Grund / Details</div>
+                  <input type="text" value={entry.korrektur_grund||""} placeholder="z.B. NZ→14 Sales, Staffel erreicht"
+                    onChange={e => { const v=e.target.value; setEntries(prev=>prev.map(x=>x.id===entry.id?{...x,korrektur_grund:v}:x)); }}
+                    onBlur={e => updateField(entry, "korrektur_grund", e.target.value||null)}
+                    style={{ width:"100%", background:"var(--bg)", border:"1px solid var(--bd)", borderRadius:6, padding:"6px 10px", color:"var(--tx)", fontSize:12 }}
+                  />
+                </div>
+                {/* Freigabe Toggle */}
+                {hasKorrektur && <div>
+                  <div style={{ fontSize:10, color:"var(--ts)", marginBottom:3, textTransform:"uppercase", fontWeight:600 }}>Freigabe</div>
+                  <div onClick={() => toggleFreigabe(entry)}
+                    style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", background: entry.freigegeben ? "#23863618" : "var(--bg)", border:`1px solid ${entry.freigegeben ? "#23863644" : "var(--bd)"}`, borderRadius:6, cursor:"pointer" }}>
+                    <div style={{ width:36, height:20, borderRadius:10, background: entry.freigegeben ? "#238636" : "#484f58", position:"relative", transition:"background .2s" }}>
+                      <div style={{ width:16, height:16, borderRadius:8, background:"#fff", position:"absolute", top:2, left: entry.freigegeben ? 18 : 2, transition:"left .2s" }} />
+                    </div>
+                    <span style={{ fontSize:12, fontWeight:700, color: entry.freigegeben ? "#238636" : "var(--ts)" }}>{entry.freigegeben ? "✅ Freigegeben" : "⏳ Ausstehend"}</span>
+                  </div>
+                </div>}
+              </div>
+            </div>
+          </div>;
+        })}
+      </div>
+    )}
+
+    {/* Nicht erfasste VTs */}
+    {vtList.filter(ma => !existingIds.has(ma.id)).length > 0 && (
+      <div style={{ marginTop:16, background:"var(--s2)", border:"1px solid var(--bd)", borderRadius:10, padding:14 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:"var(--ts)", marginBottom:8 }}>Noch nicht erfasste VTs ({vtList.filter(ma => !existingIds.has(ma.id)).length})</div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+          {vtList.filter(ma => !existingIds.has(ma.id)).map(ma => (
+            <button key={ma.id} onClick={() => addEntry(ma)}
+              style={{ background:"var(--bg)", border:"1px solid var(--bd)", borderRadius:6, padding:"5px 12px", fontSize:11, color:"var(--tx)", cursor:"pointer", fontWeight:600 }}>
+              + {ma.vorname} {ma.nachname}
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>;
+}
+
 // ═══ Tab: CSV-Import (Aufträge) ═══
 function TabImport({ toast, mitarbeiterList }) {
   const [file, setFile] = useState(null);
@@ -1084,6 +1362,7 @@ function App() {
     { key: "sperr", label: "🔒 Sperrlisten", color: "var(--r)" },
     { key: "duplikate", label: "⚠️ Duplikate", color: "var(--o)" },
     { key: "historie", label: "📜 Historie", color: "var(--p)" },
+    { key: "staffel", label: "📈 Staffel-History", color: "var(--g)" },
     { key: "import", label: "📥 CSV-Import", color: "var(--t)" },
   ];
 
@@ -1096,6 +1375,7 @@ function App() {
     sperr: `${sperrData.length} Sperrlisten-Einträge – Grundbuch, MA-Abbruch, CRM-Storno`,
     duplikate: `${duplikateData.length} Duplikat-Verdachtsfälle – gleicher Kunde + kWp + PLZ`,
     historie: `${historieData.length} Provisions-Perioden – Stichtagsprinzip: DatumErstellt bestimmt den Satz`,
+    staffel: `Vormonat-Daten pro VT eintragen und Staffel-Korrekturen manuell freigeben`,
     import: `Leveto CSV-Import – DatumAngenommen als Auftragsdatum, Ausgezahlt am = bereits abgerechnet`,
   };
 
@@ -1157,6 +1437,7 @@ function App() {
         {tab === "sperr" && <TabSperr sperr={sperrData} setSperr={setSperrData} toast={toast} />}
         {tab === "duplikate" && <TabDuplikate duplikate={duplikateData} setDuplikate={setDuplikateData} toast={toast} />}
         {tab === "historie" && <TabHistorie historie={historieData} setHistorie={setHistorieData} toast={toast} />}
+        {tab === "staffel" && <TabStaffelHistory mitarbeiterList={mitarbeiterList} toast={toast} />}
         {tab === "import" && <TabImport toast={toast} mitarbeiterList={mitarbeiterList} />}
       </div>
     </div>
