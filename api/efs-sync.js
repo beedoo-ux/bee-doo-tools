@@ -340,10 +340,10 @@ export default async function handler(req, res) {
     // ── Phase 3: CSV generieren ──
     addLog('Phase 3: CSV generieren...');
 
-    // Lade vollständige Daten aus Supabase
+    // Lade vollständige Daten aus Supabase (alle Zeilen)
     const allDataResp = await fetch(
       `${SUPABASE_URL}/rest/v1/efs_projekte?select=*&order=status_updated_at.desc&limit=5000`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, Range: '0-4999' } }
     );
     const allData = await allDataResp.json();
 
