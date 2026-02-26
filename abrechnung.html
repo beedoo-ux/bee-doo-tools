@@ -168,7 +168,7 @@ async function generateAbrechnungen(periode, onProgress){
   const leistungsStart = `${lzY}-${lzM}-01`;
   const leistungsEnd = periodeStart;
   log(`Leistungszeitraum: ${lzM}/${lzY}, Nachzügler vor ${lzM}/${lzY}`);
-  const [regeln, stufen, mitarbeiter, sgArr, auftrLZ, auftrNZ, stornoLZ, offenAll, sonderProv, teamBonus, sperrlisten, stornoAbzuege, staffelHistoryFreigegeben, efsZeroProjekte
+  const [regeln, stufen, mitarbeiter, sgArr, auftrLZ, auftrNZ, stornoLZ, offenAll, sonderProv, teamBonus, sperrlisten, stornoAbzuege, staffelHistoryFreigegeben, efsZeroProjekte, efsBlockedProjekte
   ] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
@@ -184,6 +184,7 @@ async function generateAbrechnungen(periode, onProgress){
     sbG('pay_auftraege',`storniert=eq.true&abgerechnet_monat=not.is.null&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,abgerechnet_monat,abgerechnet_jahr,storno_provision_zurueck`),
     sbG('pay_staffel_history',`monat=eq.${parseInt(m)}&jahr=eq.${parseInt(y)}&freigegeben=eq.true`),
     sbG('efs_projekte','preismodell=eq.Zero&select=efs_id'),
+    sbG('efs_projekte','simplified_status=in.(LAND_REGISTRY_CHECK,REVOKED,MISSING_PROPERTY_OWNERS)&select=efs_id,simplified_status,kunde_name'),
   ]);
   // Sperrlisten: gesperrte AN-Nummern → nicht provisionieren
   const gesperrteANs = new Set();
@@ -226,9 +227,17 @@ async function generateAbrechnungen(periode, onProgress){
   const auftraege = [...auftrLZ, ...auftrNZ];
   // Filter gesperrte Aufträge raus
   const auftraegeClean = auftraege.filter(a => !gesperrteANs.has(String(a.auftrag_nr||'')) && a.produkt_typ !== 'lead_count' && a.produkt_typ !== 'termin_count' && a.produkt_typ !== 'zero_count');
+  // EFS-Status: LAND_REGISTRY_CHECK/MISSING_PROPERTY_OWNERS → offen (Grundbuchprüfung), REVOKED → Storno
+  const efsBlockedIds = {}; // efs_id → {status, kunde_name}
+  (efsBlockedProjekte||[]).forEach(e => { efsBlockedIds[e.efs_id] = { status: e.simplified_status, kunde: e.kunde_name }; });
+  const grundbuchOrders = auftraegeClean.filter(a => a.efs_projekt_id && efsBlockedIds[a.efs_projekt_id] && ['LAND_REGISTRY_CHECK','MISSING_PROPERTY_OWNERS'].includes(efsBlockedIds[a.efs_projekt_id].status));
+  const efsRevokedOrders = auftraegeClean.filter(a => a.efs_projekt_id && efsBlockedIds[a.efs_projekt_id] && efsBlockedIds[a.efs_projekt_id].status === 'REVOKED');
+  const afterEFS = auftraegeClean.filter(a => !grundbuchOrders.includes(a) && !efsRevokedOrders.includes(a));
+  if(grundbuchOrders.length) log(`📋 ${grundbuchOrders.length} Aufträge in Grundbuchprüfung (LAND_REGISTRY_CHECK) – stehen als offen`);
+  if(efsRevokedOrders.length) log(`🚫 ${efsRevokedOrders.length} Aufträge REVOKED in EFS – werden als Storno behandelt`);
   // On Hold: Aufträge mit "on_hold" in notiz → nicht auszahlen, separat ausweisen
-  const onHoldOrders = auftraegeClean.filter(a => (a.notiz||'').includes('on_hold'));
-  const auftraegePayable = auftraegeClean.filter(a => !(a.notiz||'').includes('on_hold'));
+  const onHoldOrders = afterEFS.filter(a => (a.notiz||'').includes('on_hold'));
+  const auftraegePayable = afterEFS.filter(a => !(a.notiz||'').includes('on_hold'));
   if(onHoldOrders.length) log(`⏸️ ${onHoldOrders.length} Aufträge on hold (Montage > On hold) – werden nicht ausgezahlt`);
   const onHoldByVP = {}; const onHoldBySC = {};
   onHoldOrders.forEach(a => { if(a.vertriebler_id){if(!onHoldByVP[a.vertriebler_id])onHoldByVP[a.vertriebler_id]=[];onHoldByVP[a.vertriebler_id].push(a);} if(a.scouter_id){if(!onHoldBySC[a.scouter_id])onHoldBySC[a.scouter_id]=[];onHoldBySC[a.scouter_id].push(a);} });
@@ -316,6 +325,12 @@ async function generateAbrechnungen(periode, onProgress){
   stornoAuftr.forEach(a => { if(!a.vertriebler_id) return; if(!stornoByVP[a.vertriebler_id]) stornoByVP[a.vertriebler_id] = []; stornoByVP[a.vertriebler_id].push(a); });
   const offenByVP = {};
   offenAll.forEach(a => { if(!a.vertriebler_id) return; if(!offenByVP[a.vertriebler_id]) offenByVP[a.vertriebler_id] = []; offenByVP[a.vertriebler_id].push(a); });
+  // Grundbuch-Aufträge → als offen anzeigen (mit Kennzeichnung)
+  grundbuchOrders.forEach(a => { a._grundbuch = true; if(a.vertriebler_id){if(!offenByVP[a.vertriebler_id])offenByVP[a.vertriebler_id]=[];offenByVP[a.vertriebler_id].push(a);} });
+  grundbuchOrders.forEach(a => { if(a.scouter_id){if(!offenByScout[a.scouter_id])offenByScout[a.scouter_id]=[];offenByScout[a.scouter_id].push(a);} });
+  // REVOKED EFS → als Storno behandeln
+  efsRevokedOrders.forEach(a => { a._efsRevoked = true; if(a.vertriebler_id){if(!stornoByVP[a.vertriebler_id])stornoByVP[a.vertriebler_id]=[];stornoByVP[a.vertriebler_id].push(a);} });
+  efsRevokedOrders.forEach(a => { if(a.scouter_id){if(!stornoByScout[a.scouter_id])stornoByScout[a.scouter_id]=[];stornoByScout[a.scouter_id].push(a);} });
   const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&select=vertriebler_id,scouter_id,auftrags_datum,auftrag_nr,notiz');
   // Paid active orders per VP per month → für rückwirkende Staffel-Korrektur
   const paidActiveOrders = await sbG('pay_auftraege','storniert=eq.false&abgerechnet_monat=not.is.null&produkt_typ=not.in.(lead_count,termin_count,zero_count)&select=vertriebler_id,auftrags_datum,auftrag_nr,kunde_name,kwp,notiz');
