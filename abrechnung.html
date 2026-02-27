@@ -692,12 +692,14 @@ async function generateAbrechnungen(periode, onProgress){
       bruttoTotal += sa.betrag;
     });
     if(vpShAbz.length) log(`  📋 ${vpName}: ${vpShAbz.length} PV-Blatt (${vpShAbz.reduce((s,a)=>s+a.betrag,0)}€)`);
-    // === SHEET-DATEN: VS Vorschüsse/Rechnungen (separat, NICHT in brutto) ===
+    // === SHEET-DATEN: VS Vorschüsse/Rechnungen (ABZUG von brutto) ===
     const vpVSh = sheetVSByVP[vpId] || [];
     vpVSh.forEach(vs => {
       const isDupe = positionen.some(p => p.notiz && vs.referenz && p.notiz.includes(vs.referenz));
       if(isDupe) return;
-      positionen.push({typ:'vorschuss_rechnung', auftrag_nr:null, kunde:vs.referenz, produkt:`${vs.kategorie==='VS'?'Vorschuss':vs.kategorie==='RE'?'Rechnung':'Beleg'} ${vs.referenz}`, original_betrag:-Math.abs(vs.betrag), aktiv:true, zurueckgestellt:false, notiz:`VS ${vs.referenz}`});
+      const vsBetrag = -Math.abs(vs.betrag);
+      positionen.push({typ:'vorschuss_rechnung', auftrag_nr:null, kunde:vs.referenz, produkt:`${vs.kategorie==='VS'?'Vorschuss':vs.kategorie==='RE'?'Rechnung':'Beleg'} ${vs.referenz}`, original_betrag:vsBetrag, aktiv:true, zurueckgestellt:false, notiz:`VS ${vs.referenz}`});
+      bruttoTotal += vsBetrag;
     });
     if(vpVSh.length) log(`  📋 ${vpName}: ${vpVSh.length} VS-Einträge`);
     // === SHEET-DATEN: Stnr Steuerberater ===
