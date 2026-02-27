@@ -74,6 +74,51 @@ const B=50;const ap=t=>`${SU}/rest/v1/${t}`;const hd=(x={})=>({apikey:SK,Authori
 // CSV Parser
 function parseCSV(t){const ls=[];let c='',q=false;for(let i=0;i<t.length;i++){const ch=t[i];if(ch==='"'){if(q&&t[i+1]==='"'){c+='"';i++}else q=!q}else if((ch==='\n'||ch==='\r')&&!q){if(c.length>0||ls.length>0){ls.push(c);c=''}if(ch==='\r'&&t[i+1]==='\n')i++}else c+=ch}if(c.length>0)ls.push(c);const sp=l=>{const cs=[];let cl='',q2=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch==='"'){if(q2&&l[i+1]==='"'){cl+='"';i++}else q2=!q2}else if(ch===','&&!q2){cs.push(cl.trim());cl=''}else cl+=ch}cs.push(cl.trim());return cs};if(!ls.length)return[];const h=sp(ls[0].replace(/^\uFEFF/,''));return ls.slice(1).filter(l=>l.trim()).map(l=>{const c2=sp(l);const o={};h.forEach((k,i)=>o[k]=c2[i]||'');return o})}
 
+// ═══ AUTO-SYNC COMPONENT ═══
+const CRON_LABELS={'0 */4 * * *':'Alle 4 Stunden','0 6 * * *':'Täglich 06:00','0 7 * * 1':'Montags 07:00','30 6 * * *':'Täglich 06:30','0 8 1 * *':'1. des Monats 08:00','— manuell —':'Kein Auto-Sync'};
+const CRON_OPTIONS=[{v:'0 6 * * *',l:'Täglich 06:00'},{v:'0 7 * * *',l:'Täglich 07:00'},{v:'0 8 * * *',l:'Täglich 08:00'},{v:'0 */4 * * *',l:'Alle 4 Stunden'},{v:'0 7 * * 1',l:'Montags 07:00'},{v:'30 6 * * *',l:'Täglich 06:30'},{v:'0 */2 * * *',l:'Alle 2 Stunden'},{v:'0 12 * * *',l:'Täglich 12:00'}];
+const SRK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
+function AutoSync({syncKey,log,extraConfig}){
+    const[cfg,setCfg]=useState(null);const[loading,setLoading]=useState(true);const[saving,setSaving]=useState(false);
+    const load=useCallback(async()=>{try{const r=await fetch(ap('sync_configs')+`?sync_key=eq.${syncKey}&select=*`,{headers:hd()});const d=await r.json();if(d.length)setCfg(d[0])}catch(e){}setLoading(false)},[syncKey]);
+    useEffect(()=>{load()},[load]);
+    const toggle=async()=>{if(!cfg)return;setSaving(true);
+        const newEnabled=!cfg.enabled;const upd={enabled:newEnabled,updated_at:new Date().toISOString()};
+        if(extraConfig)upd.config={...cfg.config,...extraConfig};
+        try{await fetch(ap('sync_configs')+`?sync_key=eq.${syncKey}`,{method:'PATCH',headers:{...hd(),Authorization:`Bearer ${SRK}`},body:JSON.stringify(upd)});
+            setCfg(p=>({...p,...upd}));log?.(`${newEnabled?'✅':'⏸️'} Auto-Sync ${newEnabled?'aktiviert':'deaktiviert'}: ${cfg.sync_name}`,newEnabled?'success':'warn');
+        }catch(e){log?.(`❌ Fehler: ${e.message}`,'error')}setSaving(false)};
+    const updateSchedule=async(newCron)=>{if(!cfg)return;setSaving(true);
+        try{await fetch(ap('sync_configs')+`?sync_key=eq.${syncKey}`,{method:'PATCH',headers:{...hd(),Authorization:`Bearer ${SRK}`},body:JSON.stringify({cron_schedule:newCron,updated_at:new Date().toISOString()})});
+            setCfg(p=>({...p,cron_schedule:newCron}));log?.(`🕐 Zeitplan geändert: ${CRON_LABELS[newCron]||newCron}`,'success');
+        }catch(e){log?.(`❌ ${e.message}`,'error')}setSaving(false)};
+    const fmtDate=d=>d?new Date(d).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+    if(loading)return <div style={{fontSize:11,color:'var(--td)',padding:8}}>Lade Sync-Config...</div>;
+    if(!cfg)return null;
+    const isManual=cfg.cron_schedule==='— manuell —';
+    return(<div style={{background:'var(--el)',borderRadius:10,padding:14,marginTop:14,border:`1px solid ${cfg.enabled?'rgba(34,197,94,.3)':'var(--b)'}`}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:cfg.enabled?10:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:cfg.enabled?'var(--g)':'var(--td)',boxShadow:cfg.enabled?'0 0 8px rgba(34,197,94,.5)':'none'}}/>
+                <div><div style={{fontSize:13,fontWeight:600,color:'var(--tb)'}}>⏱️ Auto-Sync: {cfg.sync_name}</div>
+                    <div style={{fontSize:11,color:'var(--td)',marginTop:2}}>{isManual?'Manueller Upload nötig — kein automatischer Sync möglich':`Zeitplan: ${CRON_LABELS[cfg.cron_schedule]||cfg.cron_schedule}`}</div></div>
+            </div>
+            {!isManual&&<button className={`btn bsm ${cfg.enabled?'br':'bo'}`} disabled={saving} onClick={toggle} style={{minWidth:100}}>
+                {saving?<span className="spinner"/>:cfg.enabled?'⏸️ Deaktivieren':'▶️ Aktivieren'}
+            </button>}
+        </div>
+        {cfg.enabled&&!isManual&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,fontSize:11}}>
+            <div style={{background:'var(--c)',borderRadius:6,padding:8}}><div style={{color:'var(--td)'}}>Letzter Sync</div><div style={{color:'var(--g)',fontWeight:600,marginTop:2}}>{fmtDate(cfg.last_sync_at)}</div></div>
+            <div style={{background:'var(--c)',borderRadius:6,padding:8}}><div style={{color:'var(--td)'}}>Zeitplan</div>
+                <select value={cfg.cron_schedule} onChange={e=>updateSchedule(e.target.value)} style={{background:'transparent',color:'var(--a)',border:'none',fontSize:11,fontWeight:600,fontFamily:'DM Sans',cursor:'pointer',marginTop:2,width:'100%'}}>
+                    {CRON_OPTIONS.map(o=><option key={o.v} value={o.v} style={{background:'var(--c)'}}>{o.l}</option>)}
+                </select>
+            </div>
+            <div style={{background:'var(--c)',borderRadius:6,padding:8}}><div style={{color:'var(--td)'}}>Status</div><div style={{color:cfg.last_sync_result?.error?'var(--r)':'var(--g)',fontWeight:600,marginTop:2}}>{cfg.last_sync_result?.error?'❌ Fehler':'✅ OK'}</div></div>
+        </div>}
+    </div>);
+}
+
 // Mappers
 const pI=v=>{const n=parseInt(String(v).replace(/[^0-9-]/g,''));return isNaN(n)?0:n};const cl=v=>v&&v.trim()?v.trim():null;
 function mL(r){return{lead_id:parseInt(r['Lead ID']),leadstatus:cl(r['Leadstatus']),mitarbeiter:cl(r['Mitarbeiter/Berater']),indikator:cl(r['Indikator']),letzter_bearbeitungsstatus:cl(r['LetzterBearbeitungsstatus']),projektstatus:cl(r['Projektstatus']),anrede:cl(r['Anrede']),vorname:cl(r['Vorname']),nachname:cl(r['Nachname']),name:cl(r['Name']),firma:cl(r['Firma']),strasse:cl(r['Strasse']),hausnummer:cl(r['Hausnummer']),plz:cl(r['PLZ']),ort:cl(r['Ort']),telefon:cl(r['Telefon']),mobil:cl(r['Mobil']),email:cl(r['E-Mail']),quelle:cl(r['Quelle']),projekt:cl(r['Projekt']),gruppe:cl(r['Gruppe']),anmerkung:cl(r['Anmerkung']),tags:cl(r['Tags']),erreichbarkeit:cl(r['Erreichbarkeit']),nicht_erreicht:pI(r['Nicht erreicht']),rueckruf:cl(r['Rückruf']),importiert:cl(r['Importiert']),verifizierung:cl(r['Verifizierung']),aktive_wiedervorlagen:pI(r['Aktive Wiedervorlagen']),mvpp_name:cl(r['MVPP-Name']),mvpp_id:cl(r['MVPP-ID']),qualitaetscall:cl(r['Qualitätscall']),qualitaetscall_notizen:cl(r['Qualitätscall Notizen']),externe_lead_id:cl(r['externeLeadID']),externe_lead_id_2:cl(r['externeLeadID 2']),externe_lead_id_3:cl(r['externeLeadID 3']),zuweisungsstatus:cl(r['Zuweisungsstatus']),qcells_zahlungsstatus:cl(r['Q-CellsZahlungsstatus']),qcells_fortschritt:cl(r['Q-CellsFortschritt']),lieferdatum:cl(r['Lieferdatum']),auftragsbestaetigung:cl(r['Auftragsbestätigung']),slots_verfuegbar:cl(r['Slots verfügbar']),importierte_medien:pI(r['ImportierteMedien']),datum_qualifiziert:cl(r['Datum Qualifiziert']),datum_abgeschlossen:cl(r['Datumabgeschlossen']),datum_importiert:cl(r['Datumimportiert'])}}
@@ -146,6 +191,7 @@ function LT({log,rc}){
                 {[['Neuer Lead','Neuer Lead','—'],['WVL','Wiedervorlage','—'],['Terminiert','Termin gelegt','⚡ Zählt!'],['Angebot erstellt','Angebot','⚡ Zählt!'],['Angebot angenommen','Auftrag','💰 Auszahlung'],['AB erstellt','AB erstellt','💰 Auszahlung'],['Rechnung beglichen','Abgeschlossen','💰 Bezahlt'],['STORNO','Storniert','🔴 Rückford.'],['Kein Interesse','Ausfall','—']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td></tr>)}
             </tbody></table>
         </div>
+        <AutoSync syncKey="leveto_sync" log={log}/>
     </React.Fragment>);
 }
 
@@ -174,6 +220,7 @@ function ET({log,rc}){
                 {[['id','efs_id','List'],['status / simplifiedStatus','status, simplified_status','List'],['primaryCustomer.*','kunde_*, plz, stadt','List'],['totalAmount','gesamtpreis_eur','List'],['user.*','zustaendiger, email','List'],['coSignedAt','co_signed_at','List'],['contract.rate','monatl_rate_eur','Detail'],['contract.product.*','preismodell, nominalzins, factoringrate','Detail'],['projectComponents','pv_kwp, wr_kw, bat_kwh, wb_kw','Detail'],['installedAt / gridConnectedAt','installed_at, grid_connected_at','Detail']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td><span className={`tg ${r[2]==='List'?'tg-ok':'tg-w'}`}>{r[2]}</span></td></tr>)}
             </tbody></table>
         </div>
+        <AutoSync syncKey="efs_sync" log={log}/>
     </React.Fragment>);
 }
 
@@ -381,6 +428,7 @@ function BKT({log,rc}){
             </div>
         </div>
         <IBANFinder log={log}/>
+        <AutoSync syncKey="bank_import" log={log}/>
         <div className="cd fi"><div className="cd-t">🗺️ Feld-Mapping</div>
             <table className="mt"><thead><tr><th>Quelle</th><th>→ Supabase</th><th>Format</th></tr></thead><tbody>
                 {[['Buchungstag / BookgDt / :61:','buchungsdatum','CSV / CAMT / MT940'],['Valutadatum','valutadatum','CSV / CAMT / MT940'],['Betrag / Amt','betrag','CSV / CAMT / MT940'],['±Vorzeichen / CdtDbtInd','soll_haben','CRDT / DBIT'],['Begünstigter / RltdPties Nm','gegenkonto_name','CSV / CAMT'],['Kontonummer / RltdPties IBAN','gegenkonto_iban','CSV / CAMT'],['BLZ/BIC / RltdAgts','gegenkonto_bic','CSV / CAMT'],['Verwendungszweck / RmtInf','verwendungszweck','CSV / CAMT / MT940'],['Auftragskonto / Acct IBAN','eigenes_konto_iban','CSV / CAMT / MT940'],['EndToEndId','end2end_id','CAMT']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td style={{color:'var(--td)'}}>{r[2]}</td></tr>)}
@@ -483,14 +531,7 @@ function LST({log,rc}){
                 </React.Fragment>:<div style={{fontSize:12,color:'var(--td)',padding:30,textAlign:'center'}}>Sheet-URL eingeben und Sync starten</div>}
             </div>
         </div>
-        <div className="cd fi"><div className="cd-t">ℹ️ Einrichtung</div>
-            <div style={{fontSize:13,color:'var(--td)',lineHeight:1.8}}>
-                <div>1. Google Sheet öffnen → <strong style={{color:'var(--tb)'}}>Freigeben</strong> → "Jeder mit dem Link" als Betrachter</div>
-                <div>2. Sheet-URL hier einfügen und <strong style={{color:'var(--a)'}}>Sync</strong> klicken</div>
-                <div>3. Daten landen in <code style={{background:'var(--el)',padding:'2px 6px',borderRadius:4}}>lohn_sheet_data</code> mit allen Spalten als JSON</div>
-                <div style={{marginTop:8,fontSize:11,color:'var(--o)'}}>💡 Für automatischen täglichen Sync kann ein Vercel Cron Job eingerichtet werden</div>
-            </div>
-        </div>
+        <AutoSync syncKey="lohn_sheet" log={log} extraConfig={url?{sheet_url:url}:null}/>
     </React.Fragment>);
 }
 
@@ -525,6 +566,7 @@ function MT({log,rc,ct}){
                 <tr><td style={{color:'var(--tb)'}}>EFS Projekte</td><td>↔</td><td>CSV Aufträge</td><td>Kunde Nachname + PLZ</td></tr>
             </tbody></table>
         </div>
+        <AutoSync syncKey="auto_merge" log={log}/>
     </React.Fragment>);
 }
 
