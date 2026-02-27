@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bee-doo | Leveto → Supabase Sync</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #111118 0%, #1a1a25 100%);
+            border-bottom: 1px solid #2a2a35;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #F5C500;
+        }
+        .header .sub {
+            color: #8b95a5;
+            font-size: 13px;
+        }
+        .header .status-badge {
+            margin-left: auto;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-idle { background: #1a2a1a; color: #4ade80; }
+        .status-running { background: #2a2a1a; color: #F5C500; animation: pulse 1.5s infinite; }
+        .status-error { background: #2a1a1a; color: #f87171; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: #14141f;
+            border: 1px solid #2a2a35;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .stat-card .label {
+            font-size: 12px;
+            color: #8b95a5;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+        }
+        .stat-card .value.yellow { color: #F5C500; }
+        .stat-card .value.green { color: #4ade80; }
+        .stat-card .value.red { color: #f87171; }
+        .stat-card .detail {
+            font-size: 12px;
+            color: #8b95a5;
+            margin-top: 4px;
+        }
+
+        /* Main Layout */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 24px;
+        }
+
+        /* Cards */
+        .card {
+            background: #14141f;
+            border: 1px solid #2a2a35;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .card h2 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #F5C500;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: #F5C500;
+            color: #000;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #ffd633;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background: #1e1e2e;
+            color: #e0e0e0;
+            border: 1px solid #2a2a35;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background: #2a2a3a;
+        }
+        .btn-danger {
+            background: #2a1a1a;
+            color: #f87171;
+            border: 1px solid #3a2a2a;
+        }
+
+        /* Progress */
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #1e1e2e;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 12px 0;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            background: linear-gradient(90deg, #F5C500, #ffd633);
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            font-size: 13px;
+            color: #8b95a5;
+        }
+
+        /* Log */
+        .log-area {
+            background: #0a0a12;
+            border: 1px solid #1e1e2e;
+            border-radius: 8px;
+            padding: 16px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'DM Mono', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.8;
+        }
+        .log-area .log-entry {
+            border-bottom: 1px solid #1a1a22;
+            padding: 2px 0;
+        }
+        .log-entry .time { color: #5a5a6a; }
+        .log-entry .info { color: #8b95a5; }
+        .log-entry .success { color: #4ade80; }
+        .log-entry .warn { color: #F5C500; }
+        .log-entry .error { color: #f87171; }
+
+        /* Mapping Table */
+        .mapping-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .mapping-table th {
+            text-align: left;
+            padding: 10px 12px;
+            background: #1a1a25;
+            color: #8b95a5;
+            font-weight: 500;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .mapping-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #1e1e2e;
+            color: #c0c0cc;
+        }
+        .mapping-table tr:hover td {
+            background: #1a1a22;
+        }
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .tag-green { background: #1a2a1a; color: #4ade80; }
+        .tag-yellow { background: #2a2a1a; color: #F5C500; }
+        .tag-red { background: #2a1a1a; color: #f87171; }
+        .tag-blue { background: #1a1a2a; color: #60a5fa; }
+
+        /* Schedule */
+        .schedule-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .schedule-row label {
+            color: #8b95a5;
+            font-size: 13px;
+            min-width: 100px;
+        }
+        .schedule-row select, .schedule-row input {
+            background: #1a1a25;
+            border: 1px solid #2a2a35;
+            color: #e0e0e0;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .header { flex-wrap: wrap; }
+        }
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .container { padding: 12px; }
+            .controls { flex-direction: column; }
+            .btn { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚡ Leveto → Supabase Sync</h1>
+        <span class="sub">Echtzeit-Spiegelung für System-Migration</span>
+        <span class="status-badge status-idle" id="globalStatus">● Bereit</span>
+    </div>
+
+    <div class="container">
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="label">Leveto Leads</div>
+                <div class="value yellow" id="statLeveto">—</div>
+                <div class="detail">API Gesamt</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Supabase Leads</div>
+                <div class="value green" id="statSupabase">—</div>
+                <div class="detail" id="statSyncPercent">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Fehlend</div>
+                <div class="value red" id="statMissing">—</div>
+                <div class="detail">Noch nicht gesynct</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Letzter Sync</div>
+                <div class="value" id="statLastSync" style="font-size:18px;">—</div>
+                <div class="detail" id="statLastSyncAgo">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Provisionsrelevant</div>
+                <div class="value yellow" id="statProvisionsrelevant">—</div>
+                <div class="detail">Terminiert + Angebot + AB</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Matched ↔ Pay</div>
+                <div class="value green" id="statMatched">—</div>
+                <div class="detail">Verknüpft mit pay_auftraege</div>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <!-- Left: Sync Controls + Log -->
+            <div>
+                <div class="card">
+                    <h2>🔄 Sync-Steuerung</h2>
+                    <div class="controls">
+                        <button class="btn btn-primary" id="btnFullSync" onclick="startFullSync()">
+                            Voll-Sync starten (alle Leads)
+                        </button>
+                        <button class="btn btn-secondary" id="btnIncrSync" onclick="startIncrementalSync()">
+                            Inkrementell (nur Updates)
+                        </button>
+                        <button class="btn btn-secondary" onclick="matchAuftraege()">
+                            Auto-Match pay_auftraege
+                        </button>
+                        <button class="btn btn-danger" id="btnStop" onclick="stopSync()" disabled>
+                            ⏹ Stop
+                        </button>
+                    </div>
+
+                    <div class="progress-bar"><div class="fill" id="progressFill" style="width:0%"></div></div>
+                    <div class="progress-text" id="progressText">Bereit für Sync</div>
+                </div>
+
+                <div class="card">
+                    <h2>📋 Sync-Log</h2>
+                    <div class="log-area" id="logArea">
+                        <div class="log-entry"><span class="time">[System]</span> <span class="info">Sync-Job bereit. Klicke "Voll-Sync" um alle 53.000 Leads zu laden.</span></div>
+                    </div>
+                </div>
+
+                <!-- Field Mapping -->
+                <div class="card">
+                    <h2>🗺️ Feld-Mapping Leveto → Supabase</h2>
+                    <table class="mapping-table">
+                        <thead>
+                            <tr>
+                                <th>Leveto Feld</th>
+                                <th>→ Supabase Feld</th>
+                                <th>Status</th>
+                                <th>Nutzen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>id</td><td>leveto_id</td><td><span class="tag tag-green">✅ Sync</span></td><td>Unique Key</td></tr>
+                            <tr><td>idExtern</td><td>id_extern</td><td><span class="tag tag-green">✅ Sync</span></td><td>MVPP-ID Matching</td></tr>
+                            <tr><td>firstName + lastName</td><td>vorname, nachname</td><td><span class="tag tag-green">✅ Sync</span></td><td>Kontakt</td></tr>
+                            <tr><td>homeAddress.*</td><td>strasse, hausnr, plz, ort, lat, lng</td><td><span class="tag tag-green">✅ Sync</span></td><td>Geo / Scouting Map</td></tr>
+                            <tr><td>telephone, mobile, email</td><td>telefon, mobil, email</td><td><span class="tag tag-green">✅ Sync</span></td><td>Kontakt</td></tr>
+                            <tr><td>berater</td><td>berater_name</td><td><span class="tag tag-green">✅ Sync</span></td><td>VT-Zuordnung</td></tr>
+                            <tr><td>ma_nummer</td><td>berater_ma_nummer</td><td><span class="tag tag-green">✅ Sync</span></td><td>MA-Matching</td></tr>
+                            <tr><td>source</td><td>quelle</td><td><span class="tag tag-green">✅ Sync</span></td><td>Lead-Quelle (MVPP/Eigenlead)</td></tr>
+                            <tr><td>status.name/indicator</td><td>status_name, status_indicator</td><td><span class="tag tag-green">✅ Sync</span></td><td>Aktueller Status</td></tr>
+                            <tr><td>status.date</td><td>status_datum</td><td><span class="tag tag-yellow">⚠️ Nur aktuell</span></td><td>Letztes Status-Datum</td></tr>
+                            <tr><td>survey.data</td><td>survey_data (JSON)</td><td><span class="tag tag-green">✅ Sync</span></td><td>Stromverbrauch, Dach etc.</td></tr>
+                            <tr><td>—</td><td>kWp</td><td><span class="tag tag-red">❌ Fehlt</span></td><td>Anlagengröße (CSV)</td></tr>
+                            <tr><td>—</td><td>Speicher</td><td><span class="tag tag-red">❌ Fehlt</span></td><td>Speicher-Provision (CSV)</td></tr>
+                            <tr><td>—</td><td>Auftragswert</td><td><span class="tag tag-red">❌ Fehlt</span></td><td>Vertragssumme (CSV)</td></tr>
+                            <tr><td>—</td><td>Status-Historie</td><td><span class="tag tag-red">❌ Fehlt</span></td><td>Termin-Datum = Abrechnungsmonat</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Right: Schedule + Info -->
+            <div>
+                <div class="card">
+                    <h2>⏰ Auto-Sync Zeitplan</h2>
+                    <div class="schedule-row">
+                        <label>Intervall</label>
+                        <select id="syncInterval">
+                            <option value="0">Deaktiviert</option>
+                            <option value="5">Alle 5 Minuten</option>
+                            <option value="15" selected>Alle 15 Minuten</option>
+                            <option value="30">Alle 30 Minuten</option>
+                            <option value="60">Stündlich</option>
+                        </select>
+                    </div>
+                    <div class="schedule-row">
+                        <label>Modus</label>
+                        <select id="syncMode">
+                            <option value="incremental" selected>Inkrementell (Updates)</option>
+                            <option value="full">Voll-Sync</option>
+                        </select>
+                    </div>
+                    <div class="schedule-row">
+                        <label>Batch-Größe</label>
+                        <select id="batchSize">
+                            <option value="50">50 Leads/Batch</option>
+                            <option value="100" selected>100 Leads/Batch</option>
+                            <option value="200">200 Leads/Batch</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" style="width:100%;margin-top:12px" onclick="toggleAutoSync()">
+                        <span id="autoSyncLabel">Auto-Sync aktivieren</span>
+                    </button>
+                    <div class="progress-text" style="margin-top:8px;text-align:center" id="nextSyncText">Auto-Sync deaktiviert</div>
+                </div>
+
+                <div class="card">
+                    <h2>📊 Status-Mapping</h2>
+                    <p style="font-size:13px;color:#8b95a5;margin-bottom:12px;">Leveto-Status → bee-doo Fortschritt</p>
+                    <table class="mapping-table" style="font-size:12px;">
+                        <thead><tr><th>Leveto</th><th>→ bee-doo</th><th>Provision?</th></tr></thead>
+                        <tbody>
+                            <tr><td>Neuer Lead</td><td>Neuer Lead</td><td><span class="tag tag-blue">—</span></td></tr>
+                            <tr><td>WVL</td><td>Wiedervorlage</td><td><span class="tag tag-blue">—</span></td></tr>
+                            <tr><td>Terminiert</td><td>Termin gelegt</td><td><span class="tag tag-yellow">⚡ Zählt!</span></td></tr>
+                            <tr><td>Angebot erstellt</td><td>Angebot</td><td><span class="tag tag-yellow">⚡ Zählt!</span></td></tr>
+                            <tr><td>Angebot angenommen</td><td>Auftrag</td><td><span class="tag tag-green">💰 Auszahlung</span></td></tr>
+                            <tr><td>AB erstellt</td><td>AB erstellt</td><td><span class="tag tag-green">💰 Auszahlung</span></td></tr>
+                            <tr><td>Rechnung beglichen</td><td>Abgeschlossen</td><td><span class="tag tag-green">💰 Bezahlt</span></td></tr>
+                            <tr><td>STORNO NACH ABSCHLUSS</td><td>Storniert</td><td><span class="tag tag-red">🔴 Rückford.</span></td></tr>
+                            <tr><td>Kein Interesse</td><td>Ausfall</td><td><span class="tag tag-blue">—</span></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <h2>ℹ️ Was fehlt für Abrechnung?</h2>
+                    <div style="font-size:13px;color:#c0c0cc;line-height:1.8;">
+                        <p>Die Leveto API liefert <strong>keine</strong> Auftrags­daten (kWp, Speicher, Auftragswert). Diese kommen weiterhin per CSV.</p>
+                        <p style="margin-top:8px;">Sobald Leveto die API erweitert (Mail an support@leveto.de), können wir:</p>
+                        <p style="margin-top:4px;">• Status-Historie → Termin-Datum = Ursprungsmonat</p>
+                        <p>• Auftragsdaten → kWp, Speicher, Wert</p>
+                        <p>• Webhooks → Echtzeit-Updates statt Polling</p>
+                        <p style="margin-top:8px;color:#F5C500;font-weight:600;">Bis dahin: Leveto-Sync für Kontaktdaten + Status, CSV-Import für Provisionsfelder.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ===== CONFIG =====
+const LEVETO_URL = 'https://beedoo.leveto.net/API';
+const LEVETO_USER = 'api@bee-doo.de';
+const LEVETO_PASS = 'Patrick123456789!';
+const SUPA_URL = 'https://hqzpemfaljxcysyqssng.supabase.co/rest/v1';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+let levetoToken = null;
+let tokenExpiry = 0;
+let syncRunning = false;
+let syncAborted = false;
+let autoSyncTimer = null;
+let autoSyncActive = false;
+
+// ===== LEVETO AUTH =====
+async function getToken() {
+    if (levetoToken && Date.now() < tokenExpiry - 30000) return levetoToken;
+    
+    const resp = await fetch(LEVETO_URL + '/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `username=${encodeURIComponent(LEVETO_USER)}&password=${encodeURIComponent(LEVETO_PASS)}`
+    });
+    const data = await resp.json();
+    if (!data.login) throw new Error('Leveto Auth fehlgeschlagen: ' + data.message);
+    levetoToken = data.token;
+    tokenExpiry = Date.now() + 4.5 * 60 * 1000; // 4.5 min (Token gilt 5 min)
+    return levetoToken;
+}
+
+// ===== LEVETO API =====
+async function fetchLevetoLeads(params = {}) {
+    const token = await getToken();
+    const qs = new URLSearchParams(params).toString();
+    const resp = await fetch(`${LEVETO_URL}/leads?${qs}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return resp.json();
+}
+
+// ===== SUPABASE =====
+const supaHeaders = {
+    'apikey': SUPA_KEY,
+    'Authorization': `Bearer ${SUPA_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'resolution=merge-duplicates'
+};
+
+async function supaUpsert(leads) {
+    const rows = leads.map(mapLevetoToSupabase);
+    const resp = await fetch(`${SUPA_URL}/leveto_leads`, {
+        method: 'POST',
+        headers: { ...supaHeaders, 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify(rows)
+    });
+    if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Supabase Fehler: ${resp.status} - ${err}`);
+    }
+    return rows.length;
+}
+
+async function supaCount() {
+    const resp = await fetch(`${SUPA_URL}/leveto_leads?select=id&limit=1`, {
+        headers: { ...supaHeaders, 'Prefer': 'count=exact', 'Range': '0-0' }
+    });
+    const range = resp.headers.get('content-range');
+    return range ? parseInt(range.split('/')[1]) : 0;
+}
+
+async function supaLastSync() {
+    const resp = await fetch(`${SUPA_URL}/leveto_leads?select=sync_aktualisiert_am&order=sync_aktualisiert_am.desc&limit=1`, {
+        headers: supaHeaders
+    });
+    const rows = await resp.json();
+    return rows[0]?.sync_aktualisiert_am || null;
+}
+
+// ===== FIELD MAPPING =====
+function mapLevetoToSupabase(lead) {
+    const addr = lead.homeAddress || {};
+    const status = lead.status || {};
+    const statusFirst = lead.statusFirst || {};
+    const survey = lead.survey || {};
+    
+    // Extract survey answers into structured data
+    let surveyData = null;
+    if (survey.data && Array.isArray(survey.data)) {
+        surveyData = {};
+        survey.data.forEach(s => {
+            if (s.answer) {
+                const key = (s.question || '').replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, '_').toLowerCase();
+                surveyData[key] = s.answer;
+            }
+        });
+    }
+    
+    return {
+        leveto_id: lead.id,
+        id_extern: lead.idExtern || null,
+        anrede: lead.salutation || null,
+        vorname: (lead.firstName || '').trim(),
+        nachname: (lead.lastName || '').trim(),
+        firma: lead.companyName || null,
+        email: lead.email || null,
+        telefon: lead.telephone || null,
+        telefon2: lead.telephone2 || null,
+        mobil: lead.mobile || null,
+        erreichbarkeit: lead.reachability || null,
+        strasse: addr.fullstreet || addr.street || null,
+        hausnr: addr.housenr || null,
+        plz: addr.postalCode || null,
+        ort: addr.city || null,
+        lat: addr.lat || null,
+        lng: addr.lng || null,
+        quelle: lead.source || null,
+        tags: lead.tags || null,
+        berater_name: lead.berater || null,
+        berater_ma_nummer: lead.ma_nummer || null,
+        notizen: lead.notes || null,
+        nachricht: lead.message || null,
+        status_id: status.id ?? null,
+        status_name: status.name || null,
+        status_indicator: status.indicator || null,
+        status_datum: status.date && status.date !== '0000-00-00 00:00:00' ? status.date : null,
+        erster_status_id: statusFirst.id ?? null,
+        erster_status_name: statusFirst.name || null,
+        erster_status_datum: statusFirst.date && statusFirst.date !== '0000-00-00 00:00:00' ? statusFirst.date : null,
+        letzter_status_wechsel: lead.last_status_change && lead.last_status_change !== '0000-00-00 00:00:00' ? lead.last_status_change : null,
+        zuweisungsstatus: lead.zuweisungsstatus || null,
+        assignments_count: lead.assignmentsCount || 0,
+        accepted_count: lead.acceptedCount || 0,
+        declined_count: lead.declinedCount || 0,
+        objekt_typ: lead.objectType || null,
+        personen_haushalt: lead.personsInHousehold || null,
+        dach_groesse: lead.roofSize || null,
+        dach_form: lead.roofShape || null,
+        stromverbrauch: lead.powerConsumption || null,
+        monatl_abschlag: lead.partPayment || null,
+        finanzierung: lead.financingModel || null,
+        survey_data: surveyData ? JSON.stringify(surveyData) : null,
+        opt_in_bestaetigt: lead.optIn?.confirmed || false,
+        leveto_erstellt_am: lead.createdOn && lead.createdOn !== '0000-00-00 00:00:00' ? lead.createdOn : null,
+        leveto_importiert_am: lead.importedOn && lead.importedOn !== '0000-00-00 00:00:00' ? lead.importedOn : null,
+        leveto_abgeschlossen_am: lead.finishedOn && lead.finishedOn !== '0000-00-00 00:00:00' ? lead.finishedOn : null,
+        leveto_letzte_bearbeitung: lead.lastEditOn && lead.lastEditOn !== '0000-00-00 00:00:00' ? lead.lastEditOn : null,
+        sync_aktualisiert_am: new Date().toISOString()
+    };
+}
+
+// ===== LOGGING =====
+function log(msg, level = 'info') {
+    const logArea = document.getElementById('logArea');
+    const time = new Date().toLocaleTimeString('de-DE');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `<span class="time">[${time}]</span> <span class="${level}">${msg}</span>`;
+    logArea.appendChild(entry);
+    logArea.scrollTop = logArea.scrollHeight;
+}
+
+function setProgress(percent, text) {
+    document.getElementById('progressFill').style.width = percent + '%';
+    document.getElementById('progressText').textContent = text;
+}
+
+function setGlobalStatus(status, text) {
+    const el = document.getElementById('globalStatus');
+    el.className = `status-badge status-${status}`;
+    el.textContent = text;
+}
+
+// ===== FULL SYNC =====
+async function startFullSync() {
+    if (syncRunning) return;
+    syncRunning = true;
+    syncAborted = false;
+    
+    document.getElementById('btnFullSync').disabled = true;
+    document.getElementById('btnIncrSync').disabled = true;
+    document.getElementById('btnStop').disabled = false;
+    setGlobalStatus('running', '● Sync läuft...');
+    
+    const batchSize = parseInt(document.getElementById('batchSize').value);
+    log('🚀 Voll-Sync gestartet (alle Leads von Leveto)', 'warn');
+    
+    try {
+        // Get total count
+        const first = await fetchLevetoLeads({ limit: 1 });
+        const total = first.totalrecords;
+        log(`📊 Leveto hat ${total.toLocaleString()} Leads total`, 'info');
+        
+        let synced = 0;
+        let page = 1;
+        const totalPages = Math.ceil(total / batchSize);
+        
+        while (!syncAborted) {
+            const offset = (page - 1) * batchSize;
+            if (offset >= total) break;
+            
+            const data = await fetchLevetoLeads({
+                limit: batchSize,
+                offset: offset
+            });
+            
+            if (!data.leads || data.leads.length === 0) break;
+            
+            // Upsert to Supabase
+            const count = await supaUpsert(data.leads);
+            synced += count;
+            
+            const percent = Math.round((synced / total) * 100);
+            setProgress(percent, `${synced.toLocaleString()} / ${total.toLocaleString()} Leads (${percent}%)`);
+            
+            if (page % 10 === 0) {
+                log(`📦 Batch ${page}/${totalPages}: ${synced.toLocaleString()} Leads gesynct`, 'info');
+            }
+            
+            page++;
+            
+            // Small delay to not hammer the API
+            await new Promise(r => setTimeout(r, 200));
+        }
+        
+        if (syncAborted) {
+            log(`⏹ Sync abgebrochen bei ${synced.toLocaleString()} Leads`, 'warn');
+        } else {
+            log(`✅ Voll-Sync abgeschlossen: ${synced.toLocaleString()} Leads gesynct`, 'success');
+        }
+        
+    } catch (err) {
+        log(`❌ Fehler: ${err.message}`, 'error');
+        setGlobalStatus('error', '● Fehler');
+    }
+    
+    syncRunning = false;
+    document.getElementById('btnFullSync').disabled = false;
+    document.getElementById('btnIncrSync').disabled = false;
+    document.getElementById('btnStop').disabled = true;
+    if (!syncAborted) setGlobalStatus('idle', '● Bereit');
+    updateStats();
+}
+
+// ===== INCREMENTAL SYNC =====
+async function startIncrementalSync() {
+    if (syncRunning) return;
+    syncRunning = true;
+    syncAborted = false;
+    
+    document.getElementById('btnFullSync').disabled = true;
+    document.getElementById('btnIncrSync').disabled = true;
+    document.getElementById('btnStop').disabled = false;
+    setGlobalStatus('running', '● Sync läuft...');
+    
+    const batchSize = parseInt(document.getElementById('batchSize').value);
+    log('🔄 Inkrementeller Sync gestartet (nur kürzlich geänderte)', 'warn');
+    
+    try {
+        // Get leads edited in last 24h
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        
+        let synced = 0;
+        let page = 1;
+        
+        while (!syncAborted) {
+            const offset = (page - 1) * batchSize;
+            const data = await fetchLevetoLeads({
+                limit: batchSize,
+                offset: offset,
+                lastEditFrom: since
+            });
+            
+            if (!data.leads || data.leads.length === 0) break;
+            
+            const total = data.totalrecords;
+            if (page === 1) {
+                log(`📊 ${total.toLocaleString()} Leads seit ${since} geändert`, 'info');
+            }
+            
+            const count = await supaUpsert(data.leads);
+            synced += count;
+            
+            const percent = Math.round((synced / total) * 100);
+            setProgress(percent, `${synced} / ${total} geänderte Leads`);
+            
+            if (offset + batchSize >= total) break;
+            page++;
+            await new Promise(r => setTimeout(r, 200));
+        }
+        
+        log(`✅ Inkrementeller Sync: ${synced} Leads aktualisiert`, 'success');
+        
+    } catch (err) {
+        log(`❌ Fehler: ${err.message}`, 'error');
+        setGlobalStatus('error', '● Fehler');
+    }
+    
+    syncRunning = false;
+    document.getElementById('btnFullSync').disabled = false;
+    document.getElementById('btnIncrSync').disabled = false;
+    document.getElementById('btnStop').disabled = true;
+    if (!syncAborted) setGlobalStatus('idle', '● Bereit');
+    updateStats();
+}
+
+// ===== STOP =====
+function stopSync() {
+    syncAborted = true;
+    log('⏹ Sync wird gestoppt...', 'warn');
+}
+
+// ===== AUTO-MATCH pay_auftraege =====
+async function matchAuftraege() {
+    log('🔗 Starte Auto-Match: leveto_leads ↔ pay_auftraege', 'warn');
+    
+    try {
+        // Get all pay_auftraege
+        const auftraegeResp = await fetch(`${SUPA_URL}/pay_auftraege?select=id,kunde_name,kunde_adresse`, {
+            headers: supaHeaders
+        });
+        const auftraege = await auftraegeResp.json();
+        
+        // Get relevant leveto leads (abgeschlossen)
+        const leadsResp = await fetch(`${SUPA_URL}/leveto_leads?select=id,leveto_id,vorname,nachname,plz&status_indicator=eq.abgeschlossen&limit=5000`, {
+            headers: supaHeaders
+        });
+        const leads = await leadsResp.json();
+        
+        // Build lookup
+        const leadsByNamePLZ = {};
+        leads.forEach(l => {
+            const key = `${(l.nachname || '').trim().toLowerCase()}_${l.plz || ''}`;
+            if (!leadsByNamePLZ[key]) leadsByNamePLZ[key] = [];
+            leadsByNamePLZ[key].push(l);
+        });
+        
+        let matched = 0;
+        let updates = [];
+        
+        for (const a of auftraege) {
+            const name = (a.kunde_name || '').trim().toLowerCase();
+            const plz = a.kunde_adresse || '';
+            
+            // Try each word of the name as last name
+            const parts = name.split(/\s+/);
+            for (const part of parts) {
+                const key = `${part}_${plz}`;
+                if (leadsByNamePLZ[key]) {
+                    const lead = leadsByNamePLZ[key][0];
+                    updates.push({ id: lead.id, pay_auftrag_id: a.id });
+                    matched++;
+                    break;
+                }
+            }
+        }
+        
+        // Batch update
+        if (updates.length > 0) {
+            for (const u of updates) {
+                await fetch(`${SUPA_URL}/leveto_leads?id=eq.${u.id}`, {
+                    method: 'PATCH',
+                    headers: supaHeaders,
+                    body: JSON.stringify({ pay_auftrag_id: u.pay_auftrag_id })
+                });
+            }
+        }
+        
+        log(`✅ Auto-Match: ${matched} von ${auftraege.length} Aufträgen verknüpft`, matched > 0 ? 'success' : 'warn');
+        if (matched < auftraege.length) {
+            log(`⚠️ ${auftraege.length - matched} Aufträge nicht zuordenbar (fehlende Leads oder Name-Mismatch)`, 'warn');
+        }
+        
+        updateStats();
+    } catch (err) {
+        log(`❌ Match-Fehler: ${err.message}`, 'error');
+    }
+}
+
+// ===== AUTO-SYNC =====
+function toggleAutoSync() {
+    autoSyncActive = !autoSyncActive;
+    const label = document.getElementById('autoSyncLabel');
+    const nextText = document.getElementById('nextSyncText');
+    
+    if (autoSyncActive) {
+        label.textContent = '⏹ Auto-Sync deaktivieren';
+        const interval = parseInt(document.getElementById('syncInterval').value);
+        if (interval === 0) {
+            autoSyncActive = false;
+            label.textContent = 'Auto-Sync aktivieren';
+            nextText.textContent = 'Bitte Intervall wählen';
+            return;
+        }
+        
+        log(`⏰ Auto-Sync aktiviert: alle ${interval} Minuten`, 'success');
+        nextText.textContent = `Nächster Sync in ${interval} Min.`;
+        
+        autoSyncTimer = setInterval(() => {
+            const mode = document.getElementById('syncMode').value;
+            if (mode === 'full') startFullSync();
+            else startIncrementalSync();
+        }, interval * 60 * 1000);
+        
+    } else {
+        label.textContent = 'Auto-Sync aktivieren';
+        nextText.textContent = 'Auto-Sync deaktiviert';
+        if (autoSyncTimer) clearInterval(autoSyncTimer);
+        log('⏹ Auto-Sync deaktiviert', 'warn');
+    }
+}
+
+// ===== STATS =====
+async function updateStats() {
+    try {
+        // Leveto total
+        const levetoData = await fetchLevetoLeads({ limit: 1 });
+        const levetoTotal = levetoData.totalrecords;
+        document.getElementById('statLeveto').textContent = levetoTotal.toLocaleString();
+        
+        // Supabase count
+        const supaTotal = await supaCount();
+        document.getElementById('statSupabase').textContent = supaTotal.toLocaleString();
+        document.getElementById('statSyncPercent').textContent = `${Math.round(supaTotal / levetoTotal * 100)}% gesynct`;
+        
+        // Missing
+        const missing = levetoTotal - supaTotal;
+        document.getElementById('statMissing').textContent = missing.toLocaleString();
+        
+        // Last sync
+        const lastSync = await supaLastSync();
+        if (lastSync) {
+            const d = new Date(lastSync);
+            document.getElementById('statLastSync').textContent = d.toLocaleString('de-DE');
+            const ago = Math.round((Date.now() - d.getTime()) / 60000);
+            document.getElementById('statLastSyncAgo').textContent = ago < 60 ? `vor ${ago} Min.` : `vor ${Math.round(ago / 60)} Std.`;
+        }
+        
+        // Provisionsrelevant (rough count via indicators)
+        const provResp = await fetch(`${SUPA_URL}/leveto_leads?select=id&status_indicator=eq.abgeschlossen&limit=1`, {
+            headers: { ...supaHeaders, 'Prefer': 'count=exact', 'Range': '0-0' }
+        });
+        const provRange = provResp.headers.get('content-range');
+        const provCount = provRange ? parseInt(provRange.split('/')[1]) : 0;
+        document.getElementById('statProvisionsrelevant').textContent = provCount.toLocaleString();
+        
+        // Matched
+        const matchResp = await fetch(`${SUPA_URL}/leveto_leads?select=id&pay_auftrag_id=not.is.null&limit=1`, {
+            headers: { ...supaHeaders, 'Prefer': 'count=exact', 'Range': '0-0' }
+        });
+        const matchRange = matchResp.headers.get('content-range');
+        const matchCount = matchRange ? parseInt(matchRange.split('/')[1]) : 0;
+        document.getElementById('statMatched').textContent = matchCount.toLocaleString();
+        
+    } catch (err) {
+        log(`⚠️ Stats-Update Fehler: ${err.message}`, 'warn');
+    }
+}
+
+// ===== INIT =====
+updateStats();
+</script>
+</body>
+</html>
