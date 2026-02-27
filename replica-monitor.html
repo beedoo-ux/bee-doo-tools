@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bee-doo | DB Replica Monitor</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: #0a0a0f;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: linear-gradient(135deg, #12121a 0%, #1a1a2e 100%);
+            border-bottom: 1px solid rgba(245, 197, 0, 0.15);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #F5C500;
+        }
+
+        .header .subtitle {
+            font-size: 13px;
+            color: #8b95a5;
+        }
+
+        .back-link {
+            color: #8b95a5;
+            text-decoration: none;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover { color: #F5C500; }
+
+        .live-badge {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .live-badge.error {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        .live-badge.warning {
+            background: rgba(245, 197, 0, 0.15);
+            color: #F5C500;
+        }
+
+        .pulse {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        .pulse.error { background: #ef4444; }
+        .pulse.warning { background: #F5C500; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.3); }
+        }
+
+        /* ── Main Content ── */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* ── Status Cards ── */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .status-card {
+            background: linear-gradient(135deg, #12121a 0%, #1a1a2e 100%);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 20px;
+            transition: border-color 0.3s;
+        }
+
+        .status-card:hover {
+            border-color: rgba(245, 197, 0, 0.2);
+        }
+
+        .status-card .label {
+            font-size: 12px;
+            color: #8b95a5;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .status-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #F5C500;
+        }
+
+        .status-card .value.green { color: #10b981; }
+        .status-card .value.red { color: #ef4444; }
+        .status-card .value.small { font-size: 18px; }
+
+        .status-card .detail {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        /* ── Sections ── */
+        .section {
+            background: linear-gradient(135deg, #12121a 0%, #1a1a2e 100%);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        /* ── Table Sync Grid ── */
+        .table-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+
+        .table-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .table-item .name {
+            font-size: 13px;
+            font-weight: 500;
+            color: #cbd5e1;
+            font-family: 'DM Sans', monospace;
+        }
+
+        .table-item .count {
+            font-size: 12px;
+            color: #8b95a5;
+        }
+
+        .sync-badge {
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .sync-badge.ready {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+        }
+
+        .sync-badge.copying {
+            background: rgba(59, 130, 246, 0.15);
+            color: #3b82f6;
+        }
+
+        .sync-badge.init {
+            background: rgba(245, 197, 0, 0.15);
+            color: #F5C500;
+        }
+
+        .sync-badge.error {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        /* ── Architecture Diagram ── */
+        .arch-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 30px 20px;
+            flex-wrap: wrap;
+        }
+
+        .arch-node {
+            background: rgba(255, 255, 255, 0.03);
+            border: 2px solid rgba(245, 197, 0, 0.3);
+            border-radius: 12px;
+            padding: 20px 24px;
+            text-align: center;
+            min-width: 180px;
+        }
+
+        .arch-node.primary {
+            border-color: #F5C500;
+            box-shadow: 0 0 20px rgba(245, 197, 0, 0.1);
+        }
+
+        .arch-node.replica {
+            border-color: #10b981;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+        }
+
+        .arch-node .node-label {
+            font-size: 11px;
+            color: #8b95a5;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .arch-node .node-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #e2e8f0;
+        }
+
+        .arch-node .node-detail {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        .arch-arrow {
+            font-size: 24px;
+            color: #F5C500;
+            animation: flow 1.5s infinite;
+        }
+
+        @keyframes flow {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        /* ── Log Viewer ── */
+        .log-container {
+            background: #0a0a0f;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            padding: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'DM Sans', monospace;
+            font-size: 12px;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            display: flex;
+            gap: 12px;
+        }
+
+        .log-entry .time {
+            color: #64748b;
+            white-space: nowrap;
+        }
+
+        .log-entry .msg { color: #cbd5e1; }
+        .log-entry .msg.ok { color: #10b981; }
+        .log-entry .msg.warn { color: #F5C500; }
+        .log-entry .msg.err { color: #ef4444; }
+
+        /* ── Actions ── */
+        .actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: #e2e8f0;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: rgba(245, 197, 0, 0.1);
+            border-color: rgba(245, 197, 0, 0.3);
+            color: #F5C500;
+        }
+
+        .btn.primary {
+            background: #F5C500;
+            color: #0a0a0f;
+            border-color: #F5C500;
+            font-weight: 600;
+        }
+
+        .btn.primary:hover {
+            background: #e0b400;
+        }
+
+        .btn.danger {
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .btn.danger:hover {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        /* ── Config Section ── */
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .config-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .config-item .key {
+            color: #8b95a5;
+            font-size: 13px;
+        }
+
+        .config-item .val {
+            color: #cbd5e1;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: 'DM Sans', monospace;
+        }
+
+        /* ── Setup Mode ── */
+        .setup-mode {
+            text-align: center;
+            padding: 60px 24px;
+        }
+
+        .setup-mode h2 {
+            font-size: 24px;
+            color: #F5C500;
+            margin-bottom: 12px;
+        }
+
+        .setup-mode p {
+            color: #8b95a5;
+            margin-bottom: 24px;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+
+        .setup-form {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 12px;
+            color: #8b95a5;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-family: 'DM Sans', monospace;
+            font-size: 14px;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #F5C500;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .status-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .config-grid {
+                grid-template-columns: 1fr;
+            }
+            .table-grid {
+                grid-template-columns: 1fr;
+            }
+            .arch-diagram {
+                flex-direction: column;
+            }
+            .arch-arrow {
+                transform: rotate(90deg);
+            }
+            .header {
+                flex-direction: column;
+                gap: 12px;
+                align-items: flex-start;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+            .container {
+                padding: 16px;
+            }
+            .status-card .value {
+                font-size: 22px;
+            }
+            .actions {
+                flex-direction: column;
+            }
+            .btn {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <a href="index.html" class="back-link">← Toolbox</a>
+            <div>
+                <h1>🗄️ DB Replica Monitor</h1>
+                <div class="subtitle">PostgreSQL Logical Replication · Supabase → Hetzner</div>
+            </div>
+        </div>
+        <div id="liveStatus" class="live-badge">
+            <div class="pulse"></div>
+            Wird geladen...
+        </div>
+    </div>
+
+    <div class="container" id="app">
+        <!-- Setup Mode (shown when no replica configured) -->
+        <div id="setupMode" class="section setup-mode" style="display:none;">
+            <h2>⚙️ Replica konfigurieren</h2>
+            <p>
+                Gib die Verbindungsdaten deines Hetzner-Servers ein, um das Monitoring zu starten.
+                Diese Daten werden lokal in deinem Browser gespeichert.
+            </p>
+            <div class="setup-form">
+                <div class="input-group">
+                    <label>Hetzner Server IP / Domain</label>
+                    <input type="text" id="cfgHost" placeholder="z.B. 168.119.xxx.xxx oder db-replica.bee-doo.de">
+                </div>
+                <div class="input-group">
+                    <label>PostgREST API Port</label>
+                    <input type="text" id="cfgPort" value="3000" placeholder="3000">
+                </div>
+                <div class="input-group">
+                    <label>Status-API Endpoint (optional)</label>
+                    <input type="text" id="cfgStatusUrl" placeholder="https://db-replica.bee-doo.de/api/status">
+                </div>
+                <button class="btn primary" onclick="saveConfig()" style="width:100%;justify-content:center;margin-top:8px;">
+                    💾 Speichern & Monitoring starten
+                </button>
+            </div>
+        </div>
+
+        <!-- Dashboard (shown when configured) -->
+        <div id="dashboard" style="display:none;">
+            <!-- Architecture Overview -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">🏗️ Architektur</div>
+                </div>
+                <div class="arch-diagram">
+                    <div class="arch-node primary">
+                        <div class="node-label">Primary</div>
+                        <div class="node-name">Supabase</div>
+                        <div class="node-detail">PostgreSQL · Pro Plan</div>
+                        <div class="node-detail" style="color:#F5C500;">hqzpemf...supabase.co</div>
+                    </div>
+                    <div class="arch-arrow">→ → →</div>
+                    <div class="arch-node replica">
+                        <div class="node-label">Replica</div>
+                        <div class="node-name">Hetzner VPS</div>
+                        <div class="node-detail">PostgreSQL 16 · CX21</div>
+                        <div class="node-detail" id="replicaHost" style="color:#10b981;">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status Cards -->
+            <div class="status-grid">
+                <div class="status-card">
+                    <div class="label">Replication Status</div>
+                    <div class="value green" id="repStatus">—</div>
+                    <div class="detail" id="repStatusDetail"></div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Replication Lag</div>
+                    <div class="value" id="repLag">—</div>
+                    <div class="detail">Sekunden hinter Primary</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Sync-Tabellen</div>
+                    <div class="value" id="syncTables">—</div>
+                    <div class="detail" id="syncDetail">von 78 Tabellen</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Letzter Check</div>
+                    <div class="value small" id="lastCheck">—</div>
+                    <div class="detail">Auto-Refresh: 30s</div>
+                </div>
+            </div>
+
+            <!-- Datensatz-Vergleich -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">📊 Datensatz-Vergleich (Primary vs. Replica)</div>
+                    <button class="btn" onclick="compareData()">🔄 Vergleichen</button>
+                </div>
+                <div class="table-grid" id="compareGrid">
+                    <div class="table-item">
+                        <span class="name">Wird geladen...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabellen-Sync Status -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">📋 Tabellen-Sync Status</div>
+                    <div style="display:flex;gap:8px;">
+                        <span class="sync-badge ready">● Ready</span>
+                        <span class="sync-badge copying">● Kopiert</span>
+                        <span class="sync-badge init">● Init</span>
+                    </div>
+                </div>
+                <div class="table-grid" id="tableGrid">
+                    <div class="table-item">
+                        <span class="name">Wird geladen...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Viewer -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">📝 Replication Log</div>
+                    <button class="btn" onclick="refreshLogs()">🔄 Aktualisieren</button>
+                </div>
+                <div class="log-container" id="logContainer">
+                    <div class="log-entry">
+                        <span class="time">—</span>
+                        <span class="msg">Warte auf Verbindung...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aktionen -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">⚡ Aktionen</div>
+                </div>
+                <div class="actions">
+                    <button class="btn" onclick="checkStatus()">🔍 Status prüfen</button>
+                    <button class="btn" onclick="compareData()">📊 Daten vergleichen</button>
+                    <button class="btn" onclick="showConfig()">⚙️ Config ändern</button>
+                    <button class="btn danger" onclick="simulateFailover()">🔄 Failover simulieren</button>
+                </div>
+            </div>
+
+            <!-- Verbindungs-Info -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">🔗 Verbindungsdetails</div>
+                </div>
+                <div class="config-grid">
+                    <div>
+                        <h3 style="color:#F5C500;font-size:14px;margin-bottom:12px;">Primary (Supabase)</h3>
+                        <div class="config-item">
+                            <span class="key">Host</span>
+                            <span class="val">db.hqzpemf...supabase.co</span>
+                        </div>
+                        <div class="config-item">
+                            <span class="key">Port</span>
+                            <span class="val">5432</span>
+                        </div>
+                        <div class="config-item">
+                            <span class="key">Datenbank</span>
+                            <span class="val">postgres</span>
+                        </div>
+                        <div class="config-item">
+                            <span class="key">Plan</span>
+                            <span class="val">Pro (25$/Mo)</span>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 style="color:#10b981;font-size:14px;margin-bottom:12px;">Replica (Hetzner)</h3>
+                        <div class="config-item">
+                            <span class="key">Host</span>
+                            <span class="val" id="cfgDisplayHost">—</span>
+                        </div>
+                        <div class="config-item">
+                            <span class="key">Port</span>
+                            <span class="val">5432</span>
+                        </div>
+                        <div class="config-item">
+                            <span class="key">Datenbank</span>
+                            <span class="val">beedoo_prod</span>
+                        </div>
+                        <div class="config-item">
+                            <span class="key">Kosten</span>
+                            <span class="val">~5,39€/Mo</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── Supabase Config ──
+        const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+        // Tables to compare
+        const COMPARE_TABLES = [
+            'pay_auftraege', 'pay_mitarbeiter', 'termine', 'customers',
+            'scouter', 'vertriebler', 'leveto_leads', 'efs_projekte',
+            'pay_abrechnungen', 'pay_provisionen', 'referrals', 'sessions'
+        ];
+
+        // All bee-doo tables
+        const ALL_TABLES = [
+            'adressen', 'arbeitszeiten', 'bd_users', 'blocker', 'component_datasheet_map',
+            'customers', 'document_audit_log', 'document_templates', 'documents',
+            'efs_projekte', 'enpal_leads', 'field_photos', 'gebiete', 'infas_adressen',
+            'leveto_berater_mapping', 'leveto_leads', 'leveto_sync_log', 'milestones',
+            'monitoring_daily', 'monitoring_monthly', 'notifications', 'nps_responses',
+            'order_document_packages', 'order_documents', 'pay_abrechnungen',
+            'pay_abrechnungen_positionen', 'pay_abzuege', 'pay_auftraege',
+            'pay_ausgangsrechnungen', 'pay_auszahlungen_historie', 'pay_darlehen',
+            'pay_dokumente', 'pay_duplikate', 'pay_einmalzahlungen',
+            'pay_gehaltsaenderungen', 'pay_krankheitstage', 'pay_mitarbeiter',
+            'pay_overhead_regeln', 'pay_overhead_staffeln', 'pay_pdf_vorlagen',
+            'pay_pfaendungen', 'pay_provisionen', 'pay_provisions_historie',
+            'pay_reserve_bloecke', 'pay_reserve_deficit', 'pay_reserve_einstellungen',
+            'pay_settings', 'pay_sonderprovisionen', 'pay_sperrlisten',
+            'pay_staffel_auszahlungen', 'pay_staffel_history', 'pay_staffel_regeln',
+            'pay_stufenbonus', 'pay_systemgebuehr', 'pay_team_bonus',
+            'pay_team_mitglieder', 'pay_teams', 'pay_vorschuesse', 'projects',
+            'provisions_regeln', 'pv_aufpreise', 'pv_pakete', 'qualifizierungen',
+            'quittungen', 'rankings', 'referral_berater_settings', 'referral_customers',
+            'referral_leads', 'referral_payouts', 'referral_settings', 'referrals',
+            'scouter', 'sessions', 'termine', 'trustpilot_reviews', 'vertriebler',
+            'whatsapp_notifications', 'zuweisungen'
+        ];
+
+        let replicaConfig = null;
+        let refreshInterval = null;
+        let logEntries = [];
+
+        // ── Init ──
+        function init() {
+            const saved = localStorage.getItem('beedoo_replica_config');
+            if (saved) {
+                replicaConfig = JSON.parse(saved);
+                showDashboard();
+                checkStatus();
+                startAutoRefresh();
+            } else {
+                showSetup();
+            }
+        }
+
+        function showSetup() {
+            document.getElementById('setupMode').style.display = 'block';
+            document.getElementById('dashboard').style.display = 'none';
+        }
+
+        function showDashboard() {
+            document.getElementById('setupMode').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            if (replicaConfig) {
+                document.getElementById('replicaHost').textContent = replicaConfig.host;
+                document.getElementById('cfgDisplayHost').textContent = replicaConfig.host;
+            }
+        }
+
+        function saveConfig() {
+            const host = document.getElementById('cfgHost').value.trim();
+            const port = document.getElementById('cfgPort').value.trim() || '3000';
+            const statusUrl = document.getElementById('cfgStatusUrl').value.trim();
+
+            if (!host) {
+                alert('Bitte Server-Adresse eingeben');
+                return;
+            }
+
+            replicaConfig = { host, port, statusUrl };
+            localStorage.setItem('beedoo_replica_config', JSON.stringify(replicaConfig));
+            
+            addLog('Config gespeichert: ' + host, 'ok');
+            showDashboard();
+            checkStatus();
+            startAutoRefresh();
+        }
+
+        function showConfig() {
+            if (replicaConfig) {
+                document.getElementById('cfgHost').value = replicaConfig.host;
+                document.getElementById('cfgPort').value = replicaConfig.port;
+                document.getElementById('cfgStatusUrl').value = replicaConfig.statusUrl || '';
+            }
+            showSetup();
+        }
+
+        // ── Status Check ──
+        async function checkStatus() {
+            const statusEl = document.getElementById('liveStatus');
+            const now = new Date().toLocaleTimeString('de-DE');
+            document.getElementById('lastCheck').textContent = now;
+
+            // Check Supabase (Primary)
+            try {
+                const res = await fetch(`${SUPABASE_URL}/rest/v1/pay_mitarbeiter?select=id&limit=1`, {
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': `Bearer ${SUPABASE_KEY}`
+                    }
+                });
+
+                if (res.ok) {
+                    addLog('Primary (Supabase): Erreichbar ✓', 'ok');
+                } else {
+                    addLog('Primary (Supabase): Fehler ' + res.status, 'err');
+                }
+            } catch (e) {
+                addLog('Primary (Supabase): Nicht erreichbar!', 'err');
+            }
+
+            // Check Replica (if configured)
+            if (replicaConfig && replicaConfig.statusUrl) {
+                try {
+                    const res = await fetch(replicaConfig.statusUrl);
+                    if (res.ok) {
+                        const data = await res.json();
+                        updateStatusFromAPI(data);
+                        addLog('Replica (Hetzner): Erreichbar ✓', 'ok');
+                    } else {
+                        setStatusBadge('Replica-Fehler', 'error');
+                        addLog('Replica: HTTP ' + res.status, 'err');
+                    }
+                } catch (e) {
+                    // Replica not yet reachable — show demo mode
+                    setStatusBadge('Demo-Modus', 'warning');
+                    addLog('Replica: Noch nicht erreichbar (Setup ausstehend)', 'warn');
+                    showDemoData();
+                }
+            } else {
+                setStatusBadge('Demo-Modus', 'warning');
+                showDemoData();
+                addLog('Kein Status-Endpoint konfiguriert → Demo-Modus', 'warn');
+            }
+        }
+
+        function updateStatusFromAPI(data) {
+            if (data.subscription) {
+                const sub = data.subscription;
+                const isActive = sub.subscription_active;
+                const lag = sub.lag_seconds;
+
+                document.getElementById('repStatus').textContent = isActive ? 'Aktiv' : 'Gestoppt';
+                document.getElementById('repStatus').className = `value ${isActive ? 'green' : 'red'}`;
+                document.getElementById('repStatusDetail').textContent = 
+                    isActive ? 'Logical Replication läuft' : 'Subscription inaktiv!';
+
+                document.getElementById('repLag').textContent = lag + 's';
+                document.getElementById('repLag').className = `value ${lag < 10 ? 'green' : lag < 60 ? '' : 'red'}`;
+
+                setStatusBadge(
+                    isActive ? `Live · ${lag}s Lag` : 'Gestoppt!',
+                    isActive ? (lag < 60 ? '' : 'warning') : 'error'
+                );
+            }
+
+            if (data.tables) {
+                const ready = data.tables.filter(t => t.state === 'ready').length;
+                document.getElementById('syncTables').textContent = ready;
+                document.getElementById('syncDetail').textContent = `von ${data.tables.length} Tabellen`;
+                renderTableGrid(data.tables);
+            }
+
+            if (data.counts) {
+                renderCompareGrid(data.counts, true);
+            }
+        }
+
+        function showDemoData() {
+            document.getElementById('repStatus').textContent = 'Ausstehend';
+            document.getElementById('repStatus').className = 'value';
+            document.getElementById('repStatusDetail').textContent = 'Hetzner-Setup noch nicht abgeschlossen';
+            document.getElementById('repLag').textContent = '—';
+            document.getElementById('syncTables').textContent = '0';
+            document.getElementById('syncDetail').textContent = 'von 78 Tabellen';
+
+            // Show tables in init state
+            const demoTables = ALL_TABLES.map(t => ({ table: t, state: 'init' }));
+            renderTableGrid(demoTables);
+
+            // Fetch primary counts for comparison
+            compareData();
+        }
+
+        // ── Data Comparison ──
+        async function compareData() {
+            const grid = document.getElementById('compareGrid');
+            grid.innerHTML = '<div class="table-item"><span class="name">Lade Daten von Supabase...</span></div>';
+
+            const counts = {};
+            for (const table of COMPARE_TABLES) {
+                try {
+                    const res = await fetch(
+                        `${SUPABASE_URL}/rest/v1/${table}?select=id&limit=1`,
+                        {
+                            headers: {
+                                'apikey': SUPABASE_KEY,
+                                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                                'Prefer': 'count=exact'
+                            }
+                        }
+                    );
+                    const range = res.headers.get('content-range');
+                    counts[table] = range ? parseInt(range.split('/')[1]) || 0 : '?';
+                } catch (e) {
+                    counts[table] = 'Fehler';
+                }
+            }
+
+            renderCompareGrid(counts, false);
+            addLog(`Datensätze abgefragt: ${Object.keys(counts).length} Tabellen`, 'ok');
+        }
+
+        function renderCompareGrid(counts, hasReplica) {
+            const grid = document.getElementById('compareGrid');
+            grid.innerHTML = '';
+
+            for (const [table, count] of Object.entries(counts)) {
+                const item = document.createElement('div');
+                item.className = 'table-item';
+                item.innerHTML = `
+                    <div>
+                        <div class="name">${table}</div>
+                        <div class="count">Primary: ${typeof count === 'number' ? count.toLocaleString('de-DE') : count}</div>
+                    </div>
+                    <span class="sync-badge ${hasReplica ? 'ready' : 'init'}">
+                        ${hasReplica ? '✓ Sync' : 'Ausstehend'}
+                    </span>
+                `;
+                grid.appendChild(item);
+            }
+        }
+
+        function renderTableGrid(tables) {
+            const grid = document.getElementById('tableGrid');
+            grid.innerHTML = '';
+
+            // Sort: ready first, then by name
+            tables.sort((a, b) => {
+                const order = { ready: 0, synced: 1, copying: 2, init: 3 };
+                return (order[a.state] || 99) - (order[b.state] || 99) || a.table.localeCompare(b.table);
+            });
+
+            for (const t of tables) {
+                const stateLabel = {
+                    ready: '✓ Ready', synced: '✓ Synced',
+                    copying: '⟳ Kopiert...', init: '○ Init'
+                }[t.state] || t.state;
+
+                const stateClass = {
+                    ready: 'ready', synced: 'ready',
+                    copying: 'copying', init: 'init'
+                }[t.state] || 'init';
+
+                const item = document.createElement('div');
+                item.className = 'table-item';
+                item.innerHTML = `
+                    <span class="name">${t.table}</span>
+                    <span class="sync-badge ${stateClass}">${stateLabel}</span>
+                `;
+                grid.appendChild(item);
+            }
+        }
+
+        // ── Failover Simulation ──
+        function simulateFailover() {
+            if (!confirm('⚠️ Failover-Simulation starten?\n\nDies testet nur die Umschaltung, keine echten Änderungen.')) return;
+
+            addLog('🔄 Failover-Simulation gestartet...', 'warn');
+            
+            setTimeout(() => {
+                addLog('1. Prüfe Replica-Status...', 'ok');
+            }, 500);
+            
+            setTimeout(() => {
+                addLog('2. Subscription würde gestoppt...', 'warn');
+            }, 1500);
+            
+            setTimeout(() => {
+                addLog('3. Replica → Read-Write Modus (simuliert)', 'ok');
+            }, 2500);
+            
+            setTimeout(() => {
+                addLog('4. Config-Switch: active → replica (simuliert)', 'ok');
+            }, 3500);
+            
+            setTimeout(() => {
+                addLog('✅ Failover-Simulation abgeschlossen. Im Ernstfall: ~30 Sekunden', 'ok');
+            }, 4500);
+        }
+
+        // ── Helper Functions ──
+        function setStatusBadge(text, type) {
+            const el = document.getElementById('liveStatus');
+            el.className = `live-badge ${type}`;
+            const pulse = el.querySelector('.pulse');
+            pulse.className = `pulse ${type}`;
+            el.innerHTML = '';
+            el.appendChild(pulse);
+            el.appendChild(document.createTextNode(' ' + text));
+        }
+
+        function addLog(msg, type) {
+            const time = new Date().toLocaleTimeString('de-DE');
+            logEntries.unshift({ time, msg, type });
+            if (logEntries.length > 50) logEntries.pop();
+            renderLogs();
+        }
+
+        function renderLogs() {
+            const container = document.getElementById('logContainer');
+            container.innerHTML = logEntries.map(e => `
+                <div class="log-entry">
+                    <span class="time">${e.time}</span>
+                    <span class="msg ${e.type || ''}">${e.msg}</span>
+                </div>
+            `).join('');
+        }
+
+        function refreshLogs() {
+            addLog('Logs aktualisiert', 'ok');
+        }
+
+        function startAutoRefresh() {
+            if (refreshInterval) clearInterval(refreshInterval);
+            refreshInterval = setInterval(checkStatus, 30000);
+        }
+
+        // ── Start ──
+        init();
+    </script>
+</body>
+</html>
