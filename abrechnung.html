@@ -214,7 +214,7 @@ async function generateAbrechnungen(periode, onProgress){
   const leistungsStart = `${lzY}-${lzM}-01`;
   const leistungsEnd = periodeStart;
   log(`Leistungszeitraum: ${lzM}/${lzY}, Nachzügler vor ${lzM}/${lzY}`);
-  const [regeln, stufen, mitarbeiter, sgArr, auftrLZ, auftrNZ, stornoLZ, offenAll, sonderProv, teamBonus, sperrlisten, stornoAbzuege, staffelHistoryFreigegeben, efsZeroProjekte, efsBlockedProjekte
+  const [regeln, stufen, mitarbeiter, sgArr, auftrLZ, auftrNZ, stornoLZ, offenAll, sonderProv, teamBonus, sperrlisten, stornoAbzuege, staffelHistoryFreigegeben, efsZeroProjekte, efsBlockedProjekte, szAuftraege
   ] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
@@ -231,6 +231,7 @@ async function generateAbrechnungen(periode, onProgress){
     sbG('pay_staffel_history',`monat=eq.${parseInt(m)}&jahr=eq.${parseInt(y)}&freigegeben=eq.true`),
     sbG('efs_projekte','preismodell=eq.Zero&select=efs_id'),
     sbG('efs_projekte','simplified_status=in.(LAND_REGISTRY_CHECK,REVOKED,MISSING_PROPERTY_OWNERS)&select=efs_id,simplified_status,kunde_name'),
+    sbG('pay_auftraege','produkt_typ=eq.sonderzulage&storniert=eq.false&abgerechnet_monat=is.null&select=*'),
   ]);
   // Sperrlisten: gesperrte AN-Nummern → nicht provisionieren
   const gesperrteANs = new Set();
@@ -283,8 +284,8 @@ async function generateAbrechnungen(periode, onProgress){
   const finAbgelehnt = auftraegeClean.filter(a => {const f=(a.beedoo_fortschritt||'').toLowerCase(); return f.includes('finanzierung abgelehnt') && !f.includes('barzahler');});
   const finAbgelehntANs = new Set(finAbgelehnt.map(a=>a.auftrag_nr));
   if(finAbgelehnt.length) log(`🚫 ${finAbgelehnt.length} Aufträge mit "Finanzierung abgelehnt" ausgeschlossen: ${finAbgelehnt.map(a=>`${a.auftrag_nr} (${a.kunde_name})`).join(', ')}`);
-  // Sonderzulagen aus Sheet (produkt_typ=sonderzulage) separat extrahieren
-  const sonderzulagen = auftraege.filter(a => a.produkt_typ === 'sonderzulage');
+  // Sonderzulagen aus DB (produkt_typ=sonderzulage) – separater Fetch da kein zahlungsstatus
+  const sonderzulagen = szAuftraege || [];
   const szByVP = {};
   sonderzulagen.forEach(a => { const vid=a.vertriebler_id; if(!szByVP[vid])szByVP[vid]=[]; szByVP[vid].push(a); });
   if(sonderzulagen.length) log(`📝 ${sonderzulagen.length} Sonderzulagen für ${Object.keys(szByVP).length} Mitarbeiter`);
@@ -733,6 +734,15 @@ async function generateAbrechnungen(periode, onProgress){
     count++;
   }
   log(`✅ ${count} Abrechnungen generiert!`);
+  // Sonderzulagen als abgerechnet markieren, damit sie nicht doppelt kommen
+  if(sonderzulagen.length){
+    const szIds = sonderzulagen.map(s=>s.id).filter(Boolean);
+    for(let i=0;i<szIds.length;i+=20){
+      const batch=szIds.slice(i,i+20);
+      await sbU('pay_auftraege',`id=in.(${batch.join(',')})`,{abgerechnet_monat:parseInt(m),abgerechnet_jahr:parseInt(y)});
+    }
+    log(`📝 ${szIds.length} Sonderzulagen als abgerechnet markiert`);
+  }
   return count;
 }
 
