@@ -433,9 +433,9 @@ async function generateAbrechnungen(periode, onProgress){
   log('Archiviere alte Abrechnungen für Periode...');
   const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&archiviert_am=is.null&select=id,status,mitarbeiter_name,brutto_provisionen`);
   const now = new Date().toISOString();
-  for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbU('pay_abrechnungen',`id=eq.${oa.id}`,{status:'archiviert',archiviert_am:now});}catch(e){log(`⚠️ Archiv-Fehler ${oa.mitarbeiter_name}: ${e.message}`);try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e2){}} }
-  if(oldAbr.length) log(`📦 ${oldAbr.length} alte Abrechnungen archiviert (+ Positionen gelöscht)`);
-  // === STORNO + STAFFEL + STUFEN KORREKTUR (basierend auf ALL1211 Google Sheet) ===
+  for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){log(`⚠️ Lösch-Fehler ${oa.mitarbeiter_name}: ${e.message}`);} }
+  if(oldAbr.length) log(`🗑️ ${oldAbr.length} alte Abrechnungen + Positionen gelöscht`);
+  // === ALL1211: Nur für Storno-Rückforderungs-Lookup (bezahlt ja/nein + Betrag) ===
   const SHEET_ID='1NP2uP1lctwkaqS5ChNNJ12ps8fz7ra66p_akpxLkTX0';
   log('🔍 Lade ALL1211 Zahlungsdaten aus Google Sheet...');
   const all1211Url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=ALL1211`;
@@ -449,92 +449,10 @@ async function generateAbrechnungen(periode, onProgress){
       if(!isNaN(b)&&b>0) bezahltSheet[an]=b;
     });
     log(`  📊 ALL1211: ${Object.keys(bezahltSheet).length} bezahlte Aufträge geladen`);
-  } else { log('  ⚠️ ALL1211 konnte nicht geladen werden – Korrekturen übersprungen'); }
-  // Alle Sales-Aufträge laden (inkl storniert)
-  const alleAuftrKorr = await sbG('pay_auftraege','produkt_typ=not.in.(lead_count,termin_count,zero_count,sonderzulage)&select=vertriebler_id,auftrag_nr,kunde_name,auftrags_datum,zahlungsstatus,storniert,abgerechnet_monat');
-  const korrByVPM = {};
-  alleAuftrKorr.forEach(a=>{
-    if(!a.vertriebler_id||!a.auftrags_datum)return;
-    const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7);
-    if(om===periode)return; // Aktuelle Periode überspringen
-    const key=a.vertriebler_id+'_'+om;
-    if(!korrByVPM[key])korrByVPM[key]={bezahlt:[],stornoBez:[],aktiv:[],stornoUnbez:[]};
-    const anNum=(a.auftrag_nr||'').replace('AN-','');
-    const shBetrag=bezahltSheet[anNum]||0;
-    if(shBetrag>0&&a.storniert) korrByVPM[key].stornoBez.push({...a,bezahlt_betrag:shBetrag});
-    else if(shBetrag>0&&!a.storniert) korrByVPM[key].bezahlt.push({...a,bezahlt_betrag:shBetrag});
-    else if(!a.storniert&&(a.zahlungsstatus==='anzahlung_eingegangen'||a.abgerechnet_monat)) korrByVPM[key].aktiv.push(a);
-    else if(a.storniert) korrByVPM[key].stornoUnbez.push(a);
-  });
-  // Fake-Storno-Erkennung: Wenn stornierter Auftrag einen aktiven Neuauftrag mit gleicher Kunde+höherer AN hat → kein echter Storno
-  const kundeANIndex = {};
-  alleAuftrKorr.forEach(a => {
-    const kn = (a.kunde_name||'').trim().toLowerCase();
-    if(!kn) return;
-    const anNum = parseInt((a.auftrag_nr||'').replace('AN-','')) || 0;
-    if(!kundeANIndex[kn]) kundeANIndex[kn] = [];
-    kundeANIndex[kn].push({an: anNum, storniert: a.storniert, zahlungsstatus: a.zahlungsstatus});
-  });
-  const isFakeStorno = (kundeName, anNr) => {
-    const kn = (kundeName||'').trim().toLowerCase();
-    const myAN = parseInt((anNr||'').replace('AN-','')) || 0;
-    const others = kundeANIndex[kn] || [];
-    return others.some(o => o.an > myAN && !o.storniert);
-  };
+  } else { log('  ⚠️ ALL1211 konnte nicht geladen werden'); }
+  // Auto-Korrekturen (Staffel/Stufen) DEAKTIVIERT – Daten kommen später manuell
   const staffelKorrekturen = {};
-  for(const [key,data] of Object.entries(korrByVPM)){
-    const vpId=key.split('_')[0]; const om=key.split('_').slice(1).join('_');
-    const vp=vpById[vpId]; if(!vp||(vp.typ||'').includes('scouter'))continue;
-    const ruleTyp=typMap[vp.typ]||vp.typ; const regel=regelMap[ruleTyp]; if(!regel||regel.staffel_schwelle>=999)continue;
-    // Flat-Rate VTs: KEINE Staffel/Stufen-Korrektur
-    const vpFlatSonder = sonderProv.find(sp=>sp.mitarbeiter_id===vpId&&sp.typ==='flat_rate'&&sp.aktiv);
-    if(vpFlatSonder){ log(`  ⏭️ ${vp.vorname} ${vp.nachname}: Flat-Rate (${vpFlatSonder.betrag}€) – keine Korrektur`); continue; }
-    // Filter: echte Stornos (keine Fake-Stornos mit Ersatzauftrag)
-    const echteStornoBez = data.stornoBez.filter(o => !isFakeStorno(o.kunde_name, o.auftrag_nr));
-    const fakeStornoBez = data.stornoBez.filter(o => isFakeStorno(o.kunde_name, o.auftrag_nr));
-    if(fakeStornoBez.length) log(`  ⏭️ ${vp.vorname} ${vp.nachname}: ${fakeStornoBez.length}× Fake-Storno übersprungen (Ersatzauftrag vorhanden): ${fakeStornoBez.map(o=>o.auftrag_nr).join(', ')}`);
-    // Fake-Stornos zählen als aktiv für Staffel/Stufen (Neuauftrag existiert)
-    const allBez=[...data.bezahlt,...echteStornoBez,...fakeStornoBez]; if(!allBez.length)continue;
-    const schwelle=regel.staffel_schwelle; const basisR=regel.basis_betrag_sale; const staffelR=regel.staffel_betrag_sale; const diff=staffelR-basisR;
-    const vpName=`${vp.vorname} ${vp.nachname}`;
-    const cntBez=allBez.length; const cntEchteStorno=echteStornoBez.length; const cntAktivBez=data.bezahlt.length;
-    // Aktiv gesamt: bezahlt+aktiv+fakeStornos (weil Ersatzauftrag existiert = Kunde noch da)
-    const cntAktivGes=data.bezahlt.length+data.aktiv.length+fakeStornoBez.length;
-    // wasStaffel: Anzahl bezahlter Orders in diesem Monat >= Schwelle (nicht Betrag!)
-    const wasStaffel=cntBez>=schwelle;
-    const staffelJetzt=cntAktivGes>=schwelle;
-    // Stufen berechnen: damals (bei Zahlung) vs jetzt
-    let stufeDam=0,stufeJzt=0;
-    for(const s of stufen){if(s.gilt_fuer!==ruleTyp)continue; if(cntBez>=s.min_anlagen&&s.bonus_betrag>stufeDam)stufeDam=s.bonus_betrag; if(cntAktivGes>=s.min_anlagen&&s.bonus_betrag>stufeJzt)stufeJzt=s.bonus_betrag;}
-    const korrs=[];
-    // A) Storno-Rückforderung: bezahlt + jetzt storniert + KEIN Ersatzauftrag → voller Betrag zurück
-    if(cntEchteStorno>0){
-      const sr=echteStornoBez.reduce((s,o)=>s+o.bezahlt_betrag,0);
-      korrs.push({typ:'storno_rueckforderung',monat:om,betrag:-sr,desc:`${cntEchteStorno}× Storno (bezahlt) = -${sr}€`,stornierte:echteStornoBez.map(o=>`${o.auftrag_nr} (${(o.kunde_name||'').substring(0,20)}, ${o.bezahlt_betrag}€)`)});
-      log(`  ❌ ${vpName}: Storno-Rück ${om} – ${cntEchteStorno}× = -${sr}€ [${echteStornoBez.map(o=>o.auftrag_nr).join(', ')}]`);
-    }
-    // B) Staffel→Basis Differenz: mit Staffel-Rate bezahlt, jetzt <8 aktiv
-    if(wasStaffel&&!staffelJetzt&&diff>0){
-      const sd=cntAktivBez*diff;
-      korrs.push({typ:'staffel_rueckforderung',monat:om,betrag:-sd,desc:`${cntAktivBez}× Staffel→Basis Diff à ${diff}€ = -${sd}€`});
-      log(`  📉 ${vpName}: Staffel-Diff ${om} – ${cntAktivBez}×${diff}€ = -${sd}€`);
-    }
-    // C) Basis→Staffel Nachzahlung: mit Basis bezahlt, jetzt ≥8 aktiv
-    if(!wasStaffel&&staffelJetzt&&diff>0){
-      const sn=cntBez*diff;
-      korrs.push({typ:'staffel_nachzahlung',monat:om,betrag:sn,desc:`${cntBez}× Basis→Staffel Diff à ${diff}€ = +${sn}€`});
-      log(`  📈 ${vpName}: Staffel-Nach ${om} – ${cntBez}×${diff}€ = +${sn}€`);
-    }
-    // D) Stufen-Korrektur: Schwelle 10/15 über- oder unterschritten
-    if(stufeDam!==stufeJzt){
-      const sd=stufeJzt-stufeDam;
-      korrs.push({typ:sd<0?'stufen_rueckforderung':'stufen_nachzahlung',monat:om,betrag:sd,desc:`Stufe ${stufeDam}€ → ${stufeJzt}€ = ${sd>0?'+':''}${sd}€`});
-      log(`  ${sd<0?'📉':'📈'} ${vpName}: Stufen-Korr ${om} – ${stufeDam}€→${stufeJzt}€ = ${sd>0?'+':''}${sd}€`);
-    }
-    if(korrs.length) staffelKorrekturen[vpId]=(staffelKorrekturen[vpId]||[]).concat(korrs);
-  }
-  const skCount=Object.values(staffelKorrekturen).reduce((s,a)=>s+a.length,0);
-  if(skCount) log(`📊 ${skCount} Korrekturen gefunden (Storno+Staffel+Stufen)`); else log('✅ Keine Korrekturen');
+  log('ℹ️ Auto-Korrekturen deaktiviert – Staffel/Stufen-Daten werden manuell geliefert');
 
   // === ZUSÄTZLICHE SHEET-DATEN: PV-Blatt Abzüge, VS Vorschüsse, Stnr Auszahlungen ===
   log('📋 Lade Sheet-Daten (PV-Blatt, VS, Stnr)...');
