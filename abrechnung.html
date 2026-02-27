@@ -486,6 +486,9 @@ async function generateAbrechnungen(periode, onProgress){
     const vpId=key.split('_')[0]; const om=key.split('_').slice(1).join('_');
     const vp=vpById[vpId]; if(!vp||(vp.typ||'').includes('scouter'))continue;
     const ruleTyp=typMap[vp.typ]||vp.typ; const regel=regelMap[ruleTyp]; if(!regel||regel.staffel_schwelle>=999)continue;
+    // Flat-Rate VTs: KEINE Staffel/Stufen-Korrektur
+    const vpFlatSonder = sonderProv.find(sp=>sp.mitarbeiter_id===vpId&&sp.typ==='flat_rate'&&sp.aktiv);
+    if(vpFlatSonder){ log(`  ⏭️ ${vp.vorname} ${vp.nachname}: Flat-Rate (${vpFlatSonder.betrag}€) – keine Korrektur`); continue; }
     // Filter: echte Stornos (keine Fake-Stornos mit Ersatzauftrag)
     const echteStornoBez = data.stornoBez.filter(o => !isFakeStorno(o.kunde_name, o.auftrag_nr));
     const fakeStornoBez = data.stornoBez.filter(o => isFakeStorno(o.kunde_name, o.auftrag_nr));
@@ -497,7 +500,8 @@ async function generateAbrechnungen(periode, onProgress){
     const cntBez=allBez.length; const cntEchteStorno=echteStornoBez.length; const cntAktivBez=data.bezahlt.length;
     // Aktiv gesamt: bezahlt+aktiv+fakeStornos (weil Ersatzauftrag existiert = Kunde noch da)
     const cntAktivGes=data.bezahlt.length+data.aktiv.length+fakeStornoBez.length;
-    const wasStaffel=allBez.some(o=>o.bezahlt_betrag>=staffelR);
+    // wasStaffel: Anzahl bezahlter Orders in diesem Monat >= Schwelle (nicht Betrag!)
+    const wasStaffel=cntBez>=schwelle;
     const staffelJetzt=cntAktivGes>=schwelle;
     // Stufen berechnen: damals (bei Zahlung) vs jetzt
     let stufeDam=0,stufeJzt=0;
@@ -531,9 +535,42 @@ async function generateAbrechnungen(periode, onProgress){
   }
   const skCount=Object.values(staffelKorrekturen).reduce((s,a)=>s+a.length,0);
   if(skCount) log(`📊 ${skCount} Korrekturen gefunden (Storno+Staffel+Stufen)`); else log('✅ Keine Korrekturen');
+
+  // === ZUSÄTZLICHE SHEET-DATEN: PV-Blatt Abzüge, VS Vorschüsse, Stnr Auszahlungen ===
+  log('📋 Lade Sheet-Daten (PV-Blatt, VS, Stnr)...');
+  const csvPL = line => { const f=[]; let c='',q=false; for(let i=0;i<line.length;i++){const ch=line[i]; if(ch==='"')q=!q; else if(ch===','&&!q){f.push(c.trim());c='';} else c+=ch;} f.push(c.trim()); return f; };
+  const [pvAnlagenRaw, pvBlattRaw, vsRaw, stnrRaw] = await Promise.all([
+    fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=PV%20Anlagen`).then(r=>r.text()).catch(()=>''),
+    fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(periode)}`).then(r=>r.text()).catch(()=>''),
+    fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=VS`).then(r=>r.text()).catch(()=>''),
+    fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Stnr`).then(r=>r.text()).catch(()=>'')
+  ]);
+  // PV Anlagen: payer_id → name
+  const payerToName = {};
+  if(pvAnlagenRaw){ pvAnlagenRaw.split('\n').slice(1).filter(l=>l.trim()).forEach(line=>{ const cols=csvPL(line); const nm=(cols[0]||'').trim(); const pid=(cols[3]||'').trim(); if(nm&&pid) payerToName[pid]=nm; }); log(`  📊 PV Anlagen: ${Object.keys(payerToName).length} Zuordnungen`); }
+  // Name→vpId
+  const nmToVpId = {};
+  mitarbeiter.forEach(v => { nmToVpId[`${v.vorname} ${v.nachname}`.toLowerCase()] = v.id; nmToVpId[`${v.nachname}, ${v.vorname}`.toLowerCase()] = v.id; const nn=v.nachname.toLowerCase(); if(!nmToVpId['_n_'+nn]) nmToVpId['_n_'+nn]=v.id; else nmToVpId['_n_'+nn]='X'; });
+  const resolveVpId = (name) => { if(!name) return null; const n=name.trim().toLowerCase(); if(nmToVpId[n]) return nmToVpId[n]; if(n.includes(',')){ const rev=n.split(',').map(s=>s.trim()).reverse().join(' '); if(nmToVpId[rev]) return nmToVpId[rev]; } for(const p of n.split(/[\s,]+/)){ const k='_n_'+p; if(nmToVpId[k]&&nmToVpId[k]!=='X') return nmToVpId[k]; } return null; };
+  const payerToVpId = {};
+  for(const [pid,nm] of Object.entries(payerToName)){ const vid=resolveVpId(nm); if(vid) payerToVpId[pid]=vid; }
+  log(`  🔗 Payer→VP: ${Object.keys(payerToVpId).length} Zuordnungen`);
+
+  // PV-Blatt: Abzüge/Nachzahlungen
+  const sheetAbzByVP = {};
+  if(pvBlattRaw){ let cnt=0; pvBlattRaw.split('\n').slice(1).filter(l=>l.trim()).forEach(line=>{ const cols=csvPL(line); const vtN=(cols[3]||'').trim(); const kunde=(cols[4]||'').trim(); const prod=(cols[6]||'').trim(); const bs=(cols[7]||'').trim(); if(!vtN||!bs) return; const b=parseFloat(bs.replace(',','.').replace('€','')); if(isNaN(b)||b===0) return; const vid=resolveVpId(vtN); if(!vid){ log(`  ⚠️ PV-Blatt: ${vtN} nicht gefunden`); return; } if(!sheetAbzByVP[vid]) sheetAbzByVP[vid]=[]; sheetAbzByVP[vid].push({betrag:b,produkt:prod||kunde,kunde}); cnt++; }); log(`  📋 PV-Blatt ${periode}: ${cnt} Einträge`); }
+
+  // VS: Vorschüsse/Rechnungen
+  const sheetVSByVP = {};
+  if(vsRaw){ let cnt=0; vsRaw.split('\n').slice(1).filter(l=>l.trim()).forEach(line=>{ const cols=csvPL(line); const pid=(cols[1]||'').trim(); const ref=(cols[2]||'').trim(); const refE=(cols[3]||'').trim(); const cat=(cols[4]||'').trim(); const nt=parseFloat((cols[8]||'0').replace(',','.')); if(!pid||isNaN(nt)||nt===0) return; const vid=payerToVpId[pid]; if(!vid) return; if(!sheetVSByVP[vid]) sheetVSByVP[vid]=[]; const rn=ref!=='NULL'?ref:(refE!=='NULL'?refE:''); sheetVSByVP[vid].push({betrag:nt,referenz:rn,kategorie:cat}); cnt++; }); log(`  📋 VS: ${cnt} Einträge`); }
+
+  // Stnr: Steuerberater
+  const sheetStnrByVP = {};
+  if(stnrRaw){ let cnt=0; stnrRaw.split('\n').slice(1).filter(l=>l.trim()).forEach(line=>{ const cols=csvPL(line); const pid=(cols[0]||'').trim(); const sm=parseFloat((cols[2]||'0').replace(',','.')); if(!pid||isNaN(sm)||sm===0) return; const vid=payerToVpId[pid]; if(!vid) return; sheetStnrByVP[vid]={betrag:sm,payerId:pid}; cnt++; }); log(`  📋 Stnr: ${cnt} Einträge`); }
+
   let count = 0;
   // ALL VP IDs incl. team bonus recipients + sonderprov
-  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP), ...Object.keys(umleitungOrders), ...Object.keys(szByVP)]);
+  const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP), ...Object.keys(umleitungOrders), ...Object.keys(szByVP), ...Object.keys(sheetAbzByVP), ...Object.keys(sheetVSByVP), ...Object.keys(sheetStnrByVP)]);
   for(const vpId of allVPIds){
     const vp = vpById[vpId]; if(!vp) continue;
     if((vp.typ||'').includes('scouter')) continue; // Scouter werden im Scouter-Loop verarbeitet
@@ -544,7 +581,8 @@ async function generateAbrechnungen(periode, onProgress){
     const vpOffen2 = offenByVP[vpId] || [];
     const hasSonder = !!sonderByVP[vpId];
     const hasTeamB = !!teamBonusByVP[vpId];
-    if(!orders.length && !vpStornos2.length && !vpOffen2.length && !(onHoldByVP[vpId]||[]).length && !hasTeamB && !(szByVP[vpId]||[]).length) continue;
+    const hasSheetData = !!(sheetAbzByVP[vpId]||[]).length || !!(sheetVSByVP[vpId]||[]).length || !!sheetStnrByVP[vpId];
+    if(!orders.length && !vpStornos2.length && !vpOffen2.length && !(onHoldByVP[vpId]||[]).length && !hasTeamB && !(szByVP[vpId]||[]).length && !hasSheetData) continue;
     const ruleTyp = typMap[vp.typ] || vp.typ;
     const regel = regelMap[ruleTyp];
     if(!regel){ log(`⚠️ ${vp.vorname} ${vp.nachname}: keine Regel für ${ruleTyp}`); continue; }
@@ -703,6 +741,29 @@ async function generateAbrechnungen(periode, onProgress){
     // On Hold Info
     const vpOnHold = onHoldByVP[vpId] || [];
     vpOnHold.forEach(o => { positionen.push({typ:'on_hold_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`On Hold – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
+    // === SHEET-DATEN: PV-Blatt Abzüge/Nachzahlungen ===
+    const vpShAbz = sheetAbzByVP[vpId] || [];
+    vpShAbz.forEach(sa => {
+      const isDupe = positionen.some(p => Math.abs(p.original_betrag - sa.betrag) < 0.01 && (p.produkt||'').includes((sa.produkt||'').substring(0,12)));
+      if(isDupe){ log(`  ⚠️ ${vpName}: PV-Blatt Duplikat: ${sa.produkt} ${sa.betrag}€`); return; }
+      positionen.push({typ:sa.betrag>=0?'sondereinsatz':'abzug', auftrag_nr:null, kunde:sa.kunde, produkt:sa.produkt, original_betrag:sa.betrag, aktiv:true, zurueckgestellt:false, notiz:`PV-Blatt ${periode}`});
+      bruttoTotal += sa.betrag;
+    });
+    if(vpShAbz.length) log(`  📋 ${vpName}: ${vpShAbz.length} PV-Blatt (${vpShAbz.reduce((s,a)=>s+a.betrag,0)}€)`);
+    // === SHEET-DATEN: VS Vorschüsse/Rechnungen (separat, NICHT in brutto) ===
+    const vpVSh = sheetVSByVP[vpId] || [];
+    vpVSh.forEach(vs => {
+      const isDupe = positionen.some(p => p.notiz && vs.referenz && p.notiz.includes(vs.referenz));
+      if(isDupe) return;
+      positionen.push({typ:'vorschuss_rechnung', auftrag_nr:null, kunde:vs.referenz, produkt:`${vs.kategorie==='RE'?'Rechnung':'Beleg'} ${vs.referenz}`, original_betrag:vs.betrag, aktiv:true, zurueckgestellt:false, notiz:`VS ${vs.referenz}`});
+    });
+    if(vpVSh.length) log(`  📋 ${vpName}: ${vpVSh.length} VS-Einträge`);
+    // === SHEET-DATEN: Stnr Steuerberater ===
+    const vpStnrSh = sheetStnrByVP[vpId];
+    if(vpStnrSh){
+      positionen.push({typ:'stnr_auszahlung', auftrag_nr:null, kunde:null, produkt:'Steuerberater-Auszahlung', original_betrag:vpStnrSh.betrag, aktiv:true, zurueckgestellt:false, notiz:`Stnr ${vpStnrSh.payerId}`});
+      log(`  📋 ${vpName}: Stnr ${vpStnrSh.betrag}€`);
+    }
     // === AUTO KORREKTUREN (Storno + Staffel + Stufen aus ALL1211) ===
     const vpKorr = staffelKorrekturen[vpId] || [];
     vpKorr.forEach(k => {
@@ -2035,5 +2096,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
+
 
 
