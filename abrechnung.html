@@ -481,17 +481,6 @@ async function generateAbrechnungen(periode, onProgress){
     const others = kundeANIndex[kn] || [];
     return others.some(o => o.an > myAN && !o.storniert);
   };
-  // === PRE-CALCULATE: Kumulative Totals pro VP über alle Monate ===
-  const totalsByVP = {};
-  for(const [tKey,tData] of Object.entries(korrByVPM)){
-    const tVpId=tKey.split('_')[0];
-    if(!totalsByVP[tVpId]) totalsByVP[tVpId]={bezahlt:0,aktiv:0};
-    const tEchte=tData.stornoBez.filter(o=>!isFakeStorno(o.kunde_name,o.auftrag_nr));
-    const tFake=tData.stornoBez.filter(o=>isFakeStorno(o.kunde_name,o.auftrag_nr));
-    totalsByVP[tVpId].bezahlt+=tData.bezahlt.length+tEchte.length+tFake.length;
-    totalsByVP[tVpId].aktiv+=tData.bezahlt.length+tData.aktiv.length+tFake.length;
-  }
-  log(`📊 VP-Totals: ${Object.entries(totalsByVP).map(([id,t])=>`${(vpById[id]||{}).nachname||id}: ${t.bezahlt}bez/${t.aktiv}akt`).join(', ')}`);
   const staffelKorrekturen = {};
   for(const [key,data] of Object.entries(korrByVPM)){
     const vpId=key.split('_')[0]; const om=key.split('_').slice(1).join('_');
@@ -506,15 +495,13 @@ async function generateAbrechnungen(periode, onProgress){
     const schwelle=regel.staffel_schwelle; const basisR=regel.basis_betrag_sale; const staffelR=regel.staffel_betrag_sale; const diff=staffelR-basisR;
     const vpName=`${vp.vorname} ${vp.nachname}`;
     const cntBez=allBez.length; const cntEchteStorno=echteStornoBez.length; const cntAktivBez=data.bezahlt.length;
-    // KUMULATIV: Staffel/Stufen basieren auf GESAMT-Aufträgen über ALLE Monate
-    const vpTotals=totalsByVP[vpId]||{bezahlt:0,aktiv:0};
-    // wasStaffel: hatte der VT bei Zahlung insgesamt ≥schwelle bezahlte? (kumulativ, nicht Betrag!)
-    const wasStaffel=vpTotals.bezahlt>=schwelle;
-    // staffelJetzt: hat der VT jetzt noch insgesamt ≥schwelle aktive?
-    const staffelJetzt=vpTotals.aktiv>=schwelle;
-    // Stufen berechnen: KUMULATIV damals (Gesamt-bezahlt) vs jetzt (Gesamt-aktiv)
+    // Aktiv gesamt: bezahlt+aktiv+fakeStornos (weil Ersatzauftrag existiert = Kunde noch da)
+    const cntAktivGes=data.bezahlt.length+data.aktiv.length+fakeStornoBez.length;
+    const wasStaffel=allBez.some(o=>o.bezahlt_betrag>=staffelR);
+    const staffelJetzt=cntAktivGes>=schwelle;
+    // Stufen berechnen: damals (bei Zahlung) vs jetzt
     let stufeDam=0,stufeJzt=0;
-    for(const s of stufen){if(s.gilt_fuer!==ruleTyp)continue; if(vpTotals.bezahlt>=s.min_anlagen&&s.bonus_betrag>stufeDam)stufeDam=s.bonus_betrag; if(vpTotals.aktiv>=s.min_anlagen&&s.bonus_betrag>stufeJzt)stufeJzt=s.bonus_betrag;}
+    for(const s of stufen){if(s.gilt_fuer!==ruleTyp)continue; if(cntBez>=s.min_anlagen&&s.bonus_betrag>stufeDam)stufeDam=s.bonus_betrag; if(cntAktivGes>=s.min_anlagen&&s.bonus_betrag>stufeJzt)stufeJzt=s.bonus_betrag;}
     const korrs=[];
     // A) Storno-Rückforderung: bezahlt + jetzt storniert + KEIN Ersatzauftrag → voller Betrag zurück
     if(cntEchteStorno>0){
