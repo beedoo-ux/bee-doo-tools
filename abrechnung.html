@@ -433,8 +433,8 @@ async function generateAbrechnungen(periode, onProgress){
   log('Archiviere alte Abrechnungen für Periode...');
   const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&archiviert_am=is.null&select=id,status,mitarbeiter_name,brutto_provisionen`);
   const now = new Date().toISOString();
-  for(const oa of oldAbr){ try{await sbU('pay_abrechnungen',`id=eq.${oa.id}`,{status:'archiviert',archiviert_am:now});}catch(e){log(`⚠️ Archiv-Fehler ${oa.mitarbeiter_name}: ${e.message}`);try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e2){}try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e2){}} }
-  if(oldAbr.length) log(`📦 ${oldAbr.length} alte Abrechnungen archiviert`);
+  for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbU('pay_abrechnungen',`id=eq.${oa.id}`,{status:'archiviert',archiviert_am:now});}catch(e){log(`⚠️ Archiv-Fehler ${oa.mitarbeiter_name}: ${e.message}`);try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e2){}} }
+  if(oldAbr.length) log(`📦 ${oldAbr.length} alte Abrechnungen archiviert (+ Positionen gelöscht)`);
   // === STORNO + STAFFEL + STUFEN KORREKTUR (basierend auf ALL1211 Google Sheet) ===
   const SHEET_ID='1NP2uP1lctwkaqS5ChNNJ12ps8fz7ra66p_akpxLkTX0';
   log('🔍 Lade ALL1211 Zahlungsdaten aus Google Sheet...');
@@ -2096,6 +2096,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
+
 
 
 
