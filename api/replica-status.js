@@ -11,7 +11,23 @@ export default async function handler(req, res) {
     const r = await fetch('http://91.98.26.59/status', { signal: controller.signal });
     clearTimeout(t);
     let txt = await r.text();
-    txt = txt.replace(/(\d)\s+(\d+)\s*,/g, '$1,');
+    // Fix broken JSON: remove standalone number lines before commas
+    let lines = txt.split('\n');
+    let cleaned = [];
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+      // Skip lines that are just a number followed by comma (broken lag_seconds)
+      if (/^\d+,$/.test(line) && i > 0 && cleaned.length > 0) {
+        // Append comma to previous line if needed
+        let prev = cleaned[cleaned.length - 1].trimEnd();
+        if (!prev.endsWith(',') && !prev.endsWith('{') && !prev.endsWith('[')) {
+          cleaned[cleaned.length - 1] = prev + ',';
+        }
+        continue;
+      }
+      cleaned.push(lines[i]);
+    }
+    txt = cleaned.join('\n');
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).send(txt);
   } catch (e) {
