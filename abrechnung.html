@@ -541,7 +541,7 @@ async function generateAbrechnungen(periode, onProgress){
   const csvPL = line => { const f=[]; let c='',q=false; for(let i=0;i<line.length;i++){const ch=line[i]; if(ch==='"')q=!q; else if(ch===','&&!q){f.push(c.trim());c='';} else c+=ch;} f.push(c.trim()); return f; };
   const [pvAnlagenRaw, pvBlattRaw, vsRaw, stnrRaw] = await Promise.all([
     fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=PV%20Anlagen`).then(r=>r.text()).catch(()=>''),
-    fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(periode)}`).then(r=>r.text()).catch(()=>''),
+    fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${lzY}%2F${lzM}`).then(r=>r.text()).catch(()=>''),
     fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=VS`).then(r=>r.text()).catch(()=>''),
     fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Stnr`).then(r=>r.text()).catch(()=>'')
   ]);
@@ -558,7 +558,7 @@ async function generateAbrechnungen(periode, onProgress){
 
   // PV-Blatt: Abzüge/Nachzahlungen
   const sheetAbzByVP = {};
-  if(pvBlattRaw){ let cnt=0; pvBlattRaw.split('\n').slice(1).filter(l=>l.trim()).forEach(line=>{ const cols=csvPL(line); const vtN=(cols[3]||'').trim(); const kunde=(cols[4]||'').trim(); const prod=(cols[6]||'').trim(); const bs=(cols[7]||'').trim(); if(!vtN||!bs) return; const b=parseFloat(bs.replace(',','.').replace('€','')); if(isNaN(b)||b===0) return; const vid=resolveVpId(vtN); if(!vid){ log(`  ⚠️ PV-Blatt: ${vtN} nicht gefunden`); return; } if(!sheetAbzByVP[vid]) sheetAbzByVP[vid]=[]; sheetAbzByVP[vid].push({betrag:b,produkt:prod||kunde,kunde}); cnt++; }); log(`  📋 PV-Blatt ${periode}: ${cnt} Einträge`); }
+  if(pvBlattRaw){ let cnt=0; pvBlattRaw.split('\n').slice(1).filter(l=>l.trim()).forEach(line=>{ const cols=csvPL(line); const vtN=(cols[3]||'').trim(); const kunde=(cols[4]||'').trim(); const prod=(cols[6]||'').trim(); const bs=(cols[7]||'').trim(); if(!vtN||!bs) return; const b=parseFloat(bs.replace(',','.').replace('€','')); if(isNaN(b)||b===0) return; const vid=resolveVpId(vtN); if(!vid){ log(`  ⚠️ PV-Blatt: ${vtN} nicht gefunden`); return; } if(!sheetAbzByVP[vid]) sheetAbzByVP[vid]=[]; sheetAbzByVP[vid].push({betrag:b,produkt:prod||kunde,kunde}); cnt++; }); log(`  📋 PV-Blatt ${lzY}/${lzM}: ${cnt} Einträge`); }
 
   // VS: Vorschüsse/Rechnungen
   const sheetVSByVP = {};
@@ -746,7 +746,7 @@ async function generateAbrechnungen(periode, onProgress){
     vpShAbz.forEach(sa => {
       const isDupe = positionen.some(p => Math.abs(p.original_betrag - sa.betrag) < 0.01 && (p.produkt||'').includes((sa.produkt||'').substring(0,12)));
       if(isDupe){ log(`  ⚠️ ${vpName}: PV-Blatt Duplikat: ${sa.produkt} ${sa.betrag}€`); return; }
-      positionen.push({typ:sa.betrag>=0?'sondereinsatz':'abzug', auftrag_nr:null, kunde:sa.kunde, produkt:sa.produkt, original_betrag:sa.betrag, aktiv:true, zurueckgestellt:false, notiz:`PV-Blatt ${periode}`});
+      positionen.push({typ:sa.betrag>=0?'sondereinsatz':'abzug', auftrag_nr:null, kunde:sa.kunde, produkt:sa.produkt, original_betrag:sa.betrag, aktiv:true, zurueckgestellt:false, notiz:`PV-Blatt ${lzY}/${lzM}`});
       bruttoTotal += sa.betrag;
     });
     if(vpShAbz.length) log(`  📋 ${vpName}: ${vpShAbz.length} PV-Blatt (${vpShAbz.reduce((s,a)=>s+a.betrag,0)}€)`);
