@@ -2,35 +2,33 @@ export const config = { maxDuration: 10 };
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Proxy-Version', '4');
   if (req.method === 'OPTIONS') return res.status(204).end();
   try {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 8000);
     const r = await fetch('http://91.98.26.59/status', { signal: controller.signal });
     clearTimeout(t);
-    let txt = await r.text();
-    // Fix broken JSON: remove standalone number lines before commas
-    let lines = txt.split('\n');
-    let cleaned = [];
-    for (let i = 0; i < lines.length; i++) {
-      let line = lines[i].trim();
-      // Skip lines that are just a number followed by comma (broken lag_seconds)
-      if (/^\d+,$/.test(line) && i > 0 && cleaned.length > 0) {
-        // Append comma to previous line if needed
-        let prev = cleaned[cleaned.length - 1].trimEnd();
-        if (!prev.endsWith(',') && !prev.endsWith('{') && !prev.endsWith('[')) {
-          cleaned[cleaned.length - 1] = prev + ',';
+    const txt = await r.text();
+    // Aggressive cleanup: remove any line that is just digits+comma
+    const fixed = txt.split('\n').filter((line, i, arr) => {
+      const trimmed = line.trim();
+      if (/^\d+,$/.test(trimmed) && i > 0) {
+        // Patch previous non-filtered line to end with comma
+        for (let j = arr.length - 1; j >= 0; j--) {
+          if (arr[j] !== null) {
+            arr[j] = arr[j].replace(/(\d)\s*$/, '$1,');
+            break;
+          }
         }
-        continue;
+        return false;
       }
-      cleaned.push(lines[i]);
-    }
-    txt = cleaned.join('\n');
+      return true;
+    }).join('\n');
     res.setHeader('Content-Type', 'application/json');
-    return res.status(200).send(txt);
+    return res.status(200).send(fixed);
   } catch (e) {
-    return res.status(502).json({ error: e.message });
+    return res.status(502).json({ error: e.message, v: 4 });
   }
 }
