@@ -439,7 +439,9 @@ async function generateAbrechnungen(periode, onProgress){
   const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP), ...Object.keys(umleitungOrders), ...Object.keys(szByVP)]);
   for(const vpId of allVPIds){
     const vp = vpById[vpId]; if(!vp) continue;
+    if((vp.typ||'').includes('scouter')) continue; // Scouter werden im Scouter-Loop verarbeitet
     if(skipVPIds.has(vpId)){ log(`⏸️ ${vp.vorname} ${vp.nachname} übersprungen (skip_abrechnung)`); continue; }
+    try{
     const orders = byVP[vpId] || [];
     const vpStornos2 = stornoByVP[vpId] || [];
     const vpOffen2 = offenByVP[vpId] || [];
@@ -620,6 +622,7 @@ async function generateAbrechnungen(periode, onProgress){
     const posData=positionen.map(p=>{const {_teamDetail,_betragProSale,_leadDetails,_betragProLead,_terminDetails,_betragProTermin,...rest}=p;return{...rest,abrechnung_id:abrId};});
     for(let i=0;i<posData.length;i+=50){await sbP('pay_abrechnungen_positionen',posData.slice(i,i+50));}
     count++;
+    }catch(e){log(`❌ Fehler bei ${vp.vorname} ${vp.nachname}: ${e.message}`,'error');}
   }
   // ═══ SCOUTER ABRECHNUNGEN ═══
   log('Berechne Scouter...');
@@ -640,6 +643,7 @@ async function generateAbrechnungen(periode, onProgress){
     const sc = vpById[scId]; if(!sc) continue;
     if(skipVPIds.has(scId)){ log(`⏸️ ${sc.vorname} ${sc.nachname} übersprungen (skip_abrechnung)`); continue; }
     if(!sc.typ.includes('scouter')) continue; // safety
+    try{
     const orders = byScout[scId] || [];
     const scStornos = stornoByScout[scId] || [];
     const scOffen = offenByScout[scId] || [];
@@ -733,6 +737,7 @@ async function generateAbrechnungen(periode, onProgress){
     const posData=positionen.map(p=>{const {_leadDetails,_betragProLead,_terminDetails,_betragProTermin,...rest}=p;return{...rest,abrechnung_id:abrId};});
     for(let i=0;i<posData.length;i+=50){await sbP('pay_abrechnungen_positionen',posData.slice(i,i+50));}
     count++;
+    }catch(e){log(`❌ Fehler bei Scout ${sc.vorname} ${sc.nachname}: ${e.message}`,'error');}
   }
   log(`✅ ${count} Abrechnungen generiert!`);
   // Sonderzulagen als abgerechnet markieren, damit sie nicht doppelt kommen
@@ -1922,3 +1927,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
+
