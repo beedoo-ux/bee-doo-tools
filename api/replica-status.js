@@ -1,13 +1,31 @@
+export const config = { maxDuration: 10 };
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Cache-Control', 'no-cache, no-store');
   if (req.method === 'OPTIONS') return res.status(204).end();
+  
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  
   try {
-    const r = await fetch('http://91.98.26.59/status', { signal: AbortSignal.timeout(5000) });
-    const data = await r.json();
-    res.setHeader('Cache-Control', 'no-cache');
-    res.status(200).json(data);
+    const r = await fetch('http://91.98.26.59/status', {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    const text = await r.text();
+    res.setHeader('Content-Type', 'application/json');
+    res.status(200).send(text);
   } catch (e) {
-    res.status(502).json({ error: 'Replica not reachable', ts: new Date().toISOString() });
+    clearTimeout(timeout);
+    res.status(502).json({ 
+      error: 'Replica not reachable',
+      detail: e.message,
+      code: e.code || 'UNKNOWN',
+      ts: new Date().toISOString()
+    });
   }
 }
