@@ -157,6 +157,52 @@ const sbP = async(t,d)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'P
 const sbU = async(t,q,d)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}?${q}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(d)});if(!r.ok)throw new Error(`PATCH ${t}:${r.status}`);return r.json();};
 const sbD = async(t,q)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}?${q}`,{method:'DELETE',headers:HDR});if(!r.ok)throw new Error(`DEL ${t}:${r.status}`);};
 
+// ═══ KI-Gesundheitscheck ═══
+async function runHealthCheck(periode) {
+  const warnings = [];
+  const allOrders = await sbG('pay_auftraege',`produkt_typ=not.in.(lead_count,termin_count,zero_count,sonderzulage)&limit=1000`);
+  const mitarbeiter = await sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,typ');
+  const vtMap = {}; mitarbeiter.forEach(m => vtMap[m.id] = `${m.vorname} ${m.nachname}`);
+  const now = new Date();
+
+  // 1. On-Hold + bereits bezahlt
+  const paidOH = allOrders.filter(o => (o.notiz||'').includes('on_hold') && o.abgerechnet_monat);
+  if(paidOH.length) warnings.push({typ:'kritisch',icon:'🔴',titel:`${paidOH.length} On-Hold bereits bezahlt`,details:paidOH.map(o=>`${o.auftrag_nr} ${o.kunde_name} (${vtMap[o.vertriebler_id]||'?'})`)});
+
+  // 2. On-Hold + storniert
+  const stornoOH = allOrders.filter(o => (o.notiz||'').includes('on_hold') && o.storniert);
+  if(stornoOH.length) warnings.push({typ:'kritisch',icon:'🔴',titel:`${stornoOH.length} On-Hold aber storniert`,details:stornoOH.map(o=>`${o.auftrag_nr} ${o.kunde_name}`)});
+
+  // 3. Aufträge ohne Vertriebler
+  const noVT = allOrders.filter(o => !o.vertriebler_id && !o.storniert);
+  if(noVT.length) warnings.push({typ:'warnung',icon:'🟡',titel:`${noVT.length} Aufträge ohne Vertriebler`,details:noVT.slice(0,8).map(o=>`${o.auftrag_nr} ${o.kunde_name}`)});
+
+  // 4. Duplikate
+  const byK = {}; allOrders.filter(o=>!o.storniert).forEach(o=>{const k=(o.kunde_name||'').trim().toLowerCase();if(k){if(!byK[k])byK[k]=[];byK[k].push(o);}});
+  const dupes = Object.entries(byK).filter(([k,v])=>v.length>1);
+  if(dupes.length) warnings.push({typ:'info',icon:'🔵',titel:`${dupes.length} mögliche Duplikate`,details:dupes.slice(0,8).map(([k,v])=>`${v[0].kunde_name}: ${v.map(o=>o.auftrag_nr).join(', ')}`)});
+
+  // 5. On-Hold >60 Tage
+  const oldOH = allOrders.filter(o=>(o.notiz||'').includes('on_hold')&&!o.storniert&&!o.abgerechnet_monat&&(now-new Date(o.auftrags_datum))/864e5>60);
+  if(oldOH.length) warnings.push({typ:'warnung',icon:'🟡',titel:`${oldOH.length} On-Hold seit >60 Tagen`,details:oldOH.map(o=>`${o.auftrag_nr} ${o.kunde_name} – ${Math.round((now-new Date(o.auftrags_datum))/864e5)}d (${vtMap[o.vertriebler_id]||'?'})`)});
+
+  // 6. Storno-Quote >35%
+  const stByVT={},toByVT={}; allOrders.forEach(o=>{if(!o.vertriebler_id)return;toByVT[o.vertriebler_id]=(toByVT[o.vertriebler_id]||0)+1;if(o.storniert)stByVT[o.vertriebler_id]=(stByVT[o.vertriebler_id]||0)+1;});
+  const hiSt=Object.entries(toByVT).filter(([v,t])=>t>=5&&(stByVT[v]||0)/t>.35).map(([v,t])=>({n:vtMap[v]||'?',s:stByVT[v]||0,t,p:Math.round((stByVT[v]||0)/t*100)}));
+  if(hiSt.length) warnings.push({typ:'info',icon:'📊',titel:`${hiSt.length} VTs mit Storno >35%`,details:hiSt.map(h=>`${h.n}: ${h.s}/${h.t} = ${h.p}%`)});
+
+  // 7. Finanzierung abgelehnt, nicht storniert
+  const finAbg = allOrders.filter(o=>(o.beedoo_fortschritt||'').includes('Finanzierung abgelehnt')&&!o.storniert&&!o.abgerechnet_monat);
+  if(finAbg.length) warnings.push({typ:'warnung',icon:'🟡',titel:`${finAbg.length}× Finanz. abgelehnt (nicht storniert)`,details:finAbg.map(o=>`${o.auftrag_nr} ${o.kunde_name} (${vtMap[o.vertriebler_id]||'?'})`)});
+
+  // 8. Abrechnungen mit 0€
+  const abrs = await sbG('pay_abrechnungen',`periode=eq.${periode}&select=id,mitarbeiter_name,brutto_provisionen`);
+  const zeroA = abrs.filter(a=>a.brutto_provisionen===0);
+  if(zeroA.length) warnings.push({typ:'info',icon:'💡',titel:`${zeroA.length} Abrechnungen mit 0€`,details:zeroA.map(a=>a.mitarbeiter_name)});
+
+  return warnings;
+}
+
 async function generateAbrechnungen(periode, onProgress){
   const [y,m] = periode.split('/');
   const log = (msg) => onProgress?.(msg);
@@ -1770,7 +1816,7 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
 }
 
 function App(){
-  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);const[berOpen,setBerOpen]=useState(false);const[katFilter,setKatFilter]=useState('alle');const[maArr,setMaArr]=useState([]);
+  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);const[berOpen,setBerOpen]=useState(false);const[katFilter,setKatFilter]=useState('alle');const[maArr,setMaArr]=useState([]);const[hcWarnings,setHcWarnings]=useState([]);const[hcOpen,setHcOpen]=useState(false);const[hcBusy,setHcBusy]=useState(false);
 
   useEffect(()=>{(async()=>{try{const d=await sbG('pay_auszahlungen_historie','select=periode&order=periode.desc');const u=[...new Set(d.map(x=>x.periode))];const now=new Date();const cp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;if(!u.includes(cp))u.unshift(cp);const sorted=u.sort().reverse();setPers(sorted);setPer(sorted[0]||cp);}catch(e){const now=new Date();const p=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;setPers([p]);setPer(p);}})();},[]);
 
@@ -1803,14 +1849,32 @@ function App(){
 
   const doGenerate=async()=>{if(!per)return;if(!confirm(`Abrechnungen für ${pLabel(per)} generieren?\n\nBerechnet Provisionen aus allen offenen Aufträgen.\nVorhandene Entwürfe werden überschrieben.`))return;
     setGenBusy(true);setGenMsg('Starte...');
-    try{const cnt=await generateAbrechnungen(per,(msg)=>setGenMsg(msg));window.__t?.(`✅ ${cnt} Abrechnungen generiert`);await loadP();}catch(e){window.__t?.('Fehler: '+e.message,'error');console.error(e);}
+    try{const cnt=await generateAbrechnungen(per,(msg)=>setGenMsg(msg));setGenMsg('🔍 Gesundheitscheck...');const w=await runHealthCheck(per);setHcWarnings(w);if(w.length)setHcOpen(true);window.__t?.(`✅ ${cnt} Abrechnungen generiert` + (w.length ? ` | ⚠️ ${w.length} Hinweise` : ''));await loadP();}catch(e){window.__t?.('Fehler: '+e.message,'error');console.error(e);}
     setGenBusy(false);setGenMsg('');};
+  const doHealthCheck=async()=>{if(!per)return;setHcBusy(true);try{const w=await runHealthCheck(per);setHcWarnings(w);setHcOpen(true);window.__t?.(w.length?`⚠️ ${w.length} Hinweise gefunden`:'✅ Alles sauber!');}catch(e){window.__t?.('Fehler: '+e.message,'error');}setHcBusy(false);};
 
   return<Toast>
     <div className="app-header"><div className="logo-area"><div><div className="logo-text">bee<span>-doo</span> PAY</div><div className="logo-sub">Probeabrechnung</div></div></div>
-    <div className="controls-bar">{pers.length>0&&<select className="sel-period" value={per} onChange={e=>setPer(e.target.value)}>{pers.map(p=><option key={p} value={p}>{pLabel(p)}</option>)}</select>}<button className="btn btn-primary" onClick={doGenerate} disabled={genBusy} style={{opacity:genBusy?.6:1}}>{genBusy?'⏳ Generiere...':'🔄 Abrechnungen generieren'}</button><button className="btn btn-secondary" onClick={()=>setBerOpen(true)} title="Datenbereinigung">🔧</button><a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>🏠</a></div></div>
+    <div className="controls-bar">{pers.length>0&&<select className="sel-period" value={per} onChange={e=>setPer(e.target.value)}>{pers.map(p=><option key={p} value={p}>{pLabel(p)}</option>)}</select>}<button className="btn btn-primary" onClick={doGenerate} disabled={genBusy} style={{opacity:genBusy?.6:1}}>{genBusy?'⏳ Generiere...':'🔄 Abrechnungen generieren'}</button><button className="btn btn-secondary" onClick={doHealthCheck} disabled={hcBusy} title="KI-Gesundheitscheck" style={{position:'relative'}}>{hcBusy?'⏳':'🩺'}{hcWarnings.length>0&&!hcBusy&&<span style={{position:'absolute',top:-4,right:-4,background:'#da3633',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700}}>{hcWarnings.length}</span>}</button><button className="btn btn-secondary" onClick={()=>setBerOpen(true)} title="Datenbereinigung">🔧</button><a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>🏠</a></div></div>
     <BereinigungBanner onClick={()=>setBerOpen(true)}/>
     {genMsg&&<div style={{padding:'8px 24px',background:'#161b22',borderBottom:'1px solid #21262d',fontSize:13,color:'#F5C500'}}>⏳ {genMsg}</div>}
+    {hcOpen&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.7)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>e.target===e.currentTarget&&setHcOpen(false)}>
+      <div style={{background:'#161b22',border:'1px solid #30363d',borderRadius:12,width:'90%',maxWidth:700,maxHeight:'80vh',overflow:'auto',padding:24}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div style={{fontSize:18,fontWeight:700,color:'#e6edf3'}}>🩺 Gesundheitscheck</div>
+          <button onClick={()=>setHcOpen(false)} style={{background:'none',border:'none',color:'#8b949e',fontSize:20,cursor:'pointer'}}>✕</button>
+        </div>
+        {hcWarnings.length===0&&<div style={{padding:24,textAlign:'center',color:'#3fb950',fontSize:16}}>✅ Alles sauber – keine Probleme gefunden!</div>}
+        {hcWarnings.map((w,i)=><div key={i} style={{marginBottom:12,padding:12,background:w.typ==='kritisch'?'#1c0a0a':w.typ==='warnung'?'#1c1a0a':'#0a1a1c',border:`1px solid ${w.typ==='kritisch'?'#da363360':w.typ==='warnung'?'#d2992160':'#30363d'}`,borderRadius:8}}>
+          <div style={{fontWeight:700,color:w.typ==='kritisch'?'#f85149':w.typ==='warnung'?'#d29921':'#8b949e',marginBottom:6}}>{w.icon} {w.titel}</div>
+          <div style={{fontSize:12,color:'#8b949e',lineHeight:1.6}}>{w.details.map((d,j)=><div key={j} style={{padding:'2px 0'}}>• {d}</div>)}</div>
+        </div>)}
+        <div style={{marginTop:16,display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button className="btn btn-secondary btn-sm" onClick={()=>setHcOpen(false)}>Schließen</button>
+          <button className="btn btn-primary btn-sm" onClick={()=>{doHealthCheck();}} disabled={hcBusy}>{hcBusy?'⏳ Prüfe...':'🔄 Erneut prüfen'}</button>
+        </div>
+      </div>
+    </div>}
     <div className="stats-row">
       <div className="stat-card"><div className="stat-label">Periode</div><div className="stat-value">{per?pLabel(per):'—'}</div></div>
       <div className="stat-card"><div className="stat-label">Vertriebler</div><div className="stat-value gold">{vtCount}</div></div>
