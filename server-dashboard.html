@@ -208,7 +208,7 @@
           <div class="repl-node replica offline" id="repl-replica">
             <div class="rn-label">Replica</div>
             <div class="rn-name">Hetzner</div>
-            <div class="rn-sub" id="repl-host">CX21 · Falkenstein</div>
+            <div class="rn-sub" id="repl-host">CPX22 · Nürnberg</div>
           </div>
         </div>
         <div class="repl-stats">
@@ -221,7 +221,7 @@
             <div class="rs-label">Lag</div>
           </div>
           <div class="repl-stat">
-            <div class="rs-val dim" id="rs-tables">0/78</div>
+            <div class="rs-val dim" id="rs-tables">0/72</div>
             <div class="rs-label">Tabellen</div>
           </div>
         </div>
@@ -293,7 +293,7 @@ function recheckAll(){addLog({time:new Date().toLocaleTimeString('de-DE',{hour12
 const servers=[
   {name:'Vercel Edge · EU-West',role:'Frontend CDN',icon:'⚡',ibg:'rgba(245,197,0,.12)',cpu:34,color:'#00e57a'},
   {name:'Supabase · Postgres',role:'Primary DB',icon:'🗄️',ibg:'rgba(168,85,247,.12)',cpu:61,color:'#a855f7'},
-  {name:'Hetzner · Falkenstein',role:'Replica DB',icon:'🛡️',ibg:'rgba(0,212,255,.12)',cpu:18,color:'#00d4ff'},
+  {name:'Hetzner · Nürnberg',role:'Replica DB',icon:'🛡️',ibg:'rgba(0,212,255,.12)',cpu:18,color:'#00d4ff'},
   {name:'Anthropic Inference',role:'KI Modell',icon:'🧠',ibg:'rgba(245,197,0,.12)',cpu:47,color:'#F5C500'},
   {name:'Google Cloud APIs',role:'Geodaten',icon:'🌍',ibg:'rgba(0,229,122,.08)',cpu:19,color:'#00e57a'},
 ];
@@ -312,6 +312,7 @@ function drawSpark(){const cv=document.getElementById('sparkline');const dpr=Mat
 
 // ── REPLICATION MONITOR ───────────────────────────────────
 const REPL_TABLES=['pay_auftraege','pay_mitarbeiter','termine','customers','scouter','vertriebler','leveto_leads','efs_projekte'];
+const REPLICA_URL='http://91.98.26.59/status.json';
 
 async function checkReplication(){
   const ts=new Date().toLocaleTimeString('de-DE',{hour12:false});
@@ -330,30 +331,36 @@ async function checkReplication(){
   }).join('');
   const total=Object.values(counts).filter(v=>typeof v==='number').reduce((a,b)=>a+b,0);
   
-  // Check if replica API is configured via localStorage
-  const replUrl=localStorage.getItem('beedoo_replica_url');
-  if(replUrl){
-    try{
-      const res=await fetch(replUrl,{signal:AbortSignal.timeout(5000)});
-      if(res.ok){
-        const data=await res.json();
-        const lag=data.lag_seconds||0;
-        document.getElementById('rs-status').textContent='AKTIV';document.getElementById('rs-status').className='rs-val ok';
-        document.getElementById('rs-lag').textContent=lag+'s';document.getElementById('rs-lag').className='rs-val '+(lag<10?'ok':lag<60?'warn':'err');
-        document.getElementById('rs-tables').textContent=(data.synced||78)+'/78';document.getElementById('rs-tables').className='rs-val ok';
-        document.getElementById('repl-badge').textContent='LIVE';document.getElementById('repl-badge').style.cssText='background:rgba(0,229,122,.15);color:var(--green);border-color:rgba(0,229,122,.25)';
-        document.getElementById('repl-replica').classList.remove('offline');
-        document.getElementById('kpi-lag').innerHTML=lag+'<span class="unit">s</span>';document.getElementById('kpi-lag').style.color=lag<10?'var(--green)':lag<60?'var(--orange)':'var(--red)';
-        document.getElementById('kpi-lag-sub').innerHTML=lag<10?'<span class="up">↑</span> Optimal':'<span class="warn">⚠</span> Erhöht';
-        addLog({time:ts,msg:`Replica · Lag: ${lag}s · ${data.synced||78}/78 Tabellen`,tag:'REPL',color:'#00d4ff'});
-        return;
-      }
-    }catch(e){}
-  }
-  addLog({time:ts,msg:`Primary OK · ${total.toLocaleString('de-DE')} Datensätze · Replica: Setup`,tag:'REPL',color:'#00d4ff'});
+  // Check Hetzner replica status API
+  try{
+    const res=await fetch(REPLICA_URL,{signal:AbortSignal.timeout(5000)});
+    if(res.ok){
+      const data=await res.json();
+      const lag=data.lag_seconds||0;
+      const synced=data.synced||0;
+      const isActive=data.status==='active';
+      document.getElementById('rs-status').textContent=isActive?'AKTIV':'INAKTIV';
+      document.getElementById('rs-status').className='rs-val '+(isActive?'ok':'err');
+      document.getElementById('rs-lag').textContent=lag+'s';
+      document.getElementById('rs-lag').className='rs-val '+(lag<10?'ok':lag<60?'warn':'err');
+      document.getElementById('rs-tables').textContent=synced+'/72';
+      document.getElementById('rs-tables').className='rs-val '+(synced>=70?'ok':'warn');
+      document.getElementById('repl-badge').textContent='LIVE';
+      document.getElementById('repl-badge').style.cssText='background:rgba(0,229,122,.15);color:var(--green);border-color:rgba(0,229,122,.25)';
+      document.getElementById('repl-replica').classList.remove('offline');
+      document.getElementById('kpi-lag').innerHTML=lag+'<span class="unit">s</span>';
+      document.getElementById('kpi-lag').style.color=lag<10?'var(--green)':lag<60?'var(--orange)':'var(--red)';
+      document.getElementById('kpi-lag-sub').innerHTML=lag<10?'<span class="up">↑</span> Optimal':lag<60?'<span class="warn">⚠</span> Erhöht':'<span class="dn">↓</span> Kritisch';
+      addLog({time:ts,msg:`Replica AKTIV · Lag: ${lag}s · ${synced}/72 Tabellen · ${data.total_rows?parseInt(data.total_rows).toLocaleString('de-DE'):''} Zeilen`,tag:'REPL',color:'#00d4ff'});
+      return;
+    }
+  }catch(e){/* replica not reachable yet */}
+  
+  // Fallback: replica not yet configured
+  addLog({time:ts,msg:`Primary OK · ${total.toLocaleString('de-DE')} Datensätze · Replica: Status-API prüfen`,tag:'REPL',color:'#00d4ff'});
 }
 
-function setupTicker(){const ev=['⚡ bee-doo Tools · Vercel ONLINE','🛰️ Scouting · 12 aktive Scouts','🗄️ Supabase · Primary DB','🛡️ Hetzner · Replica DB','🧠 Anthropic · claude-sonnet aktiv','🌍 Google Maps · Geocoding OK','🐙 GitHub · Last push: feat:dispatch','📊 78 Tabellen repliziert','⚙️ Alle Systeme nominal'];const t=document.getElementById('ticker');t.textContent=[...ev,...ev].map(e=>`${e}   ·   `).join('');}
+function setupTicker(){const ev=['⚡ bee-doo Tools · Vercel ONLINE','🛰️ Scouting · 12 aktive Scouts','🗄️ Supabase · Primary DB','🛡️ Hetzner · Nürnberg · Replica DB','🧠 Anthropic · claude-sonnet aktiv','🌍 Google Maps · Geocoding OK','🐙 GitHub · Last push: feat:dispatch','📊 72 Tabellen repliziert','⚙️ Alle Systeme nominal'];const t=document.getElementById('ticker');t.textContent=[...ev,...ev].map(e=>`${e}   ·   `).join('');}
 
 function simUpdate(){servers.forEach(s=>{s.cpu=Math.max(5,Math.min(95,s.cpu+(Math.random()*8-4)))});dbs.forEach(d=>{d.u=Math.max(5,Math.min(95,d.u+(Math.random()*3-1.5)))});sparkData.shift();sparkData.push(Math.random()*60+20);document.getElementById('kpi-q').textContent=Math.floor(330+Math.random()*40);renderServers();renderDBs();drawSpark();}
 
