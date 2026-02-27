@@ -290,6 +290,67 @@ function parseCSVBank(text){
         })}
     return txns}
 
+function IBANFinder({log}){
+    const[loading,setLoading]=useState(false);const[matches,setMatches]=useState(null);const[saved,setSaved]=useState({});
+    const normalize=s=>(s||'').toLowerCase().replace(/[^a-zäöüß]/g,' ').replace(/\s+/g,' ').trim();
+    const scan=async()=>{setLoading(true);setSaved({});log('🔍 IBAN-Finder: Scanne Banktransaktionen...','warn');
+        try{
+            // HGB-Mitarbeiter ohne IBAN laden
+            const maR=await fetch(ap('pay_mitarbeiter')+'?aktiv=eq.true&typ=like.*hgb*&select=id,vorname,nachname,typ,iban',{headers:hd()});
+            const allHGB=await maR.json();
+            const missing=allHGB.filter(m=>!m.iban||!m.iban.trim());
+            if(!missing.length){log('✅ Alle HGB-Mitarbeiter haben eine IBAN','success');setMatches([]);setLoading(false);return}
+            log(`📋 ${missing.length} HGB ohne IBAN, ${allHGB.length-missing.length} mit IBAN`);
+            // Banktransaktionen mit IBAN laden (Ausgänge = Überweisungen an VTs)
+            const bkR=await fetch(ap('bank_transactions')+'?soll_haben=eq.DBIT&gegenkonto_iban=not.is.null&gegenkonto_iban=neq.&select=gegenkonto_name,gegenkonto_iban,gegenkonto_bic,betrag,buchungsdatum&order=buchungsdatum.desc&limit=5000',{headers:hd()});
+            const txns=await bkR.json();
+            log(`🏦 ${txns.length} ausgehende Transaktionen mit IBAN geladen`);
+            // Unique IBANs pro Gegenkonto-Name
+            const ibanMap={};
+            txns.forEach(t=>{if(!t.gegenkonto_name||!t.gegenkonto_iban)return;const k=normalize(t.gegenkonto_name);if(!ibanMap[k])ibanMap[k]={iban:t.gegenkonto_iban,bic:t.gegenkonto_bic||'',name:t.gegenkonto_name,dates:[],total:0,count:0};ibanMap[k].dates.push(t.buchungsdatum);ibanMap[k].total+=t.betrag;ibanMap[k].count++});
+            // Matching: Nachname im Gegenkonto-Name
+            const found=[];
+            missing.forEach(m=>{const nn=normalize(m.nachname);const vn=normalize(m.vorname);const full=normalize(m.vorname+' '+m.nachname);
+                for(const[k,v] of Object.entries(ibanMap)){
+                    // Exakt: "vorname nachname" oder "nachname vorname" oder nur nachname wenn eindeutig
+                    const parts=k.split(' ');
+                    const nameMatch=k.includes(full)||k.includes(normalize(m.nachname+' '+m.vorname))||(parts.some(p=>p===nn)&&parts.some(p=>p===vn));
+                    if(nameMatch){found.push({mitarbeiter:m,iban:v.iban,bic:v.bic,bankName:v.name,txCount:v.count,txTotal:v.total,lastDate:v.dates.sort().reverse()[0]});break}}});
+            setMatches(found);
+            log(`✅ ${found.length} IBAN-Matches gefunden von ${missing.length} fehlenden`,'success');
+        }catch(e){log(`❌ IBAN-Finder: ${e.message}`,'error')}setLoading(false)};
+    const saveIBAN=async(m,iban,bic)=>{
+        try{const r=await fetch(ap('pay_mitarbeiter')+`?id=eq.${m.id}`,{method:'PATCH',headers:{...hd(),Authorization:`Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4`,'Prefer':'return=representation'},body:JSON.stringify({iban:iban,bic:bic||null})});
+            if(!r.ok)throw new Error(await r.text());
+            setSaved(p=>({...p,[m.id]:true}));log(`✅ IBAN gespeichert: ${m.vorname} ${m.nachname} → ${iban}`,'success');
+        }catch(e){log(`❌ IBAN speichern: ${e.message}`,'error')}};
+    const saveAll=async()=>{if(!matches)return;const unsaved=matches.filter(m=>!saved[m.mitarbeiter.id]);
+        for(const mt of unsaved)await saveIBAN(mt.mitarbeiter,mt.iban,mt.bic);
+        log(`✅ ${unsaved.length} IBANs gespeichert`,'success')};
+    return(<div className="cd fi"><div className="cd-t">🔍 IBAN-Finder (nur HGB)</div>
+        <p style={{fontSize:13,color:'var(--td)',marginBottom:14,lineHeight:1.6}}>Scannt importierte Banktransaktionen und matcht Empfängernamen mit HGB-Mitarbeitern ohne IBAN. Angestellte werden über das Lohnbüro abgerechnet.</p>
+        <button className="btn by" disabled={loading} onClick={scan} style={{marginBottom:14}}>{loading?<React.Fragment><span className="spinner"/> Scanne...</React.Fragment>:'🔍 IBANs aus Banktransaktionen suchen'}</button>
+        {matches!==null&&matches.length===0&&<div style={{fontSize:13,color:'var(--g)',padding:16,textAlign:'center',background:'var(--gd)',borderRadius:8}}>✅ Keine fehlenden IBANs gefunden oder keine Matches in Banktransaktionen</div>}
+        {matches!==null&&matches.length>0&&<React.Fragment>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                <span style={{fontSize:12,color:'var(--a)'}}>{matches.length} Matches gefunden</span>
+                <button className="btn bo bsm" onClick={saveAll} disabled={matches.every(m=>saved[m.mitarbeiter.id])}>💾 Alle speichern</button>
+            </div>
+            <div style={{maxHeight:350,overflowY:'auto',fontSize:12}}>
+                <table className="mt"><thead><tr><th>Mitarbeiter</th><th>Typ</th><th>IBAN (aus Bank)</th><th>Transaktionen</th><th></th></tr></thead><tbody>
+                {matches.map((mt,i)=><tr key={i} style={{opacity:saved[mt.mitarbeiter.id]?.8:1}}>
+                    <td style={{color:'var(--tb)',fontWeight:600}}>{mt.mitarbeiter.vorname} {mt.mitarbeiter.nachname}</td>
+                    <td><span className="tg tg-w">{mt.mitarbeiter.typ.replace('hgb_vertriebler_','').replace('hgb','HGB')}</span></td>
+                    <td style={{fontFamily:'monospace',fontSize:11,color:'var(--a)'}}>{mt.iban}</td>
+                    <td style={{color:'var(--td)'}}>{mt.txCount}× · {mt.txTotal.toLocaleString('de-DE',{minimumFractionDigits:2})} € · letzte: {mt.lastDate}</td>
+                    <td>{saved[mt.mitarbeiter.id]?<span style={{color:'var(--g)'}}>✅</span>:<button className="btn bo bsm" onClick={()=>saveIBAN(mt.mitarbeiter,mt.iban,mt.bic)}>💾</button>}</td>
+                </tr>)}
+                </tbody></table>
+            </div>
+        </React.Fragment>}
+    </div>);
+}
+
 function BKT({log,rc}){
     const[file,setFile]=useState(null);const[txns,setTxns]=useState(null);const[imp,setImp]=useState(false);const[res,setRes]=useState(null);const ref=useRef(null);const[dg,setDg]=useState(false);const[fmt,setFmt]=useState('');
     const hf=f=>{const rd=new FileReader();rd.onload=e=>{const c=e.target.result;let parsed;let fmt='';try{if(f.name.endsWith('.xml')||c.trim().startsWith('<?xml')||c.includes('BkToCstmrStmt')){parsed=parseCAMT(c);fmt='CAMT.053'}else if(f.name.endsWith('.csv')){parsed=parseCSVBank(c);fmt='CSV-MT940'}else{parsed=parseMT940(c);fmt='MT940'}setTxns(parsed);setFile(f);setFmt(fmt);setRes(null);log(`🏦 ${f.name}: ${parsed.length} Transaktionen geparsed (${fmt})`)}catch(err){log(`❌ Parse-Fehler: ${err.message}`,'error')}};rd.readAsText(f,'UTF-8')};
@@ -319,6 +380,7 @@ function BKT({log,rc}){
                 </React.Fragment>:<div style={{fontSize:12,color:'var(--td)',padding:30,textAlign:'center'}}>Datei hochladen um Vorschau zu sehen</div>}
             </div>
         </div>
+        <IBANFinder log={log}/>
         <div className="cd fi"><div className="cd-t">🗺️ Feld-Mapping</div>
             <table className="mt"><thead><tr><th>Quelle</th><th>→ Supabase</th><th>Format</th></tr></thead><tbody>
                 {[['Buchungstag / BookgDt / :61:','buchungsdatum','CSV / CAMT / MT940'],['Valutadatum','valutadatum','CSV / CAMT / MT940'],['Betrag / Amt','betrag','CSV / CAMT / MT940'],['±Vorzeichen / CdtDbtInd','soll_haben','CRDT / DBIT'],['Begünstigter / RltdPties Nm','gegenkonto_name','CSV / CAMT'],['Kontonummer / RltdPties IBAN','gegenkonto_iban','CSV / CAMT'],['BLZ/BIC / RltdAgts','gegenkonto_bic','CSV / CAMT'],['Verwendungszweck / RmtInf','verwendungszweck','CSV / CAMT / MT940'],['Auftragskonto / Acct IBAN','eigenes_konto_iban','CSV / CAMT / MT940'],['EndToEndId','end2end_id','CAMT']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td style={{color:'var(--td)'}}>{r[2]}</td></tr>)}
