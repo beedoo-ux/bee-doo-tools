@@ -16,15 +16,19 @@ export default async function handler(req, res) {
       signal: controller.signal
     });
     clearTimeout(timeout);
-    const text = await r.text();
+    let text = await r.text();
+    // Sanitize: fix double values from status script bug
+    text = text.replace(/:\s*(\d+)\s*
+\s*(\d+)\s*,/g, ': $1,');
+    // Validate JSON
+    const data = JSON.parse(text);
     res.setHeader('Content-Type', 'application/json');
-    res.status(200).send(text);
+    res.status(200).json(data);
   } catch (e) {
     clearTimeout(timeout);
     res.status(502).json({ 
       error: 'Replica not reachable',
       detail: e.message,
-      code: e.code || 'UNKNOWN',
       ts: new Date().toISOString()
     });
   }
