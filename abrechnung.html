@@ -218,7 +218,7 @@ async function generateAbrechnungen(periode, onProgress){
   ] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
-    sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig,auto_zuschuss'),
+    sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig,auto_zuschuss,firmenname,ustid,hausnr'),
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=*`),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${leistungsStart}&select=*`),
@@ -450,9 +450,33 @@ async function generateAbrechnungen(periode, onProgress){
     });
     log(`  📊 ALL1211: ${Object.keys(bezahltSheet).length} bezahlte Aufträge geladen`);
   } else { log('  ⚠️ ALL1211 konnte nicht geladen werden'); }
-  // Auto-Korrekturen (Staffel/Stufen) DEAKTIVIERT – Daten kommen später manuell
+  // === STORNO-RÜCKFORDERUNG: bezahlte + jetzt stornierte Aufträge aus ALL1211 ===
   const staffelKorrekturen = {};
-  log('ℹ️ Auto-Korrekturen deaktiviert – Staffel/Stufen-Daten werden manuell geliefert');
+  if(Object.keys(bezahltSheet).length){
+    const alleAuftrKorr = await sbG('pay_auftraege','storniert=eq.true&produkt_typ=not.in.(lead_count,termin_count,zero_count,sonderzulage)&select=vertriebler_id,auftrag_nr,kunde_name,auftrags_datum');
+    // Fake-Storno-Erkennung: Storno mit Ersatzauftrag (gleicher Kunde, höhere AN) → kein Rückforderung
+    const alleAuftr = await sbG('pay_auftraege','storniert=eq.false&produkt_typ=not.in.(lead_count,termin_count,zero_count,sonderzulage)&select=auftrag_nr,kunde_name');
+    const aktivByKunde = {};
+    alleAuftr.forEach(a=>{ const kn=(a.kunde_name||'').trim().toLowerCase(); if(kn){ const an=parseInt((a.auftrag_nr||'').replace('AN-',''))||0; if(!aktivByKunde[kn])aktivByKunde[kn]=[]; aktivByKunde[kn].push(an); }});
+    const isFakeStorno = (kundeName, anNr) => { const kn=(kundeName||'').trim().toLowerCase(); const myAN=parseInt((anNr||'').replace('AN-',''))||0; return (aktivByKunde[kn]||[]).some(an=>an>myAN); };
+    let stornoCount=0;
+    alleAuftrKorr.forEach(a=>{
+      if(!a.vertriebler_id||!a.auftrag_nr) return;
+      const anNum=(a.auftrag_nr||'').replace('AN-','');
+      const shBetrag=bezahltSheet[anNum]||0;
+      if(shBetrag<=0) return; // Nicht in ALL1211 = nicht bezahlt
+      if(isFakeStorno(a.kunde_name, a.auftrag_nr)){ log(`  ⏭️ Fake-Storno ${a.auftrag_nr} (${(a.kunde_name||'').substring(0,20)}) – Ersatzauftrag vorhanden`); return; }
+      const vpId=a.vertriebler_id;
+      if(!staffelKorrekturen[vpId]) staffelKorrekturen[vpId]=[];
+      const om=a.auftrags_datum?a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7):'?';
+      staffelKorrekturen[vpId].push({typ:'storno_rueckforderung',monat:om,betrag:-shBetrag,desc:`Storno ${a.auftrag_nr} (${(a.kunde_name||'').substring(0,25)}) = -${shBetrag}€`,stornierte:[`${a.auftrag_nr} (${(a.kunde_name||'').substring(0,20)}, ${shBetrag}€)`]});
+      stornoCount++;
+      const vp=vpById[vpId]; const vpN=vp?`${vp.vorname} ${vp.nachname}`:vpId;
+      log(`  ❌ ${vpN}: Storno-Rück ${a.auftrag_nr} (${(a.kunde_name||'').substring(0,20)}) = -${shBetrag}€`);
+    });
+    if(stornoCount) log(`📊 ${stornoCount} Storno-Rückforderungen`); else log('✅ Keine Storno-Rückforderungen');
+  } else { log('⚠️ ALL1211 nicht geladen – Storno-Rückforderungen übersprungen'); }
+  log('ℹ️ Staffel/Stufen-Korrekturen deaktiviert – Daten werden manuell geliefert');
 
   // === ZUSÄTZLICHE SHEET-DATEN: PV-Blatt Abzüge, VS Vorschüsse, Stnr Auszahlungen ===
   log('📋 Lade Sheet-Daten (PV-Blatt, VS, Stnr)...');
@@ -1239,7 +1263,8 @@ function GutschriftPreview({ab,pos,sg}){
 
       <div className="gs-body">
         <div style={{fontSize:8.5,color:'#888',borderBottom:'1px dotted #ccc',paddingBottom:4,marginBottom:8}}>bee-doo GmbH · Am Stadtholz 39 · D-33609 Bielefeld</div>
-        <div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{ab.mitarbeiter_name}</div>
+        {window.__vpData?.firmenname&&<div style={{fontSize:12,fontWeight:700,marginBottom:1}}>{window.__vpData.firmenname}</div>}
+        <div style={{fontSize:window.__vpData?.firmenname?10.5:12,fontWeight:window.__vpData?.firmenname?400:700,marginBottom:2}}>{ab.mitarbeiter_name}</div>
         <div style={{fontSize:11,color:'#444',lineHeight:1.7,marginBottom:2}}>{window.__vpData?.strasse?`${window.__vpData.strasse} ${window.__vpData.hausnr||''}`:'—'}<br/>{window.__vpData?.plz?`${window.__vpData.plz} ${window.__vpData.ort||''}`:'—'}</div>
         <div style={{fontSize:9.5,color:'#888',marginBottom:12}}>{(()=>{const vp=window.__vpData;const stnr=vp?.steuernummer&&vp.steuernummer.length>4&&/\d/.test(vp.steuernummer)?vp.steuernummer:null;const uid=vp?.ustid&&/^DE\d{9}$/.test(vp.ustid)?vp.ustid:null;if(stnr||uid)return(stnr?`Steuernr.: ${stnr}`:'')+(stnr&&uid?' · ':'')+(uid?`USt-IdNr.: ${uid}`:'');return hgb?'HGB §84 Handelsvertreter – ⚠️ Steuerdaten unvollständig':'Angestellt';})()}</div>
         <div style={{borderTop:'1px solid #eee',marginBottom:10}}></div>
@@ -1928,7 +1953,7 @@ function App(){
 
   useEffect(()=>{(async()=>{try{const d=await sbG('pay_auszahlungen_historie','select=periode&order=periode.desc');const u=[...new Set(d.map(x=>x.periode))];const now=new Date();const cp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;if(!u.includes(cp))u.unshift(cp);const sorted=u.sort().reverse();setPers(sorted);setPer(sorted[0]||cp);}catch(e){const now=new Date();const p=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;setPers([p]);setPer(p);}})();},[]);
 
-  const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s,ma]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&archiviert_am=is.null&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,strasse,plz,ort,steuernummer,typ,mwst_pflichtig,iban,bic,kuerzel')]);setAbrs(a);setAusz(z);setSg(s[0]||null);setMaArr(ma);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
+  const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s,ma]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&archiviert_am=is.null&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,strasse,plz,ort,steuernummer,typ,mwst_pflichtig,iban,bic,kuerzel,firmenname,ustid,hausnr')]);setAbrs(a);setAusz(z);setSg(s[0]||null);setMaArr(ma);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
   useEffect(()=>{loadP();},[loadP]);
 
   // Partner-Daten Lookup
