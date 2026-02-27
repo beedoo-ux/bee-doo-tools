@@ -1915,23 +1915,45 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
         return cl.outerHTML;
       }).join('\n');
 
-      // Build complete HTML document for DocRaptor
+      // Build complete HTML document for DocRaptor (Prince XML)
       const fullHtml=`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 @page{size:A4;margin:0}
 *{box-sizing:border-box;margin:0;padding:0}
-body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.gs-page{background:#fff;width:210mm;min-height:297mm;padding:0;position:relative;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:11px;display:flex;flex-direction:column;page-break-after:always;page-break-inside:avoid}
+body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;prince-image-resolution:300dpi}
+
+/* Prince color forcing */
+*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
+
+/* Page structure */
+.gs-page{background:#fff;width:210mm;min-height:297mm;padding:0;position:relative;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:11px;display:block;page-break-after:always;page-break-inside:avoid;overflow:hidden}
 .gs-page *{color:#111}
-.gs-branded-header{background:#2d2d2d;padding:18mm 16mm 12mm;color:#fff!important;position:relative;overflow:hidden}
-.gs-branded-header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:4px;background:#F5C500}
+
+/* Header */
+.gs-branded-header{background:#2d2d2d!important;padding:18mm 16mm 12mm;color:#fff!important;position:relative;overflow:hidden;border-bottom:4px solid #F5C500}
 .gs-branded-header *{color:#fff!important}
-.gs-body{padding:8mm 16mm 6mm;position:relative;z-index:2;flex:1;display:flex;flex-direction:column}
-.gs-footer{margin-top:auto;padding:8px 16mm 6px 16mm;border-top:3px solid #2d2d2d;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;flex-shrink:0}
-.gs-footer-col{font-size:7px;color:#888!important;line-height:1.5;padding:0 6px}
+
+/* Body - use block instead of flex for Prince */
+.gs-body{padding:8mm 16mm 6mm;position:relative;z-index:2}
+
+/* Footer - use table layout for Prince grid compatibility */
+.gs-footer{padding:8px 16mm 6px 16mm;border-top:3px solid #2d2d2d;display:table;width:100%;table-layout:fixed;position:absolute;bottom:0;left:0;right:0}
+.gs-footer-col{display:table-cell;font-size:7px;color:#888!important;line-height:1.5;padding:0 6px;vertical-align:top}
 .gs-footer-col:first-child{padding-left:0}.gs-footer-col:last-child{padding-right:0}
 .gs-footer-col b{font-size:7.5px;color:#2d2d2d!important;display:block;margin-bottom:1px;text-transform:uppercase;letter-spacing:0.3px}
+
+/* Watermark */
 .gs-watermark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:82px;font-weight:900;color:rgba(200,0,0,0.18);letter-spacing:10px;text-transform:uppercase;pointer-events:none;z-index:1;white-space:nowrap}
-table{border-collapse:collapse}
+
+/* Table defaults */
+table{border-collapse:collapse;width:100%}
+
+/* Force all inline grid layouts to work with Prince */
+[style*="grid-template-columns"]{display:table!important;width:100%!important;table-layout:fixed!important}
+[style*="grid-template-columns"]>div{display:table-cell!important;vertical-align:top!important}
+
+/* Force background colors in Prince */
+[style*="background"]{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+tr[style*="background"]{-webkit-print-color-adjust:exact!important}
 </style></head><body>${pagesHtml}</body></html>`;
 
       // Filename
