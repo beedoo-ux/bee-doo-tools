@@ -430,9 +430,10 @@ async function generateAbrechnungen(periode, onProgress){
   const totalSalesByVP = {};
   const totalSalesDetailByVP = {};
   auftraegePayable.forEach(a => { if(!a.vertriebler_id) return; totalSalesByVP[a.vertriebler_id]=(totalSalesByVP[a.vertriebler_id]||0)+1; if(!totalSalesDetailByVP[a.vertriebler_id]) totalSalesDetailByVP[a.vertriebler_id]=[]; totalSalesDetailByVP[a.vertriebler_id].push({kunde:a.kunde_name,an:a.auftrag_nr,kwp:a.kwp,datum:a.auftrags_datum}); });
-  log('Lösche alte Entwürfe...');
-  const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&status=in.(entwurf,probeabrechnung)&select=id`);
+  log('Lösche alte Abrechnungen für Periode...');
+  const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&select=id,status`);
   for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
+  if(oldAbr.length) log(`${oldAbr.length} alte Abrechnungen gelöscht`);
   let count = 0;
   // ALL VP IDs incl. team bonus recipients + sonderprov
   const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP), ...Object.keys(umleitungOrders), ...Object.keys(szByVP)]);
