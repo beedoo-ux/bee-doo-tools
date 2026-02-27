@@ -454,32 +454,35 @@ async function generateAbrechnungen(periode, onProgress){
     const staffelRate = regel.staffel_betrag_sale;
     const diff = staffelRate - basis;
     if(diff <= 0) continue;
-    // Bezahlt = abgerechnet_monat gesetzt
+    // Mind. 1 Sale muss bezahlt worden sein (abgerechnet_monat gesetzt)
     const bezahlt = orders.filter(o => o.abgerechnet_monat);
-    if(!bezahlt.length) continue; // Kein Sale je bezahlt → kein Vergleich möglich
-    // Damaliger Gesamtstand bei Zahlung: bezahlte + stornierte (die waren damals aktiv)
+    if(!bezahlt.length) continue;
+    // Damaliger Gesamtstand: bezahlte + stornierte-ohne-Abr (die waren damals ALLE aktiv und ALLE bezahlt)
     const stornoOhneAbr = orders.filter(o => o.storniert && !o.abgerechnet_monat);
     const originalCount = bezahlt.length + stornoOhneAbr.length;
-    // Aktueller Stand: nur noch aktive zählen
+    // Aktueller Stand
     const aktivJetzt = orders.filter(o => !o.storniert && o.zahlungsstatus === 'anzahlung_eingegangen').length;
-    const stornoNachZahlung = orders.filter(o => o.storniert).length;
+    const stornoGesamt = orders.filter(o => o.storniert).length;
     const staffelDamals = originalCount >= schwelle;
     const staffelJetzt = aktivJetzt >= schwelle;
     const vpName = `${vp.vorname} ${vp.nachname}`;
-    if(staffelDamals && !staffelJetzt && stornoNachZahlung > 0){
-      // Rückforderung: Differenz für aktive (Staffel→Basis) + volle Provision für Stornierte
-      const rueckAktive = bezahlt.filter(o => !o.storniert).length * diff;
-      const rueckStorno = orders.filter(o => o.storniert && o.abgerechnet_monat).length * staffelRate;
-      const rueckBetrag = rueckAktive + rueckStorno;
+    if(staffelDamals && !staffelJetzt && stornoGesamt > 0){
+      // ALLE originalCount Sales wurden mit staffelRate bezahlt!
+      // 1) Stornos: volle Provision zurückfordern (alle stornierten, egal ob abgerechnet_monat gesetzt)
+      const rueckStorno = stornoGesamt * staffelRate;
+      // 2) Verbleibende Aktive: Staffel nicht mehr erreicht → Differenz zurück
+      const rueckDiff = aktivJetzt * diff;
+      const rueckBetrag = rueckStorno + rueckDiff;
       if(rueckBetrag <= 0) continue;
       staffelKorrekturen[vpId] = staffelKorrekturen[vpId] || [];
-      staffelKorrekturen[vpId].push({typ:'rueckforderung',monat:om,originalCount,bezahlt:bezahlt.length,aktiv:aktivJetzt,storniert:stornoNachZahlung,betrag:-rueckBetrag,diff,rueckAktive,rueckStorno,stornierte:orders.filter(o=>o.storniert).map(o=>o.auftrag_nr)});
-      log(`  📉 ${vpName}: Staffel-Rückforderung ${om} (damals ${originalCount}, jetzt ${aktivJetzt} aktiv, ${stornoNachZahlung} storniert) = -${rueckBetrag.toFixed(0)}€`);
+      staffelKorrekturen[vpId].push({typ:'rueckforderung',monat:om,originalCount,bezahlt:bezahlt.length,aktiv:aktivJetzt,storniert:stornoGesamt,betrag:-rueckBetrag,diff,staffelRate,rueckStorno,rueckDiff,stornierte:orders.filter(o=>o.storniert).map(o=>o.auftrag_nr)});
+      log(`  📉 ${vpName}: Staffel-Rückforderung ${om} – damals ${originalCount} Sales (Staffel), jetzt ${aktivJetzt} aktiv, ${stornoGesamt} storniert → Storno: ${stornoGesamt}×${staffelRate}€=${rueckStorno}€ + Diff: ${aktivJetzt}×${diff}€=${rueckDiff}€ = -${rueckBetrag}€`);
     } else if(!staffelDamals && staffelJetzt){
+      // Damals Basis bezahlt, jetzt Staffel erreicht → Nachzahlung Differenz für alle bezahlten
       const nachBetrag = bezahlt.length * diff;
       staffelKorrekturen[vpId] = staffelKorrekturen[vpId] || [];
       staffelKorrekturen[vpId].push({typ:'nachzahlung',monat:om,originalCount,bezahlt:bezahlt.length,aktiv:aktivJetzt,betrag:nachBetrag,diff});
-      log(`  📈 ${vpName}: Staffel-Nachzahlung ${om} (damals ${originalCount}, jetzt ${aktivJetzt} aktiv) = +${nachBetrag.toFixed(0)}€`);
+      log(`  📈 ${vpName}: Staffel-Nachzahlung ${om} – damals ${originalCount} (Basis), jetzt ${aktivJetzt} aktiv → Staffel! ${bezahlt.length}×${diff}€ = +${nachBetrag}€`);
     }
   }
   const skCount = Object.values(staffelKorrekturen).reduce((s,a)=>s+a.length,0);
@@ -667,10 +670,10 @@ async function generateAbrechnungen(periode, onProgress){
     const vpSK = staffelKorrekturen[vpId] || [];
     vpSK.forEach(sk => {
       if(sk.typ==='rueckforderung'){
-        positionen.push({typ:'staffel_rueckforderung',auftrag_nr:null,kunde:`Vormonat ${sk.monat}: damals ${sk.originalCount} Sales (Staffel), jetzt ${sk.aktiv} aktiv`,produkt:`Staffel-Rückforderung ${sk.monat} (auto)`,original_betrag:sk.betrag,aktiv:true,zurueckgestellt:false,notiz:`${sk.storniert} Stornos nach Zahlung → Staffel nicht mehr erreicht. Rück: ${sk.rueckAktive}€ (${sk.bezahlt-sk.storniert}×${sk.diff}€ Diff) + ${sk.rueckStorno}€ Storno. ANs: ${sk.stornierte?.join(', ')||'-'}`});
-        bruttoTotal += sk.betrag; // betrag is negative
+        positionen.push({typ:'staffel_rueckforderung',auftrag_nr:null,kunde:`Vormonat ${sk.monat}: ${sk.originalCount} Sales (Staffel ${sk.staffelRate}€), jetzt ${sk.aktiv} aktiv`,produkt:`Staffel-Rückforderung ${sk.monat} (auto)`,original_betrag:sk.betrag,aktiv:true,zurueckgestellt:false,notiz:`${sk.storniert}× Storno à ${sk.staffelRate}€ = ${sk.rueckStorno}€ + ${sk.aktiv}× Staffel-Diff à ${sk.diff}€ = ${sk.rueckDiff}€. Stornos: ${sk.stornierte?.join(', ')||'-'}`});
+        bruttoTotal += sk.betrag;
       } else {
-        positionen.push({typ:'staffel_nachzahlung',auftrag_nr:null,kunde:`Vormonat ${sk.monat}: damals ${sk.originalCount} Sales (Basis), jetzt ${sk.aktiv} aktiv`,produkt:`Staffel-Nachzahlung ${sk.monat} (auto)`,original_betrag:sk.betrag,aktiv:true,zurueckgestellt:false,notiz:`Staffel jetzt erreicht. Nachzahlung: ${sk.diff}€ × ${sk.bezahlt} bezahlte Sales`});
+        positionen.push({typ:'staffel_nachzahlung',auftrag_nr:null,kunde:`Vormonat ${sk.monat}: ${sk.originalCount} Sales (Basis), jetzt ${sk.aktiv} aktiv → Staffel`,produkt:`Staffel-Nachzahlung ${sk.monat} (auto)`,original_betrag:sk.betrag,aktiv:true,zurueckgestellt:false,notiz:`Staffel jetzt erreicht. ${sk.bezahlt}× Diff à ${sk.diff}€ = +${sk.betrag}€`});
         bruttoTotal += sk.betrag;
       }
     });
