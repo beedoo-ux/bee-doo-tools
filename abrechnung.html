@@ -435,58 +435,80 @@ async function generateAbrechnungen(periode, onProgress){
   const now = new Date().toISOString();
   for(const oa of oldAbr){ try{await sbU('pay_abrechnungen',`id=eq.${oa.id}`,{status:'archiviert',archiviert_am:now});}catch(e){log(`⚠️ Archiv-Fehler ${oa.mitarbeiter_name}: ${e.message}`);try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e2){}try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e2){}} }
   if(oldAbr.length) log(`📦 ${oldAbr.length} alte Abrechnungen archiviert`);
-  // === STAFFEL-KORREKTUR: Rückwirkend alle Vormonate prüfen ===
-  log('🔍 Prüfe Staffel-Korrekturen rückwirkend...');
+  // === STORNO + STAFFEL + STUFEN KORREKTUR (basierend auf ALL1211 Google Sheet) ===
+  log('🔍 Lade ALL1211 Zahlungsdaten aus Google Sheet...');
+  const all1211Url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=ALL1211`;
+  const all1211Raw = await fetch(all1211Url).then(r=>r.text()).catch(e=>{log('⚠️ ALL1211 Fehler: '+e);return '';});
+  const bezahltSheet = {}; // AN-Nummer (ohne Prefix) → bezahlter Betrag
+  if(all1211Raw){
+    const parseCsvLine = line => { const f=[]; let c='',q=false; for(let i=0;i<line.length;i++){const ch=line[i]; if(ch==='"')q=!q; else if(ch===','&&!q){f.push(c.trim());c='';} else c+=ch;} f.push(c.trim()); return f; };
+    all1211Raw.split('\n').filter(l=>l.trim()).forEach(line=>{
+      const cols=parseCsvLine(line); const an=(cols[0]||'').trim(); const br=(cols[7]||'').trim();
+      if(!an||!br)return; const b=parseFloat(br.replace(',','.').replace('€',''));
+      if(!isNaN(b)&&b>0) bezahltSheet[an]=b;
+    });
+    log(`  📊 ALL1211: ${Object.keys(bezahltSheet).length} bezahlte Aufträge geladen`);
+  } else { log('  ⚠️ ALL1211 konnte nicht geladen werden – Korrekturen übersprungen'); }
+  // Alle Sales-Aufträge laden (inkl storniert)
+  const alleAuftrKorr = await sbG('pay_auftraege','produkt_typ=not.in.(lead_count,termin_count,zero_count,sonderzulage)&select=vertriebler_id,auftrag_nr,kunde_name,auftrags_datum,zahlungsstatus,storniert,abgerechnet_monat');
+  const korrByVPM = {};
+  alleAuftrKorr.forEach(a=>{
+    if(!a.vertriebler_id||!a.auftrags_datum)return;
+    const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7);
+    if(om===periode)return; // Aktuelle Periode überspringen
+    const key=a.vertriebler_id+'_'+om;
+    if(!korrByVPM[key])korrByVPM[key]={bezahlt:[],stornoBez:[],aktiv:[],stornoUnbez:[]};
+    const anNum=(a.auftrag_nr||'').replace('AN-','');
+    const shBetrag=bezahltSheet[anNum]||0;
+    if(shBetrag>0&&a.storniert) korrByVPM[key].stornoBez.push({...a,bezahlt_betrag:shBetrag});
+    else if(shBetrag>0&&!a.storniert) korrByVPM[key].bezahlt.push({...a,bezahlt_betrag:shBetrag});
+    else if(!a.storniert&&(a.zahlungsstatus==='anzahlung_eingegangen'||a.abgerechnet_monat)) korrByVPM[key].aktiv.push(a);
+    else if(a.storniert) korrByVPM[key].stornoUnbez.push(a);
+  });
   const staffelKorrekturen = {};
-  // Alle Sales-Aufträge laden (nicht nur abgerechnete!)
-  const alleAuftraege = await sbG('pay_auftraege','produkt_typ=not.in.(lead_count,termin_count,zero_count,sonderzulage)&select=vertriebler_id,auftrag_nr,auftrags_datum,zahlungsstatus,storniert,abgerechnet_monat,abgerechnet_jahr');
-  const abrByVPMonth = {};
-  alleAuftraege.forEach(a => { if(!a.vertriebler_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.vertriebler_id+'_'+om; if(!abrByVPMonth[key])abrByVPMonth[key]=[]; abrByVPMonth[key].push(a); });
-  for(const [key, orders] of Object.entries(abrByVPMonth)){
-    const [vpId, om] = [key.split('_')[0], key.split('_').slice(1).join('_')];
-    if(om === periode.replace(/\//g,'/')) continue; // Skip current period
-    const vp = vpById[vpId]; if(!vp) continue;
-    if((vp.typ||'').includes('scouter')) continue;
-    const ruleTyp = typMap[vp.typ] || vp.typ;
-    const regel = regelMap[ruleTyp]; if(!regel || regel.staffel_schwelle >= 999) continue;
-    const schwelle = regel.staffel_schwelle;
-    const basis = regel.basis_betrag_sale;
-    const staffelRate = regel.staffel_betrag_sale;
-    const diff = staffelRate - basis;
-    if(diff <= 0) continue;
-    // Mind. 1 Sale muss bezahlt worden sein (abgerechnet_monat gesetzt)
-    const bezahlt = orders.filter(o => o.abgerechnet_monat);
-    if(!bezahlt.length) continue;
-    // Damaliger Gesamtstand: bezahlte + stornierte-ohne-Abr (die waren damals ALLE aktiv und ALLE bezahlt)
-    const stornoOhneAbr = orders.filter(o => o.storniert && !o.abgerechnet_monat);
-    const originalCount = bezahlt.length + stornoOhneAbr.length;
-    // Aktueller Stand
-    const aktivJetzt = orders.filter(o => !o.storniert && o.zahlungsstatus === 'anzahlung_eingegangen').length;
-    const stornoGesamt = orders.filter(o => o.storniert).length;
-    const staffelDamals = originalCount >= schwelle;
-    const staffelJetzt = aktivJetzt >= schwelle;
-    const vpName = `${vp.vorname} ${vp.nachname}`;
-    if(staffelDamals && !staffelJetzt && stornoGesamt > 0){
-      // ALLE originalCount Sales wurden mit staffelRate bezahlt!
-      // 1) Stornos: volle Provision zurückfordern (alle stornierten, egal ob abgerechnet_monat gesetzt)
-      const rueckStorno = stornoGesamt * staffelRate;
-      // 2) Verbleibende Aktive: Staffel nicht mehr erreicht → Differenz zurück
-      const rueckDiff = aktivJetzt * diff;
-      const rueckBetrag = rueckStorno + rueckDiff;
-      if(rueckBetrag <= 0) continue;
-      staffelKorrekturen[vpId] = staffelKorrekturen[vpId] || [];
-      staffelKorrekturen[vpId].push({typ:'rueckforderung',monat:om,originalCount,bezahlt:bezahlt.length,aktiv:aktivJetzt,storniert:stornoGesamt,betrag:-rueckBetrag,diff,staffelRate,rueckStorno,rueckDiff,stornierte:orders.filter(o=>o.storniert).map(o=>o.auftrag_nr)});
-      log(`  📉 ${vpName}: Staffel-Rückforderung ${om} – damals ${originalCount} Sales (Staffel), jetzt ${aktivJetzt} aktiv, ${stornoGesamt} storniert → Storno: ${stornoGesamt}×${staffelRate}€=${rueckStorno}€ + Diff: ${aktivJetzt}×${diff}€=${rueckDiff}€ = -${rueckBetrag}€`);
-    } else if(!staffelDamals && staffelJetzt){
-      // Damals Basis bezahlt, jetzt Staffel erreicht → Nachzahlung Differenz für alle bezahlten
-      const nachBetrag = bezahlt.length * diff;
-      staffelKorrekturen[vpId] = staffelKorrekturen[vpId] || [];
-      staffelKorrekturen[vpId].push({typ:'nachzahlung',monat:om,originalCount,bezahlt:bezahlt.length,aktiv:aktivJetzt,betrag:nachBetrag,diff});
-      log(`  📈 ${vpName}: Staffel-Nachzahlung ${om} – damals ${originalCount} (Basis), jetzt ${aktivJetzt} aktiv → Staffel! ${bezahlt.length}×${diff}€ = +${nachBetrag}€`);
+  for(const [key,data] of Object.entries(korrByVPM)){
+    const vpId=key.split('_')[0]; const om=key.split('_').slice(1).join('_');
+    const vp=vpById[vpId]; if(!vp||(vp.typ||'').includes('scouter'))continue;
+    const ruleTyp=typMap[vp.typ]||vp.typ; const regel=regelMap[ruleTyp]; if(!regel||regel.staffel_schwelle>=999)continue;
+    const allBez=[...data.bezahlt,...data.stornoBez]; if(!allBez.length)continue;
+    const schwelle=regel.staffel_schwelle; const basisR=regel.basis_betrag_sale; const staffelR=regel.staffel_betrag_sale; const diff=staffelR-basisR;
+    const vpName=`${vp.vorname} ${vp.nachname}`;
+    const cntBez=allBez.length; const cntStornoBez=data.stornoBez.length; const cntAktivBez=data.bezahlt.length;
+    const cntAktivGes=data.bezahlt.length+data.aktiv.length;
+    const wasStaffel=allBez.some(o=>o.bezahlt_betrag>=staffelR);
+    const staffelJetzt=cntAktivGes>=schwelle;
+    // Stufen berechnen: damals (bei Zahlung) vs jetzt
+    let stufeDam=0,stufeJzt=0;
+    for(const s of stufen){if(s.gilt_fuer!==ruleTyp)continue; if(cntBez>=s.min_anlagen&&s.bonus_betrag>stufeDam)stufeDam=s.bonus_betrag; if(cntAktivGes>=s.min_anlagen&&s.bonus_betrag>stufeJzt)stufeJzt=s.bonus_betrag;}
+    const korrs=[];
+    // A) Storno-Rückforderung: bezahlt + jetzt storniert → voller Betrag zurück
+    if(cntStornoBez>0){
+      const sr=data.stornoBez.reduce((s,o)=>s+o.bezahlt_betrag,0);
+      korrs.push({typ:'storno_rueckforderung',monat:om,betrag:-sr,desc:`${cntStornoBez}× Storno (bezahlt) = -${sr}€`,stornierte:data.stornoBez.map(o=>`${o.auftrag_nr} (${(o.kunde_name||'').substring(0,20)}, ${o.bezahlt_betrag}€)`)});
+      log(`  ❌ ${vpName}: Storno-Rück ${om} – ${cntStornoBez}× = -${sr}€ [${data.stornoBez.map(o=>o.auftrag_nr).join(', ')}]`);
     }
+    // B) Staffel→Basis Differenz: mit Staffel-Rate bezahlt, jetzt <8 aktiv
+    if(wasStaffel&&!staffelJetzt&&diff>0){
+      const sd=cntAktivBez*diff;
+      korrs.push({typ:'staffel_rueckforderung',monat:om,betrag:-sd,desc:`${cntAktivBez}× Staffel→Basis Diff à ${diff}€ = -${sd}€`});
+      log(`  📉 ${vpName}: Staffel-Diff ${om} – ${cntAktivBez}×${diff}€ = -${sd}€`);
+    }
+    // C) Basis→Staffel Nachzahlung: mit Basis bezahlt, jetzt ≥8 aktiv
+    if(!wasStaffel&&staffelJetzt&&diff>0){
+      const sn=cntBez*diff;
+      korrs.push({typ:'staffel_nachzahlung',monat:om,betrag:sn,desc:`${cntBez}× Basis→Staffel Diff à ${diff}€ = +${sn}€`});
+      log(`  📈 ${vpName}: Staffel-Nach ${om} – ${cntBez}×${diff}€ = +${sn}€`);
+    }
+    // D) Stufen-Korrektur: Schwelle 10/15 über- oder unterschritten
+    if(stufeDam!==stufeJzt){
+      const sd=stufeJzt-stufeDam;
+      korrs.push({typ:sd<0?'stufen_rueckforderung':'stufen_nachzahlung',monat:om,betrag:sd,desc:`Stufe ${stufeDam}€ → ${stufeJzt}€ = ${sd>0?'+':''}${sd}€`});
+      log(`  ${sd<0?'📉':'📈'} ${vpName}: Stufen-Korr ${om} – ${stufeDam}€→${stufeJzt}€ = ${sd>0?'+':''}${sd}€`);
+    }
+    if(korrs.length) staffelKorrekturen[vpId]=(staffelKorrekturen[vpId]||[]).concat(korrs);
   }
-  const skCount = Object.values(staffelKorrekturen).reduce((s,a)=>s+a.length,0);
-  if(skCount) log(`📊 ${skCount} Staffel-Korrekturen gefunden`); else log('✅ Keine Staffel-Korrekturen');
+  const skCount=Object.values(staffelKorrekturen).reduce((s,a)=>s+a.length,0);
+  if(skCount) log(`📊 ${skCount} Korrekturen gefunden (Storno+Staffel+Stufen)`); else log('✅ Keine Korrekturen');
   let count = 0;
   // ALL VP IDs incl. team bonus recipients + sonderprov
   const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP), ...Object.keys(umleitungOrders), ...Object.keys(szByVP)]);
@@ -635,14 +657,7 @@ async function generateAbrechnungen(periode, onProgress){
     // Storno-Info (nur Leistungsmonat)
     const vpStornos = stornoByVP[vpId] || [];
     vpStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(s.auftrags_datum||'').substring(0,7)}); });
-    // Storno-Abzüge: bereits ausgezahlte Stornos → negativer Abzug mit tatsächlich gezahltem Betrag
-    const vpStornoAbz = stornoAbzByVP[vpId] || [];
-    vpStornoAbz.forEach(s => {
-      // Bevorzugt: gespeicherter Auszahlungsbetrag; Fallback: aktuelle Regel
-      const abzBetrag = (s.storno_provision_zurueck && s.storno_provision_zurueck > 0) ? s.storno_provision_zurueck : (sonderFlat || regel.basis_betrag_sale);
-      positionen.push({typ:'abzug',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno-Abzug (ausgez. ${s.abgerechnet_monat}/${s.abgerechnet_jahr})`,original_betrag:-abzBetrag,aktiv:true,zurueckgestellt:false,notiz:`Storno nach Auszahlung`});
-      bruttoTotal -= abzBetrag;
-    });
+    // Storno-Abzüge: werden über ALL1211-Korrektur-System abgewickelt (siehe AUTO KORREKTUREN unten)
     // Offen-Info (LZ + VM getrennt)
     // Sonderzulagen aus Sheet (Zugaben/Abzüge)
     const vpSZ = szByVP[vpId] || [];
@@ -666,16 +681,24 @@ async function generateAbrechnungen(periode, onProgress){
     // On Hold Info
     const vpOnHold = onHoldByVP[vpId] || [];
     vpOnHold.forEach(o => { positionen.push({typ:'on_hold_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`On Hold – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
-    // === AUTO STAFFEL-KORREKTUREN ===
-    const vpSK = staffelKorrekturen[vpId] || [];
-    vpSK.forEach(sk => {
-      if(sk.typ==='rueckforderung'){
-        positionen.push({typ:'staffel_rueckforderung',auftrag_nr:null,kunde:`Vormonat ${sk.monat}: ${sk.originalCount} Sales (Staffel ${sk.staffelRate}€), jetzt ${sk.aktiv} aktiv`,produkt:`Staffel-Rückforderung ${sk.monat} (auto)`,original_betrag:sk.betrag,aktiv:true,zurueckgestellt:false,notiz:`${sk.storniert}× Storno à ${sk.staffelRate}€ = ${sk.rueckStorno}€ + ${sk.aktiv}× Staffel-Diff à ${sk.diff}€ = ${sk.rueckDiff}€. Stornos: ${sk.stornierte?.join(', ')||'-'}`});
-        bruttoTotal += sk.betrag;
-      } else {
-        positionen.push({typ:'staffel_nachzahlung',auftrag_nr:null,kunde:`Vormonat ${sk.monat}: ${sk.originalCount} Sales (Basis), jetzt ${sk.aktiv} aktiv → Staffel`,produkt:`Staffel-Nachzahlung ${sk.monat} (auto)`,original_betrag:sk.betrag,aktiv:true,zurueckgestellt:false,notiz:`Staffel jetzt erreicht. ${sk.bezahlt}× Diff à ${sk.diff}€ = +${sk.betrag}€`});
-        bruttoTotal += sk.betrag;
-      }
+    // === AUTO KORREKTUREN (Storno + Staffel + Stufen aus ALL1211) ===
+    const vpKorr = staffelKorrekturen[vpId] || [];
+    vpKorr.forEach(k => {
+      const labels = {
+        'storno_rueckforderung': `Storno-Rückford. ${k.monat}`,
+        'staffel_rueckforderung': `Staffel-Rückford. ${k.monat}`,
+        'staffel_nachzahlung': `Staffel-Nachzahlung ${k.monat}`,
+        'stufen_rueckforderung': `Stufen-Rückford. ${k.monat}`,
+        'stufen_nachzahlung': `Stufen-Nachzahlung ${k.monat}`
+      };
+      positionen.push({
+        typ: k.typ, auftrag_nr: null,
+        kunde: k.desc,
+        produkt: labels[k.typ] || k.typ,
+        original_betrag: k.betrag, aktiv: true, zurueckgestellt: false,
+        notiz: k.stornierte ? `Stornos: ${k.stornierte.join(', ')}` : k.desc
+      });
+      bruttoTotal += k.betrag;
     });
     const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
     const sgUst=sgNetto*(sgConfig.ust_satz/100);
@@ -819,7 +842,7 @@ async function generateAbrechnungen(periode, onProgress){
 function calc(pos,sg,hgb){
   const ak=pos.filter(p=>p.aktiv&&!p.zurueckgestellt);
   const prov=ak.filter(p=>['provision','eigenlead','empfehlung','speicher','sondereinsatz','lead_bonus','termin_bonus','zero_bonus'].includes(p.typ));
-  const extra=ak.filter(p=>['einmalzahlung','abzug','sonstiges','team_bonus','staffel_nachzahlung','staffel_rueckforderung'].includes(p.typ));
+  const extra=ak.filter(p=>['einmalzahlung','abzug','sonstiges','team_bonus','staffel_nachzahlung','staffel_rueckforderung','stufen_nachzahlung','stufen_rueckforderung','storno_rueckforderung'].includes(p.typ));
   const bp=prov.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   const es=extra.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   let sgN=0,sgU=0;if(hgb&&sg){sgN=Math.min(bp*(sg.prozent/100),sg.max_netto);sgU=sgN*(sg.ust_satz/100);}
@@ -1148,8 +1171,8 @@ function GutschriftPreview({ab,pos,sg}){
   const aSt=pos.filter(p=>p.typ==='storno_info');
   const aOf=pos.filter(p=>p.typ==='offen_info');
   const aOH=pos.filter(p=>p.typ==='on_hold_info');
-  const aSKN=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&p.typ==='staffel_nachzahlung');
-  const aSKR=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&p.typ==='staffel_rueckforderung');
+  const aSKN=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['staffel_nachzahlung','stufen_nachzahlung'].includes(p.typ));
+  const aSKR=pos.filter(p=>p.aktiv&&!p.zurueckgestellt&&['staffel_rueckforderung','stufen_rueckforderung','storno_rueckforderung'].includes(p.typ));
   const aSK=[...aSKN,...aSKR];
   const skTotal=aSK.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0);
   const aStLZ=aSt;
@@ -1226,8 +1249,8 @@ function GutschriftPreview({ab,pos,sg}){
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}><tbody>
               <tr><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:'#E07800'}}>Provisionen ({salesLZ} LZ{aPNZ.filter(p=>p.typ==='provision').length>0?` + ${aPNZ.filter(p=>p.typ==='provision').length} NZ`:''} Sales – Vermittlung Solar/WP)</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(provSum)}</td></tr>
               {aE.map((p,i)=><tr key={i}><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',color:(p.override_betrag!=null?p.override_betrag:p.original_betrag)>=0?'#E07800':'#9a3412'}}>{p.kunde||p.notiz||p.typ}</td><td style={{padding:'6px 10px',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(p.override_betrag!=null?p.override_betrag:p.original_betrag)}</td></tr>)}
-              {aSKN.length>0&&<tr style={{background:'#f0fdf4'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #dcfce7',color:'#166534'}}>📈 Staffel-Nachzahlung ({aSKN.length})</td><td style={{padding:'6px 10px',borderBottom:'1px solid #dcfce7',textAlign:'right',color:'#166534',fontWeight:600}}>+ {fmtE(aSKN.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
-              {aSKR.length>0&&<tr style={{background:'#fef2f2'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #fecaca',color:'#991b1b'}}>📉 Staffel-Rückforderung ({aSKR.length})</td><td style={{padding:'6px 10px',borderBottom:'1px solid #fecaca',textAlign:'right',color:'#991b1b',fontWeight:600}}>{fmtE(aSKR.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
+              {aSKN.length>0&&<tr style={{background:'#f0fdf4'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #dcfce7',color:'#166534'}}>📈 Nachzahlungen ({aSKN.length})</td><td style={{padding:'6px 10px',borderBottom:'1px solid #dcfce7',textAlign:'right',color:'#166534',fontWeight:600}}>+ {fmtE(aSKN.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
+              {aSKR.length>0&&<tr style={{background:'#fef2f2'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #fecaca',color:'#991b1b'}}>📉 Rückforderungen ({aSKR.length})</td><td style={{padding:'6px 10px',borderBottom:'1px solid #fecaca',textAlign:'right',color:'#991b1b',fontWeight:600}}>{fmtE(aSKR.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
               {aTB.length>0&&<tr style={{background:'#eff6ff'}}><td style={{padding:'6px 10px',borderBottom:'1px solid #dbeafe',color:'#1e40af'}}>🏅 Team-Bonus ({aTB.length})</td><td style={{padding:'6px 10px',borderBottom:'1px solid #dbeafe',textAlign:'right',color:'#1e40af',fontWeight:600}}>+ {fmtE(aTB.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
               <tr><td style={{padding:'6px 10px',borderBottom:'2px solid #aaa',fontWeight:700}}>Brutto-Provisionen</td><td style={{padding:'6px 10px',borderBottom:'2px solid #aaa',textAlign:'right',fontWeight:700}}>{fmtE(b.bp+b.es)}</td></tr>
               <tr><td style={{padding:'6px 10px',borderTop:'2px solid #111',borderBottom:'1px solid #eee',color:'#555'}}>Nettobetrag</td><td style={{padding:'6px 10px',borderTop:'2px solid #111',borderBottom:'1px solid #eee',textAlign:'right'}}>{fmtE(b.net)}</td></tr>
@@ -1252,8 +1275,8 @@ function GutschriftPreview({ab,pos,sg}){
               {aOfVM.length>0&&<tr><td colSpan={2} style={{padding:'2px 7px 6px',borderBottom:'1px solid #eee'}}><div style={{fontSize:8,color:'#8b949e',lineHeight:1.5}}>{aOfVM.map(p=>p.kunde||'—').join(' · ')}</div></td></tr>}
               {aOH.length>0&&<tr><td style={{padding:'4px 7px',borderBottom:'none',color:'#6366f1'}}>⏸️ On Hold (Montage)</td><td style={{padding:'4px 7px',textAlign:'right',color:'#6366f1'}}>{aOH.length}</td></tr>}
               {aOH.length>0&&<tr><td colSpan={2} style={{padding:'2px 7px 6px',borderBottom:'1px solid #eee'}}><div style={{fontSize:8,color:'#6366f1',lineHeight:1.5}}>{aOH.map(p=>p.kunde||'—').join(' · ')}</div></td></tr>}
-              {aSKN.length>0&&<tr style={{background:'#f0fdf4'}}><td style={{padding:'4px 7px',borderBottom:'1px solid #dcfce7',color:'#166534'}}>📈 Staffel-Nachzahlung</td><td style={{padding:'4px 7px',textAlign:'right',color:'#166534',fontWeight:600}}>+{fmtE(aSKN.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
-              {aSKR.length>0&&<tr style={{background:'#fef2f2'}}><td style={{padding:'4px 7px',borderBottom:'1px solid #fecaca',color:'#991b1b'}}>📉 Staffel-Rückforderung</td><td style={{padding:'4px 7px',textAlign:'right',color:'#991b1b',fontWeight:600}}>{fmtE(aSKR.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
+              {aSKN.length>0&&<tr style={{background:'#f0fdf4'}}><td style={{padding:'4px 7px',borderBottom:'1px solid #dcfce7',color:'#166534'}}>📈 Nachzahlungen</td><td style={{padding:'4px 7px',textAlign:'right',color:'#166534',fontWeight:600}}>+{fmtE(aSKN.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
+              {aSKR.length>0&&<tr style={{background:'#fef2f2'}}><td style={{padding:'4px 7px',borderBottom:'1px solid #fecaca',color:'#991b1b'}}>📉 Rückforderungen</td><td style={{padding:'4px 7px',textAlign:'right',color:'#991b1b',fontWeight:600}}>{fmtE(aSKR.reduce((s,p)=>s+(p.override_betrag!=null?p.override_betrag:p.original_betrag),0))}</td></tr>}
               {leadBonusTotal>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#059669'}}>📋 Lead-Bonus ({aLeadBonus.length>0?aLeadBonus[0].kunde:''})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#059669',fontWeight:600}}>+ {fmtE(leadBonusTotal)}</td></tr>}
               {terminBonusTotal>0&&<tr><td style={{padding:'4px 7px',borderBottom:'1px solid #eee',color:'#2563eb'}}>📅 Termin-Bonus ({aTerminBonus.length>0?aTerminBonus[0].kunde:''})</td><td style={{padding:'4px 7px',textAlign:'right',color:'#2563eb',fontWeight:600}}>+ {fmtE(terminBonusTotal)}</td></tr>}
               
@@ -1642,7 +1665,7 @@ function GutschriftPreview({ab,pos,sg}){
         </div>
 
         {aSKN.length>0&&<>
-          <div style={{fontWeight:700,color:'#166534',fontSize:11,marginBottom:6,paddingBottom:3,borderBottom:'2px solid #bbf7d0',textTransform:'uppercase',letterSpacing:'.5px'}}>📈 Nachzahlung – Staffel rückwirkend erreicht ({aSKN.length})</div>
+          <div style={{fontWeight:700,color:'#166534',fontSize:11,marginBottom:6,paddingBottom:3,borderBottom:'2px solid #bbf7d0',textTransform:'uppercase',letterSpacing:'.5px'}}>📈 Nachzahlungen – Staffel/Stufen rückwirkend ({aSKN.length})</div>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:9.5,marginBottom:16}}>
             <thead><tr style={{background:'#f0fdf4'}}><th style={{padding:'5px 6px',textAlign:'left',fontSize:8,color:'#166534',borderBottom:'1px solid #bbf7d0'}}>Korrektur</th><th style={{padding:'5px 6px',textAlign:'left',fontSize:8,color:'#166534',borderBottom:'1px solid #bbf7d0'}}>Betroffene Aufträge</th><th style={{padding:'5px 6px',textAlign:'right',fontSize:8,color:'#166534',borderBottom:'1px solid #bbf7d0',width:80}}>Betrag</th></tr></thead>
             <tbody>
@@ -1657,7 +1680,7 @@ function GutschriftPreview({ab,pos,sg}){
         </>}
 
         {aSKR.length>0&&<>
-          <div style={{fontWeight:700,color:'#991b1b',fontSize:11,marginBottom:6,paddingBottom:3,borderBottom:'2px solid #fecaca',textTransform:'uppercase',letterSpacing:'.5px'}}>📉 Rückforderung – Staffel rückwirkend verloren ({aSKR.length})</div>
+          <div style={{fontWeight:700,color:'#991b1b',fontSize:11,marginBottom:6,paddingBottom:3,borderBottom:'2px solid #fecaca',textTransform:'uppercase',letterSpacing:'.5px'}}>📉 Rückforderungen – Storno/Staffel/Stufen ({aSKR.length})</div>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:9.5,marginBottom:16}}>
             <thead><tr style={{background:'#fef2f2'}}><th style={{padding:'5px 6px',textAlign:'left',fontSize:8,color:'#991b1b',borderBottom:'1px solid #fecaca'}}>Korrektur</th><th style={{padding:'5px 6px',textAlign:'left',fontSize:8,color:'#991b1b',borderBottom:'1px solid #fecaca'}}>Betroffene Aufträge</th><th style={{padding:'5px 6px',textAlign:'right',fontSize:8,color:'#991b1b',borderBottom:'1px solid #fecaca',width:80}}>Betrag</th></tr></thead>
             <tbody>
