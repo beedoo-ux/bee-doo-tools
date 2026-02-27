@@ -8,6 +8,7 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         :root{--a:#FDE154;--ad:rgba(253,225,84,.12);--bg:#08090d;--c:#111219;--ch:#16171f;--el:#1a1b24;--b:rgba(255,255,255,.06);--ba:rgba(253,225,84,.2);--t:#d8dae2;--td:#6b7280;--tb:#f3f4f6;--g:#22c55e;--gd:rgba(34,197,94,.12);--r:#ef4444;--rd:rgba(239,68,68,.12);--o:#f59e0b;--od:rgba(245,158,11,.12);--bl:#3b82f6;--bld:rgba(59,130,246,.12)}
         *{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);min-height:100vh}
@@ -64,6 +65,7 @@
 <div id="root"></div>
 <script type="text/babel">
 const{useState,useEffect,useRef,useCallback}=React;
+if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const SU='https://hqzpemfaljxcysyqssng.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
 const LU='https://beedoo.leveto.net/API';const LN='api@bee-doo.de';const LP='Patrick123456789!';
@@ -91,21 +93,24 @@ function lMap(l){const a=l.homeAddress||{},s=l.status||{},sf=l.statusFirst||{},s
 // ═══ MAIN APP ═══
 function App(){
     const[tab,setTab]=useState('leveto');
-    const[ct,setCt]=useState({leveto:'-',efs:'-',leads:'-',termine:'-',auftraege:'-'});
+    const[ct,setCt]=useState({leveto:'-',efs:'-',leads:'-',termine:'-',auftraege:'-',bank:'-',lohnjournal:'-',lohnsheet:'-'});
     const[logs,setLogs]=useState([]);
     const log=useCallback((m,l='info')=>setLogs(p=>[{t:new Date().toLocaleTimeString('de-DE'),m,l,id:Date.now()+Math.random()},...p].slice(0,100)),[]);
-    const rc=useCallback(async()=>{try{const[a,b,c,d,e]=await Promise.allSettled([sCnt('leveto_leads'),sCnt('efs_projekte'),sCnt('import_leads'),sCnt('import_appointments'),sCnt('import_provisions')]);setCt({leveto:a.status==='fulfilled'?a.value:'-',efs:b.status==='fulfilled'?b.value:'-',leads:c.status==='fulfilled'?c.value:'-',termine:d.status==='fulfilled'?d.value:'-',auftraege:e.status==='fulfilled'?e.value:'-'})}catch(e){log('Count-Fehler: '+e.message,'error')}},[log]);
+    const rc=useCallback(async()=>{try{const[a,b,c,d,e,f,g,h]=await Promise.allSettled([sCnt('leveto_leads'),sCnt('efs_projekte'),sCnt('import_leads'),sCnt('import_appointments'),sCnt('import_provisions'),sCnt('bank_transactions'),sCnt('lohnjournal_imports'),sCnt('lohn_sheet_data')]);setCt({leveto:a.status==='fulfilled'?a.value:'-',efs:b.status==='fulfilled'?b.value:'-',leads:c.status==='fulfilled'?c.value:'-',termine:d.status==='fulfilled'?d.value:'-',auftraege:e.status==='fulfilled'?e.value:'-',bank:f.status==='fulfilled'?f.value:'-',lohnjournal:g.status==='fulfilled'?g.value:'-',lohnsheet:h.status==='fulfilled'?h.value:'-'})}catch(e){log('Count-Fehler: '+e.message,'error')}},[log]);
     useEffect(()=>{rc()},[rc]);
     const fm=v=>typeof v==='number'?v.toLocaleString('de-DE'):v;
-    const TS=[{k:'leveto',l:'Leveto Sync',i:'🔄'},{k:'efs',l:'EFS Sync',i:'📊'},{k:'csv',l:'CSV Import',i:'📋'},{k:'merge',l:'Auto-Merge',i:'🔗'}];
+    const TS=[{k:'leveto',l:'Leveto Sync',i:'🔄'},{k:'efs',l:'EFS Sync',i:'📊'},{k:'csv',l:'CSV Import',i:'📋'},{k:'bank',l:'Bank / EBICS',i:'🏦'},{k:'lohnjournal',l:'Lohnjournal',i:'💼'},{k:'lohnsheet',l:'Lohn Sheet',i:'📊'},{k:'merge',l:'Auto-Merge',i:'🔗'}];
     return(<React.Fragment>
         <div className="hdr"><div className="hdr-l"><div className="logo">bee-doo <span>| Import Cockpit</span></div></div><a href="https://bee-doo-tools.vercel.app/" className="hdr-lk">← Toolbox</a></div>
         <div className="tabs">{TS.map(t=><div key={t.k} className={`tab ${tab===t.k?'on':''}`} onClick={()=>setTab(t.k)}>{t.i} {t.l}</div>)}</div>
         <div className="mn">
-            <div className="sts fi">{[{l:'Leveto Leads',v:ct.leveto,s:'leveto_leads'},{l:'EFS Projekte',v:ct.efs,s:'efs_projekte'},{l:'CSV Leads',v:ct.leads,s:'import_leads'},{l:'CSV Termine',v:ct.termine,s:'import_appointments'},{l:'CSV Aufträge',v:ct.auftraege,s:'import_provisions'}].map(s=><div key={s.l} className="st"><div className="st-l">{s.l}</div><div className="st-v">{fm(s.v)}</div><div className="st-s">{s.s}</div></div>)}</div>
+            <div className="sts fi">{[{l:'Leveto Leads',v:ct.leveto,s:'leveto_leads'},{l:'EFS Projekte',v:ct.efs,s:'efs_projekte'},{l:'CSV Leads',v:ct.leads,s:'import_leads'},{l:'CSV Termine',v:ct.termine,s:'import_appointments'},{l:'CSV Aufträge',v:ct.auftraege,s:'import_provisions'},{l:'Bank Trans.',v:ct.bank,s:'bank_transactions'},{l:'Lohnjournal',v:ct.lohnjournal,s:'lohnjournal_imports'},{l:'Lohn Sheet',v:ct.lohnsheet,s:'lohn_sheet_data'}].map(s=><div key={s.l} className="st"><div className="st-l">{s.l}</div><div className="st-v">{fm(s.v)}</div><div className="st-s">{s.s}</div></div>)}</div>
             {tab==='leveto'&&<LT log={log} rc={rc}/>}
             {tab==='efs'&&<ET log={log} rc={rc}/>}
             {tab==='csv'&&<CT log={log} rc={rc}/>}
+            {tab==='bank'&&<BKT log={log} rc={rc}/>}
+            {tab==='lohnjournal'&&<LJT log={log} rc={rc}/>}
+            {tab==='lohnsheet'&&<LST log={log} rc={rc}/>}
             {tab==='merge'&&<MT log={log} rc={rc} ct={ct}/>}
             <div className="cd" style={{marginTop:16}}><div className="cd-t">📊 Activity Log</div>
                 <div className="lb">{logs.length===0&&<div style={{color:'var(--td)',textAlign:'center',padding:20}}>Noch keine Aktivität</div>}{logs.map(l=><div key={l.id}><span className="tm">[{l.t}]</span> <span className={l.l}>{l.m}</span></div>)}</div>
@@ -212,6 +217,173 @@ function CC({ct,fd,imp,prog,res,onF,onR,onI}){
     </div>);
 }
 
+// ═══ BANK / EBICS TAB ═══
+function parseCAMT(xml){const dp=new DOMParser();const doc=dp.parseFromString(xml,'text/xml');const ns=doc.documentElement.namespaceURI;const gn=(el,tag)=>{const r=ns?el.getElementsByTagNameNS(ns,tag):el.getElementsByTagName(tag);return r.length?r:el.getElementsByTagName(tag)};
+    const stmts=gn(doc,'Stmt');const txns=[];let acctIBAN='';
+    for(const stmt of stmts){const ai=gn(stmt,'IBAN');if(ai.length)acctIBAN=ai[0].textContent;const entries=gn(stmt,'Ntry');
+        for(const ntry of entries){const bd=gn(ntry,'BookgDt');const vd=gn(ntry,'ValDt');const am=gn(ntry,'Amt');const cd=gn(ntry,'CdtDbtInd');
+            const dtls=gn(ntry,'NtryDtls');let vz='',gIBAN='',gBIC='',gName='',e2e='',mnd='',ref='';
+            if(dtls.length){const tx=gn(dtls[0],'TxDtls');if(tx.length){const ri=gn(tx[0],'RmtInf');if(ri.length){const us=gn(ri[0],'Ustrd');vz=Array.from(us).map(u=>u.textContent).join(' ')}
+                const rp=gn(tx[0],'RltdPties');if(rp.length){const da=[...gn(rp[0],'DbtrAcct'),...gn(rp[0],'CdtrAcct')];for(const a of da){const ib=gn(a,'IBAN');if(ib.length){gIBAN=ib[0].textContent;break}}const dn=[...gn(rp[0],'Dbtr'),...gn(rp[0],'Cdtr')];for(const d of dn){const nm=gn(d,'Nm');if(nm.length){gName=nm[0].textContent;break}}}
+                const ra=gn(tx[0],'RltdAgts');if(ra.length){const bc=gn(ra[0],'BIC');if(bc.length)gBIC=bc[0].textContent}
+                const refs=gn(tx[0],'Refs');if(refs.length){const ei=gn(refs[0],'EndToEndId');if(ei.length)e2e=ei[0].textContent;const mr=gn(refs[0],'MndtId');if(mr.length)mnd=mr[0].textContent}}}
+            const bkDt=bd.length?gn(bd[0],'Dt'):[null];const vlDt=vd.length?gn(vd[0],'Dt'):[null];
+            txns.push({buchungsdatum:bkDt[0]?.textContent||null,valutadatum:vlDt[0]?.textContent||null,betrag:am.length?parseFloat(am[0].textContent):0,waehrung:am.length?am[0].getAttribute('Ccy')||'EUR':'EUR',soll_haben:cd.length?cd[0].textContent:'',gegenkonto_iban:gIBAN,gegenkonto_bic:gBIC,gegenkonto_name:gName,verwendungszweck:vz,end2end_id:e2e!=='NOTPROVIDED'?e2e:'',mandate_id:mnd,eigenes_konto_iban:acctIBAN})}}
+    return txns}
+
+function parseMT940(text){const txns=[];let acctIBAN='',curDate='',curAmt=0,curSH='',lines=text.split('\n');let i=0;const buf={vz:'',ref:''};
+    const toDate=s=>{if(!s||s.length<6)return null;const y=s.substring(0,2);const m=s.substring(2,4);const d=s.substring(4,6);return`20${y}-${m}-${d}`};
+    while(i<lines.length){const l=lines[i].trim();
+        if(l.startsWith(':25:')){acctIBAN=l.substring(4).replace(/\//g,'')}
+        else if(l.startsWith(':61:')){if(buf.vz&&curDate){txns.push({buchungsdatum:curDate,valutadatum:curDate,betrag:curAmt,waehrung:'EUR',soll_haben:curSH,gegenkonto_iban:'',gegenkonto_bic:'',gegenkonto_name:'',verwendungszweck:buf.vz,end2end_id:'',mandate_id:'',eigenes_konto_iban:acctIBAN,bank_referenz:buf.ref});buf.vz='';buf.ref=''}
+            const ln=l.substring(4);curDate=toDate(ln.substring(0,6));const dm=ln.match(/\d{6}(C|D|RC|RD)([\d,]+)/);if(dm){curSH=dm[1].includes('D')?'DBIT':'CRDT';curAmt=parseFloat(dm[2].replace(',','.'))}const rm=ln.match(/\/\/(.+)/);if(rm)buf.ref=rm[1]}
+        else if(l.startsWith(':86:')){buf.vz=l.substring(4);let j=i+1;while(j<lines.length&&!lines[j].trim().startsWith(':')){buf.vz+=' '+lines[j].trim();j++}i=j-1}
+        i++}
+    if(buf.vz&&curDate)txns.push({buchungsdatum:curDate,valutadatum:curDate,betrag:curAmt,waehrung:'EUR',soll_haben:curSH,gegenkonto_iban:'',gegenkonto_bic:'',gegenkonto_name:'',verwendungszweck:buf.vz,end2end_id:'',mandate_id:'',eigenes_konto_iban:acctIBAN,bank_referenz:buf.ref});
+    return txns}
+
+function BKT({log,rc}){
+    const[file,setFile]=useState(null);const[txns,setTxns]=useState(null);const[imp,setImp]=useState(false);const[res,setRes]=useState(null);const ref=useRef(null);const[dg,setDg]=useState(false);
+    const hf=f=>{const rd=new FileReader();rd.onload=e=>{const c=e.target.result;let parsed;try{if(f.name.endsWith('.xml')||c.trim().startsWith('<?xml')||c.includes('BkToCstmrStmt'))parsed=parseCAMT(c);else parsed=parseMT940(c);setTxns(parsed);setFile(f);setRes(null);log(`🏦 ${f.name}: ${parsed.length} Transaktionen geparsed`)}catch(err){log(`❌ Parse-Fehler: ${err.message}`,'error')}};rd.readAsText(f,'UTF-8')};
+    const onD=e=>{e.preventDefault();setDg(false);const f=Array.from(e.dataTransfer.files).find(f=>f.name.endsWith('.xml')||f.name.endsWith('.sta')||f.name.endsWith('.mt940')||f.name.endsWith('.txt'));if(f)hf(f)};
+    const doImport=async()=>{if(!txns)return;setImp(true);log(`🏦 Import: ${txns.length} Transaktionen`,'warn');const bid=crypto.randomUUID();
+        const rows=txns.map(t=>({...t,import_batch_id:bid,import_dateiname:file.name,import_format:file.name.endsWith('.xml')?'CAMT.053':'MT940'}));
+        try{const r=await uBat('bank_transactions',rows,(c,t)=>{});setRes(r);log(`✅ Bank: ${r.inserted} neu, ${r.updated} aktualisiert${r.errors>0?`, ${r.errors} Fehler`:''}`,r.errors>0?'error':'success');rc()}catch(e){log(`❌ Bank: ${e.message}`,'error');setRes({inserted:0,updated:0,errors:txns.length})}setImp(false)};
+    const reset=()=>{setFile(null);setTxns(null);setRes(null)};
+    const fm=v=>typeof v==='number'?v.toLocaleString('de-DE',{minimumFractionDigits:2}):v;
+    const sums=txns?{ein:txns.filter(t=>t.soll_haben==='CRDT').reduce((s,t)=>s+t.betrag,0),aus:txns.filter(t=>t.soll_haben==='DBIT').reduce((s,t)=>s+t.betrag,0)}:null;
+    return(<React.Fragment>
+        <div className="eg fi">
+            <div className="cd"><div className="cd-t">🏦 CAMT.053 / MT940 Import</div>
+                <p style={{fontSize:13,color:'var(--td)',marginBottom:14,lineHeight:1.6}}>Bank-Kontoauszüge importieren. Unterstützt <strong style={{color:'var(--a)'}}>CAMT.053</strong> (XML) und <strong style={{color:'var(--a)'}}>MT940</strong> (SWIFT).</p>
+                {!file&&<div className={`dz ${dg?'dv':''}`} onDragOver={e=>{e.preventDefault();setDg(true)}} onDragLeave={()=>setDg(false)} onDrop={onD} onClick={()=>ref.current?.click()}>CAMT.053 (.xml) oder MT940 (.sta/.txt) hierher ziehen oder <strong>klicken</strong><input ref={ref} type="file" accept=".xml,.sta,.mt940,.txt" onChange={e=>{if(e.target.files[0])hf(e.target.files[0]);e.target.value=''}}/></div>}
+                {file&&<div className="fi2"><span>📄</span><div><span className="fi2-n">{file.name}</span> <span className="fi2-m">· {txns?.length||0} Transaktionen · {(file.size/1024).toFixed(0)} KB</span></div>{!imp&&!res&&<button className="fi2-x" onClick={reset}>✕</button>}</div>}
+                {txns&&!imp&&!res&&<button className="btn by" style={{width:'100%',marginTop:10,justifyContent:'center'}} onClick={doImport}>⚡ {txns.length} Transaktionen importieren</button>}
+                {res&&<React.Fragment><div className="rg"><div className="ri nw"><div className="rn">{res.inserted}</div><div className="rl">Neu</div></div><div className="ri up"><div className="rn">{res.updated}</div><div className="rl">Aktualisiert</div></div><div className="ri er"><div className="rn">{res.errors}</div><div className="rl">Fehler</div></div></div><button className="btn bo bsm" style={{width:'100%',marginTop:6,justifyContent:'center'}} onClick={reset}>↻ Neuer Import</button></React.Fragment>}
+            </div>
+            <div className="cd"><div className="cd-t">📊 Vorschau</div>
+                {sums?<React.Fragment><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+                    <div style={{background:'var(--gd)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--td)'}}>Eingänge</div><div style={{fontSize:18,fontWeight:700,color:'var(--g)'}}>+{fm(sums.ein)} €</div></div>
+                    <div style={{background:'var(--rd)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--td)'}}>Ausgänge</div><div style={{fontSize:18,fontWeight:700,color:'var(--r)'}}>-{fm(sums.aus)} €</div></div></div>
+                    <div style={{maxHeight:200,overflowY:'auto',fontSize:11}}><table className="mt"><thead><tr><th>Datum</th><th>Betrag</th><th>Gegenkonto</th><th>Verwendungszweck</th></tr></thead><tbody>
+                    {txns.slice(0,20).map((t,i)=><tr key={i}><td>{t.buchungsdatum}</td><td style={{color:t.soll_haben==='CRDT'?'var(--g)':'var(--r)',fontWeight:600}}>{t.soll_haben==='CRDT'?'+':'-'}{fm(t.betrag)} €</td><td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.gegenkonto_name||t.gegenkonto_iban||'—'}</td><td style={{maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.verwendungszweck||'—'}</td></tr>)}
+                    </tbody></table>{txns.length>20&&<div style={{textAlign:'center',padding:8,color:'var(--td)'}}>... und {txns.length-20} weitere</div>}</div>
+                </React.Fragment>:<div style={{fontSize:12,color:'var(--td)',padding:30,textAlign:'center'}}>Datei hochladen um Vorschau zu sehen</div>}
+            </div>
+        </div>
+        <div className="cd fi"><div className="cd-t">🗺️ Feld-Mapping</div>
+            <table className="mt"><thead><tr><th>CAMT.053 / MT940</th><th>→ Supabase</th><th>Beispiel</th></tr></thead><tbody>
+                {[['BookgDt / :61: Datum','buchungsdatum','2025-02-15'],['Amt / Betrag','betrag','1.234,56'],['CdtDbtInd / C|D','soll_haben','CRDT / DBIT'],['RltdPties IBAN','gegenkonto_iban','DE89370400...'],['RltdPties Nm','gegenkonto_name','Max Mustermann'],['RmtInf Ustrd / :86:','verwendungszweck','Rechnung 12345'],['EndToEndId','end2end_id','E2E-REF-001'],['Acct IBAN / :25:','eigenes_konto_iban','DE123456...']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td style={{color:'var(--td)'}}>{r[2]}</td></tr>)}
+            </tbody></table>
+        </div>
+    </React.Fragment>);
+}
+
+// ═══ LOHNJOURNAL TAB ═══
+function LJT({log,rc}){
+    const[file,setFile]=useState(null);const[parsed,setParsed]=useState(null);const[rawText,setRawText]=useState('');const[imp,setImp]=useState(false);const[res,setRes]=useState(null);const ref=useRef(null);const[dg,setDg]=useState(false);
+    const parseLJ=async(f)=>{log('📄 PDF wird gelesen...','warn');const ab=await f.arrayBuffer();
+        const pdf=await pdfjsLib.getDocument({data:ab}).promise;let text='';
+        for(let i=1;i<=pdf.numPages;i++){const pg=await pdf.getPage(i);const tc=await pg.getTextContent();text+=tc.items.map(x=>x.str).join(' ')+'\n'}
+        setRawText(text);log(`📄 ${pdf.numPages} Seiten, ${text.length} Zeichen extrahiert`);
+        // Parse Lohnjournal structure
+        const data={mitarbeiter:[],monat:'',brutto:0,netto:0,sv:0,lst:0,ag:0};
+        // Try to find month
+        const monatMatch=text.match(/(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s*(\d{4})/i)||text.match(/(\d{2})[\./](\d{4})/);
+        if(monatMatch)data.monat=monatMatch[0];
+        // Try to find totals
+        const nums=text.match(/[\d.]+,\d{2}/g)||[];const bigNums=nums.map(n=>parseFloat(n.replace(/\./g,'').replace(',','.'))).filter(n=>n>100);
+        // Count employees - look for Personalnummer or sequential numbers
+        const pnrMatch=text.match(/\d{4,6}\s+[A-ZÄÖÜa-zäöüß]+/g)||[];data.mitarbeiter_count=Math.max(pnrMatch.length,1);
+        // Store parsed data
+        const result={monat:data.monat,mitarbeiter_count:data.mitarbeiter_count,brutto_gesamt:bigNums[0]||null,sv_gesamt:bigNums[1]||null,lst_gesamt:bigNums[2]||null,netto_gesamt:bigNums[3]||null,ag_anteil_gesamt:bigNums[4]||null,raw_text:text.substring(0,5000),parsed_data:{detected_numbers:bigNums.slice(0,20),line_count:text.split('\n').length}};
+        setParsed(result);setFile(f);log(`✅ Lohnjournal geparsed: ${data.monat||'Monat?'}, ~${data.mitarbeiter_count} Mitarbeiter`,'success')};
+    const onD=e=>{e.preventDefault();setDg(false);const f=Array.from(e.dataTransfer.files).find(f=>f.name.endsWith('.pdf'));if(f)parseLJ(f)};
+    const doImport=async()=>{if(!parsed)return;setImp(true);const bid=crypto.randomUUID();
+        const row={...parsed,dateiname:file.name,import_batch_id:bid,parsed_data:JSON.stringify(parsed.parsed_data)};
+        try{const r=await fetch(ap('lohnjournal_imports'),{method:'POST',headers:{...hd(),'Prefer':'return=representation'},body:JSON.stringify(row)});if(!r.ok)throw new Error(await r.text());setRes({inserted:1,updated:0,errors:0});log('✅ Lohnjournal importiert','success');rc()}catch(e){log(`❌ Import: ${e.message}`,'error');setRes({inserted:0,updated:0,errors:1})}setImp(false)};
+    const reset=()=>{setFile(null);setParsed(null);setRawText('');setRes(null)};
+    return(<React.Fragment>
+        <div className="eg fi">
+            <div className="cd"><div className="cd-t">💼 Lohnjournal PDF Import</div>
+                <p style={{fontSize:13,color:'var(--td)',marginBottom:14,lineHeight:1.6}}>Monatliches Lohnjournal vom Steuerberater. PDF wird gescannt und Summen extrahiert.</p>
+                {!file&&<div className={`dz ${dg?'dv':''}`} onDragOver={e=>{e.preventDefault();setDg(true)}} onDragLeave={()=>setDg(false)} onDrop={onD} onClick={()=>ref.current?.click()}>Lohnjournal PDF hierher ziehen oder <strong>klicken</strong><input ref={ref} type="file" accept=".pdf" onChange={e=>{if(e.target.files[0])parseLJ(e.target.files[0]);e.target.value=''}}/></div>}
+                {file&&<div className="fi2"><span>📄</span><div><span className="fi2-n">{file.name}</span> <span className="fi2-m">· {(file.size/1024).toFixed(0)} KB</span></div>{!imp&&!res&&<button className="fi2-x" onClick={reset}>✕</button>}</div>}
+                {parsed&&!imp&&!res&&<button className="btn by" style={{width:'100%',marginTop:10,justifyContent:'center'}} onClick={doImport}>⚡ Lohnjournal importieren</button>}
+                {res&&<React.Fragment><div className="rg"><div className="ri nw"><div className="rn">{res.inserted}</div><div className="rl">Neu</div></div><div className="ri up"><div className="rn">{res.updated}</div><div className="rl">Aktualisiert</div></div><div className="ri er"><div className="rn">{res.errors}</div><div className="rl">Fehler</div></div></div><button className="btn bo bsm" style={{width:'100%',marginTop:6,justifyContent:'center'}} onClick={reset}>↻ Neuer Import</button></React.Fragment>}
+            </div>
+            <div className="cd"><div className="cd-t">📊 Erkannte Daten</div>
+                {parsed?<React.Fragment>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:14}}>
+                        <div style={{background:'var(--ad)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--td)'}}>Monat</div><div style={{fontSize:14,fontWeight:700,color:'var(--a)'}}>{parsed.monat||'—'}</div></div>
+                        <div style={{background:'var(--bld)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--td)'}}>Mitarbeiter</div><div style={{fontSize:14,fontWeight:700,color:'var(--bl)'}}>~{parsed.mitarbeiter_count}</div></div>
+                        <div style={{background:'var(--gd)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--td)'}}>Brutto Ges.</div><div style={{fontSize:14,fontWeight:700,color:'var(--g)'}}>{parsed.brutto_gesamt?parsed.brutto_gesamt.toLocaleString('de-DE',{minimumFractionDigits:2})+' €':'—'}</div></div>
+                    </div>
+                    <div className="mh">⚠️ PDF-Parsing ist approximativ — bitte Werte prüfen</div>
+                    <details style={{fontSize:12}}><summary style={{cursor:'pointer',color:'var(--td)',padding:'8px 0'}}>Raw Text anzeigen ({rawText.length} Zeichen)</summary>
+                        <div className="lb" style={{maxHeight:200,fontSize:10,whiteSpace:'pre-wrap'}}>{rawText.substring(0,3000)}{rawText.length>3000&&'\n... (gekürzt)'}</div>
+                    </details>
+                </React.Fragment>:<div style={{fontSize:12,color:'var(--td)',padding:30,textAlign:'center'}}>PDF hochladen um Daten zu extrahieren</div>}
+            </div>
+        </div>
+    </React.Fragment>);
+}
+
+// ═══ LOHN SHEET TAB ═══
+function LST({log,rc}){
+    const[url,setUrl]=useState(localStorage.getItem('lohnSheetUrl')||'');const[syncing,setSyncing]=useState(false);const[data,setData]=useState(null);const[res,setRes]=useState(null);const[lastSync,setLastSync]=useState(null);
+    const extractId=u=>{const m=u.match(/\/d\/([a-zA-Z0-9_-]+)/);return m?m[1]:u};
+    const doSync=async()=>{if(!url.trim())return;setSyncing(true);setRes(null);const sid=extractId(url);log(`📊 Google Sheet Sync: ${sid.substring(0,15)}...`,'warn');
+        localStorage.setItem('lohnSheetUrl',url);
+        try{
+            // Try public CSV export
+            const csvUrl=`https://docs.google.com/spreadsheets/d/${sid}/gviz/tq?tqx=out:csv`;
+            const r=await fetch(csvUrl);if(!r.ok)throw new Error(`Sheet nicht erreichbar (${r.status}). Ist es auf "Jeder mit dem Link" geteilt?`);
+            const text=await r.text();const rows=parseCSV(text);if(!rows.length)throw new Error('Keine Daten im Sheet');
+            log(`📊 ${rows.length} Zeilen geladen`);setData(rows);
+            // Import to Supabase
+            const bid=crypto.randomUUID();const headers=Object.keys(rows[0]);
+            const dbRows=rows.map((r,i)=>({sheet_id:sid,sheet_name:'Sheet1',zeile_nr:i+2,mitarbeiter_name:r[headers.find(h=>h.toLowerCase().includes('name')||h.toLowerCase().includes('mitarbeiter'))]||`Zeile ${i+2}`,raw_row:JSON.stringify(r),sync_batch_id:bid,synced_at:new Date().toISOString()}));
+            // Delete old data for this sheet first
+            await fetch(ap('lohn_sheet_data')+`?sheet_id=eq.${sid}`,{method:'DELETE',headers:hd()});
+            const ir=await uBat('lohn_sheet_data',dbRows,()=>{});setRes(ir);setLastSync(new Date().toLocaleTimeString('de-DE'));
+            log(`✅ Sheet: ${ir.inserted} Zeilen gesynct`,'success');rc()
+        }catch(e){log(`❌ Sheet: ${e.message}`,'error');setRes({inserted:0,updated:0,errors:1,msg:e.message})}setSyncing(false)};
+    const fm=v=>typeof v==='number'?v.toLocaleString('de-DE'):v;
+    return(<React.Fragment>
+        <div className="eg fi">
+            <div className="cd"><div className="cd-t">📊 Google Sheet Auto-Sync</div>
+                <p style={{fontSize:13,color:'var(--td)',marginBottom:14,lineHeight:1.6}}>Lohn Google Sheet live anbinden. Sheet muss auf <strong style={{color:'var(--a)'}}>"Jeder mit dem Link"</strong> geteilt sein.</p>
+                <div style={{display:'flex',gap:8,marginBottom:14}}>
+                    <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." style={{flex:1,padding:'9px 14px',borderRadius:8,border:'1px solid var(--b)',background:'var(--el)',color:'var(--t)',fontFamily:'DM Sans',fontSize:13,outline:'none'}}/>
+                    <button className="btn by" disabled={syncing||!url.trim()} onClick={doSync}>{syncing?<React.Fragment><span className="spinner"/> Sync...</React.Fragment>:'🔄 Sync'}</button>
+                </div>
+                {lastSync&&<div style={{fontSize:11,color:'var(--g)',marginBottom:8}}>✅ Letzter Sync: {lastSync}</div>}
+                {res?.msg&&<div style={{fontSize:11,color:'var(--r)',marginBottom:8}}>❌ {res.msg}</div>}
+                {res&&!res.msg&&<div className="rg"><div className="ri nw"><div className="rn">{res.inserted}</div><div className="rl">Importiert</div></div><div className="ri up"><div className="rn">{res.updated}</div><div className="rl">Aktualisiert</div></div><div className="ri er"><div className="rn">{res.errors}</div><div className="rl">Fehler</div></div></div>}
+            </div>
+            <div className="cd"><div className="cd-t">📋 Sheet-Daten Vorschau</div>
+                {data?<React.Fragment>
+                    <div style={{fontSize:11,color:'var(--a)',marginBottom:8}}>{data.length} Zeilen · {Object.keys(data[0]).length} Spalten</div>
+                    <div style={{maxHeight:250,overflowY:'auto',overflowX:'auto',fontSize:11}}>
+                        <table className="mt"><thead><tr>{Object.keys(data[0]).slice(0,8).map((h,i)=><th key={i}>{h.length>15?h.substring(0,15)+'…':h}</th>)}{Object.keys(data[0]).length>8&&<th>...</th>}</tr></thead><tbody>
+                        {data.slice(0,15).map((r,i)=><tr key={i}>{Object.values(r).slice(0,8).map((v,j)=><td key={j} style={{maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v||'—'}</td>)}{Object.keys(data[0]).length>8&&<td style={{color:'var(--td)'}}>...</td>}</tr>)}
+                        </tbody></table>{data.length>15&&<div style={{textAlign:'center',padding:8,color:'var(--td)'}}>... und {data.length-15} weitere Zeilen</div>}
+                    </div>
+                </React.Fragment>:<div style={{fontSize:12,color:'var(--td)',padding:30,textAlign:'center'}}>Sheet-URL eingeben und Sync starten</div>}
+            </div>
+        </div>
+        <div className="cd fi"><div className="cd-t">ℹ️ Einrichtung</div>
+            <div style={{fontSize:13,color:'var(--td)',lineHeight:1.8}}>
+                <div>1. Google Sheet öffnen → <strong style={{color:'var(--tb)'}}>Freigeben</strong> → "Jeder mit dem Link" als Betrachter</div>
+                <div>2. Sheet-URL hier einfügen und <strong style={{color:'var(--a)'}}>Sync</strong> klicken</div>
+                <div>3. Daten landen in <code style={{background:'var(--el)',padding:'2px 6px',borderRadius:4}}>lohn_sheet_data</code> mit allen Spalten als JSON</div>
+                <div style={{marginTop:8,fontSize:11,color:'var(--o)'}}>💡 Für automatischen täglichen Sync kann ein Vercel Cron Job eingerichtet werden</div>
+            </div>
+        </div>
+    </React.Fragment>);
+}
+
 // ═══ MERGE TAB ═══
 function MT({log,rc,ct}){
     const[run,setRun]=useState(false);const[mr,setMr]=useState(null);
@@ -230,7 +402,7 @@ function MT({log,rc,ct}){
     return(<React.Fragment>
         <div className="cd fi"><div className="cd-t">🔗 Datenquellen verknüpfen</div>
             <p style={{fontSize:13,color:'var(--td)',marginBottom:16,lineHeight:1.6}}>Matcht Leveto ↔ EFS ↔ CSV über Name+PLZ und Lead-IDs. Verknüpfte Daten ermöglichen vollständige Provisions-Berechnung.</p>
-            <div className="mg">{[{i:'🔄',v:ct.leveto,l:'Leveto Leads'},{i:'📊',v:ct.efs,l:'EFS Projekte'},{i:'💰',v:ct.auftraege,l:'CSV Aufträge'}].map(s=><div key={s.l} className="mc"><div style={{fontSize:28}}>{s.i}</div><div className="mv">{fm(s.v)}</div><div className="ml">{s.l}</div></div>)}</div>
+            <div className="mg">{[{i:'🔄',v:ct.leveto,l:'Leveto Leads'},{i:'📊',v:ct.efs,l:'EFS Projekte'},{i:'💰',v:ct.auftraege,l:'CSV Aufträge'},{i:'🏦',v:ct.bank,l:'Bank Trans.'}].map(s=><div key={s.l} className="mc"><div style={{fontSize:28}}>{s.i}</div><div className="mv">{fm(s.v)}</div><div className="ml">{s.l}</div></div>)}</div>
             <button className="btn by" disabled={run} onClick={go} style={{width:'100%',justifyContent:'center'}}>{run?<React.Fragment><span className="spinner"/> Merge läuft...</React.Fragment>:'🔗 Auto-Merge starten'}</button>
         </div>
         {mr&&<div className="cd fi"><div className="cd-t">✅ Merge-Ergebnis</div>
