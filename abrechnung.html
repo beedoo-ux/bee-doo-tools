@@ -436,6 +436,7 @@ async function generateAbrechnungen(periode, onProgress){
   for(const oa of oldAbr){ try{await sbU('pay_abrechnungen',`id=eq.${oa.id}`,{status:'archiviert',archiviert_am:now});}catch(e){log(`⚠️ Archiv-Fehler ${oa.mitarbeiter_name}: ${e.message}`);try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e2){}try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e2){}} }
   if(oldAbr.length) log(`📦 ${oldAbr.length} alte Abrechnungen archiviert`);
   // === STORNO + STAFFEL + STUFEN KORREKTUR (basierend auf ALL1211 Google Sheet) ===
+  const SHEET_ID='1NP2uP1lctwkaqS5ChNNJ12ps8fz7ra66p_akpxLkTX0';
   log('🔍 Lade ALL1211 Zahlungsdaten aus Google Sheet...');
   const all1211Url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=ALL1211`;
   const all1211Raw = await fetch(all1211Url).then(r=>r.text()).catch(e=>{log('⚠️ ALL1211 Fehler: '+e);return '';});
@@ -735,7 +736,6 @@ async function generateAbrechnungen(periode, onProgress){
   // ═══ SCOUTER ABRECHNUNGEN ═══
   log('Berechne Scouter...');
   // Lead/Termin Einzeldaten aus Google Sheet laden
-  const SHEET_ID='1NP2uP1lctwkaqS5ChNNJ12ps8fz7ra66p_akpxLkTX0';
   const leadDetailByName={}, terminDetailByName={};
   try{
     const csvParse=(txt)=>{const rows=[];let row=[],cell='',inQ=false;for(let i=0;i<txt.length;i++){const c=txt[i];if(c==='"'){if(inQ&&txt[i+1]==='"'){cell+='"';i++;}else inQ=!inQ;}else if(c===','&&!inQ){row.push(cell);cell='';}else if(c==='\n'&&!inQ){row.push(cell);rows.push(row);row=[];cell='';}else cell+=c;}if(cell||row.length){row.push(cell);rows.push(row);}return rows;};
