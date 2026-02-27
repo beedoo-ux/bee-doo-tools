@@ -196,7 +196,7 @@ async function runHealthCheck(periode) {
   if(finAbg.length) warnings.push({typ:'warnung',icon:'🟡',titel:`${finAbg.length}× Finanz. abgelehnt (nicht storniert)`,details:finAbg.map(o=>`${o.auftrag_nr} ${o.kunde_name} (${vtMap[o.vertriebler_id]||'?'})`)});
 
   // 8. Abrechnungen mit 0€
-  const abrs = await sbG('pay_abrechnungen',`periode=eq.${periode}&select=id,mitarbeiter_name,brutto_provisionen`);
+  const abrs = await sbG('pay_abrechnungen',`periode=eq.${periode}&archiviert_am=is.null&select=id,mitarbeiter_name,brutto_provisionen`);
   const zeroA = abrs.filter(a=>a.brutto_provisionen===0);
   if(zeroA.length) warnings.push({typ:'info',icon:'💡',titel:`${zeroA.length} Abrechnungen mit 0€`,details:zeroA.map(a=>a.mitarbeiter_name)});
 
@@ -1949,7 +1949,7 @@ function App(){
 
   useEffect(()=>{(async()=>{try{const d=await sbG('pay_auszahlungen_historie','select=periode&order=periode.desc');const u=[...new Set(d.map(x=>x.periode))];const now=new Date();const cp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;if(!u.includes(cp))u.unshift(cp);const sorted=u.sort().reverse();setPers(sorted);setPer(sorted[0]||cp);}catch(e){const now=new Date();const p=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;setPers([p]);setPer(p);}})();},[]);
 
-  const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s,ma]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,strasse,plz,ort,steuernummer,typ,mwst_pflichtig,iban,bic,kuerzel')]);setAbrs(a);setAusz(z);setSg(s[0]||null);setMaArr(ma);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
+  const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s,ma]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&archiviert_am=is.null&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,strasse,plz,ort,steuernummer,typ,mwst_pflichtig,iban,bic,kuerzel')]);setAbrs(a);setAusz(z);setSg(s[0]||null);setMaArr(ma);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
   useEffect(()=>{loadP();},[loadP]);
 
   // Partner-Daten Lookup
