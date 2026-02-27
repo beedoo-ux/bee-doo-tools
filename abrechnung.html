@@ -430,10 +430,60 @@ async function generateAbrechnungen(periode, onProgress){
   const totalSalesByVP = {};
   const totalSalesDetailByVP = {};
   auftraegePayable.forEach(a => { if(!a.vertriebler_id) return; totalSalesByVP[a.vertriebler_id]=(totalSalesByVP[a.vertriebler_id]||0)+1; if(!totalSalesDetailByVP[a.vertriebler_id]) totalSalesDetailByVP[a.vertriebler_id]=[]; totalSalesDetailByVP[a.vertriebler_id].push({kunde:a.kunde_name,an:a.auftrag_nr,kwp:a.kwp,datum:a.auftrags_datum}); });
-  log('Lösche alte Abrechnungen für Periode...');
-  const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&select=id,status`);
-  for(const oa of oldAbr){ try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e){} try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e){} }
-  if(oldAbr.length) log(`${oldAbr.length} alte Abrechnungen gelöscht`);
+  log('Archiviere alte Abrechnungen für Periode...');
+  const oldAbr = await sbG('pay_abrechnungen',`periode=eq.${periode}&archiviert_am=is.null&select=id,status,mitarbeiter_name,brutto_provisionen`);
+  const now = new Date().toISOString();
+  for(const oa of oldAbr){ try{await sbU('pay_abrechnungen',`id=eq.${oa.id}`,{status:'archiviert',archiviert_am:now});}catch(e){log(`⚠️ Archiv-Fehler ${oa.mitarbeiter_name}: ${e.message}`);try{await sbD('pay_abrechnungen_positionen',`abrechnung_id=eq.${oa.id}`);}catch(e2){}try{await sbD('pay_abrechnungen',`id=eq.${oa.id}`);}catch(e2){}} }
+  if(oldAbr.length) log(`📦 ${oldAbr.length} alte Abrechnungen archiviert`);
+  // === STAFFEL-KORREKTUR: Rückwirkend alle Vormonate prüfen ===
+  log('🔍 Prüfe Staffel-Korrekturen rückwirkend...');
+  const staffelKorrekturen = {};
+  // Alle Sales-Aufträge laden (nicht nur abgerechnete!)
+  const alleAuftraege = await sbG('pay_auftraege','produkt_typ=not.in.(lead_count,termin_count,zero_count,sonderzulage)&select=vertriebler_id,auftrag_nr,auftrags_datum,zahlungsstatus,storniert,abgerechnet_monat,abgerechnet_jahr');
+  const abrByVPMonth = {};
+  alleAuftraege.forEach(a => { if(!a.vertriebler_id||!a.auftrags_datum) return; const om=a.auftrags_datum.substring(0,4)+'/'+a.auftrags_datum.substring(5,7); const key=a.vertriebler_id+'_'+om; if(!abrByVPMonth[key])abrByVPMonth[key]=[]; abrByVPMonth[key].push(a); });
+  for(const [key, orders] of Object.entries(abrByVPMonth)){
+    const [vpId, om] = [key.split('_')[0], key.split('_').slice(1).join('_')];
+    if(om === periode.replace(/\//g,'/')) continue; // Skip current period
+    const vp = vpById[vpId]; if(!vp) continue;
+    if((vp.typ||'').includes('scouter')) continue;
+    const ruleTyp = typMap[vp.typ] || vp.typ;
+    const regel = regelMap[ruleTyp]; if(!regel || regel.staffel_schwelle >= 999) continue;
+    const schwelle = regel.staffel_schwelle;
+    const basis = regel.basis_betrag_sale;
+    const staffelRate = regel.staffel_betrag_sale;
+    const diff = staffelRate - basis;
+    if(diff <= 0) continue;
+    // Bezahlt = abgerechnet_monat gesetzt
+    const bezahlt = orders.filter(o => o.abgerechnet_monat);
+    if(!bezahlt.length) continue; // Kein Sale je bezahlt → kein Vergleich möglich
+    // Damaliger Gesamtstand bei Zahlung: bezahlte + stornierte (die waren damals aktiv)
+    const stornoOhneAbr = orders.filter(o => o.storniert && !o.abgerechnet_monat);
+    const originalCount = bezahlt.length + stornoOhneAbr.length;
+    // Aktueller Stand: nur noch aktive zählen
+    const aktivJetzt = orders.filter(o => !o.storniert && o.zahlungsstatus === 'anzahlung_eingegangen').length;
+    const stornoNachZahlung = orders.filter(o => o.storniert).length;
+    const staffelDamals = originalCount >= schwelle;
+    const staffelJetzt = aktivJetzt >= schwelle;
+    const vpName = `${vp.vorname} ${vp.nachname}`;
+    if(staffelDamals && !staffelJetzt && stornoNachZahlung > 0){
+      // Rückforderung: Differenz für aktive (Staffel→Basis) + volle Provision für Stornierte
+      const rueckAktive = bezahlt.filter(o => !o.storniert).length * diff;
+      const rueckStorno = orders.filter(o => o.storniert && o.abgerechnet_monat).length * staffelRate;
+      const rueckBetrag = rueckAktive + rueckStorno;
+      if(rueckBetrag <= 0) continue;
+      staffelKorrekturen[vpId] = staffelKorrekturen[vpId] || [];
+      staffelKorrekturen[vpId].push({typ:'rueckforderung',monat:om,originalCount,bezahlt:bezahlt.length,aktiv:aktivJetzt,storniert:stornoNachZahlung,betrag:-rueckBetrag,diff,rueckAktive,rueckStorno,stornierte:orders.filter(o=>o.storniert).map(o=>o.auftrag_nr)});
+      log(`  📉 ${vpName}: Staffel-Rückforderung ${om} (damals ${originalCount}, jetzt ${aktivJetzt} aktiv, ${stornoNachZahlung} storniert) = -${rueckBetrag.toFixed(0)}€`);
+    } else if(!staffelDamals && staffelJetzt){
+      const nachBetrag = bezahlt.length * diff;
+      staffelKorrekturen[vpId] = staffelKorrekturen[vpId] || [];
+      staffelKorrekturen[vpId].push({typ:'nachzahlung',monat:om,originalCount,bezahlt:bezahlt.length,aktiv:aktivJetzt,betrag:nachBetrag,diff});
+      log(`  📈 ${vpName}: Staffel-Nachzahlung ${om} (damals ${originalCount}, jetzt ${aktivJetzt} aktiv) = +${nachBetrag.toFixed(0)}€`);
+    }
+  }
+  const skCount = Object.values(staffelKorrekturen).reduce((s,a)=>s+a.length,0);
+  if(skCount) log(`📊 ${skCount} Staffel-Korrekturen gefunden`); else log('✅ Keine Staffel-Korrekturen');
   let count = 0;
   // ALL VP IDs incl. team bonus recipients + sonderprov
   const allVPIds = new Set([...Object.keys(byVP), ...Object.keys(stornoByVP), ...Object.keys(offenByVP), ...Object.keys(sonderByVP), ...Object.keys(teamBonusByVP), ...Object.keys(stornoAbzByVP), ...Object.keys(zeroByVP), ...Object.keys(umleitungOrders), ...Object.keys(szByVP)]);
@@ -613,6 +663,17 @@ async function generateAbrechnungen(periode, onProgress){
     // On Hold Info
     const vpOnHold = onHoldByVP[vpId] || [];
     vpOnHold.forEach(o => { positionen.push({typ:'on_hold_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`On Hold – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
+    // === AUTO STAFFEL-KORREKTUREN ===
+    const vpSK = staffelKorrekturen[vpId] || [];
+    vpSK.forEach(sk => {
+      if(sk.typ==='rueckforderung'){
+        positionen.push({typ:'staffel_rueckforderung',auftrag_nr:null,kunde:`Vormonat ${sk.monat}: damals ${sk.originalCount} Sales (Staffel), jetzt ${sk.aktiv} aktiv`,produkt:`Staffel-Rückforderung ${sk.monat} (auto)`,original_betrag:sk.betrag,aktiv:true,zurueckgestellt:false,notiz:`${sk.storniert} Stornos nach Zahlung → Staffel nicht mehr erreicht. Rück: ${sk.rueckAktive}€ (${sk.bezahlt-sk.storniert}×${sk.diff}€ Diff) + ${sk.rueckStorno}€ Storno. ANs: ${sk.stornierte?.join(', ')||'-'}`});
+        bruttoTotal += sk.betrag; // betrag is negative
+      } else {
+        positionen.push({typ:'staffel_nachzahlung',auftrag_nr:null,kunde:`Vormonat ${sk.monat}: damals ${sk.originalCount} Sales (Basis), jetzt ${sk.aktiv} aktiv`,produkt:`Staffel-Nachzahlung ${sk.monat} (auto)`,original_betrag:sk.betrag,aktiv:true,zurueckgestellt:false,notiz:`Staffel jetzt erreicht. Nachzahlung: ${sk.diff}€ × ${sk.bezahlt} bezahlte Sales`});
+        bruttoTotal += sk.betrag;
+      }
+    });
     const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
     const sgUst=sgNetto*(sgConfig.ust_satz/100);
     const ustSatz=isHGB&&vp.mwst_pflichtig?19:0;
