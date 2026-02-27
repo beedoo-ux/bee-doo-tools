@@ -242,22 +242,70 @@ function parseMT940(text){const txns=[];let acctIBAN='',curDate='',curAmt=0,curS
     if(buf.vz&&curDate)txns.push({buchungsdatum:curDate,valutadatum:curDate,betrag:curAmt,waehrung:'EUR',soll_haben:curSH,gegenkonto_iban:'',gegenkonto_bic:'',gegenkonto_name:'',verwendungszweck:buf.vz,end2end_id:'',mandate_id:'',eigenes_konto_iban:acctIBAN,bank_referenz:buf.ref});
     return txns}
 
+function parseCSVBank(text){
+    // CSV-MT940 / Sparkasse CSV Export Parser
+    // Supports various German bank CSV exports with semicolon or comma delimiter
+    const lines=text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(l=>l.trim());
+    if(lines.length<2)return[];
+    // Auto-detect delimiter
+    const delim=lines[0].split(';').length>lines[0].split(',').length?';':',';
+    const splitRow=(line)=>{const cols=[];let cur='',inQ=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++}else inQ=!inQ}else if(ch===delim&&!inQ){cols.push(cur.trim());cur=''}else cur+=ch}cols.push(cur.trim());return cols};
+    const hdr=splitRow(lines[0]).map(h=>h.replace(/^"|"$/g,'').trim());
+    // Column mapping - flexible for different bank exports
+    const find=(names)=>{for(const n of names){const i=hdr.findIndex(h=>h.toLowerCase().includes(n.toLowerCase()));if(i>=0)return i}return-1};
+    const iKonto=find(['Auftragskonto','Kontonummer des Auftraggebers','IBAN']);
+    const iBuchung=find(['Buchungstag','Buchungsdatum','Buchung']);
+    const iValuta=find(['Valutadatum','Valuta','Wertstellung']);
+    const iBuchText=find(['Buchungstext','Buchungs Text','Textschlüssel']);
+    const iVwz=find(['Verwendungszweck','VWZ']);
+    const iName=find(['Begünstigter','Beguenstigter','Zahlungspflichtiger','Empfänger','Name','Auftraggeber']);
+    const iIBAN=find(['Kontonummer','Kontonummer/IBAN','IBAN des Gegenkontos','Gegenkonto']);
+    const iBLZ=find(['BLZ','BIC','BIC (SWIFT-Code)']);
+    const iBetrag=find(['Betrag','Umsatz']);
+    const iWaehrung=find(['Währung','Waehrung']);
+    const iInfo=find(['Info']);
+    // Parse German date DD.MM.YYYY or DD.MM.YY
+    const parseDE=(s)=>{if(!s)return null;const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);if(!m)return null;const y=m[3].length===2?'20'+m[3]:m[3];return`${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`};
+    // Parse German amount 1.234,56 or -1.234,56
+    const parseAmt=(s)=>{if(!s)return 0;const c=s.replace(/\s/g,'').replace(/\./g,'').replace(',','.');return parseFloat(c)||0};
+    const txns=[];
+    for(let i=1;i<lines.length;i++){
+        const cols=splitRow(lines[i]);if(cols.length<3)continue;
+        const betrag=iBetrag>=0?parseAmt(cols[iBetrag]):0;
+        if(betrag===0&&!cols.some(c=>c.trim()))continue; // skip empty rows
+        const sh=betrag>=0?'CRDT':'DBIT';
+        txns.push({
+            buchungsdatum:iBuchung>=0?parseDE(cols[iBuchung]):null,
+            valutadatum:iValuta>=0?parseDE(cols[iValuta]):null,
+            betrag:Math.abs(betrag),
+            waehrung:iWaehrung>=0&&cols[iWaehrung]?cols[iWaehrung].replace(/"/g,'').trim()||'EUR':'EUR',
+            soll_haben:sh,
+            gegenkonto_iban:iIBAN>=0?cols[iIBAN].replace(/"/g,'').trim():'',
+            gegenkonto_bic:iBLZ>=0?cols[iBLZ].replace(/"/g,'').trim():'',
+            gegenkonto_name:iName>=0?cols[iName].replace(/"/g,'').trim():'',
+            verwendungszweck:[iBuchText>=0?cols[iBuchText]:'',iVwz>=0?cols[iVwz]:''].filter(Boolean).join(' ').replace(/"/g,'').trim(),
+            end2end_id:'',mandate_id:'',
+            eigenes_konto_iban:iKonto>=0?cols[iKonto].replace(/"/g,'').trim():'',
+            bank_referenz:''
+        })}
+    return txns}
+
 function BKT({log,rc}){
-    const[file,setFile]=useState(null);const[txns,setTxns]=useState(null);const[imp,setImp]=useState(false);const[res,setRes]=useState(null);const ref=useRef(null);const[dg,setDg]=useState(false);
-    const hf=f=>{const rd=new FileReader();rd.onload=e=>{const c=e.target.result;let parsed;try{if(f.name.endsWith('.xml')||c.trim().startsWith('<?xml')||c.includes('BkToCstmrStmt'))parsed=parseCAMT(c);else parsed=parseMT940(c);setTxns(parsed);setFile(f);setRes(null);log(`🏦 ${f.name}: ${parsed.length} Transaktionen geparsed`)}catch(err){log(`❌ Parse-Fehler: ${err.message}`,'error')}};rd.readAsText(f,'UTF-8')};
-    const onD=e=>{e.preventDefault();setDg(false);const f=Array.from(e.dataTransfer.files).find(f=>f.name.endsWith('.xml')||f.name.endsWith('.sta')||f.name.endsWith('.mt940')||f.name.endsWith('.txt'));if(f)hf(f)};
+    const[file,setFile]=useState(null);const[txns,setTxns]=useState(null);const[imp,setImp]=useState(false);const[res,setRes]=useState(null);const ref=useRef(null);const[dg,setDg]=useState(false);const[fmt,setFmt]=useState('');
+    const hf=f=>{const rd=new FileReader();rd.onload=e=>{const c=e.target.result;let parsed;let fmt='';try{if(f.name.endsWith('.xml')||c.trim().startsWith('<?xml')||c.includes('BkToCstmrStmt')){parsed=parseCAMT(c);fmt='CAMT.053'}else if(f.name.endsWith('.csv')){parsed=parseCSVBank(c);fmt='CSV-MT940'}else{parsed=parseMT940(c);fmt='MT940'}setTxns(parsed);setFile(f);setFmt(fmt);setRes(null);log(`🏦 ${f.name}: ${parsed.length} Transaktionen geparsed (${fmt})`)}catch(err){log(`❌ Parse-Fehler: ${err.message}`,'error')}};rd.readAsText(f,'UTF-8')};
+    const onD=e=>{e.preventDefault();setDg(false);const f=Array.from(e.dataTransfer.files).find(f=>f.name.endsWith('.xml')||f.name.endsWith('.csv')||f.name.endsWith('.sta')||f.name.endsWith('.mt940')||f.name.endsWith('.txt'));if(f)hf(f)};
     const doImport=async()=>{if(!txns)return;setImp(true);log(`🏦 Import: ${txns.length} Transaktionen`,'warn');const bid=crypto.randomUUID();
-        const rows=txns.map(t=>({...t,import_batch_id:bid,import_dateiname:file.name,import_format:file.name.endsWith('.xml')?'CAMT.053':'MT940'}));
+        const rows=txns.map(t=>({...t,import_batch_id:bid,import_dateiname:file.name,import_format:fmt||'CSV-MT940'}));
         try{const r=await uBat('bank_transactions',rows,(c,t)=>{});setRes(r);log(`✅ Bank: ${r.inserted} neu, ${r.updated} aktualisiert${r.errors>0?`, ${r.errors} Fehler`:''}`,r.errors>0?'error':'success');rc()}catch(e){log(`❌ Bank: ${e.message}`,'error');setRes({inserted:0,updated:0,errors:txns.length})}setImp(false)};
-    const reset=()=>{setFile(null);setTxns(null);setRes(null)};
+    const reset=()=>{setFile(null);setTxns(null);setRes(null);setFmt('')};
     const fm=v=>typeof v==='number'?v.toLocaleString('de-DE',{minimumFractionDigits:2}):v;
     const sums=txns?{ein:txns.filter(t=>t.soll_haben==='CRDT').reduce((s,t)=>s+t.betrag,0),aus:txns.filter(t=>t.soll_haben==='DBIT').reduce((s,t)=>s+t.betrag,0)}:null;
     return(<React.Fragment>
         <div className="eg fi">
-            <div className="cd"><div className="cd-t">🏦 CAMT.053 / MT940 Import</div>
-                <p style={{fontSize:13,color:'var(--td)',marginBottom:14,lineHeight:1.6}}>Bank-Kontoauszüge importieren. Unterstützt <strong style={{color:'var(--a)'}}>CAMT.053</strong> (XML) und <strong style={{color:'var(--a)'}}>MT940</strong> (SWIFT).</p>
-                {!file&&<div className={`dz ${dg?'dv':''}`} onDragOver={e=>{e.preventDefault();setDg(true)}} onDragLeave={()=>setDg(false)} onDrop={onD} onClick={()=>ref.current?.click()}>CAMT.053 (.xml) oder MT940 (.sta/.txt) hierher ziehen oder <strong>klicken</strong><input ref={ref} type="file" accept=".xml,.sta,.mt940,.txt" onChange={e=>{if(e.target.files[0])hf(e.target.files[0]);e.target.value=''}}/></div>}
-                {file&&<div className="fi2"><span>📄</span><div><span className="fi2-n">{file.name}</span> <span className="fi2-m">· {txns?.length||0} Transaktionen · {(file.size/1024).toFixed(0)} KB</span></div>{!imp&&!res&&<button className="fi2-x" onClick={reset}>✕</button>}</div>}
+            <div className="cd"><div className="cd-t">🏦 Bank-Kontoauszug Import</div>
+                <p style={{fontSize:13,color:'var(--td)',marginBottom:14,lineHeight:1.6}}>Unterstützt <strong style={{color:'var(--a)'}}>CSV-MT940</strong> (Sparkasse Excel-Export), <strong style={{color:'var(--a)'}}>CAMT.053</strong> (XML) und <strong style={{color:'var(--a)'}}>MT940</strong> (SWIFT).</p>
+                {!file&&<div className={`dz ${dg?'dv':''}`} onDragOver={e=>{e.preventDefault();setDg(true)}} onDragLeave={()=>setDg(false)} onDrop={onD} onClick={()=>ref.current?.click()}>CSV (.csv), CAMT.053 (.xml) oder MT940 (.sta/.txt) hierher ziehen oder <strong>klicken</strong><input ref={ref} type="file" accept=".csv,.xml,.sta,.mt940,.txt" onChange={e=>{if(e.target.files[0])hf(e.target.files[0]);e.target.value=''}}/></div>}
+                {file&&<div className="fi2"><span>📄</span><div><span className="fi2-n">{file.name}</span> <span className="fi2-m">· {txns?.length||0} Transaktionen · {fmt} · {(file.size/1024).toFixed(0)} KB</span></div>{!imp&&!res&&<button className="fi2-x" onClick={reset}>✕</button>}</div>}
                 {txns&&!imp&&!res&&<button className="btn by" style={{width:'100%',marginTop:10,justifyContent:'center'}} onClick={doImport}>⚡ {txns.length} Transaktionen importieren</button>}
                 {res&&<React.Fragment><div className="rg"><div className="ri nw"><div className="rn">{res.inserted}</div><div className="rl">Neu</div></div><div className="ri up"><div className="rn">{res.updated}</div><div className="rl">Aktualisiert</div></div><div className="ri er"><div className="rn">{res.errors}</div><div className="rl">Fehler</div></div></div><button className="btn bo bsm" style={{width:'100%',marginTop:6,justifyContent:'center'}} onClick={reset}>↻ Neuer Import</button></React.Fragment>}
             </div>
@@ -272,8 +320,8 @@ function BKT({log,rc}){
             </div>
         </div>
         <div className="cd fi"><div className="cd-t">🗺️ Feld-Mapping</div>
-            <table className="mt"><thead><tr><th>CAMT.053 / MT940</th><th>→ Supabase</th><th>Beispiel</th></tr></thead><tbody>
-                {[['BookgDt / :61: Datum','buchungsdatum','2025-02-15'],['Amt / Betrag','betrag','1.234,56'],['CdtDbtInd / C|D','soll_haben','CRDT / DBIT'],['RltdPties IBAN','gegenkonto_iban','DE89370400...'],['RltdPties Nm','gegenkonto_name','Max Mustermann'],['RmtInf Ustrd / :86:','verwendungszweck','Rechnung 12345'],['EndToEndId','end2end_id','E2E-REF-001'],['Acct IBAN / :25:','eigenes_konto_iban','DE123456...']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td style={{color:'var(--td)'}}>{r[2]}</td></tr>)}
+            <table className="mt"><thead><tr><th>Quelle</th><th>→ Supabase</th><th>Format</th></tr></thead><tbody>
+                {[['Buchungstag / BookgDt / :61:','buchungsdatum','CSV / CAMT / MT940'],['Valutadatum','valutadatum','CSV / CAMT / MT940'],['Betrag / Amt','betrag','CSV / CAMT / MT940'],['±Vorzeichen / CdtDbtInd','soll_haben','CRDT / DBIT'],['Begünstigter / RltdPties Nm','gegenkonto_name','CSV / CAMT'],['Kontonummer / RltdPties IBAN','gegenkonto_iban','CSV / CAMT'],['BLZ/BIC / RltdAgts','gegenkonto_bic','CSV / CAMT'],['Verwendungszweck / RmtInf','verwendungszweck','CSV / CAMT / MT940'],['Auftragskonto / Acct IBAN','eigenes_konto_iban','CSV / CAMT / MT940'],['EndToEndId','end2end_id','CAMT']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td style={{color:'var(--td)'}}>{r[2]}</td></tr>)}
             </tbody></table>
         </div>
     </React.Fragment>);
@@ -422,3 +470,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
+
