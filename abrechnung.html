@@ -1905,20 +1905,87 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
   const pdf=async()=>{
     const pages=ref.current?.querySelectorAll('.gs-page');
     if(!pages?.length)return;
-    window.__t?.('PDF wird erstellt...');
+    window.__t?.('PDF wird erstellt (DocRaptor)...');
     try{
-      const c=document.createElement('div');
-      pages.forEach((p,i)=>{const cl=p.cloneNode(true);cl.style.boxShadow='none';cl.style.margin='0';cl.style.gap='0';if(i>0)cl.style.pageBreakBefore='always';c.appendChild(cl);});
-      // Dateiname: "Abrechnung Januar 2026 Max Mustermann.pdf"
+      // Collect all page HTML
+      const pagesHtml=Array.from(pages).map((p,i)=>{
+        const cl=p.cloneNode(true);
+        cl.style.boxShadow='none';cl.style.margin='0';
+        if(i>0)cl.style.pageBreakBefore='always';
+        return cl.outerHTML;
+      }).join('\n');
+
+      // Build complete HTML document for DocRaptor
+      const fullHtml=`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+@page{size:A4;margin:0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.gs-page{background:#fff;width:210mm;min-height:297mm;padding:0;position:relative;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:11px;display:flex;flex-direction:column;page-break-after:always;page-break-inside:avoid}
+.gs-page *{color:#111}
+.gs-branded-header{background:#2d2d2d;padding:18mm 16mm 12mm;color:#fff!important;position:relative;overflow:hidden}
+.gs-branded-header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:4px;background:#F5C500}
+.gs-branded-header *{color:#fff!important}
+.gs-body{padding:8mm 16mm 6mm;position:relative;z-index:2;flex:1;display:flex;flex-direction:column}
+.gs-footer{margin-top:auto;padding:8px 16mm 6px 16mm;border-top:3px solid #2d2d2d;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;flex-shrink:0}
+.gs-footer-col{font-size:7px;color:#888!important;line-height:1.5;padding:0 6px}
+.gs-footer-col:first-child{padding-left:0}.gs-footer-col:last-child{padding-right:0}
+.gs-footer-col b{font-size:7.5px;color:#2d2d2d!important;display:block;margin-bottom:1px;text-transform:uppercase;letter-spacing:0.3px}
+.gs-watermark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:82px;font-weight:900;color:rgba(200,0,0,0.18);letter-spacing:10px;text-transform:uppercase;pointer-events:none;z-index:1;white-space:nowrap}
+table{border-collapse:collapse}
+</style></head><body>${pagesHtml}</body></html>`;
+
+      // Filename
       const monate=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
       const lzParts=ab.periode?ab.periode.split('/'):[];
       let lzMonat='',lzJahr='';
       if(lzParts.length===2){const pY=parseInt(lzParts[0]),pM=parseInt(lzParts[1])-2;const lzD=new Date(pY,pM,1);lzMonat=monate[lzD.getMonth()];lzJahr=lzD.getFullYear();}
       const safeName=(ab.mitarbeiter_name||'Unbekannt').replace(/[^a-zA-ZäöüÄÖÜß\s-]/g,'').trim();
       const fname=`Abrechnung ${lzMonat} ${lzJahr} ${safeName}.pdf`;
-      await html2pdf().set({margin:0,filename:fname,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css']}}).from(c).save();
-      window.__t?.('✅ PDF heruntergeladen');
-    }catch(e){console.error('PDF Error:',e);window.__t?.('PDF-Fehler: '+e.message,'error');}
+
+      // DocRaptor API call
+      const resp=await fetch('https://docraptor.com/docs',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          user_credentials:'YOUR_API_KEY_HERE',
+          doc:{
+            document_content:fullHtml,
+            type:'pdf',
+            test:true,
+            name:fname,
+            prince_options:{
+              media:'print',
+              baseurl:window.location.origin
+            }
+          }
+        })
+      });
+
+      if(!resp.ok){const err=await resp.text();throw new Error('DocRaptor: '+err);}
+
+      const blob=await resp.blob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=fname;document.body.appendChild(a);a.click();
+      document.body.removeChild(a);URL.revokeObjectURL(url);
+      window.__t?.('✅ PDF heruntergeladen (DocRaptor)');
+    }catch(e){
+      console.error('DocRaptor Error:',e);
+      // Fallback to html2pdf
+      window.__t?.('DocRaptor fehlgeschlagen, nutze Fallback...','warn');
+      try{
+        const c=document.createElement('div');
+        pages.forEach((p,i)=>{const cl=p.cloneNode(true);cl.style.boxShadow='none';cl.style.margin='0';if(i>0)cl.style.pageBreakBefore='always';c.appendChild(cl);});
+        const monate=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+        const lzParts=ab.periode?ab.periode.split('/'):[];
+        let lzMonat='',lzJahr='';
+        if(lzParts.length===2){const pY=parseInt(lzParts[0]),pM=parseInt(lzParts[1])-2;const lzD=new Date(pY,pM,1);lzMonat=monate[lzD.getMonth()];lzJahr=lzD.getFullYear();}
+        const safeName=(ab.mitarbeiter_name||'Unbekannt').replace(/[^a-zA-ZäöüÄÖÜß\s-]/g,'').trim();
+        const fname=`Abrechnung ${lzMonat} ${lzJahr} ${safeName}.pdf`;
+        await html2pdf().set({margin:0,filename:fname,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css']}}).from(c).save();
+        window.__t?.('✅ PDF heruntergeladen (Fallback)');
+      }catch(e2){window.__t?.('PDF-Fehler: '+e2.message,'error');}
+    }
   };
 
   if(ld)return<div className="detail-overlay"><div className="detail-container"><div className="loading"><div className="spinner"/>Lade...</div></div></div>;
