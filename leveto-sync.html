@@ -291,49 +291,50 @@ function parseMT940(text){const txns=[];let acctIBAN='',curDate='',curAmt=0,curS
 
 function parseCSVBank(text){
     // CSV-MT940 / Sparkasse CSV Export Parser
-    // Supports various German bank CSV exports with semicolon or comma delimiter
     const lines=text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(l=>l.trim());
     if(lines.length<2)return[];
-    // Auto-detect delimiter
+    // Auto-detect delimiter (Sparkasse uses semicolon)
     const delim=lines[0].split(';').length>lines[0].split(',').length?';':',';
-    const splitRow=(line)=>{const cols=[];let cur='',inQ=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++}else inQ=!inQ}else if(ch===delim&&!inQ){cols.push(cur.trim());cur=''}else cur+=ch}cols.push(cur.trim());return cols};
+    const splitRow=(line)=>{const cols=[];let cur='',inQ=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++}else inQ=!inQ}else if(ch===delim&&!inQ){cols.push(cur);cur=''}else cur+=ch}cols.push(cur);return cols};
     const hdr=splitRow(lines[0]).map(h=>h.replace(/^"|"$/g,'').trim());
-    // Column mapping - flexible for different bank exports
-    const find=(names)=>{for(const n of names){const i=hdr.findIndex(h=>h.toLowerCase().includes(n.toLowerCase()));if(i>=0)return i}return-1};
-    const iKonto=find(['Auftragskonto','Kontonummer des Auftraggebers','IBAN']);
-    const iBuchung=find(['Buchungstag','Buchungsdatum','Buchung']);
+    // Flexible column finder
+    const find=(names)=>{for(const n of names){const nl=n.toLowerCase();const i=hdr.findIndex(h=>h.toLowerCase().includes(nl));if(i>=0)return i}return-1};
+    const iKonto=find(['Auftragskonto','Kontonummer des Auftraggebers']);
+    const iBuchung=find(['Buchungstag','Buchungsdatum']);
     const iValuta=find(['Valutadatum','Valuta','Wertstellung']);
-    const iBuchText=find(['Buchungstext','Buchungs Text','Textschlüssel']);
-    const iVwz=find(['Verwendungszweck','VWZ']);
-    const iName=find(['Begünstigter','Beguenstigter','Zahlungspflichtiger','Empfänger','Name','Auftraggeber']);
-    const iIBAN=find(['Kontonummer','Kontonummer/IBAN','IBAN des Gegenkontos','Gegenkonto']);
-    const iBLZ=find(['BLZ','BIC','BIC (SWIFT-Code)']);
+    const iBuchText=find(['Buchungstext']);
+    const iVwz=find(['Verwendungszweck']);
+    const iName=find(['Beguenstigter','Begünstigter','Zahlungspflichtiger','Empfänger','Empfaenger']);
+    const iIBAN=find(['Kontonummer']);
+    const iBLZ=find(['BLZ','BIC']);
     const iBetrag=find(['Betrag','Umsatz']);
-    const iWaehrung=find(['Währung','Waehrung']);
+    const iWaehrung=find(['Waehrung','Währung']);
     const iInfo=find(['Info']);
-    // Parse German date DD.MM.YYYY or DD.MM.YY
-    const parseDE=(s)=>{if(!s)return null;const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);if(!m)return null;const y=m[3].length===2?'20'+m[3]:m[3];return`${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`};
-    // Parse German amount 1.234,56 or -1.234,56
+    // Parse German date DD.MM.YY or DD.MM.YYYY
+    const parseDE=(s)=>{if(!s)return null;const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);if(!m)return null;let y=m[3];if(y.length===2)y=parseInt(y)>50?'19'+y:'20'+y;return`${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`};
+    // Parse German amount: "-1.758,79" or "1.758,79"
     const parseAmt=(s)=>{if(!s)return 0;const c=s.replace(/\s/g,'').replace(/\./g,'').replace(',','.');return parseFloat(c)||0};
     const txns=[];
     for(let i=1;i<lines.length;i++){
-        const cols=splitRow(lines[i]);if(cols.length<3)continue;
+        const cols=splitRow(lines[i]).map(c=>c.replace(/^"|"$/g,''));
+        if(cols.length<3||cols.every(c=>!c.trim()))continue;
         const betrag=iBetrag>=0?parseAmt(cols[iBetrag]):0;
-        if(betrag===0&&!cols.some(c=>c.trim()))continue; // skip empty rows
+        if(betrag===0)continue;
         const sh=betrag>=0?'CRDT':'DBIT';
         txns.push({
             buchungsdatum:iBuchung>=0?parseDE(cols[iBuchung]):null,
             valutadatum:iValuta>=0?parseDE(cols[iValuta]):null,
             betrag:Math.abs(betrag),
-            waehrung:iWaehrung>=0&&cols[iWaehrung]?cols[iWaehrung].replace(/"/g,'').trim()||'EUR':'EUR',
+            waehrung:iWaehrung>=0&&cols[iWaehrung]?cols[iWaehrung].trim()||'EUR':'EUR',
             soll_haben:sh,
-            gegenkonto_iban:iIBAN>=0?cols[iIBAN].replace(/"/g,'').trim():'',
-            gegenkonto_bic:iBLZ>=0?cols[iBLZ].replace(/"/g,'').trim():'',
-            gegenkonto_name:iName>=0?cols[iName].replace(/"/g,'').trim():'',
-            verwendungszweck:[iBuchText>=0?cols[iBuchText]:'',iVwz>=0?cols[iVwz]:''].filter(Boolean).join(' ').replace(/"/g,'').trim(),
+            gegenkonto_iban:iIBAN>=0?cols[iIBAN].trim():'',
+            gegenkonto_bic:iBLZ>=0?cols[iBLZ].trim():'',
+            gegenkonto_name:iName>=0?cols[iName].trim():'',
+            verwendungszweck:[iBuchText>=0?cols[iBuchText]:'',iVwz>=0?cols[iVwz]:''].filter(Boolean).map(s=>s.trim()).join(' · '),
             end2end_id:'',mandate_id:'',
-            eigenes_konto_iban:iKonto>=0?cols[iKonto].replace(/"/g,'').trim():'',
-            bank_referenz:''
+            eigenes_konto_iban:iKonto>=0?cols[iKonto].trim():'',
+            bank_referenz:'',
+            info:iInfo>=0?cols[iInfo].trim():''
         })}
     return txns}
 
@@ -400,10 +401,12 @@ function IBANFinder({log}){
 
 function BKT({log,rc}){
     const[file,setFile]=useState(null);const[txns,setTxns]=useState(null);const[imp,setImp]=useState(false);const[res,setRes]=useState(null);const ref=useRef(null);const[dg,setDg]=useState(false);const[fmt,setFmt]=useState('');
-    const hf=f=>{const rd=new FileReader();rd.onload=e=>{const c=e.target.result;let parsed;let fmt='';try{if(f.name.endsWith('.xml')||c.trim().startsWith('<?xml')||c.includes('BkToCstmrStmt')){parsed=parseCAMT(c);fmt='CAMT.053'}else if(f.name.endsWith('.csv')){parsed=parseCSVBank(c);fmt='CSV-MT940'}else{parsed=parseMT940(c);fmt='MT940'}setTxns(parsed);setFile(f);setFmt(fmt);setRes(null);log(`🏦 ${f.name}: ${parsed.length} Transaktionen geparsed (${fmt})`)}catch(err){log(`❌ Parse-Fehler: ${err.message}`,'error')}};rd.readAsText(f,'UTF-8')};
+    const hf=f=>{const rd=new FileReader();rd.onload=e=>{const c=e.target.result;let parsed;let fmt='';try{if(f.name.endsWith('.xml')||c.trim().startsWith('<?xml')||c.includes('BkToCstmrStmt')){parsed=parseCAMT(c);fmt='CAMT.053'}else if(f.name.endsWith('.csv')){parsed=parseCSVBank(c);fmt='CSV-MT940'}else{parsed=parseMT940(c);fmt='MT940'}setTxns(parsed);setFile(f);setFmt(fmt);setRes(null);log(`🏦 ${f.name}: ${parsed.length} Transaktionen geparsed (${fmt})`)}catch(err){log(`❌ Parse-Fehler: ${err.message}`,'error')}};
+        // CSV files from German banks are often ISO-8859-1
+        rd.readAsText(f,f.name.endsWith('.csv')?'ISO-8859-1':'UTF-8')};
     const onD=e=>{e.preventDefault();setDg(false);const f=Array.from(e.dataTransfer.files).find(f=>f.name.endsWith('.xml')||f.name.endsWith('.csv')||f.name.endsWith('.sta')||f.name.endsWith('.mt940')||f.name.endsWith('.txt'));if(f)hf(f)};
     const doImport=async()=>{if(!txns)return;setImp(true);log(`🏦 Import: ${txns.length} Transaktionen`,'warn');const bid=crypto.randomUUID();
-        const rows=txns.map(t=>({...t,import_batch_id:bid,import_dateiname:file.name,import_format:fmt||'CSV-MT940'}));
+        const rows=txns.map(t=>{const{info,...rest}=t;return{...rest,import_batch_id:bid,import_dateiname:file.name,import_format:fmt||'CSV-MT940'}});
         try{const r=await uBat('bank_transactions',rows,(c,t)=>{});setRes(r);log(`✅ Bank: ${r.inserted} neu, ${r.updated} aktualisiert${r.errors>0?`, ${r.errors} Fehler`:''}`,r.errors>0?'error':'success');rc()}catch(e){log(`❌ Bank: ${e.message}`,'error');setRes({inserted:0,updated:0,errors:txns.length})}setImp(false)};
     const reset=()=>{setFile(null);setTxns(null);setRes(null);setFmt('')};
     const fm=v=>typeof v==='number'?v.toLocaleString('de-DE',{minimumFractionDigits:2}):v;
@@ -421,8 +424,8 @@ function BKT({log,rc}){
                 {sums?<React.Fragment><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
                     <div style={{background:'var(--gd)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--td)'}}>Eingänge</div><div style={{fontSize:18,fontWeight:700,color:'var(--g)'}}>+{fm(sums.ein)} €</div></div>
                     <div style={{background:'var(--rd)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--td)'}}>Ausgänge</div><div style={{fontSize:18,fontWeight:700,color:'var(--r)'}}>-{fm(sums.aus)} €</div></div></div>
-                    <div style={{maxHeight:200,overflowY:'auto',fontSize:11}}><table className="mt"><thead><tr><th>Datum</th><th>Betrag</th><th>Gegenkonto</th><th>Verwendungszweck</th></tr></thead><tbody>
-                    {txns.slice(0,20).map((t,i)=><tr key={i}><td>{t.buchungsdatum}</td><td style={{color:t.soll_haben==='CRDT'?'var(--g)':'var(--r)',fontWeight:600}}>{t.soll_haben==='CRDT'?'+':'-'}{fm(t.betrag)} €</td><td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.gegenkonto_name||t.gegenkonto_iban||'—'}</td><td style={{maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.verwendungszweck||'—'}</td></tr>)}
+                    <div style={{maxHeight:200,overflowY:'auto',fontSize:11}}><table className="mt"><thead><tr><th>Datum</th><th>Betrag</th><th>Gegenkonto</th><th>Verwendungszweck</th>{txns[0]?.info!==undefined&&<th>Status</th>}</tr></thead><tbody>
+                    {txns.slice(0,20).map((t,i)=><tr key={i}><td>{t.buchungsdatum||t.valutadatum}</td><td style={{color:t.soll_haben==='CRDT'?'var(--g)':'var(--r)',fontWeight:600,whiteSpace:'nowrap'}}>{t.soll_haben==='CRDT'?'+':'-'}{fm(t.betrag)} €</td><td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.gegenkonto_name||t.gegenkonto_iban||'—'}</td><td style={{maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.verwendungszweck||'—'}</td>{t.info!==undefined&&<td><span className={`tg ${t.info?.includes('gebucht')?'tg-ok':'tg-w'}`}>{t.info?.includes('gebucht')?'gebucht':'vorgemerkt'}</span></td>}</tr>)}
                     </tbody></table>{txns.length>20&&<div style={{textAlign:'center',padding:8,color:'var(--td)'}}>... und {txns.length-20} weitere</div>}</div>
                 </React.Fragment>:<div style={{fontSize:12,color:'var(--td)',padding:30,textAlign:'center'}}>Datei hochladen um Vorschau zu sehen</div>}
             </div>
