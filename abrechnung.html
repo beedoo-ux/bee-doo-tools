@@ -10,6 +10,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -159,6 +160,46 @@ const sbG = async(t,q='')=>{const r=await fetch(`${SB_URL}/rest/v1/${t}?${q}`,{h
 const sbP = async(t,d)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(d)});if(!r.ok){const x=await r.text();throw new Error(`POST ${t}:${x}`);}return r.json();};
 const sbU = async(t,q,d)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}?${q}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(d)});if(!r.ok)throw new Error(`PATCH ${t}:${r.status}`);return r.json();};
 const sbD = async(t,q)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}?${q}`,{method:'DELETE',headers:HDR});if(!r.ok)throw new Error(`DEL ${t}:${r.status}`);};
+
+const DOCRAPTOR_CSS=`@page{size:A4;margin:0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;prince-image-resolution:300dpi}
+*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
+.gs-page{background:#fff;width:210mm;min-height:297mm;padding:0;position:relative;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:11px;display:block;page-break-after:always;page-break-inside:avoid;overflow:hidden}
+.gs-page *{color:#111}
+.gs-branded-header{background:#2d2d2d!important;padding:18mm 16mm 12mm;color:#fff!important;position:relative;overflow:hidden;border-bottom:4px solid #F5C500}
+.gs-branded-header *{color:#fff!important}
+.gs-body{padding:8mm 16mm 6mm;position:relative;z-index:2}
+.gs-footer{padding:10px 16mm 8px 16mm;background:#2d2d2d!important;display:table;width:100%;table-layout:fixed;position:absolute;bottom:0;left:0;right:0}
+.gs-footer-col{display:table-cell;font-size:7px;color:rgba(255,255,255,.7)!important;line-height:1.5;padding:0 12px;vertical-align:top;border-right:1px solid rgba(255,255,255,.15)}
+.gs-footer-col:first-child{padding-left:0}.gs-footer-col:last-child{padding-right:0;border-right:none}
+.gs-footer-col b{font-size:7.5px;color:#F5C500!important;display:block;margin-bottom:2px;text-transform:uppercase;letter-spacing:0.5px}
+.gs-watermark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:82px;font-weight:900;color:rgba(200,0,0,0.18);letter-spacing:10px;text-transform:uppercase;pointer-events:none;z-index:1;white-space:nowrap}
+table{border-collapse:collapse;width:100%}
+[style*="grid-template-columns"]{display:table!important;width:100%!important;table-layout:fixed!important}
+[style*="grid-template-columns"]>div{display:table-cell!important;vertical-align:top!important}
+[style*="background"]{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+tr[style*="background"]{-webkit-print-color-adjust:exact!important}`;
+
+const buildDocRaptorHtml=(pagesHtml)=>`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${DOCRAPTOR_CSS}</style></head><body>${pagesHtml}</body></html>`;
+
+const makePdfFilename=(periode,name)=>{
+  const monate=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const lzParts=periode?periode.split('/'):[];
+  let lzMonat='',lzJahr='';
+  if(lzParts.length===2){const pY=parseInt(lzParts[0]),pM=parseInt(lzParts[1])-2;const lzD=new Date(pY,pM,1);lzMonat=monate[lzD.getMonth()];lzJahr=lzD.getFullYear();}
+  const safeName=(name||'Unbekannt').replace(/[^a-zA-ZäöüÄÖÜß\s-]/g,'').trim();
+  return `Abrechnung ${lzMonat} ${lzJahr} ${safeName}.pdf`;
+};
+
+const docRaptorPdf=async(html,fname)=>{
+  const resp=await fetch('https://docraptor.com/docs',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({user_credentials:'iap81wS_f3t2f8108Uib',doc:{document_content:html,type:'pdf',test:false,name:fname,prince_options:{media:'print',baseurl:window.location.origin}}})
+  });
+  if(!resp.ok){const err=await resp.text();throw new Error('DocRaptor: '+err);}
+  return resp.blob();
+};
 
 // ═══ KI-Gesundheitscheck ═══
 async function runHealthCheck(periode) {
@@ -1899,103 +1940,24 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
     if(!pages?.length)return;
     window.__t?.('PDF wird erstellt (DocRaptor)...');
     try{
-      // Collect all page HTML
       const pagesHtml=Array.from(pages).map((p,i)=>{
-        const cl=p.cloneNode(true);
-        cl.style.boxShadow='none';cl.style.margin='0';
+        const cl=p.cloneNode(true);cl.style.boxShadow='none';cl.style.margin='0';
         if(i>0)cl.style.pageBreakBefore='always';
         return cl.outerHTML;
       }).join('\n');
-
-      // Build complete HTML document for DocRaptor (Prince XML)
-      const fullHtml=`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-@page{size:A4;margin:0}
-*{box-sizing:border-box;margin:0;padding:0}
-body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;prince-image-resolution:300dpi}
-
-/* Prince color forcing */
-*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
-
-/* Page structure */
-.gs-page{background:#fff;width:210mm;min-height:297mm;padding:0;position:relative;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:11px;display:block;page-break-after:always;page-break-inside:avoid;overflow:hidden}
-.gs-page *{color:#111}
-
-/* Header */
-.gs-branded-header{background:#2d2d2d!important;padding:18mm 16mm 12mm;color:#fff!important;position:relative;overflow:hidden;border-bottom:4px solid #F5C500}
-.gs-branded-header *{color:#fff!important}
-
-/* Body - use block instead of flex for Prince */
-.gs-body{padding:8mm 16mm 6mm;position:relative;z-index:2}
-
-/* Footer - Dark Bar with gold headings */
-.gs-footer{padding:10px 16mm 8px 16mm;background:#2d2d2d!important;display:table;width:100%;table-layout:fixed;position:absolute;bottom:0;left:0;right:0}
-.gs-footer-col{display:table-cell;font-size:7px;color:rgba(255,255,255,.7)!important;line-height:1.5;padding:0 12px;vertical-align:top;border-right:1px solid rgba(255,255,255,.15)}
-.gs-footer-col:first-child{padding-left:0}.gs-footer-col:last-child{padding-right:0;border-right:none}
-.gs-footer-col b{font-size:7.5px;color:#F5C500!important;display:block;margin-bottom:2px;text-transform:uppercase;letter-spacing:0.5px}
-
-/* Watermark */
-.gs-watermark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:82px;font-weight:900;color:rgba(200,0,0,0.18);letter-spacing:10px;text-transform:uppercase;pointer-events:none;z-index:1;white-space:nowrap}
-
-/* Table defaults */
-table{border-collapse:collapse;width:100%}
-
-/* Force all inline grid layouts to work with Prince */
-[style*="grid-template-columns"]{display:table!important;width:100%!important;table-layout:fixed!important}
-[style*="grid-template-columns"]>div{display:table-cell!important;vertical-align:top!important}
-
-/* Force background colors in Prince */
-[style*="background"]{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-tr[style*="background"]{-webkit-print-color-adjust:exact!important}
-</style></head><body>${pagesHtml}</body></html>`;
-
-      // Filename
-      const monate=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-      const lzParts=ab.periode?ab.periode.split('/'):[];
-      let lzMonat='',lzJahr='';
-      if(lzParts.length===2){const pY=parseInt(lzParts[0]),pM=parseInt(lzParts[1])-2;const lzD=new Date(pY,pM,1);lzMonat=monate[lzD.getMonth()];lzJahr=lzD.getFullYear();}
-      const safeName=(ab.mitarbeiter_name||'Unbekannt').replace(/[^a-zA-ZäöüÄÖÜß\s-]/g,'').trim();
-      const fname=`Abrechnung ${lzMonat} ${lzJahr} ${safeName}.pdf`;
-
-      // DocRaptor API call
-      const resp=await fetch('https://docraptor.com/docs',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          user_credentials:'iap81wS_f3t2f8108Uib',
-          doc:{
-            document_content:fullHtml,
-            type:'pdf',
-            test:false,
-            name:fname,
-            prince_options:{
-              media:'print',
-              baseurl:window.location.origin
-            }
-          }
-        })
-      });
-
-      if(!resp.ok){const err=await resp.text();throw new Error('DocRaptor: '+err);}
-
-      const blob=await resp.blob();
+      const fname=makePdfFilename(ab.periode,ab.mitarbeiter_name);
+      const blob=await docRaptorPdf(buildDocRaptorHtml(pagesHtml),fname);
       const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url;a.download=fname;document.body.appendChild(a);a.click();
+      const a=document.createElement('a');a.href=url;a.download=fname;document.body.appendChild(a);a.click();
       document.body.removeChild(a);URL.revokeObjectURL(url);
-      window.__t?.('✅ PDF heruntergeladen (DocRaptor)');
+      window.__t?.('✅ PDF heruntergeladen');
     }catch(e){
       console.error('DocRaptor Error:',e);
-      // Fallback to html2pdf
       window.__t?.('DocRaptor fehlgeschlagen, nutze Fallback...','warn');
       try{
         const c=document.createElement('div');
         pages.forEach((p,i)=>{const cl=p.cloneNode(true);cl.style.boxShadow='none';cl.style.margin='0';if(i>0)cl.style.pageBreakBefore='always';c.appendChild(cl);});
-        const monate=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-        const lzParts=ab.periode?ab.periode.split('/'):[];
-        let lzMonat='',lzJahr='';
-        if(lzParts.length===2){const pY=parseInt(lzParts[0]),pM=parseInt(lzParts[1])-2;const lzD=new Date(pY,pM,1);lzMonat=monate[lzD.getMonth()];lzJahr=lzD.getFullYear();}
-        const safeName=(ab.mitarbeiter_name||'Unbekannt').replace(/[^a-zA-ZäöüÄÖÜß\s-]/g,'').trim();
-        const fname=`Abrechnung ${lzMonat} ${lzJahr} ${safeName}.pdf`;
+        const fname=makePdfFilename(ab.periode,ab.mitarbeiter_name);
         await html2pdf().set({margin:0,filename:fname,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css']}}).from(c).save();
         window.__t?.('✅ PDF heruntergeladen (Fallback)');
       }catch(e2){window.__t?.('PDF-Fehler: '+e2.message,'error');}
@@ -2016,7 +1978,7 @@ tr[style*="background"]{-webkit-print-color-adjust:exact!important}
 }
 
 function App(){
-  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);const[berOpen,setBerOpen]=useState(false);const[katFilter,setKatFilter]=useState('alle');const[maArr,setMaArr]=useState([]);const[hcWarnings,setHcWarnings]=useState([]);const[hcOpen,setHcOpen]=useState(false);const[hcBusy,setHcBusy]=useState(false);
+  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);const[berOpen,setBerOpen]=useState(false);const[katFilter,setKatFilter]=useState('alle');const[maArr,setMaArr]=useState([]);const[hcWarnings,setHcWarnings]=useState([]);const[hcOpen,setHcOpen]=useState(false);const[hcBusy,setHcBusy]=useState(false);const[bulkBusy,setBulkBusy]=useState(false);const[bulkMsg,setBulkMsg]=useState('');
 
   useEffect(()=>{(async()=>{try{const d=await sbG('pay_auszahlungen_historie','select=periode&order=periode.desc');const u=[...new Set(d.map(x=>x.periode))];const now=new Date();const cp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;if(!u.includes(cp))u.unshift(cp);const sorted=u.sort().reverse();setPers(sorted);setPer(sorted[0]||cp);}catch(e){const now=new Date();const p=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;setPers([p]);setPer(p);}})();},[]);
 
@@ -2053,11 +2015,62 @@ function App(){
     setGenBusy(false);setGenMsg('');};
   const doHealthCheck=async()=>{if(!per)return;setHcBusy(true);try{const w=await runHealthCheck(per);setHcWarnings(w);setHcOpen(true);window.__t?.(w.length?`⚠️ ${w.length} Hinweise gefunden`:'✅ Alles sauber!');}catch(e){window.__t?.('Fehler: '+e.message,'error');}setHcBusy(false);};
 
+  const doBulkPdf=async()=>{
+    const frei=abrs.filter(a=>a.status==='freigegeben'||a.status==='ausgezahlt');
+    if(!frei.length){window.__t?.('Keine freigegebenen Abrechnungen','error');return;}
+    if(!confirm(`${frei.length} PDFs erstellen und als ZIP herunterladen?\n\nDas dauert ca. ${Math.ceil(frei.length*1.5)} Sekunden.`))return;
+    setBulkBusy(true);setBulkMsg(`0/${frei.length} PDFs...`);
+    const zip=new JSZip();
+    const container=document.createElement('div');
+    container.style.cssText='position:absolute;left:-9999px;top:-9999px;width:210mm';
+    document.body.appendChild(container);
+    let ok=0,fail=0;
+    for(let i=0;i<frei.length;i++){
+      const ab=frei[i];
+      const fname=makePdfFilename(ab.periode,ab.mitarbeiter_name);
+      setBulkMsg(`${i+1}/${frei.length}: ${ab.mitarbeiter_name}...`);
+      try{
+        // Load positions + VP data
+        const posArr=await sbG('pay_abrechnungen_positionen',`abrechnung_id=eq.${ab.id}&order=erstellt_am.asc`);
+        const nameParts=ab.mitarbeiter_name.trim().split(/\s+/);
+        const vpArr=await sbG('pay_mitarbeiter',`vorname=eq.${encodeURIComponent(nameParts[0])}&nachname=eq.${encodeURIComponent(nameParts.slice(1).join(' '))}&limit=1`).catch(()=>[]);
+        if(vpArr[0])window.__vpData=vpArr[0];
+        // Render offscreen
+        const root=ReactDOM.createRoot(container);
+        root.render(React.createElement(GutschriftPreview,{ab,pos:posArr,sg}));
+        await new Promise(r=>setTimeout(r,200));
+        // Grab pages
+        const pages=container.querySelectorAll('.gs-page');
+        if(!pages.length){root.unmount();fail++;continue;}
+        const pagesHtml=Array.from(pages).map((p,pi)=>{
+          const cl=p.cloneNode(true);cl.style.boxShadow='none';cl.style.margin='0';
+          if(pi>0)cl.style.pageBreakBefore='always';
+          return cl.outerHTML;
+        }).join('\n');
+        root.unmount();
+        // DocRaptor
+        const blob=await docRaptorPdf(buildDocRaptorHtml(pagesHtml),fname);
+        zip.file(fname,blob);ok++;
+      }catch(e){console.error(`PDF ${ab.mitarbeiter_name}:`,e);fail++;}
+    }
+    document.body.removeChild(container);
+    setBulkMsg('ZIP wird erstellt...');
+    try{
+      const zipBlob=await zip.generateAsync({type:'blob'});
+      const url=URL.createObjectURL(zipBlob);
+      const a=document.createElement('a');a.href=url;a.download=`Abrechnungen_${per.replace('/','-')}.zip`;
+      document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+      window.__t?.(`✅ ${ok} PDFs heruntergeladen${fail>0?` (${fail} Fehler)`:''}`);
+    }catch(e){window.__t?.('ZIP-Fehler: '+e.message,'error');}
+    setBulkBusy(false);setBulkMsg('');
+  };
+
   return<Toast>
     <div className="app-header"><div className="logo-area"><div><div className="logo-text">bee<span>-doo</span> PAY</div><div className="logo-sub">Probeabrechnung</div></div></div>
-    <div className="controls-bar">{pers.length>0&&<select className="sel-period" value={per} onChange={e=>setPer(e.target.value)}>{pers.map(p=><option key={p} value={p}>{pLabel(p)}</option>)}</select>}<button className="btn btn-primary" onClick={doGenerate} disabled={genBusy} style={{opacity:genBusy?.6:1}}>{genBusy?'⏳ Generiere...':'🔄 Abrechnungen generieren'}</button><button className="btn btn-secondary" onClick={doHealthCheck} disabled={hcBusy} title="KI-Gesundheitscheck" style={{position:'relative'}}>{hcBusy?'⏳':'🩺'}{hcWarnings.length>0&&!hcBusy&&<span style={{position:'absolute',top:-4,right:-4,background:'#da3633',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700}}>{hcWarnings.length}</span>}</button><button className="btn btn-secondary" onClick={()=>setBerOpen(true)} title="Datenbereinigung">🔧</button><a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>🏠</a></div></div>
+    <div className="controls-bar">{pers.length>0&&<select className="sel-period" value={per} onChange={e=>setPer(e.target.value)}>{pers.map(p=><option key={p} value={p}>{pLabel(p)}</option>)}</select>}<button className="btn btn-primary" onClick={doGenerate} disabled={genBusy} style={{opacity:genBusy?.6:1}}>{genBusy?'⏳ Generiere...':'🔄 Abrechnungen generieren'}</button><button className="btn btn-secondary" onClick={doHealthCheck} disabled={hcBusy} title="KI-Gesundheitscheck" style={{position:'relative'}}>{hcBusy?'⏳':'🩺'}{hcWarnings.length>0&&!hcBusy&&<span style={{position:'absolute',top:-4,right:-4,background:'#da3633',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700}}>{hcWarnings.length}</span>}</button><button className="btn btn-secondary" onClick={()=>setBerOpen(true)} title="Datenbereinigung">🔧</button><button className="btn btn-success" onClick={doBulkPdf} disabled={bulkBusy} title="Alle PDFs als ZIP herunterladen" style={{opacity:bulkBusy?.6:1}}>{bulkBusy?'⏳':'📦'} Alle PDFs</button><a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>🏠</a></div></div>
     <BereinigungBanner onClick={()=>setBerOpen(true)}/>
     {genMsg&&<div style={{padding:'8px 24px',background:'#161b22',borderBottom:'1px solid #21262d',fontSize:13,color:'#F5C500'}}>⏳ {genMsg}</div>}
+    {bulkMsg&&<div style={{padding:'8px 24px',background:'#0d2818',borderBottom:'1px solid #238636',fontSize:13,color:'#3fb950'}}>📦 {bulkMsg}</div>}
     {hcOpen&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.7)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>e.target===e.currentTarget&&setHcOpen(false)}>
       <div style={{background:'#161b22',border:'1px solid #30363d',borderRadius:12,width:'90%',maxWidth:700,maxHeight:'80vh',overflow:'auto',padding:24}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
