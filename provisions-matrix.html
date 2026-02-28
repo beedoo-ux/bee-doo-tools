@@ -169,13 +169,13 @@ function ConfirmModal({ msg, onOk, onCancel }) {
 function TabRegeln({ regeln, setRegeln, toast }) {
   const save = async (r) => {
     try {
-      await db.patch("provisions_regeln", `id=eq.${r.id}`, {
-        basis_betrag_sale: r.basis_betrag_sale, staffel_betrag_sale: r.staffel_betrag_sale,
-        staffel_schwelle: r.staffel_schwelle, betrag_eigenlead: r.betrag_eigenlead,
-        betrag_empfehlung: r.betrag_empfehlung, betrag_speicher: r.betrag_speicher,
-        betrag_termin_sf: r.betrag_termin_sf, betrag_lead: r.betrag_lead,
-        betrag_sondereinsatz: r.betrag_sondereinsatz, betrag_zero: r.betrag_zero, rueckwirkend: r.rueckwirkend,
-        geaendert_am: ts()
+      await db.patch("provisionsmodelle", `id=eq.${r.id}`, {
+        basis_rate: r.basis_rate, staffel_rate: r.staffel_rate,
+        staffel_schwelle: r.staffel_schwelle, eigenlead_bonus: r.eigenlead_bonus,
+        empfehlungs_bonus: r.empfehlungs_bonus, speicher_bonus: r.speicher_bonus,
+        termin_bonus: r.termin_bonus, lead_bonus: r.lead_bonus,
+        sondereinsatz_bonus: r.sondereinsatz_bonus, zero_bonus: r.zero_bonus, rueckwirkend: r.rueckwirkend,
+        
       });
       toast("Regel gespeichert", "ok");
     } catch (e) { toast("Fehler: " + e.message, "err"); }
@@ -187,23 +187,23 @@ function TabRegeln({ regeln, setRegeln, toast }) {
       {regeln.map(r => <div key={r.id} style={{ background: "var(--s2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 16 }} className="fade-in">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--y)" }}>{r.modell_name}</div>
-            <span className="badge b-b">{r.mitarbeiter_typ}</span>
+            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--y)" }}>{r.name}</div>
+            <span className="badge b-b">{r.typ}</span>
           </div>
           <Btn label="Speichern" onClick={() => save(r)} small icon="💾" />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 8 }}>
           {[
-            ["Basis €/Sale", "basis_betrag_sale", "number"],
-            ["Staffel €/Sale", "staffel_betrag_sale", "number"],
+            ["Basis €/Sale", "basis_rate", "number"],
+            ["Staffel €/Sale", "staffel_rate", "number"],
             ["Staffel ab", "staffel_schwelle", "number"],
-            ["Eigenlead €", "betrag_eigenlead", "number"],
-            ["Empfehlung €", "betrag_empfehlung", "number"],
-            ["Speicher €", "betrag_speicher", "number"],
-            ["Termin SF €", "betrag_termin_sf", "number"],
-            ["Lead €", "betrag_lead", "number"],
-            ["Sondereinsatz €", "betrag_sondereinsatz", "number"],
-            ["Zero €", "betrag_zero", "number"],
+            ["Eigenlead €", "eigenlead_bonus", "number"],
+            ["Empfehlung €", "empfehlungs_bonus", "number"],
+            ["Speicher €", "speicher_bonus", "number"],
+            ["Termin SF €", "termin_bonus", "number"],
+            ["Lead €", "lead_bonus", "number"],
+            ["Sondereinsatz €", "sondereinsatz_bonus", "number"],
+            ["Zero €", "zero_bonus", "number"],
           ].map(([lbl, key, type]) => <div key={key}>
             <div style={{ fontSize: 10, color: "var(--ts)", marginBottom: 3, textTransform: "uppercase", fontWeight: 600 }}>{lbl}</div>
             <EditCell value={r[key]} onChange={v => upd(r.id, key, v)} type={type} />
@@ -240,7 +240,7 @@ function TabSonder({ sonder, setSonder, toast, mitarbeiterList }) {
       await db.patch("pay_sonderprovisionen", `id=eq.${s.id}`, {
         mitarbeiter_name: s.mitarbeiter_name, typ: s.typ, betrag: s.betrag,
         beschreibung: s.beschreibung, gueltig_ab: s.gueltig_ab, gueltig_bis: s.gueltig_bis,
-        aktiv: s.aktiv, geaendert_am: ts()
+        aktiv: s.aktiv
       });
       toast("Gespeichert", "ok");
     } catch (e) { toast("Fehler: " + e.message, "err"); }
@@ -500,7 +500,7 @@ function TabSperr({ sperr, setSperr, toast }) {
     try {
       await db.patch("pay_sperrlisten", `id=eq.${s.id}`, {
         auftrag_nr: s.auftrag_nr, kunde_name: s.kunde_name, vertriebler: s.vertriebler,
-        typ: s.typ, status: s.status, betrag: s.betrag, notiz: s.notiz, geaendert_am: ts()
+        typ: s.typ, status: s.status, betrag: s.betrag, notiz: s.notiz
       });
       toast("Gespeichert", "ok");
     } catch (e) { toast("Fehler: " + e.message, "err"); }
@@ -575,7 +575,7 @@ function TabDuplikate({ duplikate, setDuplikate, toast }) {
   const [delId, setDelId] = useState(null);
   const save = async (d) => {
     try {
-      await db.patch("pay_duplikate", `id=eq.${d.id}`, { status: d.status, aktion: d.aktion, notiz: d.notiz, geaendert_am: ts() });
+      await db.patch("pay_duplikate", `id=eq.${d.id}`, { status: d.status, aktion: d.aktion, notiz: d.notiz });
       toast("Gespeichert", "ok");
     } catch (e) { toast("Fehler: " + e.message, "err"); }
   };
@@ -1308,16 +1308,16 @@ function TabImport({ toast, mitarbeiterList }) {
     try {
       if(mode === 'replace') {
         addLog('🗑️ Lösche bestehende Daten...');
-        await db.del('pay_provisionen','id=not.is.null').catch(()=>{});
-        await db.del('pay_abrechnungen_positionen','id=not.is.null').catch(()=>{});
-        await db.del('pay_abrechnungen','id=not.is.null').catch(()=>{});
-        await db.del('pay_auftraege','id=not.is.null').catch(()=>{});
+        await db.del('abrechnung_positionen','id=not.is.null').catch(()=>{});
+        await db.del('abrechnung_positionen','id=not.is.null').catch(()=>{});
+        await db.del('abrechnungen','id=not.is.null').catch(()=>{});
+        await db.del('auftraege','id=not.is.null').catch(()=>{});
         addLog('✅ Alte Daten gelöscht');
       }
       let inserted = 0;
       for(let i = 0; i < preview.mapped.length; i += 100) {
         const batch = preview.mapped.slice(i, i+100);
-        await db.post('pay_auftraege', batch);
+        await db.post('auftraege', batch);
         inserted += batch.length;
         addLog(`📦 Batch ${Math.floor(i/100)+1}: ${batch.length} Aufträge`);
       }
@@ -1338,7 +1338,7 @@ function TabImport({ toast, mitarbeiterList }) {
         <span style={{ color: 'var(--g)' }}>✓</span> <b>DatumAngenommen</b> → Auftragsdatum (maßgeblich für Leistungszeitraum)<br/>
         <span style={{ color: 'var(--g)' }}>✓</span> <b>Ausgezahlt am</b> → bereits abgerechnet → wird bei Generierung übersprungen<br/>
         <span style={{ color: 'var(--g)' }}>✓</span> <b>BeeDooFortschritt</b> → Fortschritt für Duplikat-Entscheidungen<br/>
-        <span style={{ color: 'var(--g)' }}>✓</span> <b>Kundenberater</b> → Vertriebler-Zuordnung via pay_mitarbeiter<br/>
+        <span style={{ color: 'var(--g)' }}>✓</span> <b>Kundenberater</b> → Vertriebler-Zuordnung via mitarbeiter<br/>
         <span style={{ color: 'var(--g)' }}>✓</span> <b>Auftragsbestätigung erstellt</b> = auszahlbar | <b>Storniert</b> = storniert
       </div>
     </div>
@@ -1373,7 +1373,7 @@ function TabImport({ toast, mitarbeiterList }) {
       </div>
 
       {preview.stats.unmapped.length > 0 && <div style={{ background: '#422006', border: '1px solid #92400e', borderRadius: 8, padding: 12, marginBottom: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o)', marginBottom: 4 }}>⚠️ {preview.stats.unmapped.length} Vertriebler nicht in pay_mitarbeiter:</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o)', marginBottom: 4 }}>⚠️ {preview.stats.unmapped.length} Vertriebler nicht in mitarbeiter:</div>
         <div style={{ fontSize: 11, color: 'var(--ts)' }}>{preview.stats.unmapped.join(', ')}</div>
       </div>}
 
@@ -1421,14 +1421,14 @@ function App() {
     (async () => {
       try {
         const [r, s, st, tb, sp, dp, hi, ma] = await Promise.all([
-          db.get("provisions_regeln", "?aktiv=eq.true&order=modell_name.asc"),
+          db.get("provisionsmodelle", "?aktiv=eq.true&order=name.asc"),
           db.get("pay_sonderprovisionen", "?order=mitarbeiter_name.asc").catch(() => []),
           db.get("pay_stufenbonus", "?order=min_anlagen.asc").catch(() => []),
           db.get("pay_team_bonus", "?order=mitarbeiter_name.asc").catch(() => []),
           db.get("pay_sperrlisten", "?order=auftrag_nr.asc").catch(() => []),
           db.get("pay_duplikate", "?order=kunde_name.asc").catch(() => []),
           db.get("pay_provisions_historie", "?order=mitarbeiter_name.asc,gueltig_ab.asc").catch(() => []),
-          db.get("pay_mitarbeiter", "?select=id,vorname,nachname,typ&order=nachname.asc").catch(() => []),
+          db.get("mitarbeiter", "?select=id,vorname,nachname,typ&order=nachname.asc").catch(() => []),
         ]);
         setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp); setHistorieData(hi); setMitarbeiterList(ma);
         setLoading(false);
