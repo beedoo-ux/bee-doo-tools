@@ -2067,12 +2067,26 @@ function getNextBankWorkday(fromDate){
   return d;
 }
 
+function getSecondToLastBankWorkday(year,month){
+  // Vorletzter Bankarbeitstag im Monat
+  const lastDay=new Date(year,month+1,0); // letzter Tag des Monats
+  let count=0;
+  const d=new Date(lastDay);
+  while(count<2){
+    if(isBankWorkday(d))count++;
+    if(count<2)d.setDate(d.getDate()-1);
+  }
+  return d;
+}
+
 function getBestExecDate(){
   const now=new Date();
   const today=new Date(now);today.setHours(0,0,0,0);
-  if(isBankWorkday(today)&&now.getHours()<14)return today;
-  const tomorrow=new Date(today);tomorrow.setDate(tomorrow.getDate()+1);
-  return getNextBankWorkday(tomorrow);
+  // Standard: Vorletzter Bankarbeitstag des aktuellen Monats
+  const target=getSecondToLastBankWorkday(today.getFullYear(),today.getMonth());
+  // Falls Zieldatum bereits vorbei: nächsten Bankarbeitstag nehmen
+  if(target<today)return getNextBankWorkday(today);
+  return target;
 }
 
 function fmtDateSEPA(d){return d.toISOString().slice(0,10);}
@@ -2233,7 +2247,7 @@ function App(){
         </div>
         <div style={{background:'#0d2818',border:'1px solid #238636',borderRadius:8,padding:12,marginBottom:16}}>
           <div style={{fontSize:12,color:'#3fb950',lineHeight:1.6}}>
-            <b>Bankarbeitstag-Prüfung:</b> Das System prüft automatisch ob das gewählte Datum auf einen Bankarbeitstag fällt (kein Wochenende, keine deutschen Feiertage inkl. NRW-Feiertage). Falls nicht, wird der nächste Bankarbeitstag gewählt.
+            <b>Bankarbeitstag-Prüfung:</b> Das System setzt automatisch den <b>vorletzten Bankarbeitstag</b> im Monat als Ausführungsdatum (kein Wochenende, keine deutschen Feiertage inkl. NRW). So ist ein Puffer eingebaut, falls bei der Bank noch etwas schiefgeht.
           </div>
         </div>
         <div style={{display:'flex',gap:12,justifyContent:'flex-end',flexWrap:'wrap'}}>
