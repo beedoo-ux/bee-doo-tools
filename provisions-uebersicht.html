@@ -222,7 +222,7 @@ function render(d) {
     <!-- Stats -->
     <div class="stat-grid">
       <div class="stat-box">
-        <div class="val" style="color:var(--accent)">${d.models.length}</div>
+        <div class="val" style="color:var(--accent)">${d.models.filter(m => m.typ !== 'hgb_vertriebler_agentur').length}</div>
         <div class="lbl">Provisionsmodelle</div>
       </div>
       <div class="stat-box">
@@ -239,13 +239,31 @@ function render(d) {
       </div>
     </div>
 
-    <!-- 1. Provisionsmodelle -->
+    <!-- 1a. Provisionsmodelle Vertrieb -->
     <div class="section">
       <div class="section-title">
-        <div class="icon" style="background:var(--accent-dim);color:var(--accent)">📊</div>
-        Globale Provisionsmodelle
+        <div class="icon" style="background:var(--accent-dim);color:var(--accent)">💼</div>
+        Provisionsmodelle – Vertrieb
       </div>
-      <div class="grid-3" id="models-grid"></div>
+      <div class="grid-3" id="models-vt-grid"></div>
+    </div>
+
+    <!-- 1b. Provisionsmodelle Scouting -->
+    <div class="section">
+      <div class="section-title">
+        <div class="icon" style="background:var(--green-dim);color:var(--green)">🚪</div>
+        Provisionsmodelle – Scouting
+      </div>
+      <div class="grid-3" id="models-sc-grid"></div>
+    </div>
+
+    <!-- 1c. Provisionsmodelle Montage -->
+    <div class="section" id="models-mt-section" style="display:none">
+      <div class="section-title">
+        <div class="icon" style="background:var(--red-dim);color:var(--red)">🔧</div>
+        Provisionsmodelle – Montage
+      </div>
+      <div class="grid-3" id="models-mt-grid"></div>
     </div>
 
     <!-- 2. Stufenboni -->
@@ -361,9 +379,15 @@ function render(d) {
     </div>
   `;
 
-  // Render model cards
-  const modelsGrid = document.getElementById('models-grid');
-  d.models.forEach(m => {
+  // Render model cards – split by category, exclude HGB Agentur
+  const vtGrid = document.getElementById('models-vt-grid');
+  const scGrid = document.getElementById('models-sc-grid');
+  const mtGrid = document.getElementById('models-mt-grid');
+  const mtSection = document.getElementById('models-mt-section');
+
+  d.models
+    .filter(m => m.typ !== 'hgb_vertriebler_agentur')
+    .forEach(m => {
     const div = document.createElement('div');
     div.className = 'model-card';
     const hasStaffel = m.staffel_schwelle < 999;
@@ -384,7 +408,16 @@ function render(d) {
         ${m.zero_bonus ? `<div class="row"><span class="label">Zero-Bonus</span><span class="val eur">${eur(m.zero_bonus)}</span></div>` : ''}
       </div>
     `;
-    modelsGrid.appendChild(div);
+    // Route to correct grid
+    const t = m.typ || '';
+    if (t.includes('montage') || t.includes('dc_') || t.includes('ac_')) {
+      mtGrid.appendChild(div);
+      mtSection.style.display = '';
+    } else if (t.includes('scout')) {
+      scGrid.appendChild(div);
+    } else {
+      vtGrid.appendChild(div);
+    }
   });
 
   // Render Sonderlösungen
