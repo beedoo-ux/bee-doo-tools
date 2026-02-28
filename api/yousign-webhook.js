@@ -30,7 +30,27 @@ module.exports = async function handler(req, res) {
     const event = req.body;
     console.log(`📨 Yousign Webhook: ${event.event_name}`);
 
-    // Nur auf "signature_request.done" reagieren
+    // Nur auf "signature_request.done" und "signer.done" reagieren
+    if (event.event_name === 'signer.done') {
+      // Check if this is an HR contract signer
+      const srId = event.data?.signature_request?.id || event.data?.signer?.signature_request_id;
+      if (srId) {
+        const { data: hrC } = await supabase
+          .from('hr_contracts')
+          .select('*')
+          .eq('yousign_request_id', srId)
+          .single();
+        if (hrC && hrC.status === 'gesendet') {
+          await supabase.from('hr_contracts').update({
+            status: 'mitarbeiter_ok',
+            employee_signed_at: new Date().toISOString()
+          }).eq('id', hrC.id);
+          console.log(`👤 HR: Mitarbeiter ${hrC.employee_first_name} hat unterschrieben`);
+        }
+      }
+      return res.status(200).json({ ok: true, event: 'signer.done' });
+    }
+
     if (event.event_name !== 'signature_request.done') {
       return res.status(200).json({ ok: true, skipped: event.event_name });
     }
@@ -40,15 +60,63 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'Missing signature_request.id' });
     }
 
-    // 1. Paket finden
+    // 1. Paket finden (erst Kundenverträge, dann HR-Verträge)
     const { data: pkg } = await supabase
       .from('order_document_packages')
       .select('*')
       .eq('yousign_envelope_id', signatureRequestId)
       .single();
 
+    // Check HR contracts if no customer package found
     if (!pkg) {
-      console.error(`❌ Kein Paket für Yousign ID: ${signatureRequestId}`);
+      const { data: hrContract } = await supabase
+        .from('hr_contracts')
+        .select('*')
+        .eq('yousign_request_id', signatureRequestId)
+        .single();
+
+      if (hrContract) {
+        console.log(`📝 HR Contract: ${hrContract.employee_first_name} ${hrContract.employee_last_name}`);
+
+        // Download signed PDF from Yousign
+        const docsRes = await fetch(
+          `${YOUSIGN_BASE_URL}/signature_requests/${signatureRequestId}/documents`,
+          { headers: { 'Authorization': `Bearer ${YOUSIGN_API_KEY}` } }
+        );
+        const yDocs = await docsRes.json();
+
+        for (const yDoc of (yDocs.data || yDocs)) {
+          if (yDoc.nature === 'signable_document') {
+            const dlRes = await fetch(
+              `${YOUSIGN_BASE_URL}/signature_requests/${signatureRequestId}/documents/${yDoc.id}/download`,
+              { headers: { 'Authorization': `Bearer ${YOUSIGN_API_KEY}` } }
+            );
+            const pdfBuf = new Uint8Array(await dlRes.arrayBuffer());
+
+            // Save signed PDF
+            const signedPath = hrContract.pdf_storage_path.replace('.pdf', '_signed.pdf');
+            await supabase.storage
+              .from('hr-contracts')
+              .upload(signedPath, pdfBuf, { contentType: 'application/pdf', upsert: true });
+
+            // Update HR contract status
+            await supabase
+              .from('hr_contracts')
+              .update({
+                signed_pdf_path: signedPath,
+                status: 'unterschrieben',
+                completed_at: new Date().toISOString()
+              })
+              .eq('id', hrContract.id);
+
+            console.log(`✅ HR Contract signed: ${signedPath}`);
+          }
+        }
+
+        return res.status(200).json({ ok: true, type: 'hr_contract', id: hrContract.id });
+      }
+
+      console.error(`❌ Kein Paket/Vertrag für Yousign ID: ${signatureRequestId}`);
       return res.status(404).json({ error: 'Package not found' });
     }
 
