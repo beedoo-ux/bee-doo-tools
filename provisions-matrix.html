@@ -1398,6 +1398,268 @@ function TabImport({ toast, mitarbeiterList }) {
   </div>;
 }
 
+// ═══ Tab: Monatssteuerung (Override pro Monat) ═══
+function TabMonatssteuerung({ regeln, sonder, stufen, teamBonus, overrides, setOverrides, toast }) {
+  const now = new Date();
+  const curY = now.getFullYear();
+  const curM = now.getMonth(); // 0-indexed
+  
+  // Generate 7 months: 3 back, current, 3 forward
+  const months = [];
+  for (let i = -3; i <= 3; i++) {
+    const d = new Date(curY, curM + i, 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    months.push({ key: `${y}-${m}`, label: d.toLocaleDateString("de-DE", { month: "short", year: "2-digit" }), isCurrent: i === 0, offset: i });
+  }
+
+  const [selPeriode, setSelPeriode] = useState(months.find(m => m.isCurrent)?.key || months[3]?.key);
+
+  // Group rules by type
+  const groups = [
+    { key: "provisionsmodell", label: "Provisionsmodelle", icon: "📋", color: "var(--b)", items: regeln.map(r => ({ id: r.id, name: r.name, detail: `${eur(r.basis_rate)} Basis${r.staffel_schwelle < 999 ? `, Staffel ${eur(r.staffel_rate)} ab ${r.staffel_schwelle}` : ""}`, typ: r.typ })) },
+    { key: "sonderprovision", label: "Sonderprovisionen", icon: "⭐", color: "var(--y)", items: sonder.filter(s => s.typ !== "skip_abrechnung").map(s => ({ id: s.id, name: s.mitarbeiter_name, detail: `${s.typ}: ${eur(s.betrag)}`, typ: s.typ, baseAktiv: s.aktiv })) },
+    { key: "stufenbonus", label: "Stufenbonus", icon: "🏆", color: "var(--g)", items: stufen.map(s => ({ id: s.id, name: s.stufe_name, detail: `ab ${s.min_anlagen} Anlagen → ${eur(s.bonus_betrag)} (${s.gilt_fuer})`, typ: s.gilt_fuer })) },
+    { key: "team_bonus", label: "Team-Bonus", icon: "👥", color: "var(--t)", items: teamBonus.map(t => ({ id: t.id, name: t.mitarbeiter_name, detail: `${eur(t.betrag_pro_sale)}/Sale (${t.bezugsgruppe})`, typ: t.bezugsgruppe })) },
+  ];
+
+  // Find override for rule+periode
+  const findOv = (regelTyp, regelId) => overrides.find(o => o.regel_typ === regelTyp && o.regel_id === regelId && o.periode === selPeriode);
+
+  // Get effective state: "standard" | "on" | "off"
+  const getState = (regelTyp, regelId) => {
+    const ov = findOv(regelTyp, regelId);
+    if (!ov) return "standard";
+    return ov.aktiv ? "on" : "off";
+  };
+
+  // Cycle state: standard → on → off → standard
+  const cycleState = async (regelTyp, regelId, currentState) => {
+    const next = currentState === "standard" ? "off" : currentState === "off" ? "on" : "standard";
+    const existing = findOv(regelTyp, regelId);
+
+    try {
+      if (next === "standard" && existing) {
+        await db.del("regel_overrides", `id=eq.${existing.id}`);
+        setOverrides(prev => prev.filter(o => o.id !== existing.id));
+        toast("Override entfernt → Standard", "ok");
+      } else if (next !== "standard") {
+        if (existing) {
+          const res = await db.patch("regel_overrides", `id=eq.${existing.id}`, { aktiv: next === "on", geaendert_am: ts() });
+          setOverrides(prev => prev.map(o => o.id === existing.id ? res[0] : o));
+        } else {
+          const res = await db.post("regel_overrides", { regel_typ: regelTyp, regel_id: regelId, periode: selPeriode, aktiv: next === "on" });
+          setOverrides(prev => [...prev, res[0]]);
+        }
+        toast(next === "on" ? "Aktiviert für " + selPeriode : "Deaktiviert für " + selPeriode, "ok");
+      }
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+
+  // Bulk toggle
+  const bulkToggle = async (regelTyp, items, targetState) => {
+    try {
+      let count = 0;
+      for (const item of items) {
+        const current = getState(regelTyp, item.id);
+        if (current !== targetState) {
+          await cycleStateQuiet(regelTyp, item.id, current, targetState);
+          count++;
+        }
+      }
+      toast(`${count} Regeln → ${targetState === "on" ? "AN" : targetState === "off" ? "AUS" : "Standard"} für ${selPeriode}`, "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+
+  // Silent version for bulk
+  const cycleStateQuiet = async (regelTyp, regelId, currentState, targetState) => {
+    const existing = findOv(regelTyp, regelId);
+    if (targetState === "standard" && existing) {
+      await db.del("regel_overrides", `id=eq.${existing.id}`);
+      setOverrides(prev => prev.filter(o => o.id !== existing.id));
+    } else if (targetState !== "standard") {
+      if (existing) {
+        const res = await db.patch("regel_overrides", `id=eq.${existing.id}`, { aktiv: targetState === "on", geaendert_am: ts() });
+        setOverrides(prev => prev.map(o => o.id === existing.id ? res[0] : o));
+      } else {
+        const res = await db.post("regel_overrides", { regel_typ: regelTyp, regel_id: regelId, periode: selPeriode, aktiv: targetState === "on" });
+        setOverrides(prev => [...prev, res[0]]);
+      }
+    }
+  };
+
+  // Update override betrag
+  const updateBetrag = async (regelTyp, regelId, betrag) => {
+    const existing = findOv(regelTyp, regelId);
+    try {
+      if (existing) {
+        const res = await db.patch("regel_overrides", `id=eq.${existing.id}`, { override_betrag: betrag || null, geaendert_am: ts() });
+        setOverrides(prev => prev.map(o => o.id === existing.id ? res[0] : o));
+      } else {
+        const res = await db.post("regel_overrides", { regel_typ: regelTyp, regel_id: regelId, periode: selPeriode, aktiv: true, override_betrag: betrag || null });
+        setOverrides(prev => [...prev, res[0]]);
+      }
+      toast("Betrag aktualisiert", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+  };
+
+  // Count overrides per month for the mini indicators
+  const countForMonth = (periode) => overrides.filter(o => o.periode === periode).length;
+  const countOffForMonth = (periode) => overrides.filter(o => o.periode === periode && !o.aktiv).length;
+
+  const stateIcon = (s) => s === "on" ? "🟢" : s === "off" ? "🔴" : "⚪";
+  const stateLabel = (s) => s === "on" ? "AN" : s === "off" ? "AUS" : "Standard";
+  const stateColor = (s) => s === "on" ? "var(--g)" : s === "off" ? "var(--r)" : "var(--ts)";
+
+  return <div>
+    {/* Month Selector */}
+    <div style={{ background: "var(--s1)", border: "1px solid var(--bd)", borderRadius: 12, padding: 20, marginBottom: 20 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--y)", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+        📅 Abrechnungsmonat wählen
+        <span style={{ fontSize: 11, fontWeight: 400, color: "var(--ts)" }}>Klicke auf einen Monat um Regeln ein-/auszuschalten</span>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {months.map(m => {
+          const total = countForMonth(m.key);
+          const off = countOffForMonth(m.key);
+          const isSel = selPeriode === m.key;
+          return <button key={m.key} onClick={() => setSelPeriode(m.key)} style={{
+            background: isSel ? "var(--y)" : m.isCurrent ? "var(--s3)" : "var(--s2)",
+            color: isSel ? "#000" : m.isCurrent ? "var(--y)" : "var(--tx)",
+            border: `2px solid ${isSel ? "var(--y)" : m.isCurrent ? "var(--y)44" : "var(--bd)"}`,
+            borderRadius: 10, padding: "12px 18px", fontSize: 13, fontWeight: 700,
+            minWidth: 100, textAlign: "center", position: "relative", cursor: "pointer",
+            transition: "all .2s"
+          }}>
+            <div>{m.label}</div>
+            {m.isCurrent && <div style={{ fontSize: 9, opacity: .7, marginTop: 2 }}>aktuell</div>}
+            {total > 0 && <div style={{
+              position: "absolute", top: -6, right: -6,
+              background: off > 0 ? "var(--r)" : "var(--g)",
+              color: "#fff", fontSize: 10, fontWeight: 800,
+              width: 20, height: 20, borderRadius: "50%",
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }}>{total}</div>}
+          </button>;
+        })}
+      </div>
+    </div>
+
+    {/* Legend */}
+    <div style={{ display: "flex", gap: 20, marginBottom: 16, fontSize: 12, color: "var(--ts)", flexWrap: "wrap" }}>
+      <span>⚪ <b>Standard</b> = Basis-Regel gilt</span>
+      <span>🟢 <b>AN</b> = Explizit aktiviert (Override)</span>
+      <span>🔴 <b>AUS</b> = Explizit deaktiviert für diesen Monat</span>
+      <span style={{ color: "var(--y)" }}>💰 Betrag = Abweichender Betrag nur für diesen Monat</span>
+    </div>
+
+    {/* Rule Groups */}
+    {groups.map(g => {
+      if (!g.items.length) return null;
+      const activeCount = g.items.filter(i => getState(g.key, i.id) !== "off").length;
+      const overrideCount = g.items.filter(i => getState(g.key, i.id) !== "standard").length;
+
+      return <div key={g.key} style={{ background: "var(--s1)", border: "1px solid var(--bd)", borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
+        {/* Group Header */}
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--bd)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 20 }}>{g.icon}</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: g.color }}>{g.label}</span>
+            <span style={{ fontSize: 11, color: "var(--ts)", background: "var(--s3)", padding: "2px 8px", borderRadius: 4 }}>
+              {activeCount}/{g.items.length} aktiv
+              {overrideCount > 0 && <span style={{ color: "var(--o)", marginLeft: 6 }}>({overrideCount} Override{overrideCount > 1 ? "s" : ""})</span>}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => bulkToggle(g.key, g.items, "on")} style={{ background: "var(--g)18", color: "var(--g)", border: "1px solid var(--g)44", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✅ Alle AN</button>
+            <button onClick={() => bulkToggle(g.key, g.items, "off")} style={{ background: "var(--r)18", color: "var(--r)", border: "1px solid var(--r)44", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>❌ Alle AUS</button>
+            <button onClick={() => bulkToggle(g.key, g.items, "standard")} style={{ background: "var(--s3)", color: "var(--ts)", border: "1px solid var(--bd)", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>⚪ Reset</button>
+          </div>
+        </div>
+
+        {/* Items */}
+        <div style={{ padding: "8px 12px" }}>
+          {g.items.map(item => {
+            const state = getState(g.key, item.id);
+            const ov = findOv(g.key, item.id);
+            const hasOverrideBetrag = ov && ov.override_betrag != null;
+
+            return <div key={item.id} style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "10px 12px",
+              borderRadius: 8, marginBottom: 4,
+              background: state === "off" ? "var(--r)08" : state === "on" ? "var(--g)08" : "transparent",
+              borderLeft: `3px solid ${stateColor(state)}`,
+              opacity: state === "off" ? 0.6 : 1,
+              transition: "all .2s"
+            }}>
+              {/* Toggle Button */}
+              <button onClick={() => cycleState(g.key, item.id, state)} style={{
+                width: 44, height: 28, borderRadius: 14, border: "none", cursor: "pointer",
+                background: state === "on" ? "var(--g)" : state === "off" ? "var(--r)" : "var(--bd)",
+                position: "relative", transition: "background .2s", flexShrink: 0
+              }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: "50%", background: "#fff",
+                  position: "absolute", top: 3,
+                  left: state === "off" ? 3 : state === "on" ? 19 : 11,
+                  transition: "left .2s",
+                  boxShadow: "0 1px 3px #0004"
+                }} />
+              </button>
+
+              {/* Name & Detail */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: state === "off" ? "var(--ts)" : "var(--tx)", textDecoration: state === "off" ? "line-through" : "none" }}>
+                  {item.name}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--ts)", marginTop: 1 }}>{item.detail}</div>
+              </div>
+
+              {/* State Badge */}
+              <div style={{ fontSize: 11, fontWeight: 700, color: stateColor(state), background: `${stateColor(state)}15`, padding: "3px 10px", borderRadius: 4, flexShrink: 0 }}>
+                {stateIcon(state)} {stateLabel(state)}
+              </div>
+
+              {/* Override Betrag */}
+              {state !== "standard" && <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                <span style={{ fontSize: 11, color: "var(--y)" }}>💰</span>
+                <input type="number" placeholder="Betrag" value={ov?.override_betrag ?? ""} 
+                  onBlur={e => { if (e.target.value !== (ov?.override_betrag ?? "").toString()) updateBetrag(g.key, item.id, e.target.value ? +e.target.value : null); }}
+                  onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
+                  style={{ width: 80, fontSize: 12, padding: "3px 6px", textAlign: "right", background: hasOverrideBetrag ? "var(--y)15" : "var(--s2)", borderColor: hasOverrideBetrag ? "var(--y)44" : "var(--bd)" }} />
+                <span style={{ fontSize: 10, color: "var(--ts)" }}>€</span>
+              </div>}
+            </div>;
+          })}
+        </div>
+      </div>;
+    })}
+
+    {/* Summary */}
+    <div style={{ background: "var(--s1)", border: "1px solid var(--bd)", borderRadius: 12, padding: 16, marginTop: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--y)", marginBottom: 10 }}>📊 Zusammenfassung für {selPeriode}</div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
+        {groups.map(g => {
+          const on = g.items.filter(i => getState(g.key, i.id) === "on").length;
+          const off = g.items.filter(i => getState(g.key, i.id) === "off").length;
+          const std = g.items.length - on - off;
+          return <div key={g.key} style={{ background: "var(--s2)", borderRadius: 8, padding: "10px 14px", minWidth: 140 }}>
+            <div style={{ fontWeight: 700, color: g.color, marginBottom: 4 }}>{g.icon} {g.label}</div>
+            <div style={{ color: "var(--ts)" }}>
+              {std > 0 && <span>⚪ {std} Standard </span>}
+              {on > 0 && <span style={{ color: "var(--g)" }}>🟢 {on} AN </span>}
+              {off > 0 && <span style={{ color: "var(--r)" }}>🔴 {off} AUS</span>}
+              {on === 0 && off === 0 && <span>Keine Overrides</span>}
+            </div>
+          </div>;
+        })}
+      </div>
+    </div>
+  </div>;
+}
+
+
+
 // ═══ Main App ═══
 function App() {
   const [tab, setTab] = useState("uebersicht");
@@ -1414,13 +1676,14 @@ function App() {
   const [duplikateData, setDuplikateData] = useState([]);
   const [historieData, setHistorieData] = useState([]);
   const [mitarbeiterList, setMitarbeiterList] = useState([]);
+  const [overrides, setOverrides] = useState([]);
 
   const toast = (msg, type = "ok") => { setToastMsg(msg); setToastType(type); setTimeout(() => setToastMsg(null), 3000); };
 
   useEffect(() => {
     (async () => {
       try {
-        const [r, s, st, tb, sp, dp, hi, ma] = await Promise.all([
+        const [r, s, st, tb, sp, dp, hi, ma, ov] = await Promise.all([
           db.get("provisionsmodelle", "?aktiv=eq.true&order=name.asc"),
           db.get("pay_sonderprovisionen", "?order=mitarbeiter_name.asc").catch(() => []),
           db.get("pay_stufenbonus", "?order=min_anlagen.asc").catch(() => []),
@@ -1429,8 +1692,9 @@ function App() {
           db.get("pay_duplikate", "?order=kunde_name.asc").catch(() => []),
           db.get("pay_provisions_historie", "?order=mitarbeiter_name.asc,gueltig_ab.asc").catch(() => []),
           db.get("mitarbeiter", "?select=id,vorname,nachname,typ&order=nachname.asc").catch(() => []),
+          db.get("regel_overrides", "?order=periode.asc").catch(() => []),
         ]);
-        setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp); setHistorieData(hi); setMitarbeiterList(ma);
+        setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp); setHistorieData(hi); setMitarbeiterList(ma); setOverrides(ov);
         setLoading(false);
       } catch (e) {
         setError(e.message);
@@ -1449,6 +1713,7 @@ function App() {
     { key: "duplikate", label: "⚠️ Duplikate", color: "var(--o)" },
     { key: "historie", label: "📜 Historie", color: "var(--p)" },
     { key: "staffel", label: "📈 Staffel-History", color: "var(--g)" },
+    { key: "monatssteuerung", label: "🎛️ Monatssteuerung", color: "var(--o)" },
     { key: "import", label: "📥 CSV-Import", color: "var(--t)" },
   ];
 
@@ -1462,6 +1727,7 @@ function App() {
     duplikate: `${duplikateData.length} Duplikat-Verdachtsfälle – gleicher Kunde + kWp + PLZ`,
     historie: `${historieData.length} Provisions-Perioden – Stichtagsprinzip: DatumErstellt bestimmt den Satz`,
     staffel: `Vormonat-Daten pro VT eintragen und Staffel-Korrekturen manuell freigeben`,
+    monatssteuerung: `Provisionen pro Monat ein-/ausschalten – Overrides für einzelne Monate`,
     import: `Leveto CSV-Import – DatumAngenommen als Auftragsdatum, Ausgezahlt am = bereits abgerechnet`,
   };
 
@@ -1524,6 +1790,7 @@ function App() {
         {tab === "duplikate" && <TabDuplikate duplikate={duplikateData} setDuplikate={setDuplikateData} toast={toast} />}
         {tab === "historie" && <TabHistorie historie={historieData} setHistorie={setHistorieData} toast={toast} />}
         {tab === "staffel" && <TabStaffelHistory mitarbeiterList={mitarbeiterList} toast={toast} />}
+        {tab === "monatssteuerung" && <TabMonatssteuerung regeln={regeln} sonder={sonder} stufen={stufen} teamBonus={teamBonus} overrides={overrides} setOverrides={setOverrides} toast={toast} />}
         {tab === "import" && <TabImport toast={toast} mitarbeiterList={mitarbeiterList} />}
       </div>
     </div>
