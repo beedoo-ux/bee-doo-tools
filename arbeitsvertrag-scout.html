@@ -251,7 +251,9 @@ const DEF = {
   fortbildung: "Support",
   dienstreise_gebiet: "Bundesrepublik Deutschland",
   dienstwagen_ab: "vierten",
-  dienstwagen: "ja"
+  dienstwagen: "ja",
+  email: "",
+  telefon: ""
 };
 const DEMO = {
   anrede: "Herrn",
@@ -273,7 +275,9 @@ const DEMO = {
   fortbildung: "Support",
   dienstreise_gebiet: "Bundesrepublik Deutschland",
   dienstwagen_ab: "vierten",
-  dienstwagen: "ja"
+  dienstwagen: "ja",
+  email: "fabian.ricken@test.de",
+  telefon: "+4917612345678"
 };
 const fD = (v) => {
   if (!v) return "___________";
@@ -519,16 +523,170 @@ function generatePDF(f) {
     doc.setTextColor(0);
   }
   var fn = [f.vorname, f.nachname].filter(Boolean).join("_") || "Vorlage";
+  if (f._returnBase64) {
+    return doc.output("datauristring").split(",")[1];
+  }
   doc.save("Arbeitsvertrag_" + fn + ".pdf");
 }
+
+// ── Yousign Integration ──────────────────────────────────────
+const SUPABASE_URL = typeof BEEDOO_CONFIG !== 'undefined' ? BEEDOO_CONFIG.SUPABASE_URL : "https://hqzpemfaljxcysyqssng.supabase.co";
+const SUPABASE_ANON = typeof BEEDOO_CONFIG !== 'undefined' ? BEEDOO_CONFIG.SUPABASE_ANON_KEY : "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+
+async function sendToYousign(formData, setStatus) {
+  try {
+    setStatus({ loading: true, msg: "PDF wird generiert...", type: "info" });
+
+    // 1. Generate PDF as base64
+    const pdfBase64 = generatePDF({ ...formData, _returnBase64: true });
+    if (!pdfBase64) {
+      setStatus({ loading: false, msg: "PDF-Generierung fehlgeschlagen.", type: "error" });
+      return;
+    }
+
+    setStatus({ loading: true, msg: "Vertrag wird an Yousign gesendet...", type: "info" });
+
+    // 2. Send to API
+    const response = await fetch("/api/hr-contract-sign", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + SUPABASE_ANON
+      },
+      body: JSON.stringify({
+        contract_type: "scout",
+        employee: {
+          salutation: formData.anrede,
+          first_name: formData.vorname,
+          last_name: formData.nachname,
+          email: formData.email,
+          phone: formData.telefon || null,
+          street: formData.strasse,
+          zip_city: formData.plz_ort
+        },
+        contract_data: formData,
+        pdf_base64: pdfBase64,
+        created_by: "arbeitsvertrag-scout"
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      setStatus({ loading: false, msg: "Fehler: " + (result.error || "Unbekannter Fehler"), type: "error" });
+      return;
+    }
+
+    setStatus({
+      loading: false,
+      msg: "✅ " + result.message,
+      type: "success",
+      contract_id: result.contract_id
+    });
+  } catch (err) {
+    setStatus({ loading: false, msg: "Netzwerkfehler: " + err.message, type: "error" });
+  }
+}
+
+// ── Contract List Loader ──────────────────────────────────────
+async function loadContracts() {
+  try {
+    const res = await fetch("/api/hr-contract-status?type=scout");
+    if (!res.ok) return [];
+    return await res.json();
+  } catch { return []; }
+}
+
 function App() {
   const [f, setF] = useState(DEF);
+  const [ysStatus, setYsStatus] = useState(null);
+  const [contracts, setContracts] = useState([]);
+  const [showContracts, setShowContracts] = useState(false);
   const s_ = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  return /* @__PURE__ */ React.createElement("div", { style: { background: BG, color: TX, minHeight: "100vh", fontFamily: "'DM Sans',sans-serif" } }, /* @__PURE__ */ React.createElement("a", { href: "index.html", style: { position: "fixed", top: 10, left: 10, zIndex: 99, padding: "6px 14px", borderRadius: 8, background: C1 + "ee", color: T2, fontSize: 12, textDecoration: "none", border: "1px solid " + BD } }, "\u2190", " Launcher"), /* @__PURE__ */ React.createElement("div", { style: { background: C1, borderBottom: "1px solid " + BD, padding: "12px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("img", { src: LOGO_B64, alt: "bee-doo", style: { height: 32 } }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 17, letterSpacing: -0.5 } }, "Arbeitsvertrag ", /* @__PURE__ */ React.createElement("span", { style: { color: Y } }, "Scout Angestellt")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: TM } }, "Vorlage ", "\xB7", " Variable Felder ausf\xFCllen ", "\u2192", " PDF erstellen"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setF(DEMO), style: { ...S.btn, ...S.bSm, ...S.bG } }, "\u{1F4CB}", " Demo"), /* @__PURE__ */ React.createElement("button", { onClick: () => setF(DEF), style: { ...S.btn, ...S.bSm, background: ERR + "12", color: ERR, border: "1px solid " + ERR + "25" } }, "\u2715", " Leeren"), /* @__PURE__ */ React.createElement("button", { onClick: () => generatePDF(f), style: { ...S.btn, ...S.bSm, ...S.bP } }, "\u{1F4C4}", " PDF erstellen"))), /* @__PURE__ */ React.createElement("div", { style: { maxWidth: 800, margin: "0 auto", padding: "20px 20px 60px" } }, /* @__PURE__ */ React.createElement("div", { style: S.sec }, "\u{1F464}", " Arbeitnehmer"), /* @__PURE__ */ React.createElement("div", { style: S.card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { flex: "0 0 120px", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: S.label }, "Anrede"), /* @__PURE__ */ React.createElement("select", { style: S.sel, value: f.anrede, onChange: (e) => s_("anrede", e.target.value) }, /* @__PURE__ */ React.createElement("option", null, "Herrn"), /* @__PURE__ */ React.createElement("option", null, "Frau"))), /* @__PURE__ */ React.createElement(F, { label: "Vorname", value: f.vorname, onChange: (v) => s_("vorname", v), half: true, placeholder: "Vorname" }), /* @__PURE__ */ React.createElement(F, { label: "Nachname", value: f.nachname, onChange: (v) => s_("nachname", v), half: true, placeholder: "Nachname" })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } }, /* @__PURE__ */ React.createElement(F, { label: "Stra\xDFe + Nr.", value: f.strasse, onChange: (v) => s_("strasse", v), half: true, placeholder: "Musterstr. 1" }), /* @__PURE__ */ React.createElement(F, { label: "PLZ, Ort", value: f.plz_ort, onChange: (v) => s_("plz_ort", v), half: true, placeholder: "33602 Bielefeld" }))), /* @__PURE__ */ React.createElement("div", { style: S.sec }, "\u{1F4C5}", " Vertragsdaten"), /* @__PURE__ */ React.createElement("div", { style: S.card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } }, /* @__PURE__ */ React.createElement(F, { label: "Beginn", value: f.beginn, onChange: (v) => s_("beginn", v), half: true, type: "date" }), /* @__PURE__ */ React.createElement(F, { label: "Befristet bis (leer = unbefristet)", value: f.befristet_bis, onChange: (v) => s_("befristet_bis", v), half: true, type: "date" })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { flex: "1 1 45%", minWidth: 140, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: S.label }, "Probezeit"), /* @__PURE__ */ React.createElement("select", { style: S.sel, value: f.probezeit, onChange: (e) => s_("probezeit", e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "3" }, "3 Monate"), /* @__PURE__ */ React.createElement("option", { value: "6" }, "6 Monate"))), /* @__PURE__ */ React.createElement(F, { label: "Position / T\xE4tigkeit", value: f.position, onChange: (v) => s_("position", v), half: true }))), /* @__PURE__ */ React.createElement("div", { style: S.sec }, "\u23F0", " Arbeitszeit & Urlaub"), /* @__PURE__ */ React.createElement("div", { style: S.card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } }, /* @__PURE__ */ React.createElement(F, { label: "W\xF6chentl. Arbeitszeit (Std.)", value: f.arbeitszeit, onChange: (v) => s_("arbeitszeit", v), half: true, inputMode: "numeric" }), /* @__PURE__ */ React.createElement(F, { label: "Arbeitstage/Woche", value: f.arbeitstage, onChange: (v) => s_("arbeitstage", v), half: true, inputMode: "numeric" })), /* @__PURE__ */ React.createElement(F, { label: "Urlaubstage/Jahr", value: f.urlaub, onChange: (v) => s_("urlaub", v), inputMode: "numeric", style: { maxWidth: 200 } })), /* @__PURE__ */ React.createElement("div", { style: S.sec }, "\u{1F4B0}", " Verg\xFCtung & Provision"), /* @__PURE__ */ React.createElement("div", { style: S.card }, /* @__PURE__ */ React.createElement(F, { label: "Grundgehalt brutto/Monat (\u20AC)", value: f.gehalt, onChange: (v) => s_("gehalt", v), placeholder: "3.000,00" }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } }, /* @__PURE__ */ React.createElement(F, { label: "\u20AC pro Lead", value: f.prov_lead, onChange: (v) => s_("prov_lead", v), half: true }), /* @__PURE__ */ React.createElement(F, { label: "\u20AC pro Termin", value: f.prov_termin, onChange: (v) => s_("prov_termin", v), half: true })), /* @__PURE__ */ React.createElement(F, { label: "\u20AC pro Auftrag", value: f.prov_auftrag, onChange: (v) => s_("prov_auftrag", v), style: { maxWidth: 200 } })), /* @__PURE__ */ React.createElement("div", { style: S.sec }, "\u{1F697}", " Dienstwagen & Sonstiges"), /* @__PURE__ */ React.createElement("div", { style: S.card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { flex: "1 1 45%", minWidth: 140, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: S.label }, "Dienstwagen"), /* @__PURE__ */ React.createElement("select", { style: S.sel, value: f.dienstwagen, onChange: (e) => s_("dienstwagen", e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "ja" }, "Ja"), /* @__PURE__ */ React.createElement("option", { value: "nein" }, "Nein (", "\xA7", "20 entf\xE4llt)"))), f.dienstwagen === "ja" && /* @__PURE__ */ React.createElement(F, { label: "Ab welchem Monat", value: f.dienstwagen_ab, onChange: (v) => s_("dienstwagen_ab", v), half: true, placeholder: "vierten" })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } }, /* @__PURE__ */ React.createElement(F, { label: "Fortbildungsbereich", value: f.fortbildung, onChange: (v) => s_("fortbildung", v), half: true }), /* @__PURE__ */ React.createElement(F, { label: "Dienstreise-Gebiet", value: f.dienstreise_gebiet, onChange: (v) => s_("dienstreise_gebiet", v), half: true }))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 24, display: "flex", gap: 10, justifyContent: "center" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => generatePDF(f), style: { ...S.btn, ...S.bP, fontSize: 15, padding: "14px 32px" } }, "\u{1F4C4}", " Arbeitsvertrag als PDF erstellen")), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, textAlign: "center", fontSize: 11, color: TM } }, "PDF wird direkt generiert und heruntergeladen. Kein Druckdialog n\xF6tig.")));
+
+  useEffect(() => { if (showContracts) loadContracts().then(setContracts); }, [showContracts]);
+
+  const canSign = f.vorname && f.nachname && f.email && f.beginn;
+  const SC = { entwurf: TM, gesendet: WARN, mitarbeiter_ok: INF, unterschrieben: OK, abgelehnt: ERR, abgelaufen: TM };
+  const SL = { entwurf: "Entwurf", gesendet: "Wartet auf Unterschrift", mitarbeiter_ok: "MA unterschrieben", unterschrieben: "\u2705 Komplett", abgelehnt: "Abgelehnt", abgelaufen: "Abgelaufen" };
+
+  const h = React.createElement;
+  return h("div", { style: { background: BG, color: TX, minHeight: "100vh", fontFamily: "'DM Sans',sans-serif" } },
+    h("a", { href: "index.html", style: { position: "fixed", top: 10, left: 10, zIndex: 99, padding: "6px 14px", borderRadius: 8, background: C1 + "ee", color: T2, fontSize: 12, textDecoration: "none", border: "1px solid " + BD } }, "\u2190 Launcher"),
+    h("div", { style: { background: C1, borderBottom: "1px solid " + BD, padding: "12px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 } },
+      h("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
+        h("img", { src: LOGO_B64, alt: "bee-doo", style: { height: 32 } }),
+        h("div", null,
+          h("span", { style: { fontWeight: 800, fontSize: 17, letterSpacing: -0.5 } }, "Arbeitsvertrag ", h("span", { style: { color: Y } }, "Scout Angestellt")),
+          h("div", { style: { fontSize: 11, color: TM } }, "Felder ausf\u00FCllen \u2192 PDF oder Yousign"))),
+      h("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+        h("button", { onClick: () => setF(DEMO), style: { ...S.btn, ...S.bSm, ...S.bG } }, "\uD83D\uDCCB Demo"),
+        h("button", { onClick: () => setF(DEF), style: { ...S.btn, ...S.bSm, background: ERR + "12", color: ERR, border: "1px solid " + ERR + "25" } }, "\u2715 Leeren"),
+        h("button", { onClick: () => generatePDF(f), style: { ...S.btn, ...S.bSm, ...S.bP } }, "\uD83D\uDCC4 PDF"),
+        h("button", { onClick: () => setShowContracts(!showContracts), style: { ...S.btn, ...S.bSm, ...S.bG } }, showContracts ? "\uD83D\uDCDD Form" : "\uD83D\uDCCA Status"))),
+    ysStatus && h("div", { style: { padding: "12px 24px", background: (ysStatus.type === "success" ? OK : ysStatus.type === "error" ? ERR : INF) + "18", borderBottom: "1px solid " + (ysStatus.type === "success" ? OK : ysStatus.type === "error" ? ERR : INF) + "30", display: "flex", alignItems: "center", gap: 10 } },
+      ysStatus.loading && h("div", { style: { width: 16, height: 16, border: "2px solid " + Y, borderTop: "2px solid transparent", borderRadius: "50%", animation: "spin 1s linear infinite" } }),
+      h("span", { style: { fontSize: 13, color: ysStatus.type === "success" ? OK : ysStatus.type === "error" ? ERR : INF } }, ysStatus.msg),
+      !ysStatus.loading && h("button", { onClick: () => setYsStatus(null), style: { background: "none", border: "none", color: T2, cursor: "pointer", fontSize: 14, padding: "2px 8px" } }, "\u2715")),
+    h("div", { style: { maxWidth: 800, margin: "0 auto", padding: "20px 20px 60px" } },
+      showContracts ? h("div", null,
+        h("div", { style: S.sec }, "\uD83D\uDCCA Gesendete Vertr\u00E4ge"),
+        contracts.length === 0 ? h("div", { style: { ...S.card, textAlign: "center", color: TM, padding: 40 } }, "Noch keine Vertr\u00E4ge gesendet.") :
+        contracts.map(c => h("div", { key: c.id, style: { ...S.card, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 } },
+          h("div", null,
+            h("div", { style: { fontWeight: 700, fontSize: 14, color: "#e1e7ef" } }, c.employee_first_name + " " + c.employee_last_name),
+            h("div", { style: { fontSize: 11, color: TM } }, c.employee_email + " \u00B7 " + new Date(c.created_at).toLocaleDateString("de-DE"))),
+          h("div", { style: { padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: (SC[c.status] || TM) + "20", color: SC[c.status] || TM } }, SL[c.status] || c.status)))) :
+      h("div", null,
+        h("div", { style: S.sec }, "\uD83D\uDC64 Arbeitnehmer"),
+        h("div", { style: S.card },
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } },
+            h("div", { style: { flex: "0 0 120px", marginBottom: 10 } }, h("div", { style: S.label }, "Anrede"), h("select", { style: S.sel, value: f.anrede, onChange: e => s_("anrede", e.target.value) }, h("option", null, "Herrn"), h("option", null, "Frau"))),
+            h(F, { label: "Vorname", value: f.vorname, onChange: v => s_("vorname", v), half: true, placeholder: "Vorname" }),
+            h(F, { label: "Nachname", value: f.nachname, onChange: v => s_("nachname", v), half: true, placeholder: "Nachname" })),
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } },
+            h(F, { label: "Stra\u00DFe + Nr.", value: f.strasse, onChange: v => s_("strasse", v), half: true, placeholder: "Musterstr. 1" }),
+            h(F, { label: "PLZ, Ort", value: f.plz_ort, onChange: v => s_("plz_ort", v), half: true, placeholder: "33602 Bielefeld" })),
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px", marginTop: 4, padding: "10px 0 0", borderTop: "1px solid " + BD } },
+            h(F, { label: "E-Mail *", value: f.email, onChange: v => s_("email", v), half: true, type: "email", placeholder: "name@mail.de", note: "F\u00FCr digitale Unterschrift per Yousign" }),
+            h(F, { label: "Telefon (optional)", value: f.telefon, onChange: v => s_("telefon", v), half: true, type: "tel", placeholder: "+49176...", note: "SMS-Code f\u00FCr zus\u00E4tzliche Sicherheit" }))),
+        h("div", { style: S.sec }, "\uD83D\uDCC5 Vertragsdaten"),
+        h("div", { style: S.card },
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } },
+            h(F, { label: "Beginn", value: f.beginn, onChange: v => s_("beginn", v), half: true, type: "date" }),
+            h(F, { label: "Befristet bis (leer = unbefristet)", value: f.befristet_bis, onChange: v => s_("befristet_bis", v), half: true, type: "date" })),
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } },
+            h("div", { style: { flex: "1 1 45%", minWidth: 140, marginBottom: 10 } }, h("div", { style: S.label }, "Probezeit"), h("select", { style: S.sel, value: f.probezeit, onChange: e => s_("probezeit", e.target.value) }, h("option", { value: "3" }, "3 Monate"), h("option", { value: "6" }, "6 Monate"))),
+            h(F, { label: "Position / T\u00E4tigkeit", value: f.position, onChange: v => s_("position", v), half: true }))),
+        h("div", { style: S.sec }, "\u23F0 Arbeitszeit & Urlaub"),
+        h("div", { style: S.card },
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } },
+            h(F, { label: "W\u00F6chentl. Arbeitszeit (Std.)", value: f.arbeitszeit, onChange: v => s_("arbeitszeit", v), half: true, inputMode: "numeric" }),
+            h(F, { label: "Arbeitstage/Woche", value: f.arbeitstage, onChange: v => s_("arbeitstage", v), half: true, inputMode: "numeric" })),
+          h(F, { label: "Urlaubstage/Jahr", value: f.urlaub, onChange: v => s_("urlaub", v), inputMode: "numeric", style: { maxWidth: 200 } })),
+        h("div", { style: S.sec }, "\uD83D\uDCB0 Verg\u00FCtung & Provision"),
+        h("div", { style: S.card },
+          h(F, { label: "Grundgehalt brutto/Monat (\u20AC)", value: f.gehalt, onChange: v => s_("gehalt", v), placeholder: "3.000,00" }),
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } },
+            h(F, { label: "\u20AC pro Lead", value: f.prov_lead, onChange: v => s_("prov_lead", v), half: true }),
+            h(F, { label: "\u20AC pro Termin", value: f.prov_termin, onChange: v => s_("prov_termin", v), half: true })),
+          h(F, { label: "\u20AC pro Auftrag", value: f.prov_auftrag, onChange: v => s_("prov_auftrag", v), style: { maxWidth: 200 } })),
+        h("div", { style: S.sec }, "\uD83D\uDE97 Dienstwagen & Sonstiges"),
+        h("div", { style: S.card },
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } },
+            h("div", { style: { flex: "1 1 45%", minWidth: 140, marginBottom: 10 } }, h("div", { style: S.label }, "Dienstwagen"), h("select", { style: S.sel, value: f.dienstwagen, onChange: e => s_("dienstwagen", e.target.value) }, h("option", { value: "ja" }, "Ja"), h("option", { value: "nein" }, "Nein (\u00A720 entf\u00E4llt)"))),
+            f.dienstwagen === "ja" && h(F, { label: "Ab welchem Monat", value: f.dienstwagen_ab, onChange: v => s_("dienstwagen_ab", v), half: true, placeholder: "vierten" })),
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: "0 14px" } },
+            h(F, { label: "Fortbildungsbereich", value: f.fortbildung, onChange: v => s_("fortbildung", v), half: true }),
+            h(F, { label: "Dienstreise-Gebiet", value: f.dienstreise_gebiet, onChange: v => s_("dienstreise_gebiet", v), half: true }))),
+        h("div", { style: { marginTop: 28, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" } },
+          h("button", { onClick: () => generatePDF(f), style: { ...S.btn, fontSize: 15, padding: "14px 28px", background: C2, color: TX, border: "1px solid " + BD } }, "\uD83D\uDCC4 PDF herunterladen"),
+          h("button", { onClick: () => { if(!canSign){setYsStatus({loading:false,msg:"Bitte Vorname, Nachname, E-Mail und Beginn ausf\u00FCllen.",type:"error"});return;} sendToYousign(f,setYsStatus); }, disabled: ysStatus && ysStatus.loading, style: { ...S.btn, fontSize: 15, padding: "14px 28px", background: canSign ? Y : TM + "40", color: canSign ? "#1a1a2e" : T2, cursor: canSign ? "pointer" : "not-allowed", opacity: ysStatus && ysStatus.loading ? 0.6 : 1 } }, "\u270D\uFE0F Zur Unterschrift senden")),
+        h("div", { style: { marginTop: 10, textAlign: "center", fontSize: 11, color: TM } }, "PDF = lokaler Download | Yousign = E-Mail an Mitarbeiter zur Unterschrift"))));
 }
+var stEl = document.createElement("style"); stEl.textContent = "@keyframes spin { to { transform: rotate(360deg); } }"; document.head.appendChild(stEl);
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(/* @__PURE__ */ React.createElement(App, null));
-root.render(/* @__PURE__ */ React.createElement(App, null));
+root.render(React.createElement(App, null));
 </script>
 </body>
 </html>
