@@ -1248,8 +1248,8 @@ function GutschriftPreview({ab,pos,sg}){
       <div className="gs-branded-header">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
           <div>
-            <div style={{fontFamily:"'Arial Black',Arial",fontSize:28,fontWeight:900,letterSpacing:-1,color:'#fff'}}>bee<span style={{color:'#fff'}}>-doo</span></div>
-            <div style={{fontSize:8,color:'rgba(26,18,0,.45)',letterSpacing:2,textTransform:'uppercase',marginTop:2}}>Energy for you</div>
+            <img src="https://bee-doo-tools.vercel.app/bee-doo-Logo-white.svg" style={{height:40,width:'auto',display:'block'}} alt="bee-doo"/>
+            <div style={{fontSize:8,color:'rgba(255,255,255,.45)',letterSpacing:2,textTransform:'uppercase',marginTop:2}}>Energy for you</div>
           </div>
           <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
             <div style={{textAlign:'right',fontSize:11}}>
@@ -1781,8 +1781,8 @@ function GutschriftPreview({ab,pos,sg}){
       <div className="gs-branded-header" style={{background:'#2d2d2d'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
           <div>
-            <div style={{fontFamily:"'Arial Black',Arial",fontSize:28,fontWeight:900,letterSpacing:-1,color:'#fff'}}>bee<span style={{color:'#fff'}}>-doo</span></div>
-            <div style={{fontSize:8,color:'rgba(26,18,0,.45)',letterSpacing:2,textTransform:'uppercase',marginTop:2}}>Energy for you</div>
+            <img src="https://bee-doo-tools.vercel.app/bee-doo-Logo-white.svg" style={{height:40,width:'auto',display:'block'}} alt="bee-doo"/>
+            <div style={{fontSize:8,color:'rgba(255,255,255,.45)',letterSpacing:2,textTransform:'uppercase',marginTop:2}}>Energy for you</div>
           </div>
           <div style={{textAlign:'right',fontSize:11}}>
             <div><span style={{color:'rgba(26,18,0,.5)',fontSize:9}}>Rechnungsdatum</span><br/><b>{heute}</b></div>
@@ -2023,94 +2023,8 @@ tr[style*="background"]{-webkit-print-color-adjust:exact!important}
   </div>;
 }
 
-// === SEPA EXPORT mit Bankarbeitstag-Prüfung ===
-const SEPA_DEBTOR_NAME='bee-doo GmbH';
-const SEPA_DEBTOR_IBAN='DE90254501100031039985';
-const SEPA_DEBTOR_BIC='NOLADE21SWB';
-
-function sepaClean(str){
-  if(!str)return'';
-  const map={'ä':'ae','ö':'oe','ü':'ue','Ä':'Ae','Ö':'Oe','Ü':'Ue','ß':'ss','é':'e','è':'e','ê':'e','à':'a','â':'a','ô':'o','ù':'u','û':'u','ç':'c','ñ':'n','í':'i','ó':'o','ú':'u'};
-  let r=str;for(const[k,v]of Object.entries(map))r=r.replaceAll(k,v);
-  return r.replace(/[^A-Za-z0-9 .,\-\/+?:()'"]/g,'').substring(0,70);
-}
-
-function getGermanHolidays(year){
-  const h=[];
-  h.push(new Date(year,0,1));h.push(new Date(year,4,1));h.push(new Date(year,9,3));
-  h.push(new Date(year,11,25));h.push(new Date(year,11,26));
-  const a=year%19,b=Math.floor(year/100),c=year%100;
-  const dd=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25);
-  const g=Math.floor((b-f+1)/3),hh=(19*a+b-dd-g+15)%30;
-  const ii=Math.floor(c/4),k=c%4,l=(32+2*e+2*ii-hh-k)%7;
-  const mm=Math.floor((a+11*hh+22*l)/451);
-  const month=Math.floor((hh+l-7*mm+114)/31)-1;
-  const day=((hh+l-7*mm+114)%31)+1;
-  const easter=new Date(year,month,day);
-  const eOff=(d)=>{const r=new Date(easter);r.setDate(r.getDate()+d);return r;};
-  h.push(eOff(-2));h.push(eOff(1));h.push(eOff(39));h.push(eOff(50));h.push(eOff(60));
-  h.push(new Date(year,10,1));
-  return h;
-}
-
-function isBankWorkday(date){
-  const dow=date.getDay();
-  if(dow===0||dow===6)return false;
-  const holidays=getGermanHolidays(date.getFullYear());
-  const ds=date.toISOString().slice(0,10);
-  return!holidays.some(h=>h.toISOString().slice(0,10)===ds);
-}
-
-function getNextBankWorkday(fromDate){
-  const d=new Date(fromDate);d.setHours(0,0,0,0);
-  while(!isBankWorkday(d))d.setDate(d.getDate()+1);
-  return d;
-}
-
-function getSecondToLastBankWorkday(year,month){
-  // Vorletzter Bankarbeitstag im Monat
-  const lastDay=new Date(year,month+1,0); // letzter Tag des Monats
-  let count=0;
-  const d=new Date(lastDay);
-  while(count<2){
-    if(isBankWorkday(d))count++;
-    if(count<2)d.setDate(d.getDate()-1);
-  }
-  return d;
-}
-
-function getBestExecDate(){
-  const now=new Date();
-  const today=new Date(now);today.setHours(0,0,0,0);
-  // Standard: Vorletzter Bankarbeitstag des aktuellen Monats
-  const target=getSecondToLastBankWorkday(today.getFullYear(),today.getMonth());
-  // Falls Zieldatum bereits vorbei: nächsten Bankarbeitstag nehmen
-  if(target<today)return getNextBankWorkday(today);
-  return target;
-}
-
-function fmtDateSEPA(d){return d.toISOString().slice(0,10);}
-
-function generateSEPAXML(payments,execDate,periode){
-  const ts=Date.now().toString(36).toUpperCase();
-  const msgId=`BEEDOO-${periode.replace('/','-')}-${ts}`;
-  const pmtInfId=`PMT-${periode.replace('/','-')}-${ts}`;
-  const nbOfTxs=payments.length;
-  const ctrlSum=payments.reduce((s,p)=>s+p.amount,0).toFixed(2);
-  const execDt=fmtDateSEPA(execDate);
-  const creDtTm=new Date().toISOString().replace(/\.\d+Z$/,'');
-
-  let txs='';
-  payments.forEach((p,i)=>{
-    const eid=`${pmtInfId}-${String(i+1).padStart(3,'0')}`;
-    txs+=`<CdtTrfTxInf><PmtId><EndToEndId>${eid}</EndToEndId></PmtId><Amt><InstdAmt Ccy="EUR">${p.amount.toFixed(2)}</InstdAmt></Amt><CdtrAcct><Id><IBAN>${p.iban.replace(/\s/g,'')}</IBAN></Id></CdtrAcct><Cdtr><Nm>${sepaClean(p.name)}</Nm></Cdtr><RmtInf><Ustrd>${sepaClean(p.reference)}</Ustrd></RmtInf></CdtTrfTxInf>`;
-  });
-
-  return`<?xml version="1.0" encoding="UTF-8"?>\n<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><CstmrCdtTrfInitn><GrpHdr><MsgId>${msgId}</MsgId><CreDtTm>${creDtTm}</CreDtTm><NbOfTxs>${nbOfTxs}</NbOfTxs><CtrlSum>${ctrlSum}</CtrlSum><InitgPty><Nm>${sepaClean(SEPA_DEBTOR_NAME)}</Nm></InitgPty></GrpHdr><PmtInf><PmtInfId>${pmtInfId}</PmtInfId><PmtMtd>TRF</PmtMtd><BtchBookg>false</BtchBookg><NbOfTxs>${nbOfTxs}</NbOfTxs><CtrlSum>${ctrlSum}</CtrlSum><PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl></PmtTpInf><ReqdExctnDt>${execDt}</ReqdExctnDt><Dbtr><Nm>${sepaClean(SEPA_DEBTOR_NAME)}</Nm></Dbtr><DbtrAcct><Id><IBAN>${SEPA_DEBTOR_IBAN}</IBAN></Id></DbtrAcct><DbtrAgt><FinInstnId><BIC>${SEPA_DEBTOR_BIC}</BIC></FinInstnId></DbtrAgt><ChrgBr>SLEV</ChrgBr>${txs}</PmtInf></CstmrCdtTrfInitn></Document>`;
-}
-
 function App(){
-  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);const[berOpen,setBerOpen]=useState(false);const[katFilter,setKatFilter]=useState('alle');const[maArr,setMaArr]=useState([]);const[hcWarnings,setHcWarnings]=useState([]);const[hcOpen,setHcOpen]=useState(false);const[hcBusy,setHcBusy]=useState(false);const[sepaOpen,setSepaOpen]=useState(false);const[sepaData,setSepaData]=useState(null);
+  const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);const[berOpen,setBerOpen]=useState(false);const[katFilter,setKatFilter]=useState('alle');const[maArr,setMaArr]=useState([]);const[hcWarnings,setHcWarnings]=useState([]);const[hcOpen,setHcOpen]=useState(false);const[hcBusy,setHcBusy]=useState(false);
 
   useEffect(()=>{(async()=>{try{const d=await sbG('pay_auszahlungen_historie','select=periode&order=periode.desc');const u=[...new Set(d.map(x=>x.periode))];const now=new Date();const cp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;if(!u.includes(cp))u.unshift(cp);const sorted=u.sort().reverse();setPers(sorted);setPer(sorted[0]||cp);}catch(e){const now=new Date();const p=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;setPers([p]);setPer(p);}})();},[]);
 
@@ -2147,43 +2061,9 @@ function App(){
     setGenBusy(false);setGenMsg('');};
   const doHealthCheck=async()=>{if(!per)return;setHcBusy(true);try{const w=await runHealthCheck(per);setHcWarnings(w);setHcOpen(true);window.__t?.(w.length?`⚠️ ${w.length} Hinweise gefunden`:'✅ Alles sauber!');}catch(e){window.__t?.('Fehler: '+e.message,'error');}setHcBusy(false);};
 
-  const prepareSEPA=()=>{
-    const freiAbrs=abrs.filter(a=>a.status==='freigegeben'&&parseFloat(a.auszahlungssumme)>0);
-    if(!freiAbrs.length){window.__t?.('Keine freigegebenen Abrechnungen mit Auszahlungsbetrag > 0€','error');return;}
-    const execDate=getBestExecDate();
-    const today=new Date();today.setHours(0,0,0,0);
-    const isToday=execDate.toISOString().slice(0,10)===today.toISOString().slice(0,10);
-    const payments=[];const sepWarnings=[];const sepSkipped=[];
-    freiAbrs.forEach(ab=>{
-      const ma=maArr.find(m=>`${m.vorname} ${m.nachname}`===ab.mitarbeiter_name);
-      if(!ma){sepWarnings.push(`${ab.mitarbeiter_name}: Kein Mitarbeiter-Datensatz`);sepSkipped.push(ab.mitarbeiter_name);return;}
-      if(!ma.iban||ma.iban.trim().length<15){sepWarnings.push(`${ab.mitarbeiter_name}: IBAN fehlt oder ungueltig`);sepSkipped.push(ab.mitarbeiter_name);return;}
-      const amt=parseFloat(ab.auszahlungssumme);
-      if(amt<=0){sepSkipped.push(ab.mitarbeiter_name+' (0 EUR)');return;}
-      const isHGB=(ab.beschaeftigungsart||'').includes('hgb');
-      const empfName=isHGB&&ma.firmenname?ma.firmenname:`${ma.vorname} ${ma.nachname}`;
-      payments.push({name:empfName,iban:ma.iban.trim(),amount:amt,reference:`Gutschrift ${ab.belegnummer||''} ${per} ${ab.mitarbeiter_name}`.trim(),mitarbeiter:ab.mitarbeiter_name,beschaeftigung:isHGB?'HGB §84':'Angestellt'});
-    });
-    setSepaData({payments,warnings:sepWarnings,skipped:sepSkipped,execDate,isToday,total:payments.reduce((s,p)=>s+p.amount,0),freiCount:freiAbrs.length});
-    setSepaOpen(true);
-  };
-
-  const downloadSEPA=(customDate)=>{
-    if(!sepaData||!sepaData.payments.length)return;
-    const useDate=customDate||sepaData.execDate;
-    const xml=generateSEPAXML(sepaData.payments,useDate,per);
-    const blob=new Blob([xml],{type:'application/xml'});
-    const url=URL.createObjectURL(blob);
-    const aa=document.createElement('a');
-    aa.href=url;aa.download=`SEPA_${per.replace('/','-')}_${fmtDateSEPA(useDate)}.xml`;
-    document.body.appendChild(aa);aa.click();document.body.removeChild(aa);URL.revokeObjectURL(url);
-    window.__t?.(`SEPA-Datei: ${sepaData.payments.length} Ueberweisungen, ${sepaData.total.toLocaleString('de-DE',{minimumFractionDigits:2})} EUR, Ausfuehrung ${useDate.toLocaleDateString('de-DE')}`);
-    setSepaOpen(false);
-  };
-
   return<Toast>
     <div className="app-header"><div className="logo-area"><div><div className="logo-text">bee<span>-doo</span> PAY</div><div className="logo-sub">Probeabrechnung</div></div></div>
-    <div className="controls-bar">{pers.length>0&&<select className="sel-period" value={per} onChange={e=>setPer(e.target.value)}>{pers.map(p=><option key={p} value={p}>{pLabel(p)}</option>)}</select>}<button className="btn btn-primary" onClick={doGenerate} disabled={genBusy} style={{opacity:genBusy?.6:1}}>{genBusy?'⏳ Generiere...':'🔄 Abrechnungen generieren'}</button><button className="btn btn-secondary" onClick={prepareSEPA} title="SEPA-XML Export" style={{background:'#0d2818',border:'1px solid #238636',color:'#3fb950',fontWeight:700}}>🏦 SEPA</button><button className="btn btn-secondary" onClick={doHealthCheck} disabled={hcBusy} title="KI-Gesundheitscheck" style={{position:'relative'}}>{hcBusy?'⏳':'🩺'}{hcWarnings.length>0&&!hcBusy&&<span style={{position:'absolute',top:-4,right:-4,background:'#da3633',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700}}>{hcWarnings.length}</span>}</button><button className="btn btn-secondary" onClick={()=>setBerOpen(true)} title="Datenbereinigung">🔧</button><a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>🏠</a></div></div>
+    <div className="controls-bar">{pers.length>0&&<select className="sel-period" value={per} onChange={e=>setPer(e.target.value)}>{pers.map(p=><option key={p} value={p}>{pLabel(p)}</option>)}</select>}<button className="btn btn-primary" onClick={doGenerate} disabled={genBusy} style={{opacity:genBusy?.6:1}}>{genBusy?'⏳ Generiere...':'🔄 Abrechnungen generieren'}</button><button className="btn btn-secondary" onClick={doHealthCheck} disabled={hcBusy} title="KI-Gesundheitscheck" style={{position:'relative'}}>{hcBusy?'⏳':'🩺'}{hcWarnings.length>0&&!hcBusy&&<span style={{position:'absolute',top:-4,right:-4,background:'#da3633',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700}}>{hcWarnings.length}</span>}</button><button className="btn btn-secondary" onClick={()=>setBerOpen(true)} title="Datenbereinigung">🔧</button><a href="https://bee-doo-tools.vercel.app/" className="btn btn-secondary btn-sm" style={{textDecoration:'none'}}>🏠</a></div></div>
     <BereinigungBanner onClick={()=>setBerOpen(true)}/>
     {genMsg&&<div style={{padding:'8px 24px',background:'#161b22',borderBottom:'1px solid #21262d',fontSize:13,color:'#F5C500'}}>⏳ {genMsg}</div>}
     {hcOpen&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.7)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>e.target===e.currentTarget&&setHcOpen(false)}>
@@ -2200,61 +2080,6 @@ function App(){
         <div style={{marginTop:16,display:'flex',gap:8,justifyContent:'flex-end'}}>
           <button className="btn btn-secondary btn-sm" onClick={()=>setHcOpen(false)}>Schließen</button>
           <button className="btn btn-primary btn-sm" onClick={()=>{doHealthCheck();}} disabled={hcBusy}>{hcBusy?'⏳ Prüfe...':'🔄 Erneut prüfen'}</button>
-        </div>
-      </div>
-    </div>}
-    {sepaOpen&&sepaData&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.8)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>e.target===e.currentTarget&&setSepaOpen(false)}>
-      <div style={{background:'#161b22',border:'1px solid #30363d',borderRadius:12,width:'95%',maxWidth:800,maxHeight:'90vh',overflow:'auto',padding:24}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-          <div style={{fontSize:20,fontWeight:700,color:'#e6edf3'}}>🏦 SEPA-Export · {per?pLabel(per):''}</div>
-          <button onClick={()=>setSepaOpen(false)} style={{background:'none',border:'none',color:'#8b949e',fontSize:20,cursor:'pointer'}}>✕</button>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12,marginBottom:20}}>
-          <div style={{background:'#0d1117',border:'1px solid #21262d',borderRadius:8,padding:12,textAlign:'center'}}>
-            <div style={{fontSize:11,color:'#8b949e',marginBottom:4}}>Überweisungen</div>
-            <div style={{fontSize:24,fontWeight:700,color:'#e6edf3'}}>{sepaData.payments.length}</div>
-          </div>
-          <div style={{background:'#0d1117',border:'1px solid #21262d',borderRadius:8,padding:12,textAlign:'center'}}>
-            <div style={{fontSize:11,color:'#8b949e',marginBottom:4}}>Gesamtbetrag</div>
-            <div style={{fontSize:24,fontWeight:700,color:'#3fb950'}}>{sepaData.total.toLocaleString('de-DE',{minimumFractionDigits:2})} €</div>
-          </div>
-          <div style={{background:'#0d1117',border:'1px solid #238636',borderRadius:8,padding:12,textAlign:'center'}}>
-            <div style={{fontSize:11,color:'#8b949e',marginBottom:4}}>Ausführungsdatum</div>
-            <div style={{fontSize:20,fontWeight:700,color:sepaData.isToday?'#3fb950':'#d29921'}}>{sepaData.execDate.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})}</div>
-            <div style={{fontSize:10,color:sepaData.isToday?'#3fb950':'#d29921',marginTop:2}}>{sepaData.isToday?'✅ Heute (Bankarbeitstag)':'⏭️ Nächster Bankarbeitstag'}</div>
-          </div>
-          <div style={{background:'#0d1117',border:'1px solid #21262d',borderRadius:8,padding:12,textAlign:'center'}}>
-            <div style={{fontSize:11,color:'#8b949e',marginBottom:4}}>Format</div>
-            <div style={{fontSize:13,fontWeight:600,color:'#e6edf3'}}>pain.001.001.03</div>
-            <div style={{fontSize:10,color:'#8b949e'}}>Einzelbuchungen</div>
-          </div>
-        </div>
-        {sepaData.warnings.length>0&&<div style={{background:'#1c0a0a',border:'1px solid #da363340',borderRadius:8,padding:12,marginBottom:16}}>
-          <div style={{fontWeight:700,color:'#f85149',marginBottom:6}}>⚠️ {sepaData.warnings.length} Probleme – folgende MA werden übersprungen:</div>
-          {sepaData.warnings.map((w,i)=><div key={i} style={{fontSize:12,color:'#f0883e',padding:'2px 0'}}>• {w}</div>)}
-        </div>}
-        <div style={{background:'#0d1117',border:'1px solid #21262d',borderRadius:8,overflow:'hidden',marginBottom:16}}>
-          <div style={{padding:'8px 12px',background:'#161b22',borderBottom:'1px solid #21262d',display:'flex',justifyContent:'space-between'}}>
-            <span style={{fontSize:12,fontWeight:700,color:'#8b949e'}}>Empfänger</span>
-            <span style={{fontSize:12,fontWeight:700,color:'#8b949e'}}>Betrag</span>
-          </div>
-          <div style={{maxHeight:300,overflow:'auto'}}>
-            {sepaData.payments.map((p,i)=><div key={i} style={{padding:'6px 12px',borderBottom:'1px solid #21262d15',display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:13}}>
-              <div><span style={{color:'#e6edf3'}}>{p.mitarbeiter}</span>{p.name!==p.mitarbeiter&&<span style={{color:'#8b949e',fontSize:11}}> → {p.name}</span>}<span style={{fontSize:10,marginLeft:8,padding:'1px 5px',borderRadius:3,background:p.beschaeftigung.includes('HGB')?'#F5C50020':'#58a6ff20',color:p.beschaeftigung.includes('HGB')?'#F5C500':'#58a6ff'}}>{p.beschaeftigung}</span></div>
-              <span style={{fontWeight:600,color:'#3fb950',fontVariantNumeric:'tabular-nums'}}>{p.amount.toLocaleString('de-DE',{minimumFractionDigits:2})} €</span>
-            </div>)}
-          </div>
-        </div>
-        <div style={{background:'#0d2818',border:'1px solid #238636',borderRadius:8,padding:12,marginBottom:16}}>
-          <div style={{fontSize:12,color:'#3fb950',lineHeight:1.6}}>
-            <b>Bankarbeitstag-Prüfung:</b> Das System setzt automatisch den <b>vorletzten Bankarbeitstag</b> im Monat als Ausführungsdatum (kein Wochenende, keine deutschen Feiertage inkl. NRW). So ist ein Puffer eingebaut, falls bei der Bank noch etwas schiefgeht.
-          </div>
-        </div>
-        <div style={{display:'flex',gap:12,justifyContent:'flex-end',flexWrap:'wrap'}}>
-          <button className="btn btn-secondary btn-sm" onClick={()=>setSepaOpen(false)}>Abbrechen</button>
-          <button className="btn btn-sm" style={{background:'#238636',color:'#fff',border:'none',padding:'8px 20px',borderRadius:6,fontWeight:700,fontSize:14,cursor:'pointer'}} onClick={()=>downloadSEPA()} disabled={!sepaData.payments.length}>
-            🏦 SEPA-XML herunterladen ({sepaData.payments.length} Überw.)
-          </button>
         </div>
       </div>
     </div>}
