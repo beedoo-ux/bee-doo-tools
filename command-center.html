@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo · Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#06070b;--c1:#0d0f16;--c2:#12141d;--c3:#1a1c28;--b:rgba(255,255,255,.06);--ba:rgba(245,197,0,.25);--y:#F5C500;--yd:rgba(245,197,0,.1);--g:#22c55e;--gd:rgba(34,197,94,.12);--r:#ef4444;--rd:rgba(239,68,68,.1);--bl:#3b82f6;--bld:rgba(59,130,246,.1);--o:#f59e0b;--od:rgba(245,158,11,.1);--p:#a855f7;--pd:rgba(168,85,247,.1);--t1:#f1f5f9;--t2:#94a3b8;--t3:#64748b;--t4:#475569}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t1);overflow:hidden;height:100vh}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:2px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes glow{0%,100%{box-shadow:0 0 8px rgba(245,197,0,.2)}50%{box-shadow:0 0 20px rgba(245,197,0,.4)}}
+@keyframes countUp{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+.fade-up{animation:fadeUp .4s ease-out both}
+.pulse{animation:pulse 2s ease-in-out infinite}
+
+/* Layout */
+.shell{display:grid;grid-template-rows:56px 1fr;grid-template-columns:1fr 380px;height:100vh;gap:0}
+.hdr{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--b);background:linear-gradient(180deg,rgba(245,197,0,.03),transparent)}
+.logo{font-size:20px;font-weight:800;letter-spacing:-.5px}.logo em{color:var(--y);font-style:normal}
+.hdr-r{display:flex;align-items:center;gap:16px}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--g);animation:pulse 2s infinite}
+.live-lbl{font-size:11px;color:var(--t3);display:flex;align-items:center;gap:6px}
+.hdr-time{font-size:13px;color:var(--t2);font-variant-numeric:tabular-nums}
+.back-link{font-size:12px;color:var(--t3);text-decoration:none;padding:6px 12px;border:1px solid var(--b);border-radius:8px;transition:all .2s}
+.back-link:hover{color:var(--y);border-color:var(--ba)}
+
+/* Map area */
+.map-area{position:relative;overflow:hidden}
+#map{width:100%;height:100%}
+.leaflet-tile-pane{filter:brightness(.7) saturate(.3) hue-rotate(180deg)}
+.leaflet-control-zoom a{background:var(--c2)!important;color:var(--t1)!important;border-color:var(--b)!important}
+
+/* KPI overlay on map */
+.kpi-bar{position:absolute;top:16px;left:16px;right:16px;z-index:1000;display:flex;gap:10px;pointer-events:none}
+.kpi{background:rgba(13,15,22,.92);backdrop-filter:blur(12px);border:1px solid var(--b);border-radius:12px;padding:14px 18px;flex:1;pointer-events:auto;transition:all .3s;min-width:0}
+.kpi:hover{border-color:var(--ba);transform:translateY(-2px)}
+.kpi-v{font-size:28px;font-weight:800;color:var(--t1);font-variant-numeric:tabular-nums;animation:countUp .5s ease-out;line-height:1}
+.kpi-l{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi-d{font-size:10px;margin-top:3px;display:flex;align-items:center;gap:4px}
+.kpi-up{color:var(--g)}.kpi-down{color:var(--r)}.kpi-neutral{color:var(--t3)}
+
+/* Sidebar */
+.sidebar{background:var(--c1);border-left:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden}
+.sb-tabs{display:flex;border-bottom:1px solid var(--b);padding:0 4px}
+.sb-tab{flex:1;padding:12px 8px;text-align:center;font-size:11px;font-weight:600;color:var(--t3);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;text-transform:uppercase;letter-spacing:.5px}
+.sb-tab:hover{color:var(--t2)}.sb-tab.on{color:var(--y);border-bottom-color:var(--y)}
+.sb-content{flex:1;overflow-y:auto;padding:16px}
+
+/* Feed items */
+.feed-item{background:var(--c2);border:1px solid var(--b);border-radius:10px;padding:12px;margin-bottom:8px;animation:slideIn .3s ease-out both;transition:all .2s;cursor:default}
+.feed-item:hover{border-color:var(--ba)}
+.feed-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.feed-type{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 8px;border-radius:10px}
+.feed-time{font-size:10px;color:var(--t4);font-variant-numeric:tabular-nums}
+.feed-name{font-size:13px;font-weight:600;color:var(--t1)}
+.feed-detail{font-size:11px;color:var(--t3);margin-top:2px}
+.feed-loc{font-size:10px;color:var(--t4);margin-top:4px;display:flex;align-items:center;gap:4px}
+
+.type-lead{background:var(--bld);color:var(--bl)}
+.type-termin{background:var(--yd);color:var(--y)}
+.type-auftrag{background:var(--gd);color:var(--g)}
+.type-storno{background:var(--rd);color:var(--r)}
+.type-montage{background:var(--pd);color:var(--p)}
+
+/* Stats section */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.stat-card{background:var(--c2);border:1px solid var(--b);border-radius:10px;padding:12px;text-align:center}
+.stat-v{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.stat-l{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.stat-bar{height:3px;background:var(--b);border-radius:2px;margin-top:8px;overflow:hidden}
+.stat-fill{height:100%;border-radius:2px;transition:width 1s ease}
+
+/* Section title */
+.sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--b)}
+
+/* Berater ranking */
+.rank-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--c2);border:1px solid var(--b);border-radius:8px;margin-bottom:6px}
+.rank-pos{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
+.rank-1{background:var(--yd);color:var(--y)}.rank-2{background:rgba(192,192,192,.1);color:#c0c0c0}.rank-3{background:rgba(205,127,50,.1);color:#cd7f32}.rank-n{background:var(--c3);color:var(--t3)}
+.rank-name{flex:1;font-size:12px;font-weight:600}
+.rank-count{font-size:14px;font-weight:800;color:var(--y);font-variant-numeric:tabular-nums}
+
+/* Responsive */
+@media(max-width:1024px){
+  .shell{grid-template-columns:1fr;grid-template-rows:56px 45vh 1fr}
+  .sidebar{border-left:none;border-top:1px solid var(--b)}
+  .kpi-bar{flex-wrap:wrap}.kpi{min-width:calc(50% - 5px)}
+}
+@media(max-width:600px){
+  .kpi-bar{flex-direction:column}.kpi{min-width:100%}
+  .kpi-v{font-size:22px}.kpi-l{font-size:9px}
+  .hdr{padding:0 12px}.logo{font-size:16px}
+  .sb-content{padding:10px}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useRef,useCallback,useMemo}=React;
+
+// ── Config ──
+const SB='https://hqzpemfaljxcysyqssng.supabase.co';
+const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const hd={'apikey':SK,'Authorization':`Bearer ${SK}`};
+const q=async(t,p='')=>{const r=await fetch(`${SB}/rest/v1/${t}${p?'?'+p:''}`,{headers:hd});return r.json()};
+
+// ── NRW center ──
+const NRW=[51.96,7.63];
+
+// ── Marker colors ──
+const MARKER_COLORS={lead:'#3b82f6',termin:'#F5C500',auftrag:'#22c55e',storno:'#ef4444',montage:'#a855f7'};
+
+function createIcon(color,size=8){
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.3);box-shadow:0 0 8px ${color}60;"></div>`,
+    iconSize:[size,size],iconAnchor:[size/2,size/2]
+  });
+}
+
+function createPulseIcon(color){
+  return L.divIcon({
+    className:'',
+    html:`<div style="position:relative;width:16px;height:16px;">
+      <div style="position:absolute;width:16px;height:16px;border-radius:50%;background:${color};opacity:.3;animation:pulse 2s infinite;"></div>
+      <div style="position:absolute;top:4px;left:4px;width:8px;height:8px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.5);"></div>
+    </div>`,
+    iconSize:[16,16],iconAnchor:[8,8]
+  });
+}
+
+// ── App ──
+function App(){
+  const mapRef=useRef(null);
+  const mapInstance=useRef(null);
+  const layerGroups=useRef({});
+  const[stats,setStats]=useState(null);
+  const[leads,setLeads]=useState([]);
+  const[auftraege,setAuftraege]=useState([]);
+  const[berater,setBerater]=useState([]);
+  const[feed,setFeed]=useState([]);
+  const[tab,setTab]=useState('feed');
+  const[clock,setClock]=useState(new Date());
+  const[loading,setLoading]=useState(true);
+  const[mapFilter,setMapFilter]=useState({leads:true,termine:true,auftraege:true,montage:true});
+
+  // Clock
+  useEffect(()=>{const i=setInterval(()=>setClock(new Date()),1000);return()=>clearInterval(i)},[]);
+
+  // Load data
+  const loadData=useCallback(async()=>{
+    try{
+      // Pipeline stats
+      const st=await q('v_pipeline_stats');
+      if(st&&st[0])setStats(st[0]);
+
+      // Recent leads with coordinates for map (terminierte + neue)
+      const terminLeads=await q('leveto_leads','select=id,vorname,nachname,plz,ort,lat,lng,status_name,berater_name,quelle,status_datum&lat=not.is.null&lng=not.is.null&order=status_datum.desc&limit=500');
+      setLeads(terminLeads||[]);
+
+      // Aufträge with location data from customers
+      const cust=await q('customers','select=id,vorname,nachname,plz,ort,lat,lng,kwp,auftrag_nr,status,auftrags_datum,montage_status&lat=not.is.null&lng=not.is.null&limit=300');
+      setAuftraege(cust||[]);
+
+      // Berater performance
+      const auftr=await q('pay_auftraege','select=vertriebler_id,storniert&storniert=eq.false&auftrags_datum=gte.'+new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10));
+      const mitarb=await q('pay_mitarbeiter','select=id,vorname,nachname,kuerzel');
+      if(auftr&&mitarb){
+        const counts={};
+        auftr.forEach(a=>{counts[a.vertriebler_id]=(counts[a.vertriebler_id]||0)+1});
+        const ranked=Object.entries(counts)
+          .map(([id,c])=>{const m=mitarb.find(x=>x.id===id);return{id,count:c,name:m?`${m.vorname} ${m.nachname}`:id.slice(0,8),kuerzel:m?.kuerzel}})
+          .sort((a,b)=>b.count-a.count);
+        setBerater(ranked);
+      }
+
+      // Build feed from recent status changes
+      const feedItems=[];
+      const recentLeads=(terminLeads||[]).slice(0,30);
+      recentLeads.forEach(l=>{
+        let type='lead';
+        if(l.status_name?.toLowerCase().includes('termin'))type='termin';
+        if(l.status_name?.toLowerCase().includes('auftrag')||l.status_name?.toLowerCase().includes('angenommen'))type='auftrag';
+        if(l.status_name?.toLowerCase().includes('storn'))type='storno';
+        feedItems.push({
+          type,name:`${l.vorname||''} ${l.nachname||''}`.trim(),
+          status:l.status_name,detail:l.berater_name?`Berater: ${l.berater_name}`:'',
+          loc:`${l.plz||''} ${l.ort||''}`.trim(),
+          time:l.status_datum,lat:l.lat,lng:l.lng,quelle:l.quelle
+        });
+      });
+      setFeed(feedItems);
+      setLoading(false);
+    }catch(e){console.error('Load error:',e);setLoading(false)}
+  },[]);
+
+  useEffect(()=>{loadData();const i=setInterval(loadData,30000);return()=>clearInterval(i)},[loadData]);
+
+  // ── Map ──
+  useEffect(()=>{
+    if(!mapRef.current||mapInstance.current)return;
+    const map=L.map(mapRef.current,{zoomControl:true,attributionControl:false}).setView(NRW,8);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:18}).addTo(map);
+    mapInstance.current=map;
+    layerGroups.current={leads:L.layerGroup().addTo(map),termine:L.layerGroup().addTo(map),auftraege:L.layerGroup().addTo(map),montage:L.layerGroup().addTo(map)};
+  },[]);
+
+  // Update markers
+  useEffect(()=>{
+    if(!mapInstance.current)return;
+    const lg=layerGroups.current;
+
+    // Clear all
+    Object.values(lg).forEach(g=>g.clearLayers());
+
+    if(mapFilter.leads){
+      leads.filter(l=>!l.status_name?.toLowerCase().includes('termin')&&!l.status_name?.toLowerCase().includes('auftrag')).slice(0,200).forEach(l=>{
+        if(l.lat&&l.lng)L.marker([l.lat,l.lng],{icon:createIcon(MARKER_COLORS.lead,6)}).bindPopup(`<b>${l.vorname||''} ${l.nachname||''}</b><br>${l.status_name}<br>${l.ort||''}`).addTo(lg.leads);
+      });
+    }
+
+    if(mapFilter.termine){
+      leads.filter(l=>l.status_name?.toLowerCase().includes('termin')).forEach(l=>{
+        if(l.lat&&l.lng)L.marker([l.lat,l.lng],{icon:createPulseIcon(MARKER_COLORS.termin)}).bindPopup(`<b>📅 ${l.vorname||''} ${l.nachname||''}</b><br>${l.status_name}<br>Berater: ${l.berater_name||'—'}<br>${l.ort||''}`).addTo(lg.termine);
+      });
+    }
+
+    if(mapFilter.auftraege){
+      auftraege.filter(c=>c.status==='auftrag').forEach(c=>{
+        if(c.lat&&c.lng)L.marker([c.lat,c.lng],{icon:createIcon(MARKER_COLORS.auftrag,10)}).bindPopup(`<b>✅ ${c.vorname||''} ${c.nachname||''}</b><br>${c.auftrag_nr||''} · ${c.kwp||'?'} kWp<br>${c.ort||''}`).addTo(lg.auftraege);
+      });
+    }
+
+    if(mapFilter.montage){
+      auftraege.filter(c=>c.montage_status).forEach(c=>{
+        if(c.lat&&c.lng)L.marker([c.lat,c.lng],{icon:createPulseIcon(MARKER_COLORS.montage)}).bindPopup(`<b>🔧 ${c.vorname||''} ${c.nachname||''}</b><br>Montage: ${c.montage_status}<br>${c.ort||''}`).addTo(lg.montage);
+      });
+    }
+  },[leads,auftraege,mapFilter]);
+
+  const fmtEur=v=>{if(!v)return '€0';const n=Number(v);if(n>=1e6)return `€${(n/1e6).toFixed(1)}M`;if(n>=1e3)return `€${(n/1e3).toFixed(0)}k`;return `€${n}`};
+  const fmtTime=d=>d?new Date(d).toLocaleString('de-DE',{hour:'2-digit',minute:'2-digit'}):'—';
+  const fmtDate=d=>d?new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}):'—';
+
+  const stornoRate=stats?((stats.stornos_monat/(stats.auftraege_monat+stats.stornos_monat||1))*100).toFixed(1):0;
+
+  return(
+    <div className="shell">
+      {/* ── Header ── */}
+      <div className="hdr">
+        <div style={{display:'flex',alignItems:'center',gap:16}}>
+          <div className="logo">bee<em>·</em>doo <span style={{fontSize:12,color:'var(--t3)',fontWeight:400}}>Command Center</span></div>
+        </div>
+        <div className="hdr-r">
+          <div className="live-lbl"><span className="live-dot"/>LIVE · Auto-Refresh 30s</div>
+          <div className="hdr-time">{clock.toLocaleTimeString('de-DE')}</div>
+          <a href="index.html" className="back-link">← Toolbox</a>
+        </div>
+      </div>
+
+      {/* ── Map ── */}
+      <div className="map-area">
+        <div ref={mapRef} id="map"/>
+
+        {/* KPI Overlay */}
+        <div className="kpi-bar">
+          <div className="kpi" style={{borderColor:'rgba(59,130,246,.3)'}}>
+            <div className="kpi-v" style={{color:'var(--bl)'}}>{stats?.leads_heute?.toLocaleString('de-DE')||'—'}</div>
+            <div className="kpi-l">Leads gesamt</div>
+          </div>
+          <div className="kpi" style={{borderColor:'rgba(245,197,0,.3)'}}>
+            <div className="kpi-v" style={{color:'var(--y)'}}>{stats?.leads_terminiert?.toLocaleString('de-DE')||'—'}</div>
+            <div className="kpi-l">Terminiert</div>
+          </div>
+          <div className="kpi" style={{borderColor:'rgba(34,197,94,.3)'}}>
+            <div className="kpi-v" style={{color:'var(--g)'}}>{stats?.auftraege_monat||'—'}</div>
+            <div className="kpi-l">Aufträge ∅ Monat</div>
+          </div>
+          <div className="kpi" style={{borderColor:'rgba(34,197,94,.3)'}}>
+            <div className="kpi-v" style={{color:'var(--g)'}}>{fmtEur(stats?.umsatz_monat_eur)}</div>
+            <div className="kpi-l">Umsatz Monat</div>
+          </div>
+          <div className="kpi" style={{borderColor:stornoRate>10?'rgba(239,68,68,.3)':'rgba(245,158,11,.3)'}}>
+            <div className="kpi-v" style={{color:stornoRate>10?'var(--r)':'var(--o)'}}>{stornoRate}%</div>
+            <div className="kpi-l">Storno-Rate</div>
+          </div>
+          <div className="kpi" style={{borderColor:'rgba(168,85,247,.3)'}}>
+            <div className="kpi-v" style={{color:'var(--p)'}}>{stats?.kunden_aktiv||'—'}</div>
+            <div className="kpi-l">Kunden aktiv</div>
+          </div>
+        </div>
+
+        {/* Map Legend */}
+        <div style={{position:'absolute',bottom:16,left:16,zIndex:1000,background:'rgba(13,15,22,.92)',backdropFilter:'blur(12px)',border:'1px solid var(--b)',borderRadius:10,padding:'10px 14px',display:'flex',gap:12,alignItems:'center'}}>
+          {[{key:'leads',color:MARKER_COLORS.lead,label:'Leads'},{key:'termine',color:MARKER_COLORS.termin,label:'Termine'},{key:'auftraege',color:MARKER_COLORS.auftrag,label:'Aufträge'},{key:'montage',color:MARKER_COLORS.montage,label:'Montage'}].map(f=>
+            <label key={f.key} style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',fontSize:11,color:mapFilter[f.key]?f.color:'var(--t4)',transition:'all .2s'}}
+              onClick={()=>setMapFilter(p=>({...p,[f.key]:!p[f.key]}))}>
+              <span style={{width:8,height:8,borderRadius:'50%',background:mapFilter[f.key]?f.color:'var(--t4)',transition:'all .2s'}}/>
+              {f.label}
+            </label>
+          )}
+        </div>
+      </div>
+
+      {/* ── Sidebar ── */}
+      <div className="sidebar">
+        <div className="sb-tabs">
+          {[{k:'feed',l:'🔴 Live Feed'},{k:'ranking',l:'🏆 Ranking'},{k:'stats',l:'📊 Stats'}].map(t2=>
+            <div key={t2.k} className={`sb-tab${tab===t2.k?' on':''}`} onClick={()=>setTab(t2.k)}>{t2.l}</div>
+          )}
+        </div>
+        <div className="sb-content">
+          {/* ── Feed Tab ── */}
+          {tab==='feed'&&(
+            <div>
+              <div className="sec-title">Letzte Aktivitäten</div>
+              {feed.length===0&&<div style={{color:'var(--t3)',fontSize:12,textAlign:'center',padding:20}}>Laden...</div>}
+              {feed.map((f2,i)=>(
+                <div key={i} className="feed-item" style={{animationDelay:`${i*50}ms`}}
+                  onClick={()=>{if(f2.lat&&f2.lng&&mapInstance.current)mapInstance.current.flyTo([f2.lat,f2.lng],14,{duration:1})}}>
+                  <div className="feed-top">
+                    <span className={`feed-type type-${f2.type}`}>{f2.type==='lead'?'Lead':f2.type==='termin'?'Termin':f2.type==='auftrag'?'Auftrag':f2.type==='storno'?'Storno':'Montage'}</span>
+                    <span className="feed-time">{fmtDate(f2.time)} · {fmtTime(f2.time)}</span>
+                  </div>
+                  <div className="feed-name">{f2.name||'Unbekannt'}</div>
+                  <div className="feed-detail">{f2.status}{f2.detail?` · ${f2.detail}`:''}</div>
+                  {f2.loc&&<div className="feed-loc">📍 {f2.loc}{f2.quelle?` · ${f2.quelle}`:''}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Ranking Tab ── */}
+          {tab==='ranking'&&(
+            <div>
+              <div className="sec-title">Top Vertriebler · {new Date().toLocaleDateString('de-DE',{month:'long',year:'numeric'})}</div>
+              {berater.map((b2,i)=>(
+                <div key={b2.id} className="rank-item">
+                  <div className={`rank-pos ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-n'}`}>{i+1}</div>
+                  <div className="rank-name">{b2.name}{b2.kuerzel?` (${b2.kuerzel})`:''}</div>
+                  <div className="rank-count">{b2.count}</div>
+                </div>
+              ))}
+              {berater.length===0&&<div style={{color:'var(--t3)',fontSize:12,textAlign:'center',padding:20}}>Keine Daten für diesen Monat</div>}
+
+              <div className="sec-title" style={{marginTop:24}}>Gesamt-Statistik</div>
+              <div className="stat-grid">
+                <div className="stat-card">
+                  <div className="stat-v" style={{color:'var(--g)'}}>{stats?.auftraege_gesamt||0}</div>
+                  <div className="stat-l">Aufträge gesamt</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-v" style={{color:'var(--y)'}}>{fmtEur(stats?.umsatz_gesamt_eur)}</div>
+                  <div className="stat-l">Umsatz gesamt</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-v" style={{color:'var(--bl)'}}>{stats?.efs_aktiv||0}</div>
+                  <div className="stat-l">EFS Projekte</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-v" style={{color:'var(--p)'}}>{stats?.kunden_gesamt||0}</div>
+                  <div className="stat-l">Kunden gesamt</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Stats Tab ── */}
+          {tab==='stats'&&(
+            <div>
+              <div className="sec-title">Pipeline-Übersicht</div>
+              {[
+                {l:'Leads terminiert',v:stats?.leads_terminiert||0,max:stats?.leads_heute||1,c:'var(--y)'},
+                {l:'Aufträge diesen Monat',v:stats?.auftraege_monat||0,max:250,c:'var(--g)'},
+                {l:'Stornos diesen Monat',v:stats?.stornos_monat||0,max:50,c:'var(--r)'},
+                {l:'Kunden aktiv',v:stats?.kunden_aktiv||0,max:1000,c:'var(--bl)'},
+                {l:'EFS Projekte aktiv',v:stats?.efs_aktiv||0,max:1200,c:'var(--p)'}
+              ].map((s2,i)=>(
+                <div key={i} style={{marginBottom:16}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
+                    <span style={{fontSize:11,color:'var(--t3)'}}>{s2.l}</span>
+                    <span style={{fontSize:16,fontWeight:800,color:s2.c,fontVariantNumeric:'tabular-nums'}}>{typeof s2.v==='number'?s2.v.toLocaleString('de-DE'):s2.v}</span>
+                  </div>
+                  <div className="stat-bar">
+                    <div className="stat-fill" style={{width:`${Math.min((s2.v/s2.max)*100,100)}%`,background:s2.c}}/>
+                  </div>
+                </div>
+              ))}
+
+              <div className="sec-title" style={{marginTop:24}}>Datenquellen</div>
+              {[
+                {n:'Leveto Sync',s:true,t:'Alle 4 Stunden',c:'23k Leads'},
+                {n:'Leveto Webhook',s:true,t:'Echtzeit',c:'Wartet auf Events'},
+                {n:'EFS Projekte',s:false,t:'Deaktiviert',c:'921 Projekte'},
+                {n:'Bank Import',s:false,t:'Manuell',c:'1.923 Transaktionen'},
+              ].map((d2,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--b)'}}>
+                  <span style={{width:6,height:6,borderRadius:'50%',background:d2.s?'var(--g)':'var(--t4)'}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600}}>{d2.n}</div>
+                    <div style={{fontSize:10,color:'var(--t4)'}}>{d2.t}</div>
+                  </div>
+                  <span style={{fontSize:10,color:'var(--t3)'}}>{d2.c}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
