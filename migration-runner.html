@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bee-doo DB Migration</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --bg: #0a0a0a; --card: #141414; --border: #2a2a2a; --yellow: #F5C500; --green: #22c55e; --red: #ef4444; --text: #e5e5e5; --text-dim: #888; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .container { max-width: 700px; width: 100%; }
+        h1 { font-size: 24px; margin-bottom: 8px; }
+        h1 span { color: var(--yellow); }
+        .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 32px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+        .step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+        .step-num { background: var(--yellow); color: #000; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+        .step-text { font-size: 14px; line-height: 1.6; }
+        .step-text a { color: var(--yellow); }
+        input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 12px 16px; border-radius: 8px; font-size: 14px; font-family: inherit; margin-top: 8px; }
+        input:focus { outline: none; border-color: var(--yellow); }
+        .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 32px; border-radius: 8px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+        .btn-primary { background: var(--yellow); color: #000; width: 100%; justify-content: center; }
+        .btn-primary:hover { background: #e0b400; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .log { margin-top: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-height: 400px; overflow-y: auto; font-family: 'DM Sans', monospace; font-size: 13px; line-height: 1.8; display: none; }
+        .log-ok { color: var(--green); }
+        .log-err { color: var(--red); }
+        .log-info { color: var(--text-dim); }
+        .log-warn { color: #f97316; }
+        .done { text-align: center; padding: 24px; }
+        .done .icon { font-size: 48px; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐝 <span>bee-doo</span> DB Migration v2</h1>
+        <p class="subtitle">Pipeline-Tabellen, Status-History, EFS-Mapping & Zahlungsart</p>
+        
+        <div class="card">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    Öffne <a href="https://supabase.com/dashboard/project/hqzpemfaljxcysyqssng/settings/api" target="_blank">Supabase Dashboard → Settings → API</a>
+                    und kopiere deinen <strong>service_role key</strong> (hast du schon im System).
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    Oder geh zu <a href="https://supabase.com/dashboard/account/tokens" target="_blank">Account → Access Tokens</a>
+                    und erstelle einen <strong>Personal Access Token</strong> für die Management API.
+                </div>
+            </div>
+            <input type="password" id="token" placeholder="Supabase Access Token einfügen..." />
+        </div>
+        
+        <button class="btn btn-primary" id="btn-run" onclick="runMigration()">
+            🚀 Migration ausführen
+        </button>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+    const SB_REF = 'hqzpemfaljxcysyqssng';
+    const SB_URL = `https://${SB_REF}.supabase.co`;
+    const SB_SERVICE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
+    
+    // Migration steps as individual SQL statements
+    const MIGRATION_STEPS = [
+        {
+            name: "Spalte pipeline_status hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS pipeline_status TEXT DEFAULT 'lead'"
+        },
+        {
+            name: "Spalte pipeline_status_datum hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS pipeline_status_datum TIMESTAMPTZ DEFAULT NOW()"
+        },
+        {
+            name: "Spalte zahlungsart hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS zahlungsart TEXT DEFAULT 'finanzierung'"
+        },
+        {
+            name: "Spalte finanzierung_status hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS finanzierung_status TEXT"
+        },
+        {
+            name: "Spalte finanzierung_datum hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS finanzierung_datum TIMESTAMPTZ"
+        },
+        {
+            name: "Spalte widerruf_ablauf hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS widerruf_ablauf DATE"
+        },
+        {
+            name: "Spalte montage_geplant_am hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS montage_geplant_am DATE"
+        },
+        {
+            name: "Spalte montage_datum hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS montage_datum DATE"
+        },
+        {
+            name: "Spalte quality_call_ok hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS quality_call_ok BOOLEAN"
+        },
+        {
+            name: "Spalte quality_call_datum hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS quality_call_datum TIMESTAMPTZ"
+        },
+        {
+            name: "Spalte vertriebler_id hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS vertriebler_id UUID"
+        },
+        {
+            name: "Spalte scouter_id hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS scouter_id UUID"
+        },
+        {
+            name: "Spalte lead_quelle hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS lead_quelle TEXT"
+        },
+        {
+            name: "Spalte produkt_typ hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS produkt_typ TEXT DEFAULT 'pv'"
+        },
+        {
+            name: "Spalte notizen hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS notizen TEXT"
+        },
+        {
+            name: "Spalte efs_match_score hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS efs_match_score NUMERIC"
+        },
+        {
+            name: "Spalte efs_match_methode hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS efs_match_methode TEXT"
+        },
+        {
+            name: "Spalte efs_uebergabe_status hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS efs_uebergabe_status TEXT DEFAULT 'offen'"
+        },
+        {
+            name: "Spalte efs_uebergabe_am hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS efs_uebergabe_am TIMESTAMPTZ"
+        },
+        {
+            name: "Spalte datenquelle hinzufügen",
+            sql: "ALTER TABLE customers ADD COLUMN IF NOT EXISTS datenquelle TEXT DEFAULT 'leveto'"
+        },
+        {
+            name: "Tabelle projekt_status_history erstellen",
+            sql: `CREATE TABLE IF NOT EXISTS projekt_status_history (
+                id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+                alter_status TEXT,
+                neuer_status TEXT NOT NULL,
+                geaendert_von TEXT,
+                notiz TEXT,
+                erstellt_am TIMESTAMPTZ DEFAULT NOW()
+            )`
+        },
+        {
+            name: "Index auf projekt_status_history (customer_id)",
+            sql: "CREATE INDEX IF NOT EXISTS idx_psh_customer ON projekt_status_history(customer_id)"
+        },
+        {
+            name: "Index auf projekt_status_history (erstellt_am)",
+            sql: "CREATE INDEX IF NOT EXISTS idx_psh_erstellt ON projekt_status_history(erstellt_am DESC)"
+        },
+        {
+            name: "Tabelle efs_match_log erstellen",
+            sql: `CREATE TABLE IF NOT EXISTS efs_match_log (
+                id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                customer_id UUID REFERENCES customers(id),
+                efs_projekt_id UUID,
+                match_score NUMERIC,
+                match_felder JSONB,
+                status TEXT DEFAULT 'vorschlag',
+                bearbeitet_von TEXT,
+                erstellt_am TIMESTAMPTZ DEFAULT NOW(),
+                bearbeitet_am TIMESTAMPTZ
+            )`
+        },
+        {
+            name: "Index auf efs_match_log (customer_id)",
+            sql: "CREATE INDEX IF NOT EXISTS idx_eml_customer ON efs_match_log(customer_id)"
+        },
+        {
+            name: "Index auf efs_match_log (efs_projekt_id)",
+            sql: "CREATE INDEX IF NOT EXISTS idx_eml_efs ON efs_match_log(efs_projekt_id)"
+        },
+        {
+            name: "Tabelle efs_feld_mapping erstellen",
+            sql: `CREATE TABLE IF NOT EXISTS efs_feld_mapping (
+                id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                bee_doo_feld TEXT NOT NULL,
+                bee_doo_tabelle TEXT NOT NULL,
+                efs_feld TEXT NOT NULL,
+                efs_seite TEXT,
+                pflicht BOOLEAN DEFAULT false,
+                transformation TEXT,
+                notizen TEXT,
+                aktiv BOOLEAN DEFAULT true,
+                erstellt_am TIMESTAMPTZ DEFAULT NOW()
+            )`
+        },
+        {
+            name: "Status-Trigger-Funktion erstellen",
+            sql: `CREATE OR REPLACE FUNCTION fn_pipeline_status_change()
+                RETURNS TRIGGER AS $$
+                BEGIN
+                    IF OLD.pipeline_status IS DISTINCT FROM NEW.pipeline_status THEN
+                        INSERT INTO projekt_status_history (customer_id, alter_status, neuer_status)
+                        VALUES (NEW.id, OLD.pipeline_status, NEW.pipeline_status);
+                        NEW.pipeline_status_datum = NOW();
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql`
+        },
+        {
+            name: "Alten Trigger entfernen",
+            sql: "DROP TRIGGER IF EXISTS trg_pipeline_status ON customers"
+        },
+        {
+            name: "Status-Trigger erstellen",
+            sql: `CREATE TRIGGER trg_pipeline_status
+                BEFORE UPDATE ON customers
+                FOR EACH ROW
+                EXECUTE FUNCTION fn_pipeline_status_change()`
+        },
+        {
+            name: "RLS auf projekt_status_history",
+            sql: "ALTER TABLE projekt_status_history ENABLE ROW LEVEL SECURITY"
+        },
+        {
+            name: "RLS auf efs_match_log",
+            sql: "ALTER TABLE efs_match_log ENABLE ROW LEVEL SECURITY"
+        },
+        {
+            name: "RLS auf efs_feld_mapping",
+            sql: "ALTER TABLE efs_feld_mapping ENABLE ROW LEVEL SECURITY"
+        },
+        {
+            name: "RLS Policy projekt_status_history",
+            sql: `DO $$ BEGIN CREATE POLICY "service_all" ON projekt_status_history FOR ALL USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`
+        },
+        {
+            name: "RLS Policy efs_match_log",
+            sql: `DO $$ BEGIN CREATE POLICY "service_all" ON efs_match_log FOR ALL USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`
+        },
+        {
+            name: "RLS Policy efs_feld_mapping",
+            sql: `DO $$ BEGIN CREATE POLICY "service_all" ON efs_feld_mapping FOR ALL USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`
+        },
+        {
+            name: "Pipeline-Status aus bestehendem Status befüllen",
+            sql: `UPDATE customers SET pipeline_status = CASE
+                WHEN status = 'auftrag' THEN 'auftrag_erstellt'
+                WHEN status = 'montage' THEN 'montage_geplant'
+                WHEN status = 'storniert' THEN 'storniert'
+                ELSE COALESCE(status, 'lead')
+                END WHERE pipeline_status IS NULL OR pipeline_status = 'lead'`
+        },
+        {
+            name: "Zahlungsart Standard setzen",
+            sql: "UPDATE customers SET zahlungsart = 'finanzierung' WHERE zahlungsart IS NULL"
+        },
+        {
+            name: "Datenquelle Standard setzen",
+            sql: "UPDATE customers SET datenquelle = 'leveto' WHERE datenquelle IS NULL"
+        },
+        {
+            name: "EFS Feld-Mapping: Vorname",
+            sql: "INSERT INTO efs_feld_mapping (bee_doo_feld, bee_doo_tabelle, efs_feld, efs_seite, pflicht) SELECT 'vorname','customers','kunde_vorname','Kundendaten',true WHERE NOT EXISTS (SELECT 1 FROM efs_feld_mapping WHERE bee_doo_feld='vorname' AND bee_doo_tabelle='customers')"
+        },
+        {
+            name: "EFS Feld-Mapping: Nachname",
+            sql: "INSERT INTO efs_feld_mapping (bee_doo_feld, bee_doo_tabelle, efs_feld, efs_seite, pflicht) SELECT 'nachname','customers','kunde_nachname','Kundendaten',true WHERE NOT EXISTS (SELECT 1 FROM efs_feld_mapping WHERE bee_doo_feld='nachname' AND bee_doo_tabelle='customers')"
+        },
+        {
+            name: "EFS Feld-Mapping: Email",
+            sql: "INSERT INTO efs_feld_mapping (bee_doo_feld, bee_doo_tabelle, efs_feld, efs_seite, pflicht) SELECT 'email','customers','kunde_email','Kundendaten',true WHERE NOT EXISTS (SELECT 1 FROM efs_feld_mapping WHERE bee_doo_feld='email' AND bee_doo_tabelle='customers')"
+        },
+        {
+            name: "EFS Feld-Mapping: Telefon",
+            sql: "INSERT INTO efs_feld_mapping (bee_doo_feld, bee_doo_tabelle, efs_feld, efs_seite, pflicht, transformation) SELECT 'mobil','customers','kunde_telefon','Kundendaten',true,'Format: +49...' WHERE NOT EXISTS (SELECT 1 FROM efs_feld_mapping WHERE bee_doo_feld='mobil' AND bee_doo_tabelle='customers')"
+        },
+        {
+            name: "EFS Feld-Mapping: Straße",
+            sql: "INSERT INTO efs_feld_mapping (bee_doo_feld, bee_doo_tabelle, efs_feld, efs_seite, pflicht, transformation) SELECT 'strasse','customers','kunde_strasse','Kundendaten',true,'Ohne Hausnr' WHERE NOT EXISTS (SELECT 1 FROM efs_feld_mapping WHERE bee_doo_feld='strasse' AND bee_doo_tabelle='customers')"
+        },
+        {
+            name: "EFS Feld-Mapping: Hausnr",
+            sql: "INSERT INTO efs_feld_mapping (bee_doo_feld, bee_doo_tabelle, efs_feld, efs_seite, pflicht) SELECT 'hausnr','customers','kunde_hausnr','Kundendaten',true WHERE NOT EXISTS (SELECT 1 FROM efs_feld_mapping WHERE bee_doo_feld='hausnr' AND bee_doo_tabelle='customers')"
+        },
+        {
+            name: "EFS Feld-Mapping: PLZ",
+            sql: "INSERT INTO efs_feld_mapping (bee_doo_feld, bee_doo_tabelle, efs_feld, efs_seite, pflicht, transformation) SELECT 'plz','customers','kunde_plz','Kundendaten',true,'5-stellig' WHERE NOT EXISTS (SELECT 1 FROM efs_feld_mapping WHERE bee_doo_feld='plz' AND bee_doo_tabelle='customers')"
+        },
+        {
+            name: "EFS Feld-Mapping: Ort",
+            sql: "INSERT INTO efs_feld_mapping (bee_doo_feld, bee_doo_tabelle, efs_feld, efs_seite, pflicht) SELECT 'ort','customers','kunde_stadt','Kundendaten',true WHERE NOT EXISTS (SELECT 1 FROM efs_feld_mapping WHERE bee_doo_feld='ort' AND bee_doo_tabelle='customers')"
+        },
+        {
+            name: "EFS Feld-Mapping: kWp",
+            sql: "INSERT INTO efs_feld_mapping (bee_doo_feld, bee_doo_tabelle, efs_feld, efs_seite, pflicht) SELECT 'kwp','customers','pv_kwp','Anlagendaten',true WHERE NOT EXISTS (SELECT 1 FROM efs_feld_mapping WHERE bee_doo_feld='kwp' AND bee_doo_tabelle='customers')"
+        },
+        {
+            name: "EFS Feld-Mapping: Vertragssumme",
+            sql: "INSERT INTO efs_feld_mapping (bee_doo_feld, bee_doo_tabelle, efs_feld, efs_seite, pflicht, transformation) SELECT 'vertragssumme','customers','gesamtpreis_eur','Finanzierung',true,'Cent → Euro (÷100)' WHERE NOT EXISTS (SELECT 1 FROM efs_feld_mapping WHERE bee_doo_feld='vertragssumme' AND bee_doo_tabelle='customers')"
+        }
+    ];
+    
+    const logEl = document.getElementById('log');
+    
+    function log(msg, cls = '') {
+        logEl.style.display = 'block';
+        logEl.innerHTML += `<div class="${cls}">${msg}</div>`;
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+    
+    async function execSQL(token, sql) {
+        // Try Management API first
+        const res = await fetch(`https://api.supabase.com/v1/projects/${SB_REF}/database/query`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: sql })
+        });
+        
+        if (res.ok) {
+            return { ok: true, data: await res.json() };
+        }
+        
+        const err = await res.text();
+        return { ok: false, error: err };
+    }
+    
+    async function runMigration() {
+        const token = document.getElementById('token').value.trim();
+        if (!token) {
+            alert('Bitte Access Token einfügen!');
+            return;
+        }
+        
+        const btn = document.getElementById('btn-run');
+        btn.disabled = true;
+        btn.textContent = '⏳ Migration läuft...';
+        logEl.innerHTML = '';
+        
+        log('🚀 Migration gestartet...', 'log-info');
+        log(`${MIGRATION_STEPS.length} Schritte werden ausgeführt...`, 'log-info');
+        log('', '');
+        
+        // Test connection first
+        const test = await execSQL(token, 'SELECT current_database() as db');
+        if (!test.ok) {
+            log('❌ Verbindung fehlgeschlagen: ' + test.error, 'log-err');
+            log('', '');
+            log('💡 Geh zu https://supabase.com/dashboard/account/tokens und erstelle einen Personal Access Token.', 'log-warn');
+            btn.disabled = false;
+            btn.textContent = '🚀 Migration ausführen';
+            return;
+        }
+        
+        log('✅ Verbindung hergestellt!', 'log-ok');
+        log('', '');
+        
+        let success = 0;
+        let errors = 0;
+        
+        for (let i = 0; i < MIGRATION_STEPS.length; i++) {
+            const step = MIGRATION_STEPS[i];
+            const prefix = `[${i+1}/${MIGRATION_STEPS.length}]`;
+            
+            const result = await execSQL(token, step.sql);
+            
+            if (result.ok) {
+                log(`${prefix} ✅ ${step.name}`, 'log-ok');
+                success++;
+            } else {
+                const errMsg = result.error || 'Unbekannter Fehler';
+                // Some errors are OK (like "already exists")
+                if (errMsg.includes('already exists') || errMsg.includes('duplicate')) {
+                    log(`${prefix} ⏭️ ${step.name} (existiert bereits)`, 'log-info');
+                    success++;
+                } else {
+                    log(`${prefix} ❌ ${step.name}: ${errMsg}`, 'log-err');
+                    errors++;
+                }
+            }
+            
+            // Small delay to not overwhelm the API
+            await new Promise(r => setTimeout(r, 200));
+        }
+        
+        log('', '');
+        log('═══════════════════════════════════', 'log-info');
+        
+        if (errors === 0) {
+            log('🎉 Migration komplett! Alle Schritte erfolgreich.', 'log-ok');
+            log(`✅ ${success} Schritte ausgeführt`, 'log-ok');
+            log('', '');
+            log('→ Pipeline-App: https://bee-doo-scouting.vercel.app/pipeline.html', 'log-info');
+        } else {
+            log(`⚠️ Migration abgeschlossen mit ${errors} Fehlern.`, 'log-warn');
+            log(`✅ ${success} OK · ❌ ${errors} Fehler`, 'log-warn');
+        }
+        
+        btn.disabled = false;
+        btn.textContent = '🔄 Nochmal ausführen';
+    }
+    </script>
+</body>
+</html>
