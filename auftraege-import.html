@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo | Aufträge Import</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#080C14;--c1:#111927;--c2:#1a2236;--bd:#1e293b;--y:#F5C500;--g:#22c55e;--r:#ef4444;--o:#f97316;--b:#3b82f6;--t:#e1e7ef;--s:#8b95a5;--d:#4b5563}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);min-height:100vh}
+.app{max-width:1200px;margin:0 auto;padding:20px}
+.header{display:flex;align-items:center;gap:16px;margin-bottom:32px;flex-wrap:wrap}
+.header h1{font-size:24px;font-weight:700;color:var(--y)}
+.header .sub{font-size:13px;color:var(--s)}
+.back{color:var(--s);text-decoration:none;font-size:13px;padding:6px 12px;border-radius:8px;background:var(--c1);border:1px solid var(--bd);transition:.2s}
+.back:hover{color:var(--y);border-color:var(--y)}
+
+/* Steps */
+.steps{display:flex;gap:4px;margin-bottom:32px;flex-wrap:wrap}
+.step{padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;background:var(--c1);color:var(--d);border:1px solid var(--bd);transition:.2s}
+.step.active{background:var(--y);color:#000;border-color:var(--y)}
+.step.done{background:var(--g);color:#fff;border-color:var(--g)}
+
+/* Drop zone */
+.dropzone{border:2px dashed var(--bd);border-radius:16px;padding:60px 20px;text-align:center;cursor:pointer;transition:.3s;background:var(--c1)}
+.dropzone:hover,.dropzone.dragging{border-color:var(--y);background:rgba(245,197,0,.05)}
+.dropzone h3{font-size:18px;color:var(--t);margin-bottom:8px}
+.dropzone p{color:var(--s);font-size:13px}
+.dropzone .icon{font-size:48px;margin-bottom:16px}
+
+/* Table */
+.tbl-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--bd);margin-top:16px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--c1);color:var(--s);font-weight:600;padding:10px 12px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:2}
+td{padding:8px 12px;border-top:1px solid var(--bd);color:var(--t);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+tr:hover td{background:rgba(245,197,0,.03)}
+tr.err td{background:rgba(239,68,68,.08)}
+tr.ok td:first-child{border-left:3px solid var(--g)}
+tr.warn td:first-child{border-left:3px solid var(--o)}
+tr.err td:first-child{border-left:3px solid var(--r)}
+
+/* Mapping */
+.map-row{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--bd)}
+.map-row:last-child{border:none}
+.map-label{width:200px;font-size:13px;font-weight:600;color:var(--t);flex-shrink:0}
+.map-label .req{color:var(--r);margin-left:2px}
+.map-arrow{color:var(--d);font-size:16px}
+.map-select{flex:1}
+.map-select select{width:100%;padding:8px 12px;border-radius:8px;background:var(--c2);color:var(--t);border:1px solid var(--bd);font-family:inherit;font-size:13px}
+.map-select select:focus{outline:none;border-color:var(--y)}
+.map-preview{color:var(--s);font-size:11px;margin-top:2px}
+
+/* Buttons */
+.btn{padding:10px 24px;border-radius:10px;border:none;font-family:inherit;font-weight:600;font-size:14px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:8px}
+.btn-y{background:var(--y);color:#000}.btn-y:hover{filter:brightness(1.1)}
+.btn-g{background:var(--g);color:#fff}.btn-g:hover{filter:brightness(1.1)}
+.btn-o{background:var(--c1);color:var(--t);border:1px solid var(--bd)}.btn-o:hover{border-color:var(--y);color:var(--y)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+.actions{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap;align-items:center}
+.actions .info{font-size:13px;color:var(--s);margin-left:auto}
+
+/* Stats */
+.stats{display:flex;gap:12px;margin:16px 0;flex-wrap:wrap}
+.stat{background:var(--c1);border:1px solid var(--bd);border-radius:10px;padding:12px 20px;text-align:center;min-width:100px}
+.stat .val{font-size:22px;font-weight:700;color:var(--y)}
+.stat .lbl{font-size:11px;color:var(--s);margin-top:2px}
+
+/* Result */
+.result{background:var(--c1);border:1px solid var(--bd);border-radius:12px;padding:24px;margin-top:20px}
+.result h3{color:var(--g);margin-bottom:12px}
+.result .err-list{color:var(--r);font-size:13px;margin-top:8px}
+
+/* Manual entry */
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:16px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:11px;font-weight:600;color:var(--s);text-transform:uppercase;letter-spacing:.5px}
+.field input,.field select{padding:10px 12px;border-radius:8px;background:var(--c2);color:var(--t);border:1px solid var(--bd);font-family:inherit;font-size:14px}
+.field input:focus,.field select:focus{outline:none;border-color:var(--y)}
+
+/* Responsive */
+@media(max-width:768px){
+  .app{padding:12px}
+  .header h1{font-size:18px}
+  .dropzone{padding:30px 16px}
+  .map-row{flex-wrap:wrap}
+  .map-label{width:100%}
+  .form-grid{grid-template-columns:1fr}
+  .stats{gap:8px}
+  .stat{min-width:80px;padding:8px 12px}
+  .stat .val{font-size:18px}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+const SB = "https://hqzpemfaljxcysyqssng.supabase.co";
+const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const SVC = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4";
+
+const hdr = { "apikey": SVC, "Authorization": `Bearer ${SVC}`, "Content-Type": "application/json", "Prefer": "return=representation" };
+const hdrMin = { "apikey": SVC, "Authorization": `Bearer ${SVC}`, "Content-Type": "application/json", "Prefer": "return=minimal" };
+
+// Target fields for auftraege
+const TARGET_FIELDS = [
+  { key: "auftrag_nr", label: "Auftragsnummer", required: true, example: "AN-16795" },
+  { key: "kunde_name", label: "Kundenname", required: true, example: "Max Mustermann" },
+  { key: "vertriebler_name", label: "Vertriebler", required: false, example: "Martin Bott" },
+  { key: "scouter_name", label: "Scouter", required: false, example: "Peter Schmidt" },
+  { key: "anlagen_kwp", label: "kWp", required: false, example: "11.28" },
+  { key: "hat_speicher", label: "Speicher (ja/nein)", required: false, example: "ja" },
+  { key: "speicher_kwh", label: "Speicher kWh", required: false, example: "9.84" },
+  { key: "lead_quelle", label: "Lead-Quelle", required: false, example: "mvpp" },
+  { key: "auftrags_datum", label: "Auftragsdatum", required: false, example: "2026-01-15" },
+  { key: "produkt_typ", label: "Produkttyp", required: false, example: "pv" },
+  { key: "beedoo_fortschritt", label: "Fortschritt/Status", required: false, example: "AC Freigabe" },
+  { key: "ist_eigenlead", label: "Eigenlead", required: false, example: "ja" },
+  { key: "ist_empfehlung", label: "Empfehlung", required: false, example: "nein" },
+  { key: "empfehlung_von", label: "Empfehlung von", required: false, example: "" },
+  { key: "kunde_plz", label: "PLZ", required: false, example: "33609" },
+  { key: "kunde_ort", label: "Ort", required: false, example: "Bielefeld" },
+  { key: "notiz", label: "Notiz", required: false, example: "" },
+];
+
+// Auto-mapping: CSV header → target field
+const AUTO_MAP = {
+  "auftragsnummer": "auftrag_nr", "auftrag_nr": "auftrag_nr", "an": "auftrag_nr", "auftrags-nr": "auftrag_nr",
+  "auftragsnr": "auftrag_nr", "auftrag": "auftrag_nr", "order": "auftrag_nr",
+  "kunde": "kunde_name", "kundenname": "kunde_name", "name": "kunde_name", "customer": "kunde_name",
+  "kunde_name": "kunde_name", "kundename": "kunde_name",
+  "vertriebler": "vertriebler_name", "berater": "vertriebler_name", "vt": "vertriebler_name", "sales": "vertriebler_name",
+  "vertriebler_name": "vertriebler_name", "vertrieb": "vertriebler_name",
+  "scouter": "scouter_name", "scout": "scouter_name", "scouter_name": "scouter_name",
+  "kwp": "anlagen_kwp", "kw_peak": "anlagen_kwp", "leistung": "anlagen_kwp", "anlagen_kwp": "anlagen_kwp",
+  "speicher": "hat_speicher", "hat_speicher": "hat_speicher", "speichererweiterung": "hat_speicher",
+  "speicher_kwh": "speicher_kwh", "batterie": "speicher_kwh", "speichergroesse": "speicher_kwh",
+  "quelle": "lead_quelle", "lead_quelle": "lead_quelle", "leadquelle": "lead_quelle", "source": "lead_quelle",
+  "datum": "auftrags_datum", "auftrags_datum": "auftrags_datum", "auftragsdatum": "auftrags_datum", "date": "auftrags_datum",
+  "produkt": "produkt_typ", "produkt_typ": "produkt_typ", "produkttyp": "produkt_typ", "typ": "produkt_typ",
+  "status": "beedoo_fortschritt", "fortschritt": "beedoo_fortschritt", "beedoo_fortschritt": "beedoo_fortschritt",
+  "eigenlead": "ist_eigenlead", "ist_eigenlead": "ist_eigenlead",
+  "empfehlung": "ist_empfehlung", "ist_empfehlung": "ist_empfehlung",
+  "empfehlung_von": "empfehlung_von", "empfehlungvon": "empfehlung_von",
+  "plz": "kunde_plz", "kunde_plz": "kunde_plz", "postleitzahl": "kunde_plz",
+  "ort": "kunde_ort", "stadt": "kunde_ort", "kunde_ort": "kunde_ort", "city": "kunde_ort",
+  "notiz": "notiz", "notizen": "notiz", "bemerkung": "notiz", "kommentar": "notiz", "note": "notiz",
+};
+
+function App() {
+  const [step, setStep] = useState(1); // 1=Upload, 2=Mapping, 3=Preview, 4=Result
+  const [csvData, setCsvData] = useState(null);
+  const [csvHeaders, setCsvHeaders] = useState([]);
+  const [mapping, setMapping] = useState({});
+  const [mitarbeiter, setMitarbeiter] = useState([]);
+  const [existingNrs, setExistingNrs] = useState(new Set());
+  const [validated, setValidated] = useState([]);
+  const [importResult, setImportResult] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [mode, setMode] = useState("csv"); // csv or manual
+  const [manualRow, setManualRow] = useState({});
+  const [dragging, setDragging] = useState(false);
+  const fileRef = useRef();
+
+  // Load mitarbeiter + existing auftrag_nrs on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const [maRes, anRes] = await Promise.all([
+          fetch(`${SB}/rest/v1/mitarbeiter?select=id,vorname,nachname,typ,aktiv&order=nachname`, { headers: { apikey: KEY } }),
+          fetch(`${SB}/rest/v1/auftraege?select=auftrag_nr`, { headers: { apikey: KEY } })
+        ]);
+        const ma = await maRes.json();
+        const an = await anRes.json();
+        setMitarbeiter(ma || []);
+        setExistingNrs(new Set((an || []).map(a => a.auftrag_nr)));
+      } catch(e) { console.error(e); }
+    })();
+  }, []);
+
+  // Find mitarbeiter by name (fuzzy)
+  const findMA = useCallback((name) => {
+    if (!name || !name.trim()) return null;
+    const n = name.trim().toLowerCase();
+    // Exact match
+    let m = mitarbeiter.find(m => `${m.vorname} ${m.nachname}`.toLowerCase() === n);
+    if (m) return m;
+    // Last name match
+    m = mitarbeiter.find(m => m.nachname.toLowerCase() === n);
+    if (m) return m;
+    // Partial match
+    m = mitarbeiter.find(m => n.includes(m.nachname.toLowerCase()) || `${m.vorname} ${m.nachname}`.toLowerCase().includes(n));
+    return m || null;
+  }, [mitarbeiter]);
+
+  // Handle CSV parse
+  const handleFile = useCallback((file) => {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      encoding: "UTF-8",
+      complete: (result) => {
+        if (result.data && result.data.length > 0) {
+          setCsvData(result.data);
+          setCsvHeaders(result.meta.fields || []);
+          // Auto-map
+          const autoMap = {};
+          (result.meta.fields || []).forEach(h => {
+            const norm = h.toLowerCase().replace(/[\s\-_\.]/g, "").trim();
+            for (const [pattern, target] of Object.entries(AUTO_MAP)) {
+              if (norm === pattern.replace(/[\s\-_]/g, "") || norm.includes(pattern.replace(/[\s\-_]/g, ""))) {
+                if (!Object.values(autoMap).includes(target)) {
+                  autoMap[h] = target;
+                  break;
+                }
+              }
+            }
+          });
+          setMapping(autoMap);
+          setStep(2);
+        }
+      },
+      error: (err) => alert("CSV-Fehler: " + err.message)
+    });
+  }, []);
+
+  // Drop handler
+  const onDrop = useCallback((e) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer?.files?.[0] || e.target?.files?.[0];
+    if (file) handleFile(file);
+  }, [handleFile]);
+
+  // Validate rows
+  const validateRows = useCallback(() => {
+    if (!csvData) return;
+    const anField = Object.entries(mapping).find(([,v]) => v === "auftrag_nr")?.[0];
+    const kundeField = Object.entries(mapping).find(([,v]) => v === "kunde_name")?.[0];
+    
+    const rows = csvData.map((row, idx) => {
+      const errors = [];
+      const warnings = [];
+      const mapped = {};
+      
+      // Map fields
+      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+        if (targetField && row[csvCol] !== undefined) {
+          mapped[targetField] = row[csvCol];
+        }
+      });
+      
+      // Validate required
+      if (!mapped.auftrag_nr || !mapped.auftrag_nr.trim()) {
+        errors.push("Auftragsnummer fehlt");
+      } else if (existingNrs.has(mapped.auftrag_nr.trim())) {
+        warnings.push("AN existiert bereits → wird übersprungen");
+      }
+      if (!mapped.kunde_name || !mapped.kunde_name.trim()) {
+        errors.push("Kundenname fehlt");
+      }
+      
+      // Parse/normalize values
+      if (mapped.anlagen_kwp) {
+        const v = parseFloat(String(mapped.anlagen_kwp).replace(",", "."));
+        mapped.anlagen_kwp = isNaN(v) ? null : v;
+      }
+      if (mapped.speicher_kwh) {
+        const v = parseFloat(String(mapped.speicher_kwh).replace(",", "."));
+        mapped.speicher_kwh = isNaN(v) ? null : v;
+      }
+      if (mapped.hat_speicher) {
+        const v = String(mapped.hat_speicher).toLowerCase();
+        mapped.hat_speicher = ["ja","yes","true","1","x","✓","✅"].includes(v);
+      } else {
+        mapped.hat_speicher = (mapped.speicher_kwh && mapped.speicher_kwh > 0) || false;
+      }
+      if (mapped.ist_eigenlead) {
+        const v = String(mapped.ist_eigenlead).toLowerCase();
+        mapped.ist_eigenlead = ["ja","yes","true","1","x","✓","✅"].includes(v);
+      }
+      if (mapped.ist_empfehlung) {
+        const v = String(mapped.ist_empfehlung).toLowerCase();
+        mapped.ist_empfehlung = ["ja","yes","true","1","x","✓","✅"].includes(v);
+      }
+      
+      // Match vertriebler
+      if (mapped.vertriebler_name) {
+        const ma = findMA(mapped.vertriebler_name);
+        if (ma) {
+          mapped._vertriebler_id = ma.id;
+          mapped._vertriebler_match = `${ma.vorname} ${ma.nachname}`;
+        } else {
+          warnings.push(`Vertriebler "${mapped.vertriebler_name}" nicht gefunden`);
+        }
+      }
+      
+      // Match scouter
+      if (mapped.scouter_name) {
+        const ma = findMA(mapped.scouter_name);
+        if (ma) {
+          mapped._scouter_id = ma.id;
+          mapped._scouter_match = `${ma.vorname} ${ma.nachname}`;
+        } else {
+          warnings.push(`Scouter "${mapped.scouter_name}" nicht gefunden`);
+        }
+      }
+      
+      // Normalize produkt_typ
+      if (mapped.produkt_typ) {
+        const p = mapped.produkt_typ.toLowerCase();
+        if (p.includes("wp") && p.includes("pv")) mapped.produkt_typ = "pv_wp";
+        else if (p.includes("wp") || p.includes("wärmepumpe")) mapped.produkt_typ = "wp";
+        else if (p.includes("speicher")) mapped.produkt_typ = "speicher";
+        else mapped.produkt_typ = "pv";
+      }
+      
+      const status = errors.length > 0 ? "err" : warnings.length > 0 ? "warn" : "ok";
+      return { idx, raw: row, mapped, errors, warnings, status };
+    });
+    
+    setValidated(rows);
+    setStep(3);
+  }, [csvData, mapping, existingNrs, findMA]);
+
+  // Import
+  const doImport = useCallback(async () => {
+    setImporting(true);
+    const toInsert = validated.filter(r => r.status !== "err" && !existingNrs.has(r.mapped.auftrag_nr?.trim()));
+    let success = 0, failed = 0, skipped = validated.length - toInsert.length;
+    const errors = [];
+    
+    // Batch insert in chunks of 50
+    for (let i = 0; i < toInsert.length; i += 50) {
+      const batch = toInsert.slice(i, i + 50).map(r => {
+        const m = r.mapped;
+        return {
+          auftrag_nr: m.auftrag_nr?.trim(),
+          kunde_name: m.kunde_name?.trim(),
+          vertriebler_id: m._vertriebler_id || null,
+          scouter_id: m._scouter_id || null,
+          anlagen_kwp: m.anlagen_kwp || null,
+          hat_speicher: m.hat_speicher || false,
+          speicher_kwh: m.speicher_kwh || null,
+          lead_quelle: m.lead_quelle?.trim() || null,
+          auftrags_datum: m.auftrags_datum || null,
+          produkt_typ: m.produkt_typ || "pv",
+          beedoo_fortschritt: m.beedoo_fortschritt?.trim() || null,
+          ist_eigenlead: m.ist_eigenlead || false,
+          ist_empfehlung: m.ist_empfehlung || false,
+          empfehlung_von: m.empfehlung_von?.trim() || null,
+          kunde_plz: m.kunde_plz?.trim() || null,
+          kunde_ort: m.kunde_ort?.trim() || null,
+          notiz: m.notiz?.trim() || null,
+          status: "offen",
+        };
+      });
+      
+      try {
+        const res = await fetch(`${SB}/rest/v1/auftraege`, {
+          method: "POST",
+          headers: { ...hdr, "Prefer": "return=minimal,resolution=merge-duplicates" },
+          body: JSON.stringify(batch)
+        });
+        if (res.ok) {
+          success += batch.length;
+        } else {
+          const err = await res.text();
+          // Try one by one on batch failure
+          for (const row of batch) {
+            try {
+              const r2 = await fetch(`${SB}/rest/v1/auftraege`, {
+                method: "POST", headers: hdr, body: JSON.stringify(row)
+              });
+              if (r2.ok) success++;
+              else {
+                const e2 = await r2.text();
+                failed++;
+                errors.push(`${row.auftrag_nr}: ${e2.substring(0,80)}`);
+              }
+            } catch(e) { failed++; errors.push(`${row.auftrag_nr}: ${e.message}`); }
+          }
+        }
+      } catch(e) {
+        failed += batch.length;
+        errors.push(`Batch-Fehler: ${e.message}`);
+      }
+    }
+    
+    setImportResult({ success, failed, skipped, errors });
+    setStep(4);
+    setImporting(false);
+    
+    // Refresh existing ANs
+    try {
+      const anRes = await fetch(`${SB}/rest/v1/auftraege?select=auftrag_nr`, { headers: { apikey: KEY } });
+      const an = await anRes.json();
+      setExistingNrs(new Set((an || []).map(a => a.auftrag_nr)));
+    } catch(e) {}
+  }, [validated, existingNrs]);
+
+  // Manual entry submit
+  const submitManual = useCallback(async () => {
+    if (!manualRow.auftrag_nr || !manualRow.kunde_name) {
+      alert("Auftragsnummer und Kundenname sind Pflicht!");
+      return;
+    }
+    const vtMA = findMA(manualRow.vertriebler_name);
+    const scMA = findMA(manualRow.scouter_name);
+    
+    const payload = {
+      auftrag_nr: manualRow.auftrag_nr.trim(),
+      kunde_name: manualRow.kunde_name.trim(),
+      vertriebler_id: vtMA?.id || null,
+      scouter_id: scMA?.id || null,
+      anlagen_kwp: manualRow.anlagen_kwp ? parseFloat(manualRow.anlagen_kwp) : null,
+      hat_speicher: manualRow.hat_speicher === "ja",
+      speicher_kwh: manualRow.speicher_kwh ? parseFloat(manualRow.speicher_kwh) : null,
+      lead_quelle: manualRow.lead_quelle || null,
+      auftrags_datum: manualRow.auftrags_datum || null,
+      produkt_typ: manualRow.produkt_typ || "pv",
+      beedoo_fortschritt: manualRow.beedoo_fortschritt || null,
+      ist_eigenlead: manualRow.ist_eigenlead === "ja",
+      ist_empfehlung: manualRow.ist_empfehlung === "ja",
+      empfehlung_von: manualRow.empfehlung_von || null,
+      kunde_plz: manualRow.kunde_plz || null,
+      kunde_ort: manualRow.kunde_ort || null,
+      notiz: manualRow.notiz || null,
+      status: "offen",
+    };
+    
+    try {
+      const res = await fetch(`${SB}/rest/v1/auftraege`, { method: "POST", headers: hdr, body: JSON.stringify(payload) });
+      if (res.ok) {
+        alert(`✅ ${payload.auftrag_nr} erfolgreich angelegt!`);
+        setManualRow({});
+        setExistingNrs(prev => new Set([...prev, payload.auftrag_nr]));
+      } else {
+        const e = await res.text();
+        alert(`❌ Fehler: ${e}`);
+      }
+    } catch(e) { alert(`❌ ${e.message}`); }
+  }, [manualRow, findMA]);
+
+  // Count stats
+  const okCount = validated.filter(r => r.status === "ok").length;
+  const warnCount = validated.filter(r => r.status === "warn").length;
+  const errCount = validated.filter(r => r.status === "err").length;
+  const dupCount = validated.filter(r => r.warnings.some(w => w.includes("existiert bereits"))).length;
+
+  return (
+    <div className="app">
+      <div className="header">
+        <a href="index.html" className="back">← Toolbox</a>
+        <h1>📦 Aufträge Import</h1>
+        <span className="sub">{existingNrs.size} Aufträge in DB · {mitarbeiter.length} Mitarbeiter geladen</span>
+      </div>
+
+      {/* Steps */}
+      <div className="steps">
+        <div className={`step ${step === 1 ? "active" : step > 1 ? "done" : ""}`}>1. Daten laden</div>
+        <div className={`step ${step === 2 ? "active" : step > 2 ? "done" : ""}`}>2. Spalten zuordnen</div>
+        <div className={`step ${step === 3 ? "active" : step > 3 ? "done" : ""}`}>3. Prüfen</div>
+        <div className={`step ${step === 4 ? "active" : ""}`}>4. Import</div>
+      </div>
+
+      {/* Step 1: Upload */}
+      {step === 1 && (
+        <div>
+          <div style={{display:"flex",gap:12,marginBottom:20}}>
+            <button className={`btn ${mode === "csv" ? "btn-y" : "btn-o"}`} onClick={() => setMode("csv")}>📄 CSV-Upload</button>
+            <button className={`btn ${mode === "manual" ? "btn-y" : "btn-o"}`} onClick={() => setMode("manual")}>✏️ Manuell eingeben</button>
+          </div>
+
+          {mode === "csv" ? (
+            <div
+              className={`dropzone ${dragging ? "dragging" : ""}`}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              onClick={() => fileRef.current?.click()}
+            >
+              <div className="icon">📄</div>
+              <h3>CSV-Datei hierher ziehen</h3>
+              <p>oder klicken zum Auswählen · UTF-8, Semikolon oder Komma getrennt</p>
+              <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" style={{display:"none"}} onChange={(e) => { if(e.target.files[0]) handleFile(e.target.files[0]); }} />
+            </div>
+          ) : (
+            <div>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Auftragsnummer *</label>
+                  <input placeholder="AN-16800" value={manualRow.auftrag_nr || ""} onChange={e => setManualRow(p => ({...p, auftrag_nr: e.target.value}))} />
+                </div>
+                <div className="field">
+                  <label>Kundenname *</label>
+                  <input placeholder="Max Mustermann" value={manualRow.kunde_name || ""} onChange={e => setManualRow(p => ({...p, kunde_name: e.target.value}))} />
+                </div>
+                <div className="field">
+                  <label>Vertriebler</label>
+                  <select value={manualRow.vertriebler_name || ""} onChange={e => setManualRow(p => ({...p, vertriebler_name: e.target.value}))}>
+                    <option value="">– Wählen –</option>
+                    {mitarbeiter.filter(m => m.aktiv && (m.typ.includes("vertriebler") || m.typ === "geschaeftsfuehrung")).map(m => (
+                      <option key={m.id} value={`${m.vorname} ${m.nachname}`}>{m.vorname} {m.nachname}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Scouter</label>
+                  <select value={manualRow.scouter_name || ""} onChange={e => setManualRow(p => ({...p, scouter_name: e.target.value}))}>
+                    <option value="">– Kein Scouter –</option>
+                    {mitarbeiter.filter(m => m.typ.includes("scouter")).map(m => (
+                      <option key={m.id} value={`${m.vorname} ${m.nachname}`}>{m.vorname} {m.nachname}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>kWp</label>
+                  <input type="number" step="0.01" placeholder="11.28" value={manualRow.anlagen_kwp || ""} onChange={e => setManualRow(p => ({...p, anlagen_kwp: e.target.value}))} />
+                </div>
+                <div className="field">
+                  <label>Speicher</label>
+                  <select value={manualRow.hat_speicher || ""} onChange={e => setManualRow(p => ({...p, hat_speicher: e.target.value}))}>
+                    <option value="">– Wählen –</option>
+                    <option value="ja">Ja</option>
+                    <option value="nein">Nein</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Speicher kWh</label>
+                  <input type="number" step="0.01" placeholder="9.84" value={manualRow.speicher_kwh || ""} onChange={e => setManualRow(p => ({...p, speicher_kwh: e.target.value}))} />
+                </div>
+                <div className="field">
+                  <label>Lead-Quelle</label>
+                  <select value={manualRow.lead_quelle || ""} onChange={e => setManualRow(p => ({...p, lead_quelle: e.target.value}))}>
+                    <option value="">– Wählen –</option>
+                    <option value="mvpp">MVPP</option>
+                    <option value="telefon">Telefon</option>
+                    <option value="messe">Messe</option>
+                    <option value="eigenlead">Eigenlead</option>
+                    <option value="empfehlung">Empfehlung</option>
+                    <option value="online">Online</option>
+                    <option value="scouting">Scouting</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Auftragsdatum</label>
+                  <input type="date" value={manualRow.auftrags_datum || ""} onChange={e => setManualRow(p => ({...p, auftrags_datum: e.target.value}))} />
+                </div>
+                <div className="field">
+                  <label>Produkttyp</label>
+                  <select value={manualRow.produkt_typ || "pv"} onChange={e => setManualRow(p => ({...p, produkt_typ: e.target.value}))}>
+                    <option value="pv">PV</option>
+                    <option value="wp">Wärmepumpe</option>
+                    <option value="pv_wp">PV + WP</option>
+                    <option value="speicher">Speicher</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Fortschritt</label>
+                  <input placeholder="AC Freigabe" value={manualRow.beedoo_fortschritt || ""} onChange={e => setManualRow(p => ({...p, beedoo_fortschritt: e.target.value}))} />
+                </div>
+                <div className="field">
+                  <label>PLZ</label>
+                  <input placeholder="33609" value={manualRow.kunde_plz || ""} onChange={e => setManualRow(p => ({...p, kunde_plz: e.target.value}))} />
+                </div>
+                <div className="field">
+                  <label>Ort</label>
+                  <input placeholder="Bielefeld" value={manualRow.kunde_ort || ""} onChange={e => setManualRow(p => ({...p, kunde_ort: e.target.value}))} />
+                </div>
+                <div className="field" style={{gridColumn:"1/-1"}}>
+                  <label>Notiz</label>
+                  <input placeholder="Freitext..." value={manualRow.notiz || ""} onChange={e => setManualRow(p => ({...p, notiz: e.target.value}))} />
+                </div>
+              </div>
+              <div className="actions" style={{marginTop:20}}>
+                <button className="btn btn-g" onClick={submitManual} disabled={!manualRow.auftrag_nr || !manualRow.kunde_name}>
+                  ✅ Auftrag anlegen
+                </button>
+                {existingNrs.has(manualRow.auftrag_nr?.trim()) && (
+                  <span style={{color:"var(--o)",fontSize:13}}>⚠️ {manualRow.auftrag_nr} existiert bereits</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 2: Mapping */}
+      {step === 2 && (
+        <div>
+          <div style={{background:"var(--c1)",borderRadius:12,border:"1px solid var(--bd)",overflow:"hidden"}}>
+            <div style={{padding:"14px 16px",borderBottom:"1px solid var(--bd)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontWeight:700,fontSize:14}}>{csvHeaders.length} CSV-Spalten → Auftrags-Felder</span>
+              <span style={{color:"var(--s)",fontSize:12}}>{csvData.length} Zeilen erkannt</span>
+            </div>
+            {TARGET_FIELDS.map(tf => {
+              const assignedCol = Object.entries(mapping).find(([,v]) => v === tf.key)?.[0] || "";
+              const preview = assignedCol && csvData[0] ? csvData[0][assignedCol] : "";
+              return (
+                <div className="map-row" key={tf.key}>
+                  <div className="map-label">
+                    {tf.label}{tf.required && <span className="req">*</span>}
+                  </div>
+                  <span className="map-arrow">←</span>
+                  <div className="map-select">
+                    <select value={assignedCol} onChange={e => {
+                      const newMap = {...mapping};
+                      // Remove old assignment
+                      Object.keys(newMap).forEach(k => { if(newMap[k] === tf.key) delete newMap[k]; });
+                      if (e.target.value) newMap[e.target.value] = tf.key;
+                      setMapping(newMap);
+                    }}>
+                      <option value="">– nicht zuordnen –</option>
+                      {csvHeaders.map(h => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    {preview && <div className="map-preview">Beispiel: {preview}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="actions">
+            <button className="btn btn-o" onClick={() => setStep(1)}>← Zurück</button>
+            <button className="btn btn-y" onClick={validateRows}
+              disabled={!Object.values(mapping).includes("auftrag_nr") || !Object.values(mapping).includes("kunde_name")}>
+              Weiter → Prüfen
+            </button>
+            <span className="info">
+              {Object.values(mapping).includes("auftrag_nr") ? "✅" : "❌"} Auftragsnr
+              {" · "}
+              {Object.values(mapping).includes("kunde_name") ? "✅" : "❌"} Kundenname
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Preview */}
+      {step === 3 && (
+        <div>
+          <div className="stats">
+            <div className="stat"><div className="val" style={{color:"var(--g)"}}>{okCount}</div><div className="lbl">OK</div></div>
+            <div className="stat"><div className="val" style={{color:"var(--o)"}}>{warnCount}</div><div className="lbl">Warnungen</div></div>
+            <div className="stat"><div className="val" style={{color:"var(--r)"}}>{errCount}</div><div className="lbl">Fehler</div></div>
+            <div className="stat"><div className="val" style={{color:"var(--d)"}}>{dupCount}</div><div className="lbl">Duplikate</div></div>
+            <div className="stat"><div className="val">{okCount + warnCount - dupCount}</div><div className="lbl">Werden importiert</div></div>
+          </div>
+
+          <div className="tbl-wrap" style={{maxHeight:"60vh",overflow:"auto"}}>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>AN-Nr</th>
+                  <th>Kunde</th>
+                  <th>Vertriebler</th>
+                  <th>kWp</th>
+                  <th>Status</th>
+                  <th>Hinweise</th>
+                </tr>
+              </thead>
+              <tbody>
+                {validated.map(r => (
+                  <tr key={r.idx} className={r.status}>
+                    <td>{r.idx + 1}</td>
+                    <td style={{fontWeight:600}}>{r.mapped.auftrag_nr || "–"}</td>
+                    <td>{r.mapped.kunde_name || "–"}</td>
+                    <td>
+                      {r.mapped._vertriebler_match
+                        ? <span style={{color:"var(--g)"}}>✅ {r.mapped._vertriebler_match}</span>
+                        : r.mapped.vertriebler_name
+                          ? <span style={{color:"var(--o)"}}>⚠️ {r.mapped.vertriebler_name}</span>
+                          : "–"}
+                    </td>
+                    <td>{r.mapped.anlagen_kwp || "–"}</td>
+                    <td>{r.mapped.beedoo_fortschritt || "–"}</td>
+                    <td style={{fontSize:11,maxWidth:300,whiteSpace:"normal"}}>
+                      {r.errors.map((e,i) => <span key={i} style={{color:"var(--r)"}}>{e} </span>)}
+                      {r.warnings.map((w,i) => <span key={i} style={{color:"var(--o)"}}>{w} </span>)}
+                      {r.status === "ok" && <span style={{color:"var(--g)"}}>✅</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="actions">
+            <button className="btn btn-o" onClick={() => setStep(2)}>← Mapping</button>
+            <button className="btn btn-g" onClick={doImport} disabled={importing || (okCount + warnCount - dupCount) === 0}>
+              {importing ? "⏳ Importiere..." : `✅ ${okCount + warnCount - dupCount} Aufträge importieren`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Result */}
+      {step === 4 && importResult && (
+        <div className="result">
+          <h3>Import abgeschlossen</h3>
+          <div className="stats">
+            <div className="stat"><div className="val" style={{color:"var(--g)"}}>{importResult.success}</div><div className="lbl">Importiert</div></div>
+            <div className="stat"><div className="val" style={{color:"var(--r)"}}>{importResult.failed}</div><div className="lbl">Fehler</div></div>
+            <div className="stat"><div className="val" style={{color:"var(--d)"}}>{importResult.skipped}</div><div className="lbl">Übersprungen</div></div>
+          </div>
+          {importResult.errors.length > 0 && (
+            <div className="err-list">
+              <strong>Fehler:</strong>
+              {importResult.errors.map((e,i) => <div key={i}>· {e}</div>)}
+            </div>
+          )}
+          <div className="actions" style={{marginTop:20}}>
+            <button className="btn btn-y" onClick={() => { setStep(1); setCsvData(null); setValidated([]); setImportResult(null); }}>
+              📄 Weiteren Import starten
+            </button>
+            <a href="pay.html" className="btn btn-o">🧾 Zu bee-doo PAY</a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
