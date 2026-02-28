@@ -541,33 +541,93 @@ function LST({log,rc}){
 // ═══ MERGE TAB ═══
 function MT({log,rc,ct}){
     const[run,setRun]=useState(false);const[mr,setMr]=useState(null);
-    const go=async()=>{setRun(true);setMr(null);log('🔗 Auto-Merge gestartet','warn');let le=0,lc=0,ec=0;
-        try{log('Phase 1: EFS ↔ Leveto (PLZ + Name)...');
-            const er=await(await fetch(ap('efs_projekte')+'?select=efs_id,kunde_nachname,kunde_plz,leveto_id&leveto_id=is.null&limit=2000',{headers:hd()})).json();
-            if(er.length>0){const lr=await(await fetch(ap('leveto_leads')+'?select=id,leveto_id,nachname,plz&limit=10000',{headers:hd()})).json();const lk={};lr.forEach(l=>{const k=`${(l.nachname||'').toLowerCase().trim()}_${l.plz||''}`;if(!lk[k])lk[k]=[];lk[k].push(l)});
-                for(const e of er){const k=`${(e.kunde_nachname||'').toLowerCase().trim()}_${e.kunde_plz||''}`;if(lk[k]){await fetch(ap('efs_projekte')+`?efs_id=eq.${e.efs_id}`,{method:'PATCH',headers:hd(),body:JSON.stringify({leveto_id:lk[k][0].leveto_id})});le++}}
-                log(`✅ EFS ↔ Leveto: ${le} Matches`,'success')}else log('EFS ↔ Leveto: Alle gematcht');
-            log('Phase 2: CSV ↔ Leveto (Lead ID)...');const pr=await(await fetch(ap('import_provisions')+'?select=an_nr,lead_id&lead_id=not.is.null&limit=5000',{headers:hd()})).json();
-            if(pr.length>0){const li=await(await fetch(ap('leveto_leads')+'?select=id,leveto_id&limit=50000',{headers:hd()})).json();const ik={};li.forEach(l=>{ik[l.leveto_id]=l.id});for(const p of pr)if(ik[p.lead_id])lc++; log(`✅ CSV ↔ Leveto: ${lc} zuordenbar`,'success')}
-            log('Phase 3: EFS ↔ CSV (Name + PLZ)...');const ea=await(await fetch(ap('efs_projekte')+'?select=efs_id,kunde_nachname,kunde_plz&limit=2000',{headers:hd()})).json();const pa=await(await fetch(ap('import_provisions')+'?select=an_nr,kunde,kunde_plz&limit=5000',{headers:hd()})).json();
-            const pk={};pa.forEach(p=>{const nm=(p.kunde||'').split(/\s+/).pop()||'';const k=`${nm.toLowerCase()}_${p.kunde_plz||''}`;if(!pk[k])pk[k]=[];pk[k].push(p)});for(const e of ea){const k=`${(e.kunde_nachname||'').toLowerCase().trim()}_${e.kunde_plz||''}`;if(pk[k])ec++}log(`✅ EFS ↔ CSV: ${ec} Matches`,'success');
-            setMr({le,lc,ec});log(`🔗 Merge fertig: ${le+lc+ec} total`,'success')}catch(e){log(`❌ Merge: ${e.message}`,'error')}setRun(false);rc()};
+    const norm=s=>(s||'').toLowerCase().trim().replace(/\s+/g,' ');
+    const go=async()=>{setRun(true);setMr(null);log('🔗 Auto-Merge gestartet','warn');let le=0,lc=0,ec=0,ew=0;
+        try{
+            // Phase 1: EFS ↔ Leveto Matching (Nachname+PLZ, mit Vorname-Boost)
+            log('Phase 1: EFS ↔ Leveto matchen (Nachname+PLZ+Vorname)...');
+            const er=await(await fetch(ap('efs_projekte')+'?select=efs_id,kunde_nachname,kunde_vorname,kunde_plz,leveto_id&leveto_id=is.null&limit=2000',{headers:hd()})).json();
+            if(er.length>0){
+                const lr=await(await fetch(ap('leveto_leads')+'?select=id,leveto_id,vorname,nachname,plz&limit=25000',{headers:hd()})).json();
+                const lkNP={};lr.forEach(l=>{const k=`${norm(l.nachname)}_${(l.plz||'').trim()}`;if(!lkNP[k])lkNP[k]=[];lkNP[k].push(l)});
+                for(const e of er){
+                    const k=`${norm(e.kunde_nachname)}_${(e.kunde_plz||'').trim()}`;
+                    const cands=lkNP[k];
+                    if(cands){
+                        // Prefer vorname match if possible
+                        const evn=norm(e.kunde_vorname||'').split(' ')[0];
+                        let best=cands[0];
+                        if(evn.length>=2){const vnM=cands.find(c=>norm(c.vorname||'').startsWith(evn.substring(0,3)));if(vnM)best=vnM;}
+                        await fetch(ap('efs_projekte')+`?efs_id=eq.${e.efs_id}`,{method:'PATCH',headers:hd(),body:JSON.stringify({leveto_id:best.leveto_id})});le++
+                    }
+                }
+                log(`✅ Phase 1: ${le} neue Matches`,'success');
+            }else log('Phase 1: Alle bereits gematcht');
+
+            // Phase 2: EFS-Daten → Leveto schreiben (IMMER für alle gematchten)
+            log('Phase 2: EFS-Daten → Leveto Leads übertragen...');
+            const allEfs=[];
+            for(let off=0;off<2000;off+=1000){const batch=await(await fetch(ap('efs_projekte')+`?select=efs_id,leveto_id,status,simplified_status,gesamtpreis_eur,monatl_rate_eur,pv_kwp,bat_kwh,installed_at,grid_connected_at,zustaendiger,preismodell&leveto_id=not.is.null&limit=1000&offset=${off}`,{headers:hd()})).json();if(!batch.length)break;allEfs.push(...batch)}
+            if(allEfs.length>0){
+                // Load all leveto with leveto_id for lookup
+                const allLev=[];
+                for(let off=0;off<30000;off+=1000){const batch=await(await fetch(ap('leveto_leads')+`?select=id,leveto_id&limit=1000&offset=${off}`,{headers:hd()})).json();if(!batch.length)break;allLev.push(...batch)}
+                const levMap={};allLev.forEach(l=>{levMap[l.leveto_id]=l.id});
+                const now=new Date().toISOString();
+                for(const e of allEfs){
+                    const lid=levMap[e.leveto_id];
+                    if(!lid)continue;
+                    const patch={
+                        efs_id:e.efs_id,
+                        efs_status:e.status,
+                        efs_simplified_status:e.simplified_status,
+                        efs_gesamtpreis_eur:e.gesamtpreis_eur,
+                        efs_monatl_rate_eur:e.monatl_rate_eur,
+                        efs_pv_kwp:e.pv_kwp,
+                        efs_bat_kwh:e.bat_kwh,
+                        efs_installed_at:e.installed_at,
+                        efs_grid_connected_at:e.grid_connected_at,
+                        efs_zustaendiger:(e.zustaendiger||'').replace(/\t/g,'').trim(),
+                        efs_preismodell:e.preismodell,
+                        efs_merged_at:now
+                    };
+                    await fetch(ap('leveto_leads')+`?id=eq.${lid}`,{method:'PATCH',headers:hd(),body:JSON.stringify(patch)});ew++
+                }
+                log(`✅ Phase 2: ${ew} Leveto-Leads mit EFS-Daten aktualisiert`,'success');
+            }else log('Phase 2: Keine gematchten EFS-Projekte');
+
+            // Phase 3: CSV ↔ Leveto
+            log('Phase 3: CSV ↔ Leveto (Lead ID)...');const pr=await(await fetch(ap('import_provisions')+'?select=an_nr,lead_id&lead_id=not.is.null&limit=5000',{headers:hd()})).json();
+            if(pr.length>0){const li=await(await fetch(ap('leveto_leads')+'?select=id,leveto_id&limit=50000',{headers:hd()})).json();const ik={};li.forEach(l=>{ik[l.leveto_id]=l.id});for(const p of pr)if(ik[p.lead_id])lc++; log(`✅ Phase 3: ${lc} CSV ↔ Leveto zuordenbar`,'success')}
+
+            // Phase 4: EFS ↔ CSV
+            log('Phase 4: EFS ↔ CSV (Name + PLZ)...');const ea=await(await fetch(ap('efs_projekte')+'?select=efs_id,kunde_nachname,kunde_plz&limit=2000',{headers:hd()})).json();const pa=await(await fetch(ap('import_provisions')+'?select=an_nr,kunde,kunde_plz&limit=5000',{headers:hd()})).json();
+            const pk={};pa.forEach(p=>{const nm=(p.kunde||'').split(/\s+/).pop()||'';const k=`${nm.toLowerCase()}_${p.kunde_plz||''}`;if(!pk[k])pk[k]=[];pk[k].push(p)});for(const e of ea){const k=`${norm(e.kunde_nachname)}_${e.kunde_plz||''}`;if(pk[k])ec++}log(`✅ Phase 4: ${ec} EFS ↔ CSV Matches`,'success');
+
+            setMr({le,ew,lc,ec});log(`🔗 Merge fertig: ${le} neue Matches, ${ew} Leads aktualisiert`,'success');
+        }catch(e){log(`❌ Merge: ${e.message}`,'error')}setRun(false);rc()};
     const fm=v=>typeof v==='number'?v.toLocaleString('de-DE'):v;
     return(<React.Fragment>
         <div className="cd fi"><div className="cd-t">🔗 Datenquellen verknüpfen</div>
-            <p style={{fontSize:13,color:'var(--td)',marginBottom:16,lineHeight:1.6}}>Matcht Leveto ↔ EFS ↔ CSV über Name+PLZ und Lead-IDs. Verknüpfte Daten ermöglichen vollständige Provisions-Berechnung.</p>
+            <p style={{fontSize:13,color:'var(--td)',marginBottom:16,lineHeight:1.6}}>Matcht Leveto ↔ EFS ↔ CSV über Name+PLZ und Lead-IDs. Schreibt EFS-Status, Preis, kWp und Anlagendaten direkt in die Leveto-Leads.</p>
             <div className="mg">{[{i:'🔄',v:ct.leveto,l:'Leveto Leads'},{i:'📊',v:ct.efs,l:'EFS Projekte'},{i:'💰',v:ct.auftraege,l:'CSV Aufträge'},{i:'🏦',v:ct.bank,l:'Bank Trans.'}].map(s=><div key={s.l} className="mc"><div style={{fontSize:28}}>{s.i}</div><div className="mv">{fm(s.v)}</div><div className="ml">{s.l}</div></div>)}</div>
             <button className="btn by" disabled={run} onClick={go} style={{width:'100%',justifyContent:'center'}}>{run?<React.Fragment><span className="spinner"/> Merge läuft...</React.Fragment>:'🔗 Auto-Merge starten'}</button>
         </div>
         {mr&&<div className="cd fi"><div className="cd-t">✅ Merge-Ergebnis</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>{[{v:mr.le,l:'EFS ↔ Leveto',bg:'var(--ad)',c:'var(--a)'},{v:mr.lc,l:'CSV ↔ Leveto',bg:'var(--bld)',c:'var(--bl)'},{v:mr.ec,l:'EFS ↔ CSV',bg:'var(--gd)',c:'var(--g)'}].map(s=><div key={s.l} style={{background:s.bg,borderRadius:10,padding:16,textAlign:'center'}}><div style={{fontSize:24,fontWeight:700,color:s.c}}>{s.v}</div><div style={{fontSize:11,color:'var(--td)',marginTop:4}}>{s.l}</div></div>)}</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:14}}>
+                {[{v:mr.le,l:'Neue EFS↔Leveto Matches',bg:'var(--ad)',c:'var(--a)'},{v:mr.ew,l:'Leveto mit EFS aktualisiert',bg:'rgba(245,197,0,0.15)',c:'var(--a)'},{v:mr.lc,l:'CSV ↔ Leveto',bg:'var(--bld)',c:'var(--bl)'},{v:mr.ec,l:'EFS ↔ CSV',bg:'var(--gd)',c:'var(--g)'}].map(s=><div key={s.l} style={{background:s.bg,borderRadius:10,padding:16,textAlign:'center'}}><div style={{fontSize:24,fontWeight:700,color:s.c}}>{s.v}</div><div style={{fontSize:11,color:'var(--td)',marginTop:4}}>{s.l}</div></div>)}
+            </div>
         </div>}
         <div className="cd fi"><div className="cd-t">ℹ️ Merge-Logik</div>
-            <table className="mt"><thead><tr><th>Quelle A</th><th>↔</th><th>Quelle B</th><th>Match-Kriterium</th></tr></thead><tbody>
-                <tr><td style={{color:'var(--tb)'}}>EFS Projekte</td><td>↔</td><td>Leveto Leads</td><td>Nachname + PLZ</td></tr>
-                <tr><td style={{color:'var(--tb)'}}>CSV Aufträge</td><td>↔</td><td>Leveto Leads</td><td>Lead ID (direkt)</td></tr>
-                <tr><td style={{color:'var(--tb)'}}>EFS Projekte</td><td>↔</td><td>CSV Aufträge</td><td>Kunde Nachname + PLZ</td></tr>
+            <table className="mt"><thead><tr><th>Phase</th><th>Aktion</th><th>Match-Kriterium</th></tr></thead><tbody>
+                <tr><td style={{color:'var(--a)'}}>1</td><td>EFS ↔ Leveto verknüpfen</td><td>Nachname + PLZ + Vorname</td></tr>
+                <tr><td style={{color:'var(--a)'}}>2</td><td><strong>EFS → Leveto Daten schreiben</strong></td><td>Status, Preis, kWp, Batterie, Montage-Datum</td></tr>
+                <tr><td style={{color:'var(--bl)'}}>3</td><td>CSV ↔ Leveto</td><td>Lead ID (direkt)</td></tr>
+                <tr><td style={{color:'var(--g)'}}>4</td><td>EFS ↔ CSV</td><td>Kunde Nachname + PLZ</td></tr>
             </tbody></table>
+            <div style={{marginTop:12,fontSize:12,color:'var(--td)',lineHeight:1.6}}>
+                <strong style={{color:'var(--tb)'}}>EFS-Felder in Leveto:</strong> efs_status, efs_simplified_status, efs_gesamtpreis_eur, efs_monatl_rate_eur, efs_pv_kwp, efs_bat_kwh, efs_installed_at, efs_grid_connected_at, efs_zustaendiger, efs_preismodell
+            </div>
         </div>
         <AutoSync syncKey="auto_merge" log={log}/>
     </React.Fragment>);
