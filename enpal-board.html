@@ -84,18 +84,22 @@ function App(){
     const isInt=!urlToken;
     const[authed,setAuthed]=useState(isInt||urlToken===EXT_TOKEN);
     const[pw,setPw]=useState('');const[err,setErr]=useState('');
-    const[leads,setLeads]=useState(null);const[tab,setTab]=useState('overview');const[search,setSearch]=useState('');
+    const[leads,setLeads]=useState(null);const[tab,setTab]=useState('overview');const[search,setSearch]=useState('');const[qFilter,setQF]=useState('Alle');
 
     useEffect(()=>{if(!authed)return;(async()=>{const all=[];for(let o=0;o<10000;o+=1000){const r=await fetch(`${SB}/rest/v1/enpal_leads?select=*&limit=1000&offset=${o}&order=leveto_erstellt_am.desc.nullslast`,{headers:hd()});const d=await r.json();if(!d.length)break;all.push(...d);if(d.length<1000)break}setLeads(all)})()},[authed]);
 
-    const an=useMemo(()=>{if(!leads)return null;const total=leads.length;const cats={ok:0,wvl:0,bad:0,qual:0,other:0};const byStatus={};const byQuelle={};const byPlz={};const monthly={};
-        leads.forEach(l=>{const cat=stCat(l.status_name);cats[cat]++;const s=l.status_name||'?';byStatus[s]=(byStatus[s]||0)+1;const q=l.quelle||'?';byQuelle[q]=(byQuelle[q]||0)+1;const p=(l.plz||'').substring(0,2);if(p)byPlz[p+'xxx']=(byPlz[p+'xxx']||0)+1;if(l.leveto_erstellt_am){const ym=l.leveto_erstellt_am.substring(0,7);monthly[ym]=(monthly[ym]||0)+1}});
-        return{total,cats,byStatus,byQuelle,byPlz,monthly,mitAuftrag:leads.filter(l=>l.hat_auftrag).length,storno:leads.filter(l=>l.storniert).length}},[leads]);
+    const quellen=useMemo(()=>{if(!leads)return[];const s=new Set(leads.map(l=>l.quelle).filter(Boolean));return['Alle',...Array.from(s).sort()]},[leads]);
+    const fLeads=useMemo(()=>{if(!leads)return[];return qFilter==='Alle'?leads:leads.filter(l=>l.quelle===qFilter)},[leads,qFilter]);
 
-    const filtered=useMemo(()=>{if(!leads)return[];if(!search.trim())return leads;const q=search.toLowerCase();return leads.filter(l=>(l.kunde_nachname||'').toLowerCase().includes(q)||(l.kunde_vorname||'').toLowerCase().includes(q)||(l.plz||'').includes(q)||(l.ort||'').toLowerCase().includes(q)||(l.status_name||'').toLowerCase().includes(q)||(l.berater_name||'').toLowerCase().includes(q)||String(l.leveto_id).includes(q))},[leads,search]);
+    const an=useMemo(()=>{if(!leads)return null;const src=fLeads;const total=src.length;const cats={ok:0,wvl:0,bad:0,qual:0,other:0};const byStatus={};const byQuelle={};const byPlz={};const monthly={};
+        src.forEach(l=>{const cat=stCat(l.status_name);cats[cat]++;const s=l.status_name||'?';byStatus[s]=(byStatus[s]||0)+1;const q=l.quelle||'?';byQuelle[q]=(byQuelle[q]||0)+1;const p=(l.plz||'').substring(0,2);if(p)byPlz[p+'xxx']=(byPlz[p+'xxx']||0)+1;if(l.leveto_erstellt_am){const ym=l.leveto_erstellt_am.substring(0,7);monthly[ym]=(monthly[ym]||0)+1}});
+        return{total,cats,byStatus,byQuelle,byPlz,monthly,mitAuftrag:src.filter(l=>l.hat_auftrag).length,storno:src.filter(l=>l.storniert).length}},[fLeads]);
+
+    const filtered=useMemo(()=>{if(!fLeads)return[];if(!search.trim())return fLeads;const q=search.toLowerCase();return fLeads.filter(l=>(l.kunde_nachname||'').toLowerCase().includes(q)||(l.kunde_vorname||'').toLowerCase().includes(q)||(l.plz||'').includes(q)||(l.ort||'').toLowerCase().includes(q)||(l.status_name||'').toLowerCase().includes(q)||(l.berater_name||'').toLowerCase().includes(q)||String(l.leveto_id).includes(q))},[fLeads,search]);
 
     if(!authed)return<div className="lock"><img src="https://bee-doo-tools.vercel.app/Logo%20bee-doo%20Schriftzug.svg" style={{height:32,filter:'brightness(0) invert(1)',opacity:.7}} alt=""/><div style={{fontSize:20,fontWeight:800,color:'var(--a)'}}>Enpal Partner Board</div><div style={{color:'var(--td)',fontSize:13}}>Bitte Zugangstoken eingeben</div><input type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr('')}} onKeyDown={e=>{if(e.key==='Enter'){if(pw===EXT_TOKEN)setAuthed(true);else setErr('Falsches Passwort')}}} placeholder="Token..." autoFocus/><button className="btn" onClick={()=>{if(pw===EXT_TOKEN)setAuthed(true);else setErr('Falsches Passwort')}}>Zugang</button>{err&&<div style={{color:'var(--r)',fontSize:13}}>{err}</div>}</div>;
     if(!leads)return<div><div className="spinner"/></div>;
+    if(!an)return<div><div className="spinner"/></div>;
 
     const TABS=[{k:'overview',l:'📊 Übersicht'},{k:'funnel',l:'🎯 Funnel'},{k:'status',l:'📋 Status'},{k:'leads',l:'🔍 Leads'},{k:'geo',l:'📍 Regionen'}];
 
@@ -110,6 +114,7 @@ function App(){
                 <div className="kpi"><div className="kpi-l">Disqualifiziert</div><div className="kpi-v" style={{color:'var(--p)'}}>{fm(an.cats.qual)}</div><div className="kpi-s" style={{color:'var(--p)'}}>{pct(an.cats.qual,an.total)}%</div></div>
                 <div className="kpi"><div className="kpi-l">→ Auftrag</div><div className="kpi-v" style={{color:'var(--g)'}}>{fm(an.mitAuftrag)}</div><div className="kpi-s" style={{color:'var(--td)'}}>{pct(an.mitAuftrag,an.total)}% CR</div></div>
             </div>
+            <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}><span style={{fontSize:11,color:'var(--td)',fontWeight:600,marginRight:4}}>QUELLE:</span>{quellen.map(q=><div key={q} onClick={()=>setQF(q)} style={{padding:'5px 12px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',background:qFilter===q?'var(--a)':'#111827',color:qFilter===q?'#0a0e1a':'var(--td)',border:qFilter===q?'1px solid var(--a)':'1px solid #263354',transition:'all .15s'}}>{q}{q!=='Alle'?` (${leads.filter(l=>l.quelle===q).length})`:` (${leads.length})`}</div>)}</div>
             <div className="tabs">{TABS.map(t=><div key={t.k} className={`tab ${tab===t.k?'on':''}`} onClick={()=>setTab(t.k)}>{t.l}</div>)}</div>
 
             {tab==='overview'&&<React.Fragment><div className="g2">
