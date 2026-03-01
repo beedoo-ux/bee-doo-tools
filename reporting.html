@@ -267,13 +267,23 @@ function processTermine(termine, vertrMap) {
   const isStorno = s => s === 'storniert';
   const isOffen = s => s === 'bestaetigt' || s === 'offen';
 
-  const byStatus = {};
+  // Count by normalized status keys
+  let nAbschluss = 0, nAbgeschlossen = 0, nStorno = 0, nOffen = 0, nSonstige = 0;
   termine.forEach(t => {
     const s = t.status || 'unbekannt';
-    // Normalize for display
-    const label = isAbschluss(s) ? 'Abschluss' : isAbgeschlossen(s) ? 'Abgeschlossen' : isStorno(s) ? 'Storniert' : isOffen(s) ? 'Offen' : s;
-    byStatus[label] = (byStatus[label] || 0) + 1;
+    if (isAbschluss(s)) nAbschluss++;
+    else if (isAbgeschlossen(s)) nAbgeschlossen++;
+    else if (isStorno(s)) nStorno++;
+    else if (isOffen(s)) nOffen++;
+    else nSonstige++;
   });
+  const byStatus = {
+    'Abschluss': nAbschluss,
+    'Abgeschlossen': nAbgeschlossen,
+    'Storniert': nStorno,
+    'Offen/Bestätigt': nOffen,
+    ...(nSonstige > 0 ? { 'Sonstige': nSonstige } : {})
+  };
 
   // Daily
   const dailyMap = {};
@@ -301,7 +311,7 @@ function processTermine(termine, vertrMap) {
   const berater = Object.values(beraterTermMap)
     .sort((a, b) => a.n === 'Nicht zugewiesen' ? 1 : b.n === 'Nicht zugewiesen' ? -1 : b.total - a.total);
 
-  return { total, byStatus, daily, berater };
+  return { total, byStatus, daily, berater, nAbschluss, nStorno, nOffen, nAbgeschlossen };
 }
 
 function processEFS(projekte) {
@@ -607,10 +617,10 @@ const TabTermine = ({ data }) => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
         <KPI label="Termine gesamt" value={fmt(d.total)} color={C.gold} />
-        <KPI label="Abschluss" value={fmt(d.byStatus['Abschluss'] || 0)} sub={`${pct(d.byStatus['Abschluss'] || 0, d.total)}% Close-Rate`} color={C.green} />
-        <KPI label="Bestätigt" value={fmt(d.byStatus.bestaetigt || 0)} color={C.blue} />
-        <KPI label="Storniert" value={fmt(d.byStatus['Storniert'] || 0)} sub={`${pct(d.byStatus['Storniert'] || 0, d.total)}% Ausfallquote`} color={C.red} />
-        <KPI label="Offen" value={fmt(d.byStatus.offen || 0)} color={C.amber} />
+        <KPI label="Abschluss" value={fmt(d.nAbschluss)} sub={`${pct(d.nAbschluss, d.total)}% Close-Rate`} color={C.green} />
+        <KPI label="Bestätigt" value={fmt(d.nOffen)} color={C.blue} />
+        <KPI label="Storniert" value={fmt(d.nStorno)} sub={`${pct(d.nStorno, d.total)}% Ausfallquote`} color={C.red} />
+        <KPI label="Abgeschlossen" value={fmt(d.nAbgeschlossen)} color={C.amber} />
       </div>
 
       <Sec title="📅 Tägliche Termine">
