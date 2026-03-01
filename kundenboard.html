@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo · Kundenboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#111;--bg2:#1a1a1a;--bg3:#222;--bg4:#2a2a2a;
+  --text:#f0f0f0;--text2:#aaa;--text3:#666;
+  --gold:#F5C500;--gold2:#FFD740;--gold-dim:rgba(245,197,0,.12);
+  --green:#22c55e;--green-dim:rgba(34,197,94,.12);
+  --red:#ef4444;--red-dim:rgba(239,68,68,.12);
+  --blue:#3b82f6;--blue-dim:rgba(59,130,246,.12);
+  --orange:#f59e0b;--orange-dim:rgba(245,158,11,.12);
+  --purple:#a855f7;--purple-dim:rgba(168,85,247,.12);
+  --cyan:#06b6d4;--cyan-dim:rgba(6,182,212,.12);
+  --r:12px;--r2:16px;
+}
+html{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif}
+body{min-height:100vh}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+
+.app{max-width:1440px;margin:0 auto;padding:16px}
+.header{display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.logo{font-size:22px;font-weight:800;color:var(--gold);white-space:nowrap}
+.logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px;opacity:.6}
+
+.search-wrap{flex:1;min-width:260px;position:relative}
+.search-wrap input{width:100%;padding:12px 16px 12px 44px;background:var(--bg2);border:1px solid var(--bg4);border-radius:var(--r);color:var(--text);font-size:15px;font-family:inherit;outline:none;transition:.2s}
+.search-wrap input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+.search-wrap input::placeholder{color:var(--text3)}
+.search-wrap svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text3)}
+.search-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg2);border:1px solid var(--bg4);border-radius:var(--r);max-height:400px;overflow-y:auto;z-index:100;box-shadow:0 20px 40px rgba(0,0,0,.5)}
+.search-results:empty{display:none}
+.sr-item{padding:12px 16px;cursor:pointer;border-bottom:1px solid var(--bg3);transition:.15s}
+.sr-item:hover{background:var(--gold-dim)}
+.sr-item:last-child{border:none}
+.sr-name{font-weight:600;font-size:14px}
+.sr-sub{font-size:11px;color:var(--text2);margin-top:2px}
+.sr-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;margin-left:8px}
+
+.stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px}
+.stat-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--r);padding:14px 16px;text-align:center}
+.stat-val{font-size:26px;font-weight:800;color:var(--gold)}
+.stat-label{font-size:11px;color:var(--text2);margin-top:2px}
+
+.empty-state{text-align:center;padding:80px 20px}
+.empty-state svg{color:var(--text3);margin-bottom:16px}
+.empty-state h2{font-size:20px;font-weight:600;margin-bottom:8px}
+.empty-state p{color:var(--text2);font-size:14px}
+
+/* Customer Detail */
+.kunde-header{background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--r2);padding:24px;margin-bottom:16px;display:grid;grid-template-columns:1fr auto;gap:20px}
+.kunde-name{font-size:28px;font-weight:800;line-height:1.1}
+.kunde-an{color:var(--gold);font-size:13px;font-weight:600;margin-top:4px}
+.kunde-meta{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px}
+.kunde-meta-item{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2)}
+.kunde-meta-item svg{width:14px;height:14px;color:var(--text3);flex-shrink:0}
+.kunde-status{display:flex;align-items:center;gap:10px;align-self:start}
+.status-pill{padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px}
+
+.card{background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--r2);padding:20px;overflow:hidden}
+.card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card-title svg{width:14px;height:14px}
+
+.data-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.data-item{padding:8px 0;border-bottom:1px solid var(--bg3)}
+.data-item:last-child,.data-item:nth-last-child(2){border:none}
+.data-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.data-val{font-size:14px;font-weight:500;margin-top:1px;word-break:break-word}
+.data-val.gold{color:var(--gold)}
+.data-val.green{color:var(--green)}
+.data-val.red{color:var(--red)}
+
+.big-num{font-size:32px;font-weight:800;line-height:1}
+.big-label{font-size:11px;color:var(--text2);margin-top:4px}
+
+/* Timeline */
+.timeline{position:relative;padding-left:28px}
+.timeline::before{content:'';position:absolute;left:9px;top:6px;bottom:6px;width:2px;background:var(--bg4)}
+.tl-item{position:relative;padding-bottom:16px}
+.tl-item:last-child{padding-bottom:0}
+.tl-dot{position:absolute;left:-28px;top:2px;width:18px;height:18px;border-radius:50%;border:2px solid var(--bg4);background:var(--bg2);display:flex;align-items:center;justify-content:center}
+.tl-dot.active{border-color:var(--gold);background:var(--gold-dim)}
+.tl-dot.active::after{content:'';width:6px;height:6px;border-radius:50%;background:var(--gold)}
+.tl-dot.done{border-color:var(--green);background:var(--green-dim)}
+.tl-dot.done::after{content:'';width:6px;height:6px;border-radius:50%;background:var(--green)}
+.tl-dot.storno{border-color:var(--red);background:var(--red-dim)}
+.tl-dot.storno::after{content:'';width:6px;height:6px;border-radius:50%;background:var(--red)}
+.tl-label{font-size:13px;font-weight:600}
+.tl-date{font-size:11px;color:var(--text3);margin-top:1px}
+
+/* Payout table */
+.pay-table{width:100%;border-collapse:collapse;font-size:13px}
+.pay-table th{text-align:left;padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);border-bottom:2px solid var(--bg4);font-weight:600}
+.pay-table td{padding:8px 12px;border-bottom:1px solid var(--bg3)}
+.pay-table tr:hover td{background:var(--gold-dim)}
+.pay-table .amt{font-weight:700;font-variant-numeric:tabular-nums}
+.pay-table .amt.pos{color:var(--green)}
+.pay-table .amt.neg{color:var(--red)}
+
+/* Map */
+.map-container{height:200px;border-radius:var(--r);overflow:hidden;margin-top:10px;border:1px solid var(--bg3)}
+.leaflet-container{background:var(--bg3)!important}
+
+/* Back button */
+.back-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:var(--bg3);border:1px solid var(--bg4);border-radius:var(--r);color:var(--text2);font-size:13px;font-family:inherit;cursor:pointer;transition:.15s;margin-bottom:16px}
+.back-btn:hover{background:var(--gold-dim);color:var(--gold);border-color:var(--gold)}
+
+/* Loading */
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--text3)}
+.spinner{width:20px;height:20px;border:2px solid var(--bg4);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;margin-right:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Responsive */
+@media(max-width:1024px){
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .kunde-header{grid-template-columns:1fr}
+}
+@media(max-width:640px){
+  .app{padding:10px}
+  .header{gap:10px}
+  .logo{font-size:18px}
+  .logo span{display:none}
+  .kunde-name{font-size:22px}
+  .data-grid{grid-template-columns:1fr}
+  .stats-bar{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState, useEffect, useRef, useCallback} = React;
+
+// ─── CONFIG ────────────────────────────────────────
+const SB = "https://hqzpemfaljxcysyqssng.supabase.co/rest/v1";
+const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const H = {"apikey": ANON, "Authorization": `Bearer ${ANON}`};
+
+async function sb(table, params="") {
+  const r = await fetch(`${SB}/${table}?${params}`, {headers: H});
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function sbCount(table, params="") {
+  const r = await fetch(`${SB}/${table}?${params}&limit=0`, {
+    headers: {...H, "Prefer": "count=exact"}
+  });
+  const range = r.headers.get('content-range') || '';
+  return parseInt(range.split('/')[1]) || 0;
+}
+
+const eur = n => new Intl.NumberFormat('de-DE', {style:'currency',currency:'EUR'}).format(n||0);
+const num = n => new Intl.NumberFormat('de-DE').format(n||0);
+const dateFmt = d => {
+  if (!d) return '–';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'numeric'});
+};
+
+// ─── ICONS (inline SVG) ────────────────────────────
+const Icon = ({d, size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+);
+const SearchIcon = () => <Icon d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>;
+const UserIcon = () => <Icon d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 3a4 4 0 100 8 4 4 0 000-8z"/>;
+const HomeIcon = () => <Icon d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10"/>;
+const PhoneIcon = () => <Icon d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>;
+const MailIcon = () => <Icon d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6"/>;
+const BoltIcon = () => <Icon d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>;
+const EuroIcon = () => <Icon d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>;
+const CalendarIcon = () => <Icon d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18"/>;
+const ArrowLeft = () => <Icon d="M19 12H5M12 19l-7-7 7-7"/>;
+const LayersIcon = () => <Icon d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>;
+const ClipIcon = () => <Icon d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>;
+
+// ─── STATUS COLORS ─────────────────────────────────
+function statusColor(status) {
+  if (!status) return {bg:'var(--bg4)',text:'var(--text3)'};
+  const s = status.toLowerCase();
+  if (s.includes('storniert') || s.includes('abgelehnt') || s.includes('nicht machbar')) return {bg:'var(--red-dim)',text:'var(--red)'};
+  if (s.includes('komplett') || s.includes('positiv') || s.includes('abgeschlossen') || s.includes('efs')) return {bg:'var(--green-dim)',text:'var(--green)'};
+  if (s.includes('hold') || s.includes('warten') || s.includes('ausstehend') || s.includes('zurück')) return {bg:'var(--orange-dim)',text:'var(--orange)'};
+  if (s.includes('montage') || s.includes('planung') || s.includes('freigabe') || s.includes('termin')) return {bg:'var(--blue-dim)',text:'var(--blue)'};
+  if (s.includes('quali') || s.includes('vertrag') || s.includes('finanzierung') || s.includes('barzahler')) return {bg:'var(--purple-dim)',text:'var(--purple)'};
+  return {bg:'var(--gold-dim)',text:'var(--gold)'};
+}
+
+// ─── WORKFLOW PARSER ───────────────────────────────
+function parseWorkflow(wf) {
+  if (!wf) return [];
+  const entries = [];
+  const regex = /(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}:\d{2})-?\s*(.*?)(?=\d{2}\.\d{2}\.\d{4}|$)/g;
+  let m;
+  while ((m = regex.exec(wf)) !== null) {
+    entries.push({
+      date: m[1],
+      time: m[2],
+      text: m[3].trim().replace(/^-\s*/, '')
+    });
+  }
+  return entries;
+}
+
+// ─── MAP COMPONENT ─────────────────────────────────
+function KundeMap({lat, lng, name}) {
+  const mapRef = useRef(null);
+  const mapInst = useRef(null);
+
+  useEffect(() => {
+    if (!lat || !lng || !mapRef.current) return;
+    if (mapInst.current) { mapInst.current.remove(); mapInst.current = null; }
+    
+    const map = L.map(mapRef.current, {zoomControl:false, attributionControl:false}).setView([lat, lng], 15);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+    L.circleMarker([lat, lng], {radius:8, color:'#F5C500', fillColor:'#F5C500', fillOpacity:.8, weight:2})
+      .addTo(map).bindPopup(`<b>${name || 'Kunde'}</b>`);
+    mapInst.current = map;
+    
+    return () => { if (mapInst.current) { mapInst.current.remove(); mapInst.current = null; } };
+  }, [lat, lng, name]);
+
+  if (!lat || !lng) return <div style={{height:200,background:'var(--bg3)',borderRadius:'var(--r)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--text3)',fontSize:12}}>Keine GPS-Daten</div>;
+  return <div ref={mapRef} className="map-container"/>;
+}
+
+// ─── MAIN APP ──────────────────────────────────────
+function App() {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [kunde, setKunde] = useState(null);
+  const [auftrag, setAuftrag] = useState(null);
+  const [efs, setEfs] = useState(null);
+  const [auszahlungen, setAuszahlungen] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState(null);
+  const searchTimeout = useRef(null);
+
+  // Load global stats on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const [kunden, auftr, efsC, auszC] = await Promise.all([
+          sbCount('customers'),
+          sbCount('auftraege'),
+          sbCount('efs_projekte'),
+          sbCount('pay_auszahlungen_historie')
+        ]);
+        setStats({kunden, auftr, efs: efsC, ausz: auszC});
+      } catch(e) { console.error(e); }
+    })();
+  }, []);
+
+  // Search
+  useEffect(() => {
+    if (query.length < 2) { setResults([]); return; }
+    clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        // Search auftraege (most comprehensive customer data)
+        let data = [];
+        
+        // If looks like AN number
+        if (/^\d{3,5}$/.test(query.trim())) {
+          data = await sb('auftraege', `auftrag_nr=ilike.*${query.trim()}*&limit=20&order=auftrags_datum.desc`);
+        }
+        // If looks like PLZ
+        else if (/^\d{5}$/.test(query.trim())) {
+          data = await sb('auftraege', `kunde_plz=eq.${query.trim()}&limit=20&order=auftrags_datum.desc`);
+        }
+        // Name search
+        else {
+          data = await sb('auftraege', `kunde_name=ilike.*${encodeURIComponent(query.trim())}*&limit=20&order=auftrags_datum.desc`);
+        }
+        
+        setResults(data);
+      } catch(e) { console.error(e); setResults([]); }
+      setSearching(false);
+    }, 300);
+  }, [query]);
+
+  // Load customer details
+  const loadKunde = useCallback(async (auftragRow) => {
+    setLoading(true);
+    setSelected(auftragRow);
+    setQuery('');
+    setResults([]);
+    
+    try {
+      // Load auftrag details
+      setAuftrag(auftragRow);
+      
+      // Load customer record
+      const customers = await sb('customers', `auftrag_nr=eq.${encodeURIComponent(auftragRow.auftrag_nr)}&limit=1`);
+      setKunde(customers[0] || null);
+      
+      // Load EFS project
+      if (auftragRow.efs_projekt_id) {
+        const efsData = await sb('efs_projekte', `id=eq.${auftragRow.efs_projekt_id}&limit=1`);
+        setEfs(efsData[0] || null);
+      } else {
+        // Try match by name
+        const nameEnc = encodeURIComponent(auftragRow.kunde_name?.split(' ').pop() || '');
+        if (nameEnc) {
+          const efsData = await sb('efs_projekte', `kunde_nachname=ilike.*${nameEnc}*&limit=3`);
+          // Find best match
+          const best = efsData.find(e => 
+            auftragRow.kunde_name && e.kunde_name && 
+            e.kunde_name.toLowerCase().includes(auftragRow.kunde_name.split(' ').pop().toLowerCase())
+          );
+          setEfs(best || efsData[0] || null);
+        } else {
+          setEfs(null);
+        }
+      }
+      
+      // Load payout history
+      const nameSearch = auftragRow.kunde_name?.split(' ').pop() || '';
+      if (nameSearch.length > 2) {
+        const payData = await sb('pay_auszahlungen_historie', `kunde=ilike.*${encodeURIComponent(nameSearch)}*&order=periode.desc`);
+        // Filter to plausible matches
+        const filtered = payData.filter(p => {
+          const kn = auftragRow.kunde_name?.toLowerCase() || '';
+          const pk = p.kunde?.toLowerCase() || '';
+          return kn.split(' ').some(w => w.length > 2 && pk.includes(w));
+        });
+        setAuszahlungen(filtered);
+      } else {
+        setAuszahlungen([]);
+      }
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  }, []);
+
+  const goBack = () => { setSelected(null); setKunde(null); setAuftrag(null); setEfs(null); setAuszahlungen([]); };
+
+  // ─── RENDER ────────────────────────────────────────
+  return (
+    <div className="app">
+      {/* Header */}
+      <div className="header">
+        <div className="logo" style={{cursor:'pointer'}} onClick={goBack}>
+          bee-doo<span>Kundenboard</span>
+        </div>
+        <div className="search-wrap">
+          <SearchIcon/>
+          <input 
+            value={query} 
+            onChange={e => setQuery(e.target.value)} 
+            placeholder="Kunde suchen — Name, AN-Nr, PLZ..."
+            onFocus={() => query.length >= 2 && setResults(results)}
+          />
+          {(results.length > 0 || searching) && query.length >= 2 && (
+            <div className="search-results">
+              {searching && <div className="sr-item"><div className="loading"><div className="spinner"/>Suche...</div></div>}
+              {results.map(r => {
+                const sc = statusColor(r.beedoo_fortschritt);
+                return (
+                  <div className="sr-item" key={r.id} onClick={() => loadKunde(r)}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <div>
+                        <div className="sr-name">{r.kunde_name || '–'}</div>
+                        <div className="sr-sub">
+                          AN {r.auftrag_nr} · {r.kunde_plz} · {r.produkt_bezeichnung || r.produkt_typ || '–'} · {dateFmt(r.auftrags_datum)}
+                        </div>
+                      </div>
+                      <span className="sr-badge" style={{background:sc.bg,color:sc.text}}>
+                        {(r.beedoo_fortschritt || 'offen').substring(0, 25)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+              {!searching && results.length === 0 && query.length >= 2 && (
+                <div className="sr-item" style={{color:'var(--text3)',textAlign:'center'}}>Keine Ergebnisse</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Dashboard or Detail */}
+      {!selected ? (
+        <>
+          {/* Global Stats */}
+          {stats && (
+            <div className="stats-bar">
+              <div className="stat-card"><div className="stat-val">{num(stats.kunden)}</div><div className="stat-label">Kunden</div></div>
+              <div className="stat-card"><div className="stat-val">{num(stats.auftr)}</div><div className="stat-label">Aufträge</div></div>
+              <div className="stat-card"><div className="stat-val">{num(stats.efs)}</div><div className="stat-label">EFS-Projekte</div></div>
+              <div className="stat-card"><div className="stat-val">{num(stats.ausz)}</div><div className="stat-label">Auszahlungen</div></div>
+            </div>
+          )}
+          <div className="empty-state">
+            <UserIcon/>
+            <h2>Kunde suchen</h2>
+            <p>Name, Auftragsnummer oder PLZ eingeben um alle Daten auf einen Blick zu sehen</p>
+          </div>
+        </>
+      ) : loading ? (
+        <div className="loading"><div className="spinner"/>Lade Kundendaten...</div>
+      ) : (
+        <KundeDetail 
+          auftrag={auftrag} 
+          kunde={kunde} 
+          efs={efs} 
+          auszahlungen={auszahlungen} 
+          onBack={goBack}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── CUSTOMER DETAIL VIEW ──────────────────────────
+function KundeDetail({auftrag: a, kunde: k, efs: e, auszahlungen, onBack}) {
+  if (!a) return null;
+  
+  const sc = statusColor(a.beedoo_fortschritt);
+  const wf = parseWorkflow(a.workflow_history);
+  const payTotal = auszahlungen.reduce((s, p) => s + (p.netto || 0), 0);
+  
+  // Vertriebler name from auftraege
+  const [vbName, setVbName] = useState('');
+  useEffect(() => {
+    if (a.vertriebler_id) {
+      sb('mitarbeiter', `id=eq.${a.vertriebler_id}&limit=1`).then(d => {
+        if (d[0]) setVbName(`${d[0].vorname} ${d[0].nachname}`);
+      }).catch(() => {});
+    }
+  }, [a.vertriebler_id]);
+
+  // GPS from customer or try geocode
+  const lat = k?.lat || null;
+  const lng = k?.lng || null;
+
+  return (
+    <>
+      <button className="back-btn" onClick={onBack}><ArrowLeft/> Zurück</button>
+
+      {/* Customer Header */}
+      <div className="kunde-header">
+        <div>
+          <div className="kunde-name">{a.kunde_name || '–'}</div>
+          <div className="kunde-an">AN {a.auftrag_nr} · {a.produkt_typ === 'pv_finanz' ? '☀️ Finanzierung' : a.produkt_typ === 'pv_bar' ? '☀️ Barzahler' : '☀️ PV'}</div>
+          <div className="kunde-meta">
+            {(a.kunde_plz || k?.plz) && (
+              <div className="kunde-meta-item"><HomeIcon/>{k?.strasse || ''} {k?.hausnr || ''}, {a.kunde_plz || k?.plz} {k?.ort || ''}</div>
+            )}
+            {(a.kunde_telefon || k?.telefon || k?.mobil) && (
+              <div className="kunde-meta-item"><PhoneIcon/>{a.kunde_telefon || k?.telefon || k?.mobil}</div>
+            )}
+            {(a.kunde_email || k?.email) && (
+              <div className="kunde-meta-item"><MailIcon/>{a.kunde_email || k?.email}</div>
+            )}
+            {vbName && (
+              <div className="kunde-meta-item"><UserIcon/>Berater: <strong style={{color:'var(--gold)',marginLeft:4}}>{vbName}</strong></div>
+            )}
+          </div>
+        </div>
+        <div className="kunde-status">
+          <span className="status-pill" style={{background:sc.bg,color:sc.text}}>
+            {a.beedoo_fortschritt || 'Offen'}
+          </span>
+        </div>
+      </div>
+
+      {/* Key Numbers */}
+      <div className="grid-3">
+        <div className="card" style={{textAlign:'center'}}>
+          <div className="big-num" style={{color:'var(--gold)'}}>{a.anlagen_kwp ? (a.anlagen_kwp > 100 ? (a.anlagen_kwp/100).toFixed(2) : a.anlagen_kwp.toFixed(2)) : '–'} kWp</div>
+          <div className="big-label">Anlagengröße</div>
+        </div>
+        <div className="card" style={{textAlign:'center'}}>
+          <div className="big-num" style={{color:'var(--green)'}}>{a.an_wert_netto ? eur(a.an_wert_netto / 100) : (e?.gesamtpreis_eur ? eur(e.gesamtpreis_eur) : '–')}</div>
+          <div className="big-label">Auftragswert</div>
+        </div>
+        <div className="card" style={{textAlign:'center'}}>
+          <div className="big-num" style={{color: payTotal >= 0 ? 'var(--blue)' : 'var(--red)'}}>{eur(payTotal)}</div>
+          <div className="big-label">Provision ausgezahlt</div>
+        </div>
+      </div>
+
+      <div className="grid-2">
+        {/* Auftrag Details */}
+        <div className="card">
+          <div className="card-title"><BoltIcon/> Auftrag</div>
+          <div className="data-grid">
+            <div className="data-item"><div className="data-label">Auftragsnr.</div><div className="data-val gold">{a.auftrag_nr}</div></div>
+            <div className="data-item"><div className="data-label">Datum</div><div className="data-val">{dateFmt(a.auftrags_datum)}</div></div>
+            <div className="data-item"><div className="data-label">Produkt</div><div className="data-val">{a.produkt_bezeichnung || a.produkt_typ || '–'}</div></div>
+            <div className="data-item"><div className="data-label">Module</div><div className="data-val">{a.angebot_module || '–'} × {a.angebot_solarmodule || '–'}</div></div>
+            <div className="data-item"><div className="data-label">Lead-Quelle</div><div className="data-val">{a.lead_quelle || '–'}</div></div>
+            <div className="data-item"><div className="data-label">Eigenlead</div><div className="data-val">{a.ist_eigenlead ? '✅ Ja' : a.ist_empfehlung ? '🤝 Empfehlung' : '–'}</div></div>
+            <div className="data-item"><div className="data-label">Zahlungsstatus</div><div className="data-val">{a.zahlungsstatus || '–'}</div></div>
+            <div className="data-item"><div className="data-label">Fortschritt</div><div className="data-val" style={{color:sc.text}}>{a.beedoo_fortschritt || '–'}</div></div>
+          </div>
+        </div>
+
+        {/* EFS / Finanzierung */}
+        <div className="card">
+          <div className="card-title"><EuroIcon/> {e ? 'EFS Finanzierung' : 'Finanzen'}</div>
+          {e ? (
+            <div className="data-grid">
+              <div className="data-item"><div className="data-label">Gesamtpreis</div><div className="data-val gold">{eur(e.gesamtpreis_eur)}</div></div>
+              <div className="data-item"><div className="data-label">EFS Auszahlung</div><div className="data-val green">{eur(e.efs_auszahlung_eur)}</div></div>
+              <div className="data-item"><div className="data-label">Monatliche Rate</div><div className="data-val">{eur(e.monatl_rate_eur)}</div></div>
+              <div className="data-item"><div className="data-label">Zinssatz</div><div className="data-val">{e.nominalzins ? (e.nominalzins * 100).toFixed(2) + '%' : '–'}</div></div>
+              <div className="data-item"><div className="data-label">Preismodell</div><div className="data-val">{e.preismodell || '–'}</div></div>
+              <div className="data-item"><div className="data-label">Vertragsstatus</div><div className="data-val">{e.contract_status || '–'}</div></div>
+              <div className="data-item"><div className="data-label">PV-Module</div><div className="data-val">{e.pv_anzahl}× {e.pv_hersteller} ({e.pv_kwp} kWp)</div></div>
+              <div className="data-item"><div className="data-label">Batterie</div><div className="data-val">{e.bat_hersteller} {e.bat_kwh} kWh</div></div>
+            </div>
+          ) : (
+            <div style={{color:'var(--text3)',fontSize:13,padding:'20px 0',textAlign:'center'}}>
+              Kein EFS-Projekt verknüpft
+              {a.an_wert_netto ? <div style={{marginTop:12}}><div className="data-label">Netto-Auftragswert</div><div className="data-val gold" style={{fontSize:20}}>{eur(a.an_wert_netto/100)}</div></div> : null}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid-2">
+        {/* Workflow Timeline */}
+        <div className="card">
+          <div className="card-title"><LayersIcon/> Workflow Timeline {wf.length > 0 && <span style={{color:'var(--text3)',fontWeight:400}}>({wf.length} Schritte)</span>}</div>
+          {wf.length > 0 ? (
+            <div className="timeline" style={{maxHeight:400,overflowY:'auto'}}>
+              {wf.map((step, i) => {
+                const isLast = i === wf.length - 1;
+                const isStorno = step.text.toLowerCase().includes('storniert');
+                const isDone = !isLast && !isStorno;
+                return (
+                  <div className="tl-item" key={i}>
+                    <div className={`tl-dot ${isStorno ? 'storno' : isLast ? 'active' : 'done'}`}/>
+                    <div className="tl-label">{step.text}</div>
+                    <div className="tl-date">{step.date} · {step.time}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{color:'var(--text3)',fontSize:13,textAlign:'center',padding:20}}>Keine Workflow-Daten</div>
+          )}
+        </div>
+
+        {/* Map + Auszahlungen */}
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div className="card" style={{flex:'0 0 auto'}}>
+            <div className="card-title"><HomeIcon/> Standort</div>
+            <KundeMap lat={lat} lng={lng} name={a.kunde_name}/>
+          </div>
+
+          <div className="card" style={{flex:1}}>
+            <div className="card-title"><EuroIcon/> Provisionshistorie {auszahlungen.length > 0 && <span style={{color:'var(--text3)',fontWeight:400}}>({auszahlungen.length})</span>}</div>
+            {auszahlungen.length > 0 ? (
+              <div style={{overflowX:'auto'}}>
+                <table className="pay-table">
+                  <thead><tr><th>Periode</th><th>Berater</th><th>Betrag</th></tr></thead>
+                  <tbody>
+                    {auszahlungen.map((p, i) => (
+                      <tr key={i}>
+                        <td>{p.periode}</td>
+                        <td>{p.vertriebler}<br/><span style={{fontSize:10,color:'var(--text3)'}}>{p.vp_nummer}</span></td>
+                        <td className={`amt ${p.netto >= 0 ? 'pos' : 'neg'}`}>{eur(p.netto)}</td>
+                      </tr>
+                    ))}
+                    <tr style={{borderTop:'2px solid var(--gold)'}}>
+                      <td colSpan="2" style={{fontWeight:700}}>Gesamt</td>
+                      <td className={`amt ${payTotal >= 0 ? 'pos' : 'neg'}`} style={{fontWeight:700}}>{eur(payTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{color:'var(--text3)',fontSize:13,textAlign:'center',padding:20}}>Keine Auszahlungsdaten</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Raw Data Accordion */}
+      {a.dokumentstatus && (
+        <div className="card" style={{marginBottom:16}}>
+          <div className="card-title"><ClipIcon/> Weitere Details</div>
+          <div className="data-grid">
+            <div className="data-item"><div className="data-label">Dokumentstatus</div><div className="data-val">{a.dokumentstatus}</div></div>
+            <div className="data-item"><div className="data-label">Auftragsstatus</div><div className="data-val">{a.auftragsstatus || '–'}</div></div>
+            <div className="data-item"><div className="data-label">Metrify</div><div className="data-val">{a.metrify_status || '–'}</div></div>
+            <div className="data-item"><div className="data-label">Leveto-ID</div><div className="data-val">{a.leveto_lead_id || '–'}</div></div>
+            {a.mvpp_name && a.mvpp_name !== '-' && <div className="data-item"><div className="data-label">MVPP</div><div className="data-val">{a.mvpp_name}</div></div>}
+            {a.datum_angenommen && <div className="data-item"><div className="data-label">Angenommen</div><div className="data-val">{dateFmt(a.datum_angenommen)}</div></div>}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
