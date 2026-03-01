@@ -109,6 +109,11 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 @keyframes spin{to{transform:rotate(360deg)}}
 .load-text{font-size:13px;color:var(--dim);font-weight:500}
 
+.month-wrap{position:relative;display:flex;align-items:center;gap:6px}
+.month-hint{position:absolute;top:-34px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--bg);font-size:11px;font-weight:700;font-family:'Outfit',sans-serif;padding:4px 12px;border-radius:8px;white-space:nowrap;animation:hintBounce 2s ease infinite;pointer-events:none}
+.month-hint::after{content:'';position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid var(--gold)}
+@keyframes hintBounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-4px)}}
+
 @media(max-width:480px){
     .main{padding:12px 10px 40px}
     .kpis{grid-template-columns:repeat(3,1fr);gap:6px}
@@ -134,7 +139,7 @@ const SB='https://hqzpemfaljxcysyqssng.supabase.co';
 const AK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
 const hd={apikey:AK,Authorization:'Bearer '+AK};
 const MN=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-const FREE='2026-02';
+const FREE=['2026-02','2026-03'];
 const PW='Patrick123!';
 
 function Gate({onUnlock}){
@@ -163,7 +168,8 @@ function App(){
     const posterRef=useRef(null);
     const[orders,setOrders]=useState(null);
     const[zeroIds,setZeroIds]=useState({});
-    const[month,setMonth]=useState(FREE);
+    const now=new Date();const defM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+    const[month,setMonth]=useState(FREE.includes(defM)?defM:FREE[FREE.length-1]);
     const[unlocked,setUnlocked]=useState(false);
     const[showGate,setShowGate]=useState(false);
     const[pendingMonth,setPendingMonth]=useState(null);
@@ -173,7 +179,8 @@ function App(){
     useEffect(()=>{
         const p=new URLSearchParams(window.location.search);
         const m=p.get('m');
-        if(m&&m===FREE)setMonth(m);
+        if(m&&FREE.includes(m))setMonth(m);
+        else if(m&&unlocked)setMonth(m);
     },[]);
 
     useEffect(()=>{
@@ -192,7 +199,7 @@ function App(){
     },[]);
 
     const tryMonth=(m)=>{
-        if(m===FREE||unlocked){setMonth(m);window.history.replaceState(null,'','?m='+m);return}
+        if(FREE.includes(m)||unlocked){setMonth(m);window.history.replaceState(null,'','?m='+m);return}
         setPendingMonth(m);setShowGate(true);
     };
     const handleUnlock=()=>{
@@ -281,9 +288,12 @@ function App(){
             <button className={`ctrl-btn${sort==='volume'?' active':''}`} onClick={()=>setSort('volume')}>💰 Volumen</button>
             <button className={`ctrl-btn${sort==='kwp'?' active':''}`} onClick={()=>setSort('kwp')}>⚡ kWp</button>
             <div style={{flex:'1 0 4px'}}/>
-            <select className="ctrl-select" value={month} onChange={e=>tryMonth(e.target.value)}>
-                {data.months.map(mv=>{const p=mv.split('-');return<option key={mv} value={mv}>{MN[+p[1]-1]} {p[0]}{mv===FREE?' 🔓':!unlocked?' 🔒':''}</option>})}
-            </select>
+            <div className="month-wrap">
+                <div className="month-hint">📅 Monat wechseln</div>
+                <select className="ctrl-select" value={month} onChange={e=>tryMonth(e.target.value)}>
+                    {data.months.map(mv=>{const p=mv.split('-');return<option key={mv} value={mv}>{MN[+p[1]-1]} {p[0]}{FREE.includes(mv)?' 🔓':!unlocked?' 🔒':''}</option>})}
+                </select>
+            </div>
             <button className="ctrl-btn" onClick={downloadPNG} disabled={downloading}>{downloading?'⏳':'📸'}</button>
             <a className="ctrl-btn" href="index.html" style={{textDecoration:'none'}}>←</a>
         </div>
