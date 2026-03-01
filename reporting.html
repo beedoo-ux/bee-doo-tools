@@ -493,6 +493,383 @@ function processEFS(projekte) {
   return { total, pipeline, totalRevenue, avgPrice, totalKwp, avgKwp, withBat, activeCount: activeProjects.length, zustaendige };
 }
 
+// ═══ CASHFLOW PROCESSING ═══
+function processCashflow(transactions) {
+  const byMonth = {};
+  transactions.forEach(t => {
+    const m = (t.buchungsdatum || '').slice(0, 7);
+    if (!m || m < '2025-01') return;
+    if (!byMonth[m]) byMonth[m] = { m, label: monthNames[parseInt(m.slice(5,7))-1] + ' ' + m.slice(2,4), ein: 0, aus: 0, einCnt: 0, ausCnt: 0 };
+    const b = Math.abs(parseFloat(t.betrag) || 0);
+    if (t.soll_haben === 'CRDT') { byMonth[m].ein += b; byMonth[m].einCnt++; }
+    else { byMonth[m].aus += b; byMonth[m].ausCnt++; }
+  });
+  const monthly = Object.values(byMonth).sort((a, b) => a.m.localeCompare(b.m));
+  monthly.forEach((m, i) => { m.saldo = m.ein - m.aus; m.cumSaldo = (i > 0 ? monthly[i-1].cumSaldo : 0) + m.saldo; });
+
+  const totalEin = transactions.filter(t => t.soll_haben === 'CRDT').reduce((s, t) => s + Math.abs(parseFloat(t.betrag) || 0), 0);
+  const totalAus = transactions.filter(t => t.soll_haben === 'DBIT').reduce((s, t) => s + Math.abs(parseFloat(t.betrag) || 0), 0);
+
+  // Top Empfänger (Ausgaben)
+  const empfMap = {};
+  transactions.filter(t => t.soll_haben === 'DBIT').forEach(t => {
+    const n = (t.gegenkonto_name || 'Unbekannt').trim().substring(0, 40);
+    if (!empfMap[n]) empfMap[n] = { n, sum: 0, cnt: 0 };
+    empfMap[n].sum += Math.abs(parseFloat(t.betrag) || 0);
+    empfMap[n].cnt++;
+  });
+  const topEmpfaenger = Object.values(empfMap).sort((a, b) => b.sum - a.sum).slice(0, 15);
+
+  // Top Einzahler
+  const einzMap = {};
+  transactions.filter(t => t.soll_haben === 'CRDT').forEach(t => {
+    const n = (t.gegenkonto_name || 'Unbekannt').trim().substring(0, 40);
+    if (!einzMap[n]) einzMap[n] = { n, sum: 0, cnt: 0 };
+    einzMap[n].sum += Math.abs(parseFloat(t.betrag) || 0);
+    einzMap[n].cnt++;
+  });
+  const topEinzahler = Object.values(einzMap).sort((a, b) => b.sum - a.sum).slice(0, 10);
+
+  // Burn rate (avg monthly out last 3 months)
+  const last3 = monthly.slice(-3);
+  const avgBurn = last3.length > 0 ? last3.reduce((s, m) => s + m.aus, 0) / last3.length : 0;
+  const avgIncome = last3.length > 0 ? last3.reduce((s, m) => s + m.ein, 0) / last3.length : 0;
+
+  // Weekly trend (last 8 weeks)
+  const weekMap = {};
+  transactions.forEach(t => {
+    const d = t.buchungsdatum;
+    if (!d) return;
+    const dt = new Date(d);
+    const wk = new Date(dt.setDate(dt.getDate() - dt.getDay() + 1));
+    const key = wk.toISOString().slice(0, 10);
+    if (!weekMap[key]) weekMap[key] = { d: key, label: fmtDate(key), ein: 0, aus: 0 };
+    const b = Math.abs(parseFloat(t.betrag) || 0);
+    if (t.soll_haben === 'CRDT') weekMap[key].ein += b;
+    else weekMap[key].aus += b;
+  });
+  const weekly = Object.values(weekMap).sort((a, b) => a.d.localeCompare(b.d)).slice(-8);
+  weekly.forEach(w => { w.saldo = w.ein - w.aus; });
+
+  return { monthly, totalEin, totalAus, topEmpfaenger, topEinzahler, avgBurn, avgIncome, weekly, total: transactions.length };
+}
+
+// ═══ TEAM PERFORMANCE PROCESSING ═══
+function processTeam(auftraege, termine, leads, mitarbeiterList) {
+  const maMap = {};
+  mitarbeiterList.forEach(m => {
+    maMap[m.id] = { id: m.id, name: `${m.vorname} ${m.nachname}`.trim(), typ: m.typ || '', kuerzel: m.kuerzel || '' };
+  });
+
+  // Sales per person
+  const vtPerf = {};
+  auftraege.forEach(a => {
+    const vid = a.vertriebler_id;
+    if (!vid) return;
+    const name = maMap[vid]?.name || `ID ${vid.slice(0,6)}`;
+    const typ = maMap[vid]?.typ || '';
+    if (!vtPerf[vid]) vtPerf[vid] = { id: vid, name, typ, sales: 0, storno: 0, netto: 0, speicher: 0, eigenlead: 0, empfehlung: 0, kwpSum: 0 };
+    if (a.storniert) vtPerf[vid].storno++;
+    else {
+      vtPerf[vid].sales++;
+      vtPerf[vid].netto += (a.an_wert_netto || 0) / 100;
+      if (a.hat_speicher) vtPerf[vid].speicher++;
+      if (a.ist_eigenlead) vtPerf[vid].eigenlead++;
+      if (a.ist_empfehlung) vtPerf[vid].empfehlung++;
+      vtPerf[vid].kwpSum += (a.anlagen_kwp || 0) / 100;
+    }
+  });
+  Object.values(vtPerf).forEach(v => {
+    v.stornoRate = v.sales + v.storno > 0 ? (v.storno / (v.sales + v.storno) * 100) : 0;
+    v.avgKwp = v.sales > 0 ? v.kwpSum / v.sales : 0;
+    v.avgNetto = v.sales > 0 ? v.netto / v.sales : 0;
+    v.speicherRate = v.sales > 0 ? (v.speicher / v.sales * 100) : 0;
+  });
+  const vtRanking = Object.values(vtPerf).filter(v => v.sales + v.storno > 0).sort((a, b) => b.sales - a.sales);
+
+  // Termine per person
+  const termPerf = {};
+  const today = new Date().toISOString().slice(0, 10);
+  termine.forEach(t => {
+    const name = t.berater || 'Unbekannt';
+    if (!termPerf[name]) termPerf[name] = { name, total: 0, stattgef: 0, ausgef: 0 };
+    termPerf[name].total++;
+    const d = (t.start_date || '').slice(0, 10);
+    if (d <= today) {
+      if (t.status === 'Cancelled') termPerf[name].ausgef++;
+      else termPerf[name].stattgef++;
+    }
+  });
+  Object.values(termPerf).forEach(t => {
+    t.convRate = t.stattgef + t.ausgef > 0 ? (t.stattgef / (t.stattgef + t.ausgef) * 100) : 0;
+  });
+  const termRanking = Object.values(termPerf).filter(t => t.total > 0).sort((a, b) => b.total - a.total);
+
+  // Type summary
+  const typSummary = {};
+  vtRanking.forEach(v => {
+    const t = v.typ || 'Sonstige';
+    if (!typSummary[t]) typSummary[t] = { typ: t, persons: 0, sales: 0, storno: 0, netto: 0 };
+    typSummary[t].persons++;
+    typSummary[t].sales += v.sales;
+    typSummary[t].storno += v.storno;
+    typSummary[t].netto += v.netto;
+  });
+  Object.values(typSummary).forEach(t => {
+    t.avgPerPerson = t.persons > 0 ? t.sales / t.persons : 0;
+    t.stornoRate = t.sales + t.storno > 0 ? (t.storno / (t.sales + t.storno) * 100) : 0;
+  });
+  const typBreakdown = Object.values(typSummary).sort((a, b) => b.sales - a.sales);
+
+  return { vtRanking, termRanking, typBreakdown };
+}
+
+// ═══ PIPELINE VELOCITY PROCESSING ═══
+function processPipeline(leads, auftraege) {
+  const now = new Date();
+
+  // Lead age analysis
+  const ageGroups = [
+    { label: '< 7 Tage', min: 0, max: 7, cnt: 0, term: 0 },
+    { label: '7–14 Tage', min: 7, max: 14, cnt: 0, term: 0 },
+    { label: '14–30 Tage', min: 14, max: 30, cnt: 0, term: 0 },
+    { label: '30–60 Tage', min: 30, max: 60, cnt: 0, term: 0 },
+    { label: '60–90 Tage', min: 60, max: 90, cnt: 0, term: 0 },
+    { label: '> 90 Tage', min: 90, max: 9999, cnt: 0, term: 0 },
+  ];
+  const isTerm = s => /terminiert|termin gelegt|termin vor ort|angebot/i.test(s);
+  const isAuftrag = s => /auftrag|vertrag|sale/i.test(s);
+  const isStorno = s => /storn/i.test(s);
+  const isOpen = s => !isAuftrag(s) && !isStorno(s) && !/kein interesse|nicht im plz|reklamation|5x nicht/i.test(s);
+
+  let openLeads = 0, stalledLeads = 0;
+  const stalledList = [];
+  leads.forEach(l => {
+    const created = l.erster_status_datum || l.leveto_erstellt_am;
+    if (!created) return;
+    const age = (now - new Date(created)) / 86400000;
+    const sn = (l.status_name || '').trim();
+    ageGroups.forEach(g => { if (age >= g.min && age < g.max) { g.cnt++; if (isTerm(sn) || isAuftrag(sn)) g.term++; } });
+    if (isOpen(sn)) {
+      openLeads++;
+      if (age > 30) {
+        stalledLeads++;
+        if (stalledList.length < 50) stalledList.push({ name: `${l.vorname || ''} ${l.nachname || ''}`.trim(), status: sn, age: Math.round(age), ort: l.ort || '', berater: l.berater_name || '' });
+      }
+    }
+  });
+  stalledList.sort((a, b) => b.age - a.age);
+
+  // Status flow / dropout funnel
+  let total = leads.length, terminiert = 0, auftragN = 0, stornoN = 0, neN = 0, keinIntN = 0;
+  leads.forEach(l => {
+    const sn = (l.status_name || '').trim();
+    if (isTerm(sn) || isAuftrag(sn)) terminiert++;
+    if (isAuftrag(sn)) auftragN++;
+    if (isStorno(sn)) stornoN++;
+    if (/nicht erreicht/i.test(sn)) neN++;
+    if (/kein interesse/i.test(sn)) keinIntN++;
+  });
+  const funnel = [
+    { name: 'Leads gesamt', v: total, color: C.blue },
+    { name: 'Terminiert', v: terminiert, color: C.green },
+    { name: 'Auftrag', v: auftragN, color: C.gold },
+  ];
+  const dropouts = [
+    { name: 'Nicht erreicht', v: neN, color: C.orange },
+    { name: 'Kein Interesse', v: keinIntN, color: C.dim },
+    { name: 'Storniert', v: stornoN, color: C.red },
+  ];
+
+  // Processing speed (lead to termin)
+  const speeds = [];
+  leads.forEach(l => {
+    if (l.leveto_erstellt_am && l.status_datum) {
+      const diff = (new Date(l.status_datum) - new Date(l.leveto_erstellt_am)) / 86400000;
+      if (diff > 0 && diff < 180) speeds.push(diff);
+    }
+  });
+  speeds.sort((a, b) => a - b);
+  const medianSpeed = speeds.length > 0 ? speeds[Math.floor(speeds.length / 2)] : 0;
+  const avgSpeed = speeds.length > 0 ? speeds.reduce((s, v) => s + v, 0) / speeds.length : 0;
+
+  // Auftrags-Phase durations (from workflow_history)
+  const phaseDurations = {};
+  auftraege.filter(a => a.workflow_history && !a.storniert).forEach(a => {
+    let wf = a.workflow_history;
+    if (typeof wf === 'string') try { wf = JSON.parse(wf); } catch(e) { return; }
+    if (!Array.isArray(wf)) return;
+    for (let i = 0; i < wf.length - 1; i++) {
+      const from = wf[i]?.status || wf[i]?.name || '';
+      const to = wf[i + 1]?.status || wf[i + 1]?.name || '';
+      const d1 = wf[i]?.date || wf[i]?.datum || '';
+      const d2 = wf[i + 1]?.date || wf[i + 1]?.datum || '';
+      if (!d1 || !d2 || !from) continue;
+      const days = (new Date(d2) - new Date(d1)) / 86400000;
+      if (days >= 0 && days < 365) {
+        const key = from.substring(0, 30);
+        if (!phaseDurations[key]) phaseDurations[key] = { phase: key, durations: [], count: 0 };
+        phaseDurations[key].durations.push(days);
+        phaseDurations[key].count++;
+      }
+    }
+  });
+  const phases = Object.values(phaseDurations).map(p => {
+    p.durations.sort((a, b) => a - b);
+    p.median = p.durations[Math.floor(p.durations.length / 2)] || 0;
+    p.avg = p.durations.reduce((s, v) => s + v, 0) / p.durations.length;
+    return p;
+  }).filter(p => p.count >= 3).sort((a, b) => b.count - a.count).slice(0, 12);
+
+  return { ageGroups, openLeads, stalledLeads, stalledList, funnel, dropouts, medianSpeed, avgSpeed, phases };
+}
+
+// ═══ PROVISIONS PROCESSING ═══
+function processProvisionen(historie) {
+  const byPeriode = {};
+  historie.forEach(h => {
+    const p = h.periode || '?';
+    if (!byPeriode[p]) byPeriode[p] = { p, label: p, sum: 0, cnt: 0, byVT: {}, byProdukt: {} };
+    const netto = parseFloat(h.netto) || 0;
+    byPeriode[p].sum += netto;
+    byPeriode[p].cnt++;
+    const vt = h.vertriebler || 'Unbekannt';
+    if (!byPeriode[p].byVT[vt]) byPeriode[p].byVT[vt] = 0;
+    byPeriode[p].byVT[vt] += netto;
+    const prod = h.produkt || 'PV';
+    if (!byPeriode[p].byProdukt[prod]) byPeriode[p].byProdukt[prod] = 0;
+    byPeriode[p].byProdukt[prod] += netto;
+  });
+  const monthly = Object.values(byPeriode).sort((a, b) => a.p.localeCompare(b.p));
+
+  // Per VT total
+  const vtMap = {};
+  historie.forEach(h => {
+    const vt = h.vertriebler || 'Unbekannt';
+    if (!vtMap[vt]) vtMap[vt] = { name: vt, sum: 0, cnt: 0, perioden: new Set() };
+    vtMap[vt].sum += parseFloat(h.netto) || 0;
+    vtMap[vt].cnt++;
+    vtMap[vt].perioden.add(h.periode);
+  });
+  Object.values(vtMap).forEach(v => { v.avgPerMonth = v.perioden.size > 0 ? v.sum / v.perioden.size : 0; v.periodenCount = v.perioden.size; });
+  const vtRanking = Object.values(vtMap).sort((a, b) => b.sum - a.sum).slice(0, 25);
+
+  // Totals
+  const totalSum = historie.reduce((s, h) => s + (parseFloat(h.netto) || 0), 0);
+  const totalCnt = historie.length;
+  const avgPerPosition = totalCnt > 0 ? totalSum / totalCnt : 0;
+  const perioden = new Set(historie.map(h => h.periode)).size;
+  const avgPerMonth = perioden > 0 ? totalSum / perioden : 0;
+
+  // Scout provisionen
+  const scoutMap = {};
+  historie.filter(h => h.scouter && h.scouter_bonus).forEach(h => {
+    const s = h.scouter;
+    if (!scoutMap[s]) scoutMap[s] = { name: s, sum: 0, cnt: 0 };
+    scoutMap[s].sum += parseFloat(h.scouter_bonus) || 0;
+    scoutMap[s].cnt++;
+  });
+  const scoutRanking = Object.values(scoutMap).sort((a, b) => b.sum - a.sum).slice(0, 15);
+
+  return { monthly, vtRanking, scoutRanking, totalSum, totalCnt, avgPerPosition, avgPerMonth, perioden };
+}
+
+// ═══ FORECAST PROCESSING ═══
+function processForecast(auftraege, leads, efsProjekte) {
+  // Pipeline value
+  const openAuftraege = auftraege.filter(a => !a.storniert);
+  const pipelineNetto = openAuftraege.reduce((s, a) => s + (a.an_wert_netto || 0) / 100, 0);
+
+  // Monthly trend for extrapolation
+  const monthlyMap = {};
+  auftraege.filter(a => !a.storniert).forEach(a => {
+    const m = (a.auftrags_datum || '').slice(0, 7);
+    if (!m || m < '2025-10') return;
+    if (!monthlyMap[m]) monthlyMap[m] = { m, sales: 0, netto: 0 };
+    monthlyMap[m].sales++;
+    monthlyMap[m].netto += (a.an_wert_netto || 0) / 100;
+  });
+  const monthlyTrend = Object.values(monthlyMap).sort((a, b) => a.m.localeCompare(b.m));
+
+  // 3-month forecast based on moving average
+  const last3 = monthlyTrend.slice(-3);
+  const avgSales = last3.length > 0 ? last3.reduce((s, m) => s + m.sales, 0) / last3.length : 0;
+  const avgNetto = last3.length > 0 ? last3.reduce((s, m) => s + m.netto, 0) / last3.length : 0;
+
+  const forecast = [];
+  const now = new Date();
+  for (let i = 1; i <= 3; i++) {
+    const fd = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    forecast.push({
+      m: `${fd.getFullYear()}-${String(fd.getMonth() + 1).padStart(2, '0')}`,
+      label: monthNames[fd.getMonth()] + ' ' + fd.getFullYear(),
+      salesLow: Math.round(avgSales * 0.8),
+      salesMid: Math.round(avgSales),
+      salesHigh: Math.round(avgSales * 1.2),
+      nettoMid: Math.round(avgNetto),
+    });
+  }
+
+  // EFS Pipeline value
+  const activeEFS = efsProjekte.filter(p => !['REVOKED', 'CUSTOMER_REJECTED'].includes(p.simplified_status));
+  const efsPipelineValue = activeEFS.reduce((s, p) => s + (p.gesamtpreis_eur || 0), 0);
+  const efsCompleted = efsProjekte.filter(p => ['COMPLETED', 'GRID_CONNECTED', 'INSTALLED'].includes(p.simplified_status));
+  const efsCompletedValue = efsCompleted.reduce((s, p) => s + (p.gesamtpreis_eur || 0), 0);
+
+  // Conversion rate from lead to sale
+  const isTerm = s => /terminiert|termin gelegt|termin vor ort|angebot/i.test(s);
+  const isAuft = s => /auftrag|vertrag|sale/i.test(s);
+  const termLeads = leads.filter(l => isTerm(l.status_name || '') || isAuft(l.status_name || '')).length;
+  const convRate = leads.length > 0 ? (termLeads / leads.length * 100) : 0;
+
+  return { pipelineNetto, monthlyTrend, forecast, avgSales, avgNetto, efsPipelineValue, efsCompletedValue, convRate, openCount: openAuftraege.length };
+}
+
+// ═══ MONATSVERGLEICH PROCESSING ═══
+function processVergleich(auftraege, leads, termine) {
+  const mMap = {};
+  const addMonth = (m) => { if (!mMap[m]) mMap[m] = { m, label: monthNames[parseInt(m.slice(5,7))-1] + ' ' + m.slice(2,4), sales: 0, storno: 0, netto: 0, leads: 0, termine: 0, termStattgef: 0 }; };
+  const today = new Date().toISOString().slice(0, 10);
+
+  auftraege.forEach(a => {
+    const m = (a.auftrags_datum || '').slice(0, 7);
+    if (!m || m < '2025-01') return;
+    addMonth(m);
+    if (a.storniert) mMap[m].storno++;
+    else { mMap[m].sales++; mMap[m].netto += (a.an_wert_netto || 0) / 100; }
+  });
+  leads.forEach(l => {
+    const m = (l.erster_status_datum || l.leveto_erstellt_am || '').slice(0, 7);
+    if (!m || m < '2025-01') return;
+    addMonth(m);
+    mMap[m].leads++;
+  });
+  termine.forEach(t => {
+    const m = (t.start_date || '').slice(0, 7);
+    if (!m || m < '2025-01') return;
+    addMonth(m);
+    mMap[m].termine++;
+    const d = (t.start_date || '').slice(0, 10);
+    if (d <= today && t.status !== 'Cancelled') mMap[m].termStattgef++;
+  });
+
+  const months = Object.values(mMap).sort((a, b) => a.m.localeCompare(b.m));
+  months.forEach((m, i) => {
+    if (i > 0) {
+      const prev = months[i - 1];
+      m.salesGrowth = prev.sales > 0 ? ((m.sales - prev.sales) / prev.sales * 100) : 0;
+      m.leadsGrowth = prev.leads > 0 ? ((m.leads - prev.leads) / prev.leads * 100) : 0;
+      m.nettoGrowth = prev.netto > 0 ? ((m.netto - prev.netto) / prev.netto * 100) : 0;
+    } else {
+      m.salesGrowth = 0; m.leadsGrowth = 0; m.nettoGrowth = 0;
+    }
+    m.convRate = m.leads > 0 ? (m.sales / m.leads * 100) : 0;
+    m.termConv = m.termine > 0 ? (m.termStattgef / m.termine * 100) : 0;
+  });
+
+  return { months };
+}
+
 // ═══ UI COMPONENTS ═══
 const KPI = ({ label, value, sub, color = C.gold, trend }) => (
   <div style={{
@@ -950,6 +1327,353 @@ const TabEFS = ({ data }) => {
   );
 };
 
+// ═══ TAB: CASHFLOW ═══
+const TabCashflow = ({ data }) => {
+  if (!data) return null;
+  const d = data;
+  const lastMonth = d.monthly.length > 0 ? d.monthly[d.monthly.length - 1] : null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
+        <KPI label="Gesamteinnahmen" value={eur(d.totalEin)} sub={`${fmt(d.total)} Buchungen`} color={C.green} />
+        <KPI label="Gesamtausgaben" value={eur(d.totalAus)} color={C.red} />
+        <KPI label="Netto-Saldo" value={eur(d.totalEin - d.totalAus)} color={d.totalEin > d.totalAus ? C.green : C.red} />
+        <KPI label="Ø Burn-Rate/Monat" value={eur(d.avgBurn)} sub={`Ø Einnahmen: ${eur(d.avgIncome)}`} color={C.orange} />
+      </div>
+      <Sec title="Monatlicher Cashflow" sub="Einnahmen vs. Ausgaben mit Saldo-Trend">
+        <ResponsiveContainer width="100%" height={320}>
+          <ComposedChart data={d.monthly}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <Tooltip content={<TT />} />
+            <Bar dataKey="ein" name="Einnahmen" fill={C.green} radius={[4,4,0,0]} />
+            <Bar dataKey="aus" name="Ausgaben" fill={`${C.red}90`} radius={[4,4,0,0]} />
+            <Line dataKey="saldo" name="Saldo" stroke={C.gold} strokeWidth={2} dot={{ fill: C.gold, r: 4 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </Sec>
+      {lastMonth && <Sec title={`Aktueller Monat: ${lastMonth.label}`} sub={`${lastMonth.einCnt} Eingänge · ${lastMonth.ausCnt} Ausgänge`}>
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+              <span style={{ color: C.green, fontWeight: 700 }}>+ {eur(lastMonth.ein)}</span>
+              <span style={{ color: C.red, fontWeight: 700 }}>- {eur(lastMonth.aus)}</span>
+            </div>
+            <div style={{ height: 12, borderRadius: 6, background: `${C.red}40`, overflow: 'hidden' }}>
+              <div style={{ width: `${lastMonth.ein / (lastMonth.ein + lastMonth.aus) * 100}%`, height: '100%', background: C.green, borderRadius: 6 }} />
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 8, fontSize: 18, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: lastMonth.saldo >= 0 ? C.green : C.red }}>
+              {lastMonth.saldo >= 0 ? '+' : ''}{eur(lastMonth.saldo)}
+            </div>
+          </div>
+        </div>
+      </Sec>}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="grid-1">
+        <Sec title="Top Ausgaben (Empfänger)">
+          <RankTable data={d.topEmpfaenger} columns={[
+            { label: '#', render: (r, i) => i + 1, align: 'center' },
+            { label: 'Empfänger', key: 'n', bold: true },
+            { label: 'Betrag', render: r => eur(r.sum), align: 'right', mono: true, color: C.red },
+            { label: 'Anz.', key: 'cnt', align: 'center', mono: true },
+          ]} />
+        </Sec>
+        <Sec title="Top Einzahler">
+          <RankTable data={d.topEinzahler} columns={[
+            { label: '#', render: (r, i) => i + 1, align: 'center' },
+            { label: 'Einzahler', key: 'n', bold: true },
+            { label: 'Betrag', render: r => eur(r.sum), align: 'right', mono: true, color: C.green },
+            { label: 'Anz.', key: 'cnt', align: 'center', mono: true },
+          ]} />
+        </Sec>
+      </div>
+      <Sec title="Wöchentlicher Trend (letzte 8 Wochen)">
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={d.weekly}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <Tooltip content={<TT />} />
+            <Bar dataKey="ein" name="Einnahmen" fill={C.green} radius={[3,3,0,0]} />
+            <Bar dataKey="aus" name="Ausgaben" fill={`${C.red}80`} radius={[3,3,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Sec>
+    </div>
+  );
+};
+
+// ═══ TAB: TEAM PERFORMANCE ═══
+const TabTeam = ({ data }) => {
+  if (!data) return null;
+  const d = data;
+  const typLabels = { hgb_vertriebler_haupt: 'HGB Haupt §84', hgb_vertriebler: 'HGB Agentur', angestellt_vertriebler: 'Angestellt VT', angestellt_scouter: 'Angestellt Scout', hgb_scouter: 'HGB Scout' };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <Sec title="VT-Typ Übersicht" sub="Performance nach Vertragstyp">
+        <RankTable data={d.typBreakdown} columns={[
+          { label: 'Typ', render: r => typLabels[r.typ] || r.typ, bold: true },
+          { label: 'Personen', key: 'persons', align: 'center', mono: true },
+          { label: 'Sales', key: 'sales', align: 'center', mono: true, color: C.gold },
+          { label: 'Ø/Person', render: r => r.avgPerPerson.toFixed(1), align: 'center', mono: true, color: C.green },
+          { label: 'Storno', key: 'storno', align: 'center', mono: true, color: C.red },
+          { label: 'Quote', render: r => `${r.stornoRate.toFixed(1)}%`, align: 'center', color: r => r.stornoRate > 25 ? C.red : C.sec },
+          { label: 'Netto', render: r => eur(r.netto), align: 'right', mono: true },
+        ]} />
+      </Sec>
+      <Sec title="🏆 VT-Ranking nach Sales" sub="Sortiert nach aktiven Aufträgen">
+        <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+          <RankTable data={d.vtRanking.slice(0, 30)} columns={[
+            { label: '#', render: (r, i) => <span style={{ color: i < 3 ? C.gold : C.sec, fontWeight: i < 3 ? 800 : 400 }}>{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span>, align: 'center' },
+            { label: 'Vertriebler', key: 'name', bold: true },
+            { label: 'Typ', render: r => (typLabels[r.typ] || r.typ || '').split(' ')[0], color: C.sec },
+            { label: 'Sales', key: 'sales', align: 'center', mono: true, color: C.gold, bold: true },
+            { label: 'Storno', key: 'storno', align: 'center', mono: true, color: r => r.storno > 0 ? C.red : C.dim },
+            { label: 'S-Quote', render: r => `${r.stornoRate.toFixed(0)}%`, align: 'center', color: r => r.stornoRate > 30 ? C.red : r.stornoRate > 15 ? C.orange : C.green },
+            { label: 'Netto', render: r => eur(r.netto), align: 'right', mono: true },
+            { label: 'Ø kWp', render: r => r.avgKwp.toFixed(1), align: 'center', mono: true },
+            { label: 'Speicher%', render: r => `${r.speicherRate.toFixed(0)}%`, align: 'center', color: r => r.speicherRate > 50 ? C.green : C.sec },
+          ]} />
+        </div>
+      </Sec>
+      <Sec title="📅 Termin-Ranking" sub="Sortiert nach Anzahl Termine">
+        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+          <RankTable data={d.termRanking.slice(0, 25)} columns={[
+            { label: '#', render: (r, i) => i + 1, align: 'center' },
+            { label: 'Berater', key: 'name', bold: true },
+            { label: 'Termine', key: 'total', align: 'center', mono: true, color: C.blue },
+            { label: 'Stattgef.', key: 'stattgef', align: 'center', mono: true, color: C.green },
+            { label: 'Ausgefallen', key: 'ausgef', align: 'center', mono: true, color: C.red },
+            { label: 'Quote', render: r => `${r.convRate.toFixed(0)}%`, align: 'center', color: r => r.convRate > 80 ? C.green : r.convRate > 60 ? C.orange : C.red },
+          ]} />
+        </div>
+      </Sec>
+    </div>
+  );
+};
+
+// ═══ TAB: PIPELINE VELOCITY ═══
+const TabPipeline = ({ data }) => {
+  if (!data) return null;
+  const d = data;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
+        <KPI label="Offene Leads" value={fmt(d.openLeads)} color={C.blue} />
+        <KPI label="Stalled (>30 Tage)" value={fmt(d.stalledLeads)} sub={`${d.openLeads > 0 ? (d.stalledLeads / d.openLeads * 100).toFixed(0) : 0}% aller offenen`} color={C.red} />
+        <KPI label="Ø Bearbeitungszeit" value={`${d.avgSpeed.toFixed(1)} Tage`} sub={`Median: ${d.medianSpeed.toFixed(1)} Tage`} color={C.gold} />
+      </div>
+      <Sec title="Lead-Alter Verteilung" sub="Wie alt sind die Leads nach Erstelldatum?">
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={d.ageGroups}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis tick={{ fill: C.sec, fontSize: 11 }} />
+            <Tooltip content={<TT />} />
+            <Bar dataKey="cnt" name="Leads" fill={C.blue} radius={[4,4,0,0]} />
+            <Bar dataKey="term" name="Davon terminiert" fill={C.green} radius={[4,4,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Sec>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="grid-1">
+        <Sec title="Conversion-Funnel">
+          {d.funnel.map((f, i) => (
+            <div key={i} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                <span style={{ color: f.color, fontWeight: 600 }}>{f.name}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.text }}>{fmt(f.v)}</span>
+              </div>
+              <div style={{ height: 10, borderRadius: 5, background: `${C.dim}30` }}>
+                <div style={{ width: `${d.funnel[0].v > 0 ? (f.v / d.funnel[0].v * 100) : 0}%`, height: '100%', borderRadius: 5, background: f.color, transition: 'width 0.6s' }} />
+              </div>
+            </div>
+          ))}
+          <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 12, paddingTop: 12, fontSize: 11, color: C.sec, fontWeight: 600 }}>Dropout-Gründe:</div>
+          {d.dropouts.map((f, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0' }}>
+              <span style={{ color: f.color }}>{f.name}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.text }}>{fmt(f.v)}</span>
+            </div>
+          ))}
+        </Sec>
+        <Sec title="Phasen-Dauer (Aufträge)" sub="Median Tage pro Workflow-Phase">
+          {d.phases.length > 0 ? d.phases.map((p, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
+                <span style={{ color: C.text, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.phase}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: p.median > 14 ? C.red : p.median > 7 ? C.orange : C.green, fontWeight: 700 }}>
+                  {p.median.toFixed(1)}d <span style={{ color: C.sec, fontWeight: 400 }}>({p.count}x)</span>
+                </span>
+              </div>
+              <div style={{ height: 6, borderRadius: 3, background: `${C.dim}30` }}>
+                <div style={{ width: `${Math.min(100, p.median / 30 * 100)}%`, height: '100%', borderRadius: 3, background: p.median > 14 ? C.red : p.median > 7 ? C.orange : C.green }} />
+              </div>
+            </div>
+          )) : <div style={{ color: C.sec, fontSize: 12, padding: 20, textAlign: 'center' }}>Keine Workflow-History-Daten verfügbar</div>}
+        </Sec>
+      </div>
+      {d.stalledList.length > 0 && <Sec title={`⚠️ Stalled Leads (${d.stalledList.length} > 30 Tage)`} sub="Älteste offene Leads ohne Fortschritt">
+        <div style={{ maxHeight: 350, overflowY: 'auto' }}>
+          <RankTable data={d.stalledList.slice(0, 20)} columns={[
+            { label: 'Name', key: 'name', bold: true },
+            { label: 'Status', key: 'status', color: C.sec },
+            { label: 'Alter', render: r => `${r.age} Tage`, align: 'center', mono: true, color: r => r.age > 60 ? C.red : C.orange },
+            { label: 'Ort', key: 'ort' },
+            { label: 'Berater', key: 'berater', color: C.sec },
+          ]} />
+        </div>
+      </Sec>}
+    </div>
+  );
+};
+
+// ═══ TAB: PROVISIONEN ═══
+const TabProvisionen = ({ data }) => {
+  if (!data) return null;
+  const d = data;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
+        <KPI label="Gesamt ausgezahlt" value={eur(d.totalSum)} sub={`${d.perioden} Perioden`} color={C.gold} />
+        <KPI label="Positionen" value={fmt(d.totalCnt)} sub={`Ø ${eur(d.avgPerPosition)} / Position`} color={C.blue} />
+        <KPI label="Ø pro Monat" value={eur(d.avgPerMonth)} color={C.purple} />
+      </div>
+      <Sec title="Provisionen pro Monat" sub="Gesamtauszahlung je Abrechnungsperiode">
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={d.monthly}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="p" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <Tooltip content={<TT />} />
+            <Bar dataKey="sum" name="Auszahlung" fill={C.gold} radius={[4,4,0,0]} />
+            <Bar dataKey="cnt" name="Positionen" fill={`${C.blue}60`} radius={[4,4,0,0]} yAxisId="right" hide />
+            <Line dataKey="cnt" name="Positionen" stroke={C.blue} strokeWidth={2} dot={{ fill: C.blue, r: 3 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </Sec>
+      <Sec title="🏆 VT-Ranking nach Auszahlung" sub="Kumuliert über alle Perioden">
+        <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+          <RankTable data={d.vtRanking} columns={[
+            { label: '#', render: (r, i) => <span style={{ color: i < 3 ? C.gold : C.sec, fontWeight: i < 3 ? 800 : 400 }}>{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span>, align: 'center' },
+            { label: 'Vertriebler', key: 'name', bold: true },
+            { label: 'Gesamt', render: r => eur(r.sum), align: 'right', mono: true, color: C.gold, bold: true },
+            { label: 'Positionen', key: 'cnt', align: 'center', mono: true },
+            { label: 'Ø/Monat', render: r => eur(r.avgPerMonth), align: 'right', mono: true, color: C.sec },
+            { label: 'Perioden', key: 'periodenCount', align: 'center', mono: true },
+          ]} />
+        </div>
+      </Sec>
+      {d.scoutRanking.length > 0 && <Sec title="Scout-Provisionen" sub="Bonus-Auszahlungen an Scouter">
+        <RankTable data={d.scoutRanking} columns={[
+          { label: '#', render: (r, i) => i + 1, align: 'center' },
+          { label: 'Scout', key: 'name', bold: true },
+          { label: 'Gesamt', render: r => eur(r.sum), align: 'right', mono: true, color: C.green },
+          { label: 'Aufträge', key: 'cnt', align: 'center', mono: true },
+        ]} />
+      </Sec>}
+    </div>
+  );
+};
+
+// ═══ TAB: FORECAST ═══
+const TabForecast = ({ data }) => {
+  if (!data) return null;
+  const d = data;
+  const chartData = [...d.monthlyTrend.map(m => ({ ...m, label: monthNames[parseInt(m.m.slice(5,7))-1] + ' ' + m.m.slice(2,4), type: 'ist' })), ...d.forecast.map(f => ({ m: f.m, label: f.label, sales: f.salesMid, netto: f.nettoMid, type: 'prognose' }))];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
+        <KPI label="Pipeline aktiv" value={fmt(d.openCount)} sub={`Wert: ${eur(d.pipelineNetto)}`} color={C.gold} />
+        <KPI label="Ø Sales/Monat" value={d.avgSales.toFixed(1)} sub={`Ø ${eur(d.avgNetto)} Netto`} color={C.green} />
+        <KPI label="EFS Pipeline" value={eur(d.efsPipelineValue)} sub={`Abgeschlossen: ${eur(d.efsCompletedValue)}`} color={C.cyan} />
+        <KPI label="Lead→Termin Quote" value={`${d.convRate.toFixed(1)}%`} color={C.blue} />
+      </div>
+      <Sec title="Sales-Trend & 3-Monats-Prognose" sub="Blau = Ist-Daten · Gold gestrichelt = Prognose (±20%)">
+        <ResponsiveContainer width="100%" height={300}>
+          <ComposedChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis tick={{ fill: C.sec, fontSize: 11 }} />
+            <Tooltip content={<TT />} />
+            <Bar dataKey="sales" name="Sales" fill={C.blue} radius={[4,4,0,0]} />
+            <Line dataKey="netto" name="Netto (€)" stroke={C.gold} strokeWidth={2} strokeDasharray={chartData.map((c, i) => i >= d.monthlyTrend.length ? '5 5' : '0').join(' ')} dot={{ fill: C.gold, r: 3 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </Sec>
+      <Sec title="3-Monats-Forecast Details">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }} className="grid-1">
+          {d.forecast.map((f, i) => (
+            <div key={i} style={{ background: `${C.gold}08`, border: `1px solid ${C.gold}20`, borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, marginBottom: 8 }}>{f.label}</div>
+              <div style={{ fontSize: 11, color: C.sec, marginBottom: 4 }}>Sales-Prognose:</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 20, fontWeight: 800, color: C.text }}>{f.salesMid}</div>
+              <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Range: {f.salesLow} – {f.salesHigh}</div>
+              <div style={{ fontSize: 11, color: C.sec, marginTop: 8 }}>Erwarteter Umsatz:</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 16, fontWeight: 700, color: C.green }}>{eur(f.nettoMid)}</div>
+            </div>
+          ))}
+        </div>
+      </Sec>
+    </div>
+  );
+};
+
+// ═══ TAB: MONATSVERGLEICH ═══
+const TabVergleich = ({ data }) => {
+  if (!data) return null;
+  const d = data;
+  const GrowthBadge = ({ v }) => {
+    if (v === 0 || isNaN(v)) return <span style={{ color: C.dim }}>–</span>;
+    return <span style={{ color: v > 0 ? C.green : C.red, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{v > 0 ? '▲' : '▼'} {Math.abs(v).toFixed(1)}%</span>;
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <Sec title="Monatlicher Trend" sub="Sales, Leads & Umsatz im Zeitverlauf">
+        <ResponsiveContainer width="100%" height={300}>
+          <ComposedChart data={d.months}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis yAxisId="left" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis yAxisId="right" orientation="right" tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <Tooltip content={<TT />} />
+            <Bar dataKey="sales" name="Sales" fill={C.gold} radius={[4,4,0,0]} yAxisId="left" />
+            <Bar dataKey="storno" name="Storno" fill={`${C.red}70`} radius={[4,4,0,0]} yAxisId="left" />
+            <Line dataKey="netto" name="Netto (€)" stroke={C.green} strokeWidth={2} dot={{ fill: C.green, r: 3 }} yAxisId="right" />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </Sec>
+      <Sec title="Detailvergleich pro Monat">
+        <div style={{ overflowX: 'auto' }}>
+          <RankTable data={d.months} columns={[
+            { label: 'Monat', key: 'label', bold: true },
+            { label: 'Sales', key: 'sales', align: 'center', mono: true, color: C.gold, bold: true },
+            { label: 'MoM', render: r => <GrowthBadge v={r.salesGrowth} />, align: 'center' },
+            { label: 'Storno', key: 'storno', align: 'center', mono: true, color: C.red },
+            { label: 'Netto', render: r => eur(r.netto), align: 'right', mono: true },
+            { label: 'MoM', render: r => <GrowthBadge v={r.nettoGrowth} />, align: 'center' },
+            { label: 'Leads', key: 'leads', align: 'center', mono: true, color: C.blue },
+            { label: 'MoM', render: r => <GrowthBadge v={r.leadsGrowth} />, align: 'center' },
+            { label: 'Termine', key: 'termine', align: 'center', mono: true },
+            { label: 'Conv%', render: r => `${r.convRate.toFixed(1)}%`, align: 'center', color: r => r.convRate > 5 ? C.green : C.orange },
+          ]} />
+        </div>
+      </Sec>
+      <Sec title="Leads-Trend">
+        <ResponsiveContainer width="100%" height={220}>
+          <AreaChart data={d.months}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis tick={{ fill: C.sec, fontSize: 11 }} />
+            <Tooltip content={<TT />} />
+            <Area dataKey="leads" name="Leads" fill={`${C.blue}30`} stroke={C.blue} strokeWidth={2} />
+            <Area dataKey="termine" name="Termine" fill={`${C.purple}30`} stroke={C.purple} strokeWidth={2} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </Sec>
+    </div>
+  );
+};
+
 // ═══ MAIN APP ═══
 const App = () => {
   const availableMonths = useMemo(() => getAvailableMonths(), []);
@@ -969,6 +1693,8 @@ const App = () => {
   const [efsProjekte, setEfsProjekte] = useState([]);
   const [mitarbeiterList, setMitarbeiterList] = useState([]);
   const [vertriebler, setVertriebler] = useState([]);
+  const [bankTransactions, setBankTransactions] = useState([]);
+  const [payHistorie, setPayHistorie] = useState([]);
 
   // Name maps
   const mitarbeiterMap = useMemo(() => {
@@ -994,13 +1720,15 @@ const App = () => {
       const start = isAll ? '2025-10-01' : `${selectedMonth.year}-${String(selectedMonth.month).padStart(2,'0')}-01`;
       const nextMonth = isAll ? `${new Date().getFullYear() + 1}-01-01` : (selectedMonth.month === 12 ? `${selectedMonth.year+1}-01-01` : `${selectedMonth.year}-${String(selectedMonth.month+1).padStart(2,'0')}-01`);
 
-      const [auftraegeData, leadsData, termineData, efsData, maData, vertrData] = await Promise.all([
+      const [auftraegeData, leadsData, termineData, efsData, maData, vertrData, bankData, payData] = await Promise.all([
         sbFetchAll('auftraege', `auftrags_datum=gte.${start}&auftrags_datum=lt.${nextMonth}&order=auftrags_datum.asc`),
         sbFetchAll('leveto_leads', `erster_status_datum=gte.${start}&erster_status_datum=lt.${nextMonth}&order=erster_status_datum.asc`),
         sbFetchAll('leveto_termine', `start_date=gte.${start}&start_date=lt.${nextMonth}&appointment_type=in.("Termin vor Ort PV","Termin vor Ort ( SCOUT )","Folgetermin vor Ort")&order=start_date.asc`),
         sbFetchAll('efs_projekte', 'order=erstellt_am.desc'),
         sbFetch('mitarbeiter', 'select=id,vorname,nachname,kuerzel,typ&limit=500'),
         sbFetch('vertriebler', 'select=id,name&limit=100'),
+        sbFetchAll('bank_transactions', 'order=buchungsdatum.desc'),
+        sbFetchAll('pay_auszahlungen_historie', 'order=periode.desc'),
       ]);
 
       setAuftraege(auftraegeData);
@@ -1009,6 +1737,8 @@ const App = () => {
       setEfsProjekte(efsData);
       setMitarbeiterList(maData);
       setVertriebler(vertrData);
+      setBankTransactions(bankData);
+      setPayHistorie(payData);
       setLastUpdate(new Date());
     } catch (err) {
       console.error('Fetch error:', err);
@@ -1024,6 +1754,12 @@ const App = () => {
   const leadsData = useMemo(() => leads.length > 0 ? processLeads(leads) : null, [leads]);
   const termineData = useMemo(() => termine.length > 0 ? processTermine(termine) : null, [termine]);
   const efsData = useMemo(() => efsProjekte.length > 0 ? processEFS(efsProjekte) : null, [efsProjekte]);
+  const cashflowData = useMemo(() => bankTransactions.length > 0 ? processCashflow(bankTransactions) : null, [bankTransactions]);
+  const teamData = useMemo(() => (auftraege.length > 0 || termine.length > 0) ? processTeam(auftraege, termine, leads, mitarbeiterList) : null, [auftraege, termine, leads, mitarbeiterList]);
+  const pipelineData = useMemo(() => leads.length > 0 ? processPipeline(leads, auftraege) : null, [leads, auftraege]);
+  const provisionenData = useMemo(() => payHistorie.length > 0 ? processProvisionen(payHistorie) : null, [payHistorie]);
+  const forecastData = useMemo(() => auftraege.length > 0 ? processForecast(auftraege, leads, efsProjekte) : null, [auftraege, leads, efsProjekte]);
+  const vergleichData = useMemo(() => (auftraege.length > 0 || leads.length > 0) ? processVergleich(auftraege, leads, termine) : null, [auftraege, leads, termine]);
 
   const monthLabel = selectedMonth.year === 0 ? 'Gesamt (ab Okt 2025)' : `${monthNames[selectedMonth.month - 1]} ${selectedMonth.year}`;
 
@@ -1090,11 +1826,17 @@ const App = () => {
           </div>
 
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto', paddingBottom: 4 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto', paddingBottom: 4, flexWrap: 'wrap' }}>
             <TabBtn active={tab === 'sales'} onClick={() => setTab('sales')} count={salesData?.aktiv}>📊 Sales</TabBtn>
             <TabBtn active={tab === 'leads'} onClick={() => setTab('leads')} count={leadsData?.total || leads.length}>📥 Leads</TabBtn>
             <TabBtn active={tab === 'termine'} onClick={() => setTab('termine')} count={termineData?.total}>📅 Termine</TabBtn>
-            <TabBtn active={tab === 'efs'} onClick={() => setTab('efs')} count={efsData?.total}>🔧 EFS/Montage</TabBtn>
+            <TabBtn active={tab === 'efs'} onClick={() => setTab('efs')} count={efsData?.total}>🔧 EFS</TabBtn>
+            <TabBtn active={tab === 'cashflow'} onClick={() => setTab('cashflow')} count={bankTransactions.length}>💰 Cashflow</TabBtn>
+            <TabBtn active={tab === 'team'} onClick={() => setTab('team')}>🏆 Team</TabBtn>
+            <TabBtn active={tab === 'pipeline'} onClick={() => setTab('pipeline')}>⏱️ Pipeline</TabBtn>
+            <TabBtn active={tab === 'provisionen'} onClick={() => setTab('provisionen')} count={payHistorie.length}>💳 Provisionen</TabBtn>
+            <TabBtn active={tab === 'forecast'} onClick={() => setTab('forecast')}>🔮 Forecast</TabBtn>
+            <TabBtn active={tab === 'vergleich'} onClick={() => setTab('vergleich')}>📈 Vergleich</TabBtn>
           </div>
 
           {/* Tab Content */}
@@ -1102,11 +1844,17 @@ const App = () => {
           {tab === 'leads' && <TabLeads data={leadsData || { total: 0, status: [], quellen: [], beraterLeads: [], weekly: [], topOrte: [], plzRegionen: [], anredeMap: {}, indicatorMap: {}, funnel: { terminiert:0, auftrag:0, storno:0, ne:0, keinInt:0, rekl:0, neu:0, wvl:0, noPLZ:0, optIn:0, hasEFS:0 }, processing: { median:0, avg:0, count:0 } }} hasWarning={leads.length < 100} />}
           {tab === 'termine' && <TabTermine data={termineData} />}
           {tab === 'efs' && <TabEFS data={efsData} />}
+          {tab === 'cashflow' && <TabCashflow data={cashflowData} />}
+          {tab === 'team' && <TabTeam data={teamData} />}
+          {tab === 'pipeline' && <TabPipeline data={pipelineData} />}
+          {tab === 'provisionen' && <TabProvisionen data={provisionenData} />}
+          {tab === 'forecast' && <TabForecast data={forecastData} />}
+          {tab === 'vergleich' && <TabVergleich data={vergleichData} />}
 
           {/* Footer */}
           <div style={{ textAlign: 'center', color: C.dim, fontSize: 11, marginTop: 40, padding: 20 }}>
             bee-doo GmbH · Reporting Dashboard · Live-Daten aus Supabase<br />
-            {auftraege.length} Aufträge · {leads.length} Leads · {termine.length} Termine · {efsProjekte.length} EFS-Projekte geladen
+            {auftraege.length} Aufträge · {leads.length} Leads · {termine.length} Termine · {efsProjekte.length} EFS · {bankTransactions.length} Buchungen · {payHistorie.length} Provisionen
           </div>
         </>
       )}
