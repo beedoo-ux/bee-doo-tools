@@ -115,8 +115,7 @@ function App(){
         });
         const mitAuftrag=src.filter(l=>l.hat_auftrag).length;
         const storno=src.filter(l=>l.storniert).length;
-        const ohneB=src.filter(l=>!l.berater_name).length;
-        return{t,cats,byStatus,byQuelle,byPlz,monthly,byBerater,mitAuftrag,storno,ohneB}
+        return{t,cats,byStatus,byQuelle,byPlz,monthly,byBerater,mitAuftrag,storno}
     },[fL,leads]);
 
     const filtered=useMemo(()=>{if(!fL.length)return[];if(!search.trim())return fL;const q=search.toLowerCase();return fL.filter(l=>(l.kunde_nachname||'').toLowerCase().includes(q)||(l.kunde_vorname||'').toLowerCase().includes(q)||(l.plz||'').includes(q)||(l.ort||'').toLowerCase().includes(q)||(l.status_name||'').toLowerCase().includes(q)||(l.berater_name||'').toLowerCase().includes(q)||String(l.leveto_id).includes(q))},[fL,search]);
@@ -145,9 +144,9 @@ function App(){
             {/* === ÜBERSICHT === */}
             {tab==='overview'&&<React.Fragment>
                 <div className="g3">
-                    {[{l:'⚠️ Reklamation',k:'rekl'},{l:'❌ Nicht erreicht',k:'nerr'},{l:'✅ In Pipeline',k:'pipe'},{l:'🚫 Disqualifiziert',k:'disq'},{l:'⏳ Offen/WVL',k:'wvl'},{l:'📭 Ohne Berater',k:null}].map((s,i)=>{
-                        const v=s.k?an.cats[s.k]:an.ohneB;const mx=Math.max(...Object.values(an.cats),an.ohneB,1);
-                        return<div key={i} className="sb"><div className="sb-v" style={{color:s.k?catCol(s.k):'var(--o)'}}>{fm(v)}</div><div className="sb-l">{s.l}</div><div style={{marginTop:6}}><div className="bar-h"><div className="bar-f" style={{width:`${v/mx*100}%`,background:s.k?catCol(s.k):'var(--o)'}}/></div></div><div style={{fontSize:10,color:'var(--td)',marginTop:3}}>{pct(v,an.t)}%</div></div>
+                    {[{l:'⚠️ Reklamation',k:'rekl'},{l:'❌ Nicht erreicht',k:'nerr'},{l:'✅ In Pipeline',k:'pipe'},{l:'🚫 Disqualifiziert',k:'disq'},{l:'⏳ Offen/WVL',k:'wvl'}].map((s,i)=>{
+                        const v=an.cats[s.k];const mx=Math.max(...Object.values(an.cats),1);
+                        return<div key={i} className="sb"><div className="sb-v" style={{color:catCol(s.k)}}>{fm(v)}</div><div className="sb-l">{s.l}</div><div style={{marginTop:6}}><div className="bar-h"><div className="bar-f" style={{width:`${v/mx*100}%`,background:catCol(s.k)}}/></div></div><div style={{fontSize:10,color:'var(--td)',marginTop:3}}>{pct(v,an.t)}%</div></div>
                     })}
                 </div>
                 <div className="g2">
@@ -159,14 +158,13 @@ function App(){
             {/* === FUNNEL === */}
             {tab==='funnel'&&<div className="cd"><div className="cd-t">🎯 Lead-Funnel</div><div style={{maxWidth:650,margin:'0 auto'}}>{[
                 {l:'Leads generiert',v:an.t,c:'var(--a)'},
-                {l:'Erreicht (Berater)',v:an.t-an.cats.nerr-an.ohneB,c:'var(--bl)'},
+                {l:'Erreicht (Berater)',v:an.t-an.cats.nerr,c:'var(--bl)'},
                 {l:'In Pipeline',v:an.cats.pipe,c:'var(--g)'},
                 {l:'→ Auftrag',v:an.mitAuftrag,c:'var(--cy)'},
             ].map((s,i)=>{const mx=an.t||1;return<div key={i} className="frow" style={{marginBottom:14}}><span className="flab" style={{width:160,fontSize:13}}>{s.l}</span><div className="fbar" style={{width:Math.max(s.v/mx*100,5)+'%',background:s.c,height:36,fontSize:14}}>{fm(s.v)}</div><span className="fpct" style={{fontSize:13,fontWeight:700}}>{i>0?pct(s.v,an.t)+'%':''}</span></div>})}</div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginTop:20}}>
                     <div className="sb"><div className="sb-v" style={{color:'var(--pk)'}}>{pct(an.cats.rekl,an.t)}%</div><div className="sb-l">Reklamationsquote</div></div>
                     <div className="sb"><div className="sb-v" style={{color:'var(--r)'}}>{pct(an.cats.nerr,an.t)}%</div><div className="sb-l">Nicht-Erreichbar</div></div>
-                    <div className="sb"><div className="sb-v" style={{color:'var(--o)'}}>{pct(an.ohneB,an.t)}%</div><div className="sb-l">Ohne Berater</div></div>
                     <div className="sb"><div className="sb-v" style={{color:'var(--g)'}}>{pct(an.cats.pipe,an.t)}%</div><div className="sb-l">Pipeline-Rate</div></div>
                     <div className="sb"><div className="sb-v" style={{color:'var(--cy)'}}>{pct(an.mitAuftrag,an.t)}%</div><div className="sb-l">Conversion Rate</div></div>
                     <div className="sb"><div className="sb-v" style={{color:'var(--p)'}}>{pct(an.cats.disq,an.t)}%</div><div className="sb-l">Disqualifiziert</div></div>
@@ -174,9 +172,9 @@ function App(){
             </div>}
 
             {/* === BERATER === */}
-            {tab==='berater'&&<div className="cd"><div className="cd-t">👤 Berater-Performance ({Object.keys(an.byBerater).length-1} Berater + unzugewiesen)</div>
+            {tab==='berater'&&<div className="cd"><div className="cd-t">👤 Berater-Performance ({Object.keys(an.byBerater).filter(n=>n!=='(nicht zugewiesen)').length} Berater)</div>
                 <div style={{overflowX:'auto'}}><table><thead><tr><th>#</th><th>Berater</th><th>Leads</th><th>✅ Pipeline</th><th>⚠️ Rekl.</th><th>❌ N.Err.</th><th>🚫 Disq.</th>{isInt&&<th>🎯 Auftrag</th>}<th>Pipeline%</th><th>Rekl.%</th></tr></thead><tbody>
-                {Object.entries(an.byBerater).sort((a,b)=>b[1].t-a[1].t).map(([n,d],i)=>{
+                {Object.entries(an.byBerater).filter(([n])=>n!=='(nicht zugewiesen)').sort((a,b)=>b[1].t-a[1].t).map(([n,d],i)=>{
                     const pipeP=pct(d.pipe,d.t);const reklP=pct(d.rekl,d.t);
                     return<tr key={n} style={n==='(nicht zugewiesen)'?{background:'#1a1520'}:{}}>
                         <td style={{color:i<3?'var(--a)':'var(--td)',fontWeight:700}}>{i+1}</td>
@@ -199,7 +197,6 @@ function App(){
                 <div className="g3">
                     <div className="sb"><div className="sb-v" style={{color:'var(--pk)'}}>{fm(an.cats.rekl)}</div><div className="sb-l">Reklamationen gesamt</div></div>
                     <div className="sb"><div className="sb-v" style={{color:'var(--pk)'}}>{pct(an.cats.rekl,an.t)}%</div><div className="sb-l">Reklamationsquote</div></div>
-                    <div className="sb"><div className="sb-v" style={{color:'var(--o)'}}>{fm(fL.filter(l=>l.status_name==='REKLAMATION'&&!l.berater_name).length)}</div><div className="sb-l">Davon ohne Berater</div></div>
                 </div>
                 <div className="g2">
                     <div className="cd"><div className="cd-t">⚠️ Reklamation nach Quelle</div>{Object.entries(an.byQuelle).sort((a,b)=>b[1]-a[1]).map(([q,total])=>{
@@ -229,7 +226,7 @@ function App(){
                 return<tr key={p}><td style={{color:i<3?'var(--a)':'var(--td)',fontWeight:700}}>{i+1}</td><td style={{fontWeight:600,fontFamily:'monospace'}}>{p}</td><td style={{fontWeight:700,color:'var(--bl)'}}>{fm(c)}</td><td style={{color:'var(--g)',fontWeight:600}}>{plzPipe}</td><td style={{color:'var(--pk)',fontWeight:600}}>{plzRekl}</td><td style={{color:'var(--td)'}}>{pct(c,an.t)}%</td><td style={{width:'25%'}}><div className="bar-h"><div className="bar-f" style={{width:`${c/mx*100}%`,background:'var(--bl)'}}/></div></td></tr>
             })}</tbody></table></div>}
 
-            <div style={{textAlign:'center',padding:'16px 0',fontSize:11,color:'#3a4a6a'}}>Letzte Sync: {leads[0]?.sync_am?new Date(leads[0].sync_am).toLocaleString('de-DE'):'—'} · {fm(an.t)} Leads · {Object.keys(an.byBerater).length-1} Berater</div>
+            <div style={{textAlign:'center',padding:'16px 0',fontSize:11,color:'#3a4a6a'}}>Letzte Sync: {leads[0]?.sync_am?new Date(leads[0].sync_am).toLocaleString('de-DE'):'—'} · {fm(an.t)} Leads · {Object.keys(an.byBerater).filter(n=>n!=='(nicht zugewiesen)').length} Berater</div>
         </div>
     </React.Fragment>
 }
