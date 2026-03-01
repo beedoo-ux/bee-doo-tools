@@ -1,0 +1,45 @@
+name: bee-doo Sync Crons
+
+on:
+  schedule:
+    # Leveto Leads Sync - alle 4 Stunden
+    - cron: '0 2,6,10,14,18,22 * * *'
+  workflow_dispatch:
+    inputs:
+      sync:
+        description: 'Specific sync to run (leave empty for all due)'
+        required: false
+        default: ''
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Leveto Sync
+        run: |
+          SYNC_PARAM="${{ github.event.inputs.sync }}"
+          URL="https://bee-doo-tools.vercel.app/api/cron-sync"
+          if [ -n "$SYNC_PARAM" ]; then
+            URL="${URL}?sync=${SYNC_PARAM}"
+          fi
+          echo "Calling: $URL"
+          RESULT=$(curl -sf -m 120 "$URL" -H "Authorization: Bearer manual")
+          echo "$RESULT" | python3 -m json.tool
+          # Check success
+          echo "$RESULT" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          print(f'Ran: {d.get("ran",0)} syncs')
+          for r in d.get('results',[]):
+              status='✅' if r.get('success') else '❌'
+              print(f'  {status} {r.get("sync_key","?")} - {r.get("duration_ms",0)}ms')
+              if r.get('synced'): print(f'     Synced: {r["synced"]} records')
+              if r.get('error'): print(f'     Error: {r["error"]}')
+          "
+
+      - name: Auto-Merge
+        run: |
+          echo "Running auto-merge..."
+          RESULT=$(curl -sf -m 120 "https://bee-doo-tools.vercel.app/api/cron-sync?sync=auto_merge" -H "Authorization: Bearer manual")
+          echo "$RESULT" | python3 -m json.tool
