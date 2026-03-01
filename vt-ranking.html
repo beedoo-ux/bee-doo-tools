@@ -28,13 +28,21 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .gate-error{margin-top:14px;font-size:13px;color:var(--red);font-weight:600;animation:fadeUp .3s ease;line-height:1.4}
 
 .main{max-width:720px;margin:0 auto;padding:20px 16px 60px;position:relative;z-index:1}
-.header{text-align:center;margin-bottom:28px}
-.header-logo{height:24px;filter:brightness(0) invert(1);opacity:.5;margin-bottom:8px}
-.header-badge{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:100px;padding:5px 14px 5px 10px;font-size:11px;font-weight:600;color:var(--dim);margin-bottom:10px}
-.header-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
-.header-title{font-family:'Outfit',sans-serif;font-size:clamp(28px,6vw,42px);font-weight:900;letter-spacing:-1px;line-height:1.1}
-.header-title span{background:linear-gradient(135deg,var(--gold),var(--gold2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.header-month{font-family:'Outfit',sans-serif;font-size:16px;font-weight:500;color:var(--dim);margin-top:4px}
+.header{text-align:center;margin-bottom:28px;position:relative}
+.hero-label{font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:3px}
+.hero-number{font-family:'Outfit',sans-serif;font-size:clamp(72px,16vw,110px);font-weight:900;line-height:1;background:linear-gradient(135deg,var(--gold),var(--gold2),#fff,var(--gold));background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 3s linear infinite}
+@keyframes shimmer{0%{background-position:0% center}100%{background-position:200% center}}
+.hero-sub{font-family:'Outfit',sans-serif;font-size:12px;font-weight:600;color:#2a3550;letter-spacing:2px;text-transform:uppercase;margin-top:8px}
+
+/* Confetti */
+.confetti-wrap{position:absolute;top:0;left:0;right:0;height:200px;overflow:hidden;pointer-events:none;z-index:10}
+.confetti-p{position:absolute;opacity:0;animation:confettiFall 3.5s ease-in-out forwards}
+@keyframes confettiFall{0%{opacity:1;transform:translateY(-20px) rotate(0deg) scale(1)}60%{opacity:1}100%{opacity:0;transform:translateY(200px) rotate(720deg) scale(.4)}}
+
+/* Crown on #1 */
+.crown-pos{position:relative}
+.crown-pos::before{content:'👑';position:absolute;top:-24px;left:50%;transform:translateX(-50%);font-size:18px;animation:crownFloat 2s ease-in-out infinite}
+@keyframes crownFloat{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-5px)}}
 
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:24px}
 .kpi{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 12px;text-align:center;transition:all .2s}
@@ -260,12 +268,16 @@ function App(){
     const maxVal=data.ranking.length?data.ranking[0][1][sort==='volume'?'netto':sort==='kwp'?'kwp':'sales']:1;
     const gv=(d)=>sort==='volume'?d.netto:sort==='kwp'?d.kwp:d.sales;
 
+    const confettiColors=['#F5C500','#FFE066','#22c55e','#3b82f6','#a855f7','#ec4899','#06b6d4','#ef4444'];
+    const confetti=useMemo(()=>Array.from({length:35},(_,i)=>({id:i,left:Math.random()*100,delay:Math.random()*2,dur:2.5+Math.random()*2,color:confettiColors[i%confettiColors.length],size:4+Math.random()*6,br:Math.random()>.5?'50%':'2px'})),[]);
+
     return<div className="main">
         <div className="header fade-in">
-            <img className="header-logo" src="https://bee-doo-tools.vercel.app/Logo%20bee-doo%20Schriftzug.svg" alt="bee-doo"/>
-            <div className="header-badge"><span className="dot"/>Live aus Supabase</div>
-            <div className="header-title">🏆 <span>Sales Ranking</span></div>
-            <div className="header-month">{monat}</div>
+            <div className="confetti-wrap">{confetti.map(c=><div key={c.id} className="confetti-p" style={{left:c.left+'%',background:c.color,width:c.size,height:c.size,borderRadius:c.br,animationDelay:c.delay+'s',animationDuration:c.dur+'s'}}/>)}</div>
+            <div className="hero-label">bee-doo Sales Ranking</div>
+            <div className="hero-number">{data.total}</div>
+            <div className="hero-label">Deals im {monat}</div>
+            <div className="hero-sub">🐝 powered by bee-doo</div>
         </div>
 
         <div className="kpis fade-in fade-d1">
@@ -306,7 +318,7 @@ function App(){
                 const barBg=i===0?'linear-gradient(90deg,var(--gold),var(--gold2))':i===1?'linear-gradient(90deg,#94a3b8,#cbd5e1)':i===2?'linear-gradient(90deg,#d97706,#fbbf24)':'linear-gradient(90deg,var(--blue),#60a5fa)';
                 const dl=Math.min(i,9);
                 return<div key={name} className={`rank-card ${cls} fade-in fade-d${dl}`}>
-                    <div className={`rank-pos p${i<3?i+1:'n'}`}>{i<3?['🥇','🥈','🥉'][i]:<span style={{opacity:.5}}>{i+1}</span>}</div>
+                    <div className={`rank-pos p${i<3?i+1:'n'}${i===0?' crown-pos':''}`}>{i<3?['🥇','🥈','🥉'][i]:<span style={{opacity:.5}}>{i+1}</span>}</div>
                     <div className="rank-info">
                         <div className="rank-name">{name}</div>
                         <div className="rank-meta">
