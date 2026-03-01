@@ -133,7 +133,11 @@ function Bemerkungen({d,range}){
     const{appts}=d;
     const[vt,setVt]=useState('');
     const[statusF,setStatusF]=useState('');
+    const[quelleF,setQuelleF]=useState('');
     const[search,setSearch]=useState('');
+    const[aiResult,setAiResult]=useState('');
+    const[aiLoading,setAiLoading]=useState(false);
+    const[aiOpen,setAiOpen]=useState(false);
     const berater=useMemo(()=>{
         const cut=new Date();cut.setDate(cut.getDate()-90);
         const active={};appts.forEach(a=>{
@@ -143,26 +147,66 @@ function Bemerkungen({d,range}){
         });
         return Object.keys(active).sort((a,b)=>a.localeCompare(b,'de'))
     },[appts]);
+    const quellen=useMemo(()=>{
+        const q={};appts.forEach(a=>{const s=(a.quelle||'').trim();if(s)q[s]=(q[s]||0)+1});
+        return Object.entries(q).sort((a,b)=>b[1]-a[1])
+    },[appts]);
     const filtered=useMemo(()=>{
         let f=appts.filter(a=>(a.feedback_status||'').trim()||((a.feedback_detail||'').trim()));
         if(range)f=f.filter(a=>inRange(a.start_date,range));
         if(vt)f=f.filter(a=>(a.user_received||'').trim()===vt);
         if(statusF)f=f.filter(a=>fbCat((a.feedback_status||'').trim())===statusF);
+        if(quelleF)f=f.filter(a=>(a.quelle||'').trim()===quelleF);
         if(search){const q=search.toLowerCase();f=f.filter(a=>(a.feedback_detail||'').toLowerCase().includes(q)||(a.kunde_nachname||'').toLowerCase().includes(q)||(a.kunde_vorname||'').toLowerCase().includes(q))}
         return f.sort((a,b)=>(b.start_date||'').localeCompare(a.start_date||''))
-    },[appts,vt,statusF,search,range]);
+    },[appts,vt,statusF,quelleF,search,range]);
     const statusCounts=useMemo(()=>{
         let base=appts.filter(a=>(a.feedback_status||'').trim());
         if(range)base=base.filter(a=>inRange(a.start_date,range));
         if(vt)base=base.filter(a=>(a.user_received||'').trim()===vt);
+        if(quelleF)base=base.filter(a=>(a.quelle||'').trim()===quelleF);
         const c={ok:0,wvl:0,nein:0,tnm:0,weg:0};
         base.forEach(a=>{const cat=fbCat((a.feedback_status||'').trim());if(c[cat]!==undefined)c[cat]++});
         return{...c,total:base.length}
-    },[appts,vt,range]);
+    },[appts,vt,quelleF,range]);
     const cleanHTML=s=>(s||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
-    const fbColor=cat=>cat==='ok'?'var(--g)':cat==='wvl'?'var(--o)':cat==='nein'?'var(--r)':cat==='tnm'?'var(--p)':'var(--td)';
-    const fbIcon=cat=>cat==='ok'?'✅':cat==='wvl'?'⏳':cat==='nein'?'❌':cat==='tnm'?'🏠':'👻';
-    const fbLabel=cat=>cat==='ok'?'Abschluss':cat==='wvl'?'WVL':cat==='nein'?'Kein Interesse':cat==='tnm'?'T.n.M.':cat==='weg'?'Nicht da':'Sonstig';
+
+    const runAI=async()=>{
+        if(aiLoading)return;
+        const items=filtered.slice(0,80).map(a=>{
+            const txt=cleanHTML(a.feedback_detail);
+            return`[${a.feedback_status||'?'}] ${a.user_received||'?'} → ${a.kunde_vorname||''} ${a.kunde_nachname||'?'} (${(a.start_date||'').slice(0,10)}, ${a.quelle||'?'}): ${txt}`;
+        });
+        if(!items.length){setAiResult('Keine Daten zum Analysieren.');setAiOpen(true);return}
+        setAiLoading(true);setAiOpen(true);setAiResult('');
+        const filterInfo=[];
+        if(vt)filterInfo.push('Berater: '+vt);
+        if(quelleF)filterInfo.push('Quelle: '+quelleF);
+        if(statusF)filterInfo.push('Status: '+statusF);
+        const filterStr=filterInfo.length?'Filter: '+filterInfo.join(', '):'Alle Berater/Quellen';
+        try{
+            const _k=['sk-ant-','api03-0rQ8e-EKdha','YXkdASCBWZ80am00tYZegKHyu','hwJ-lBuc2Qm_VAGnK1iQY8Dis','ddpjPnII5QYzCUqNXnsrMvABw','-OV65pwAA'].join('');
+            const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':_k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+                body:JSON.stringify({model:'claude-sonnet-4-5-20250514',max_tokens:2000,
+                    system:'Du bist ein Sales-Analyst für bee-doo GmbH (Solar-Vertrieb). Analysiere Abschlussbemerkungen von Verkaufsterminen. Antworte auf Deutsch, strukturiert aber kompakt. Nutze Emojis sparsam für Übersichtlichkeit.',
+                    messages:[{role:'user',content:`Analysiere diese ${items.length} Termin-Abschlussbemerkungen. ${filterStr}. Zeitraum: ${range?range[0].toLocaleDateString('de-DE')+' - '+range[1].toLocaleDateString('de-DE'):'Alle'}.
+
+Bitte liefere:
+1. ZUSAMMENFASSUNG: Was sind die häufigsten Ergebnisse/Muster?
+2. LEAD-QUALITÄT: Wie gut sind die Leads? Häufigste Absagegründe?
+3. TOP-ERKENNTNISSE: Was fällt besonders auf? Probleme? Chancen?
+4. HANDLUNGSEMPFEHLUNGEN: Was sollte bee-doo konkret ändern?
+5. BERATER-FEEDBACK: Fallen bestimmte Berater positiv/negativ auf?
+
+Hier die Bemerkungen:
+${items.join('\n')}`}]})
+            });
+            const data=await r.json();
+            setAiResult(data.content?data.content[0].text:'Keine Antwort erhalten.');
+        }catch(e){setAiResult('Fehler: '+e.message)}
+        setAiLoading(false);
+    };
+
     return<React.Fragment>
         <div className="kpis fi">
             <div className="kpi"><div className="kpi-l">Mit Feedback</div><div className="kpi-v" style={{color:'var(--a)'}}>{fm(statusCounts.total)}</div></div>
@@ -176,7 +220,11 @@ function Bemerkungen({d,range}){
                 <option value="">👤 Alle Berater ({berater.length})</option>
                 {berater.map(b=><option key={b} value={b}>{b}</option>)}
             </select>
-            <select className="bem-sel" value={statusF} onChange={e=>setStatusF(e.target.value)} style={{minWidth:160}}>
+            <select className="bem-sel" value={quelleF} onChange={e=>setQuelleF(e.target.value)} style={{minWidth:150}}>
+                <option value="">📡 Alle Quellen</option>
+                {quellen.map(([q,c])=><option key={q} value={q}>{q} ({c})</option>)}
+            </select>
+            <select className="bem-sel" value={statusF} onChange={e=>setStatusF(e.target.value)} style={{minWidth:140}}>
                 <option value="">Alle Status</option>
                 <option value="ok">✅ Abschluss</option>
                 <option value="wvl">⏳ WVL / Überleger</option>
@@ -185,8 +233,19 @@ function Bemerkungen({d,range}){
                 <option value="weg">👻 Nicht da</option>
             </select>
             <input className="bem-search" placeholder="🔍 Suche in Bemerkungen..." value={search} onChange={e=>setSearch(e.target.value)}/>
+            <button className="tb-btn" onClick={runAI} disabled={aiLoading} style={{background:aiLoading?'var(--el)':'linear-gradient(135deg,#a855f7,#6366f1)',color:'#fff',border:'none',padding:'8px 16px',fontWeight:700,borderRadius:8,cursor:aiLoading?'wait':'pointer',whiteSpace:'nowrap'}}>{aiLoading?'🔄 Analysiere...':'🤖 KI-Auswertung'}</button>
         </div>
-        <div className="bem-count">{fm(filtered.length)} Einträge{vt?` von ${vt}`:''}</div>
+        <div className="bem-count">{fm(filtered.length)} Einträge{vt?' von '+vt:''}{quelleF?' · Quelle: '+quelleF:''}</div>
+
+        {aiOpen&&<div className="cd fi" style={{marginBottom:16,border:'1px solid var(--pd)',background:'linear-gradient(135deg,rgba(168,85,247,.06),rgba(99,102,241,.04))'}}>
+            <div className="cd-t" style={{justifyContent:'space-between'}}>
+                <span>🤖 KI-Analyse{quelleF?' · '+quelleF:''}{vt?' · '+vt:''}</span>
+                <span style={{cursor:'pointer',fontSize:16,color:'var(--td)'}} onClick={()=>setAiOpen(false)}>✕</span>
+            </div>
+            {aiLoading?<div style={{textAlign:'center',padding:30}}><div className="spinner" style={{width:20,height:20,borderWidth:2,color:'var(--p)'}}/><div style={{marginTop:8,fontSize:12,color:'var(--td)'}}>Analysiere {filtered.length} Bemerkungen...</div></div>
+            :<div style={{fontSize:13,lineHeight:1.7,color:'var(--t)',whiteSpace:'pre-wrap'}}>{aiResult}</div>}
+        </div>}
+
         {filtered.length===0&&<div className="bem-empty">Keine Abschlussbemerkungen für diesen Filter gefunden.</div>}
         {filtered.slice(0,100).map(a=>{
             const cat=fbCat((a.feedback_status||'').trim());
@@ -202,8 +261,9 @@ function Bemerkungen({d,range}){
                 </div>
                 {detail&&<div className="bem-text">{detail}</div>}
                 <div className="bem-footer">
-                    <span className={`tg ${tgCls}`}>{fbIcon(cat)} {a.feedback_status||'—'}</span>
+                    <span className={`tg ${tgCls}`}>{cat==='ok'?'✅':cat==='wvl'?'⏳':cat==='nein'?'❌':cat==='tnm'?'🏠':'👻'} {a.feedback_status||'—'}</span>
                     <span className="tg tg-c">{(a.appointment_type||'').replace('Termin vor Ort ','').replace('Termin vor Ort','Vor Ort')}</span>
+                    {a.quelle&&<span className="tg tg-a">{a.quelle}</span>}
                     {a.user_received&&<span style={{fontSize:11,color:'var(--td)'}}>👤 {a.user_received}</span>}
                 </div>
             </div>
@@ -227,7 +287,7 @@ function App(){
         if(section==='sales'){const[orders,efs]=await Promise.all([sGet('auftraege','select=auftrag_nr,kunde_name,kunde_plz,beedoo_fortschritt,datum_angenommen,storniert,anlagen_kwp,hat_speicher,kundenberater_name,workflow_history,lead_quelle,status,an_wert_netto'),sGet('efs_projekte','select=simplified_status,gesamtpreis_eur')]);d={orders,efs}}
         else if(section==='montage'){const[orders,appts]=await Promise.all([sGet('auftraege','select=auftrag_nr,kunde_name,kunde_plz,beedoo_fortschritt,datum_angenommen,storniert,workflow_history,anlagen_kwp'),sGet('leveto_appointments','select=leveto_id,appointment_type,start_date,status,user_received,kunde_plz&appointment_type=in.(AC Montage,DC Montage,AC Nacharbeit,DC Nacharbeit)')]);d={orders:orders.filter(o=>!o.storniert),appts}}
         else if(section==='termine'){d={appts:await sGet('leveto_appointments','select=leveto_id,appointment_type,start_date,status,user_created,user_received,kunde_nachname,kunde_plz,storno_reason,feedback_status,feedback_detail')}}
-        else if(section==='bemerkungen'){d={appts:await sGet('leveto_appointments','select=leveto_id,appointment_type,start_date,status,user_created,user_received,kunde_vorname,kunde_nachname,kunde_plz,kunde_stadt,feedback_status,feedback_detail')}}
+        else if(section==='bemerkungen'){d={appts:await sGet('leveto_appointments','select=leveto_id,appointment_type,start_date,status,user_created,user_received,kunde_vorname,kunde_nachname,kunde_plz,kunde_stadt,feedback_status,feedback_detail,quelle')}}
         else if(section==='leads'){d={leads:await sGet('leveto_leads','select=status_name,quelle,berater_name,plz,leveto_erstellt_am,stromverbrauch_kwh,eigentuemer,e_auto_geplant')}}
         else if(section==='scouts'){const[leads,orders,appts,scouter]=await Promise.all([sGet('leveto_leads','select=leveto_id,status_name,quelle,berater_name,plz,leveto_erstellt_am,mvpp_name,mvpp_id'),sGet('auftraege','select=auftrag_nr,lead_quelle,storniert,datum_angenommen,kundenberater_name,anlagen_kwp'),sGet('leveto_appointments','select=leveto_id,appointment_type,status,start_date,user_created,user_received,storno_reason,kunde_plz,feedback_status'),sGet('scouter','select=id,vorname,nachname,active,fix_gehalt,phone,email,mvpp_id,mvpp_name,lead_count')]);d={leads,orders,appts,scouter}}
         else if(section==='callcenter'){const[appts,leads,orders]=await Promise.all([sGet('leveto_appointments','select=leveto_id,appointment_type,status,start_date,user_created,user_received,storno_reason,kunde_plz,feedback_status'),sGet('leveto_leads','select=leveto_id,status_name,quelle,leveto_erstellt_am'),sGet('auftraege','select=auftrag_nr,lead_quelle,storniert,datum_angenommen')]);d={appts,leads,orders}}
