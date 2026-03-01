@@ -68,11 +68,56 @@ const{useState,useEffect,useRef,useCallback}=React;
 if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const SU='https://hqzpemfaljxcysyqssng.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
-const LU='https://beedoo.leveto.net/API';const LN='api@bee-doo.de';const LP='Patrick123456789!';
+const LU='/api/leveto-proxy';const LN='api@bee-doo.de';const LP='Patrick123456789!';
 const B=50;const ap=t=>`${SU}/rest/v1/${t}`;const hd=(x={})=>({apikey:SK,Authorization:`Bearer ${SK}`,'Content-Type':'application/json',...x});
 
 // CSV Parser
 function parseCSV(t){const ls=[];let c='',q=false;for(let i=0;i<t.length;i++){const ch=t[i];if(ch==='"'){if(q&&t[i+1]==='"'){c+='"';i++}else q=!q}else if((ch==='\n'||ch==='\r')&&!q){if(c.length>0||ls.length>0){ls.push(c);c=''}if(ch==='\r'&&t[i+1]==='\n')i++}else c+=ch}if(c.length>0)ls.push(c);const sp=l=>{const cs=[];let cl='',q2=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch==='"'){if(q2&&l[i+1]==='"'){cl+='"';i++}else q2=!q2}else if(ch===','&&!q2){cs.push(cl.trim());cl=''}else cl+=ch}cs.push(cl.trim());return cs};if(!ls.length)return[];const h=sp(ls[0].replace(/^\uFEFF/,''));return ls.slice(1).filter(l=>l.trim()).map(l=>{const c2=sp(l);const o={};h.forEach((k,i)=>o[k]=c2[i]||'');return o})}
+
+// ═══ AUTO-SYNC COMPONENT ═══
+const CRON_LABELS={'0 */4 * * *':'Alle 4 Stunden','0 6 * * *':'Täglich 06:00','0 7 * * 1':'Montags 07:00','30 6 * * *':'Täglich 06:30','0 8 1 * *':'1. des Monats 08:00','— manuell —':'Kein Auto-Sync'};
+const CRON_OPTIONS=[{v:'0 6 * * *',l:'Täglich 06:00'},{v:'0 7 * * *',l:'Täglich 07:00'},{v:'0 8 * * *',l:'Täglich 08:00'},{v:'0 */4 * * *',l:'Alle 4 Stunden'},{v:'0 7 * * 1',l:'Montags 07:00'},{v:'30 6 * * *',l:'Täglich 06:30'},{v:'0 */2 * * *',l:'Alle 2 Stunden'},{v:'0 12 * * *',l:'Täglich 12:00'}];
+const SRK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
+function AutoSync({syncKey,log,extraConfig}){
+    const[cfg,setCfg]=useState(null);const[loading,setLoading]=useState(true);const[saving,setSaving]=useState(false);
+    const load=useCallback(async()=>{try{const r=await fetch(ap('sync_configs')+`?sync_key=eq.${syncKey}&select=*`,{headers:hd()});const d=await r.json();if(d.length)setCfg(d[0])}catch(e){}setLoading(false)},[syncKey]);
+    useEffect(()=>{load()},[load]);
+    const toggle=async()=>{if(!cfg)return;setSaving(true);
+        const newEnabled=!cfg.enabled;const upd={enabled:newEnabled,updated_at:new Date().toISOString()};
+        if(extraConfig)upd.config={...cfg.config,...extraConfig};
+        try{await fetch(ap('sync_configs')+`?sync_key=eq.${syncKey}`,{method:'PATCH',headers:{...hd(),Authorization:`Bearer ${SRK}`},body:JSON.stringify(upd)});
+            setCfg(p=>({...p,...upd}));log?.(`${newEnabled?'✅':'⏸️'} Auto-Sync ${newEnabled?'aktiviert':'deaktiviert'}: ${cfg.sync_name}`,newEnabled?'success':'warn');
+        }catch(e){log?.(`❌ Fehler: ${e.message}`,'error')}setSaving(false)};
+    const updateSchedule=async(newCron)=>{if(!cfg)return;setSaving(true);
+        try{await fetch(ap('sync_configs')+`?sync_key=eq.${syncKey}`,{method:'PATCH',headers:{...hd(),Authorization:`Bearer ${SRK}`},body:JSON.stringify({cron_schedule:newCron,updated_at:new Date().toISOString()})});
+            setCfg(p=>({...p,cron_schedule:newCron}));log?.(`🕐 Zeitplan geändert: ${CRON_LABELS[newCron]||newCron}`,'success');
+        }catch(e){log?.(`❌ ${e.message}`,'error')}setSaving(false)};
+    const fmtDate=d=>d?new Date(d).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+    if(loading)return <div style={{fontSize:11,color:'var(--td)',padding:8}}>Lade Sync-Config...</div>;
+    if(!cfg)return null;
+    const isManual=cfg.cron_schedule==='— manuell —';
+    return(<div style={{background:'var(--el)',borderRadius:10,padding:14,marginTop:14,border:`1px solid ${cfg.enabled?'rgba(34,197,94,.3)':'var(--b)'}`}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:cfg.enabled?10:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:cfg.enabled?'var(--g)':'var(--td)',boxShadow:cfg.enabled?'0 0 8px rgba(34,197,94,.5)':'none'}}/>
+                <div><div style={{fontSize:13,fontWeight:600,color:'var(--tb)'}}>⏱️ Auto-Sync: {cfg.sync_name}</div>
+                    <div style={{fontSize:11,color:'var(--td)',marginTop:2}}>{isManual?'Manueller Upload nötig — kein automatischer Sync möglich':`Zeitplan: ${CRON_LABELS[cfg.cron_schedule]||cfg.cron_schedule}`}</div></div>
+            </div>
+            {!isManual&&<button className={`btn bsm ${cfg.enabled?'br':'bo'}`} disabled={saving} onClick={toggle} style={{minWidth:100}}>
+                {saving?<span className="spinner"/>:cfg.enabled?'⏸️ Deaktivieren':'▶️ Aktivieren'}
+            </button>}
+        </div>
+        {cfg.enabled&&!isManual&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,fontSize:11}}>
+            <div style={{background:'var(--c)',borderRadius:6,padding:8}}><div style={{color:'var(--td)'}}>Letzter Sync</div><div style={{color:'var(--g)',fontWeight:600,marginTop:2}}>{fmtDate(cfg.last_sync_at)}</div></div>
+            <div style={{background:'var(--c)',borderRadius:6,padding:8}}><div style={{color:'var(--td)'}}>Zeitplan</div>
+                <select value={cfg.cron_schedule} onChange={e=>updateSchedule(e.target.value)} style={{background:'transparent',color:'var(--a)',border:'none',fontSize:11,fontWeight:600,fontFamily:'DM Sans',cursor:'pointer',marginTop:2,width:'100%'}}>
+                    {CRON_OPTIONS.map(o=><option key={o.v} value={o.v} style={{background:'var(--c)'}}>{o.l}</option>)}
+                </select>
+            </div>
+            <div style={{background:'var(--c)',borderRadius:6,padding:8}}><div style={{color:'var(--td)'}}>Status</div><div style={{color:cfg.last_sync_result?.error?'var(--r)':'var(--g)',fontWeight:600,marginTop:2}}>{cfg.last_sync_result?.error?'❌ Fehler':'✅ OK'}</div></div>
+        </div>}
+    </div>);
+}
 
 // Mappers
 const pI=v=>{const n=parseInt(String(v).replace(/[^0-9-]/g,''));return isNaN(n)?0:n};const cl=v=>v&&v.trim()?v.trim():null;
@@ -86,8 +131,8 @@ async function uBat(t,rows,onP){let ins=0,upd=0,er=0;const eD=[];for(let i=0;i<r
 
 // Leveto
 let lTk=null,lEx=0;
-async function lAuth(){if(lTk&&Date.now()<lEx-30000)return lTk;const r=await fetch(LU+'/auth',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:`username=${encodeURIComponent(LN)}&password=${encodeURIComponent(LP)}`});const d=await r.json();if(!d.login)throw new Error('Leveto Auth: '+d.message);lTk=d.token;lEx=Date.now()+4.5*60*1000;return lTk}
-async function lGet(p={}){const tk=await lAuth();const qs=new URLSearchParams(p).toString();return(await fetch(`${LU}/leads?${qs}`,{headers:{Authorization:`Bearer ${tk}`}})).json()}
+async function lAuth(retry=0){if(lTk&&Date.now()<lEx-30000)return lTk;try{const r=await fetch(LU+'?path=auth',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:`username=${encodeURIComponent(LN)}&password=${encodeURIComponent(LP)}`});if(!r.ok)throw new Error(`HTTP ${r.status}: ${await r.text().catch(()=>'')}`);const d=await r.json();if(!d.login)throw new Error('Leveto Auth: '+d.message);lTk=d.token;lEx=Date.now()+4.5*60*1000;return lTk}catch(e){if(retry<2){await new Promise(r=>setTimeout(r,1000*(retry+1)));return lAuth(retry+1)}throw new Error(`Auth fehlgeschlagen (${retry+1} Versuche): ${e.message}`)}}
+async function lGet(p={},retry=0){const tk=await lAuth();const qs=new URLSearchParams({path:'leads',...p}).toString();try{const r=await fetch(`${LU}?${qs}`,{headers:{Authorization:`Bearer ${tk}`}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return await r.json()}catch(e){if(retry<2){await new Promise(r=>setTimeout(r,1000*(retry+1)));lTk=null;return lGet(p,retry+1)}throw new Error(`Leads-Abruf fehlgeschlagen (${retry+1} Versuche): ${e.message}`)}}
 function lMap(l){const a=l.homeAddress||{},s=l.status||{},sf=l.statusFirst||{},sv=l.survey||{};let sd=null;if(sv.data&&Array.isArray(sv.data)){sd={};sv.data.forEach(x=>{if(x.answer)sd[(x.question||'').replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_').toLowerCase()]=x.answer})}return{leveto_id:l.id,id_extern:l.idExtern||null,anrede:l.salutation||null,vorname:(l.firstName||'').trim(),nachname:(l.lastName||'').trim(),firma:l.companyName||null,email:l.email||null,telefon:l.telephone||null,telefon2:l.telephone2||null,mobil:l.mobile||null,erreichbarkeit:l.reachability||null,strasse:a.fullstreet||a.street||null,hausnr:a.housenr||null,plz:a.postalCode||null,ort:a.city||null,lat:a.lat||null,lng:a.lng||null,quelle:l.source||null,tags:l.tags||null,berater_name:l.berater||null,berater_ma_nummer:l.ma_nummer||null,notizen:l.notes||null,nachricht:l.message||null,status_id:s.id??null,status_name:s.name||null,status_indicator:s.indicator||null,status_datum:s.date&&s.date!=='0000-00-00 00:00:00'?s.date:null,erster_status_id:sf.id??null,erster_status_name:sf.name||null,erster_status_datum:sf.date&&sf.date!=='0000-00-00 00:00:00'?sf.date:null,letzter_status_wechsel:l.last_status_change&&l.last_status_change!=='0000-00-00 00:00:00'?l.last_status_change:null,zuweisungsstatus:l.zuweisungsstatus||null,assignments_count:l.assignmentsCount||0,accepted_count:l.acceptedCount||0,declined_count:l.declinedCount||0,objekt_typ:l.objectType||null,personen_haushalt:l.personsInHousehold||null,dach_groesse:l.roofSize||null,dach_form:l.roofShape||null,stromverbrauch:l.powerConsumption||null,monatl_abschlag:l.partPayment||null,finanzierung:l.financingModel||null,survey_data:sd?JSON.stringify(sd):null,opt_in_bestaetigt:l.optIn?.confirmed||false,leveto_erstellt_am:l.createdOn&&l.createdOn!=='0000-00-00 00:00:00'?l.createdOn:null,leveto_importiert_am:l.importedOn&&l.importedOn!=='0000-00-00 00:00:00'?l.importedOn:null,leveto_abgeschlossen_am:l.finishedOn&&l.finishedOn!=='0000-00-00 00:00:00'?l.finishedOn:null,leveto_letzte_bearbeitung:l.lastEditOn&&l.lastEditOn!=='0000-00-00 00:00:00'?l.lastEditOn:null,sync_aktualisiert_am:new Date().toISOString()}}
 
 // ═══ MAIN APP ═══
@@ -101,7 +146,7 @@ function App(){
     const fm=v=>typeof v==='number'?v.toLocaleString('de-DE'):v;
     const TS=[{k:'leveto',l:'Leveto Sync',i:'🔄'},{k:'efs',l:'EFS Sync',i:'📊'},{k:'csv',l:'CSV Import',i:'📋'},{k:'bank',l:'Bank / EBICS',i:'🏦'},{k:'lohnjournal',l:'Lohnjournal',i:'💼'},{k:'lohnsheet',l:'Lohn Sheet',i:'📊'},{k:'merge',l:'Auto-Merge',i:'🔗'}];
     return(<React.Fragment>
-        <div className="hdr"><div className="hdr-l"><div className="logo">bee-doo <span>| Import Cockpit</span></div></div><a href="https://bee-doo-tools.vercel.app/" className="hdr-lk">← Toolbox</a></div>
+        <div className="hdr"><div className="hdr-l"><div className="logo"><img src="https://bee-doo-tools.vercel.app/bee-doo-Logo-white.svg" style={{height:28}} alt="bee-doo" /> <span>Import Cockpit</span></div></div><a href="https://bee-doo-tools.vercel.app/" className="hdr-lk">← Toolbox</a></div>
         <div className="tabs">{TS.map(t=><div key={t.k} className={`tab ${tab===t.k?'on':''}`} onClick={()=>setTab(t.k)}>{t.i} {t.l}</div>)}</div>
         <div className="mn">
             <div className="sts fi">{[{l:'Leveto Leads',v:ct.leveto,s:'leveto_leads'},{l:'EFS Projekte',v:ct.efs,s:'efs_projekte'},{l:'CSV Leads',v:ct.leads,s:'import_leads'},{l:'CSV Termine',v:ct.termine,s:'import_appointments'},{l:'CSV Aufträge',v:ct.auftraege,s:'import_provisions'},{l:'Bank Trans.',v:ct.bank,s:'bank_transactions'},{l:'Lohnjournal',v:ct.lohnjournal,s:'lohnjournal_imports'},{l:'Lohn Sheet',v:ct.lohnsheet,s:'lohn_sheet_data'}].map(s=><div key={s.l} className="st"><div className="st-l">{s.l}</div><div className="st-v">{fm(s.v)}</div><div className="st-s">{s.s}</div></div>)}</div>
@@ -122,9 +167,9 @@ function App(){
 // ═══ LEVETO TAB ═══
 function LT({log,rc}){
     const[run,setRun]=useState(false);const[prog,setProg]=useState(null);const ab=useRef(false);
-    const sync=async(mode)=>{if(run)return;setRun(true);ab.current=false;const bs=100;log(`🚀 Leveto ${mode==='full'?'Voll':'Inkrement'}-Sync`,'warn');
-        try{const p=mode==='full'?{limit:1}:{limit:1,lastEditFrom:new Date(Date.now()-25*3600000).toISOString().split('T')[0]};const f=await lGet(p);const tot=f.totalrecords;log(`📊 ${tot.toLocaleString()} Leads ${mode==='full'?'total':'geändert'}`);
-            let sy=0,pg=1;while(!ab.current){const off=(pg-1)*bs;if(off>=tot)break;const fp=mode==='full'?{limit:bs,offset:off}:{limit:bs,offset:off,lastEditFrom:new Date(Date.now()-25*3600000).toISOString().split('T')[0]};const d=await lGet(fp);if(!d.leads||!d.leads.length)break;const rows=d.leads.map(lMap);const r=await fetch(ap('leveto_leads'),{method:'POST',headers:{...hd(),'Prefer':'resolution=merge-duplicates'},body:JSON.stringify(rows)});if(!r.ok)throw new Error('Supabase: '+await r.text());sy+=rows.length;setProg({c:sy,t:tot,p:Math.round(sy/tot*100)});if(pg%10===0)log(`📦 ${sy.toLocaleString()} / ${tot.toLocaleString()}`);pg++;await new Promise(r=>setTimeout(r,200))}
+    const sync=async(mode)=>{if(run)return;setRun(true);ab.current=false;const bs=500;const RL=14;const RLPAUSE=22000;log(`🚀 Leveto ${mode==='full'?'Voll':'Inkrement'}-Sync (500er Batches)`,'warn');
+        try{const p=mode==='full'?{limit:1,lastEditFrom:'2025-10-01 00:00:00'}:{limit:1,lastEditFrom:new Date(Date.now()-25*3600000).toISOString().split('T')[0]+' 00:00:00'};const f=await lGet(p);const tot=f.totalrecords||0;const tpg=f.totalpages||Math.ceil(tot/500);log(`📊 ${tot.toLocaleString()} Leads ${mode==='full'?'ab 01.10.2025':'geändert (letzte 25h)'} — ${tpg} Seiten`);
+            let sy=0,pg=1,reqCount=0;while(!ab.current){if(pg>Math.ceil(tot/bs)+1)break;const fp=mode==='full'?{limit:bs,page:pg,lastEditFrom:'2025-10-01 00:00:00'}:{limit:bs,page:pg,lastEditFrom:new Date(Date.now()-25*3600000).toISOString().split('T')[0]+' 00:00:00'};let d;try{d=await lGet(fp);reqCount++}catch(fe){log(`⚠️ Fetch error: ${fe.message}, warte 20s...`,'warn');await new Promise(r=>setTimeout(r,RLPAUSE));lTk=null;lEx=0;try{d=await lGet(fp);reqCount++}catch(fe2){throw fe2}};if(d.msg==='maximum_requests_exceeded'||d.allowed===false){log(`⏳ Rate-Limit bei ${sy.toLocaleString()} — 22s Pause...`,'warn');await new Promise(r=>setTimeout(r,RLPAUSE));lTk=null;lEx=0;continue};if(!d.leads||!d.leads.length){log(`✅ Keine weiteren Leads auf Seite ${pg}`,'success');break};const rows=d.leads.map(lMap);const r=await fetch(ap('leveto_leads')+'?on_conflict=leveto_id',{method:'POST',headers:{apikey:SRK,Authorization:`Bearer ${SRK}`,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},body:JSON.stringify(rows)});if(!r.ok)throw new Error('Supabase: '+await r.text());sy+=rows.length;setProg({c:sy,t:tot,p:Math.round(sy/tot*100)});log(`📦 Seite ${pg}: ${sy.toLocaleString()} / ${tot.toLocaleString()}`);pg++;if(reqCount>=RL){log(`⏳ Rate-Limit Pause (${reqCount} Requests)...`,'warn');await new Promise(r=>setTimeout(r,RLPAUSE));reqCount=0}else{await new Promise(r=>setTimeout(r,300))}}
             log(ab.current?`⏹ Abgebrochen bei ${sy}`:`✅ ${sy.toLocaleString()} Leads gesynct`,ab.current?'warn':'success');
         }catch(e){log(`❌ Leveto: ${e.message}`,'error')}setRun(false);setProg(null);rc()};
     return(<React.Fragment>
@@ -146,6 +191,7 @@ function LT({log,rc}){
                 {[['Neuer Lead','Neuer Lead','—'],['WVL','Wiedervorlage','—'],['Terminiert','Termin gelegt','⚡ Zählt!'],['Angebot erstellt','Angebot','⚡ Zählt!'],['Angebot angenommen','Auftrag','💰 Auszahlung'],['AB erstellt','AB erstellt','💰 Auszahlung'],['Rechnung beglichen','Abgeschlossen','💰 Bezahlt'],['STORNO','Storniert','🔴 Rückford.'],['Kein Interesse','Ausfall','—']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td></tr>)}
             </tbody></table>
         </div>
+        <AutoSync syncKey="leveto_sync" log={log}/>
     </React.Fragment>);
 }
 
@@ -174,6 +220,7 @@ function ET({log,rc}){
                 {[['id','efs_id','List'],['status / simplifiedStatus','status, simplified_status','List'],['primaryCustomer.*','kunde_*, plz, stadt','List'],['totalAmount','gesamtpreis_eur','List'],['user.*','zustaendiger, email','List'],['coSignedAt','co_signed_at','List'],['contract.rate','monatl_rate_eur','Detail'],['contract.product.*','preismodell, nominalzins, factoringrate','Detail'],['projectComponents','pv_kwp, wr_kw, bat_kwh, wb_kw','Detail'],['installedAt / gridConnectedAt','installed_at, grid_connected_at','Detail']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td><span className={`tg ${r[2]==='List'?'tg-ok':'tg-w'}`}>{r[2]}</span></td></tr>)}
             </tbody></table>
         </div>
+        <AutoSync syncKey="efs_sync" log={log}/>
     </React.Fragment>);
 }
 
@@ -242,22 +289,134 @@ function parseMT940(text){const txns=[];let acctIBAN='',curDate='',curAmt=0,curS
     if(buf.vz&&curDate)txns.push({buchungsdatum:curDate,valutadatum:curDate,betrag:curAmt,waehrung:'EUR',soll_haben:curSH,gegenkonto_iban:'',gegenkonto_bic:'',gegenkonto_name:'',verwendungszweck:buf.vz,end2end_id:'',mandate_id:'',eigenes_konto_iban:acctIBAN,bank_referenz:buf.ref});
     return txns}
 
+function parseCSVBank(text){
+    // CSV-MT940 / Sparkasse CSV Export Parser
+    const lines=text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(l=>l.trim());
+    if(lines.length<2)return[];
+    // Auto-detect delimiter (Sparkasse uses semicolon)
+    const delim=lines[0].split(';').length>lines[0].split(',').length?';':',';
+    const splitRow=(line)=>{const cols=[];let cur='',inQ=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++}else inQ=!inQ}else if(ch===delim&&!inQ){cols.push(cur);cur=''}else cur+=ch}cols.push(cur);return cols};
+    const hdr=splitRow(lines[0]).map(h=>h.replace(/^"|"$/g,'').trim());
+    // Flexible column finder
+    const find=(names)=>{for(const n of names){const nl=n.toLowerCase();const i=hdr.findIndex(h=>h.toLowerCase().includes(nl));if(i>=0)return i}return-1};
+    const iKonto=find(['Auftragskonto','Kontonummer des Auftraggebers']);
+    const iBuchung=find(['Buchungstag','Buchungsdatum']);
+    const iValuta=find(['Valutadatum','Valuta','Wertstellung']);
+    const iBuchText=find(['Buchungstext']);
+    const iVwz=find(['Verwendungszweck']);
+    const iName=find(['Beguenstigter','Begünstigter','Zahlungspflichtiger','Empfänger','Empfaenger']);
+    const iIBAN=find(['Kontonummer']);
+    const iBLZ=find(['BLZ','BIC']);
+    const iBetrag=find(['Betrag','Umsatz']);
+    const iWaehrung=find(['Waehrung','Währung']);
+    const iInfo=find(['Info']);
+    // Parse German date DD.MM.YY or DD.MM.YYYY
+    const parseDE=(s)=>{if(!s)return null;const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);if(!m)return null;let y=m[3];if(y.length===2)y=parseInt(y)>50?'19'+y:'20'+y;return`${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`};
+    // Parse German amount: "-1.758,79" or "1.758,79"
+    const parseAmt=(s)=>{if(!s)return 0;const c=s.replace(/\s/g,'').replace(/\./g,'').replace(',','.');return parseFloat(c)||0};
+    const txns=[];
+    for(let i=1;i<lines.length;i++){
+        const cols=splitRow(lines[i]).map(c=>c.replace(/^"|"$/g,''));
+        if(cols.length<3||cols.every(c=>!c.trim()))continue;
+        const betrag=iBetrag>=0?parseAmt(cols[iBetrag]):0;
+        if(betrag===0)continue;
+        const sh=betrag>=0?'CRDT':'DBIT';
+        txns.push({
+            buchungsdatum:iBuchung>=0?parseDE(cols[iBuchung]):null,
+            valutadatum:iValuta>=0?parseDE(cols[iValuta]):null,
+            betrag:Math.abs(betrag),
+            waehrung:iWaehrung>=0&&cols[iWaehrung]?cols[iWaehrung].trim()||'EUR':'EUR',
+            soll_haben:sh,
+            gegenkonto_iban:iIBAN>=0?cols[iIBAN].trim():'',
+            gegenkonto_bic:iBLZ>=0?cols[iBLZ].trim():'',
+            gegenkonto_name:iName>=0?cols[iName].trim():'',
+            verwendungszweck:[iBuchText>=0?cols[iBuchText]:'',iVwz>=0?cols[iVwz]:''].filter(Boolean).map(s=>s.trim()).join(' · '),
+            end2end_id:'',mandate_id:'',
+            eigenes_konto_iban:iKonto>=0?cols[iKonto].trim():'',
+            bank_referenz:'',
+            info:iInfo>=0?cols[iInfo].trim():''
+        })}
+    return txns}
+
+function IBANFinder({log}){
+    const[loading,setLoading]=useState(false);const[matches,setMatches]=useState(null);const[saved,setSaved]=useState({});
+    const normalize=s=>(s||'').toLowerCase().replace(/[^a-zäöüß]/g,' ').replace(/\s+/g,' ').trim();
+    const scan=async()=>{setLoading(true);setSaved({});log('🔍 IBAN-Finder: Scanne Banktransaktionen...','warn');
+        try{
+            // HGB-Mitarbeiter ohne IBAN laden
+            const maR=await fetch(ap('pay_mitarbeiter')+'?aktiv=eq.true&typ=like.*hgb*&select=id,vorname,nachname,typ,iban',{headers:hd()});
+            const allHGB=await maR.json();
+            const missing=allHGB.filter(m=>!m.iban||!m.iban.trim());
+            if(!missing.length){log('✅ Alle HGB-Mitarbeiter haben eine IBAN','success');setMatches([]);setLoading(false);return}
+            log(`📋 ${missing.length} HGB ohne IBAN, ${allHGB.length-missing.length} mit IBAN`);
+            // Banktransaktionen mit IBAN laden (Ausgänge = Überweisungen an VTs)
+            const bkR=await fetch(ap('bank_transactions')+'?soll_haben=eq.DBIT&gegenkonto_iban=not.is.null&gegenkonto_iban=neq.&select=gegenkonto_name,gegenkonto_iban,gegenkonto_bic,betrag,buchungsdatum&order=buchungsdatum.desc&limit=5000',{headers:hd()});
+            const txns=await bkR.json();
+            log(`🏦 ${txns.length} ausgehende Transaktionen mit IBAN geladen`);
+            // Unique IBANs pro Gegenkonto-Name
+            const ibanMap={};
+            txns.forEach(t=>{if(!t.gegenkonto_name||!t.gegenkonto_iban)return;const k=normalize(t.gegenkonto_name);if(!ibanMap[k])ibanMap[k]={iban:t.gegenkonto_iban,bic:t.gegenkonto_bic||'',name:t.gegenkonto_name,dates:[],total:0,count:0};ibanMap[k].dates.push(t.buchungsdatum);ibanMap[k].total+=t.betrag;ibanMap[k].count++});
+            // Matching: Nachname im Gegenkonto-Name
+            const found=[];
+            missing.forEach(m=>{const nn=normalize(m.nachname);const vn=normalize(m.vorname);const full=normalize(m.vorname+' '+m.nachname);
+                for(const[k,v] of Object.entries(ibanMap)){
+                    // Exakt: "vorname nachname" oder "nachname vorname" oder nur nachname wenn eindeutig
+                    const parts=k.split(' ');
+                    const nameMatch=k.includes(full)||k.includes(normalize(m.nachname+' '+m.vorname))||(parts.some(p=>p===nn)&&parts.some(p=>p===vn));
+                    if(nameMatch){found.push({mitarbeiter:m,iban:v.iban,bic:v.bic,bankName:v.name,txCount:v.count,txTotal:v.total,lastDate:v.dates.sort().reverse()[0]});break}}});
+            setMatches(found);
+            log(`✅ ${found.length} IBAN-Matches gefunden von ${missing.length} fehlenden`,'success');
+        }catch(e){log(`❌ IBAN-Finder: ${e.message}`,'error')}setLoading(false)};
+    const saveIBAN=async(m,iban,bic)=>{
+        try{const r=await fetch(ap('pay_mitarbeiter')+`?id=eq.${m.id}`,{method:'PATCH',headers:{...hd(),Authorization:`Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4`,'Prefer':'return=representation'},body:JSON.stringify({iban:iban,bic:bic||null})});
+            if(!r.ok)throw new Error(await r.text());
+            setSaved(p=>({...p,[m.id]:true}));log(`✅ IBAN gespeichert: ${m.vorname} ${m.nachname} → ${iban}`,'success');
+        }catch(e){log(`❌ IBAN speichern: ${e.message}`,'error')}};
+    const saveAll=async()=>{if(!matches)return;const unsaved=matches.filter(m=>!saved[m.mitarbeiter.id]);
+        for(const mt of unsaved)await saveIBAN(mt.mitarbeiter,mt.iban,mt.bic);
+        log(`✅ ${unsaved.length} IBANs gespeichert`,'success')};
+    return(<div className="cd fi"><div className="cd-t">🔍 IBAN-Finder (nur HGB)</div>
+        <p style={{fontSize:13,color:'var(--td)',marginBottom:14,lineHeight:1.6}}>Scannt importierte Banktransaktionen und matcht Empfängernamen mit HGB-Mitarbeitern ohne IBAN. Angestellte werden über das Lohnbüro abgerechnet.</p>
+        <button className="btn by" disabled={loading} onClick={scan} style={{marginBottom:14}}>{loading?<React.Fragment><span className="spinner"/> Scanne...</React.Fragment>:'🔍 IBANs aus Banktransaktionen suchen'}</button>
+        {matches!==null&&matches.length===0&&<div style={{fontSize:13,color:'var(--g)',padding:16,textAlign:'center',background:'var(--gd)',borderRadius:8}}>✅ Keine fehlenden IBANs gefunden oder keine Matches in Banktransaktionen</div>}
+        {matches!==null&&matches.length>0&&<React.Fragment>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                <span style={{fontSize:12,color:'var(--a)'}}>{matches.length} Matches gefunden</span>
+                <button className="btn bo bsm" onClick={saveAll} disabled={matches.every(m=>saved[m.mitarbeiter.id])}>💾 Alle speichern</button>
+            </div>
+            <div style={{maxHeight:350,overflowY:'auto',fontSize:12}}>
+                <table className="mt"><thead><tr><th>Mitarbeiter</th><th>Typ</th><th>IBAN (aus Bank)</th><th>Transaktionen</th><th></th></tr></thead><tbody>
+                {matches.map((mt,i)=><tr key={i} style={{opacity:saved[mt.mitarbeiter.id]?.8:1}}>
+                    <td style={{color:'var(--tb)',fontWeight:600}}>{mt.mitarbeiter.vorname} {mt.mitarbeiter.nachname}</td>
+                    <td><span className="tg tg-w">{mt.mitarbeiter.typ.replace('hgb_vertriebler_','').replace('hgb','HGB')}</span></td>
+                    <td style={{fontFamily:'monospace',fontSize:11,color:'var(--a)'}}>{mt.iban}</td>
+                    <td style={{color:'var(--td)'}}>{mt.txCount}× · {mt.txTotal.toLocaleString('de-DE',{minimumFractionDigits:2})} € · letzte: {mt.lastDate}</td>
+                    <td>{saved[mt.mitarbeiter.id]?<span style={{color:'var(--g)'}}>✅</span>:<button className="btn bo bsm" onClick={()=>saveIBAN(mt.mitarbeiter,mt.iban,mt.bic)}>💾</button>}</td>
+                </tr>)}
+                </tbody></table>
+            </div>
+        </React.Fragment>}
+    </div>);
+}
+
 function BKT({log,rc}){
-    const[file,setFile]=useState(null);const[txns,setTxns]=useState(null);const[imp,setImp]=useState(false);const[res,setRes]=useState(null);const ref=useRef(null);const[dg,setDg]=useState(false);
-    const hf=f=>{const rd=new FileReader();rd.onload=e=>{const c=e.target.result;let parsed;try{if(f.name.endsWith('.xml')||c.trim().startsWith('<?xml')||c.includes('BkToCstmrStmt'))parsed=parseCAMT(c);else parsed=parseMT940(c);setTxns(parsed);setFile(f);setRes(null);log(`🏦 ${f.name}: ${parsed.length} Transaktionen geparsed`)}catch(err){log(`❌ Parse-Fehler: ${err.message}`,'error')}};rd.readAsText(f,'UTF-8')};
-    const onD=e=>{e.preventDefault();setDg(false);const f=Array.from(e.dataTransfer.files).find(f=>f.name.endsWith('.xml')||f.name.endsWith('.sta')||f.name.endsWith('.mt940')||f.name.endsWith('.txt'));if(f)hf(f)};
+    const[file,setFile]=useState(null);const[txns,setTxns]=useState(null);const[imp,setImp]=useState(false);const[res,setRes]=useState(null);const ref=useRef(null);const[dg,setDg]=useState(false);const[fmt,setFmt]=useState('');
+    const hf=f=>{const rd=new FileReader();const fn=f.name.toLowerCase();rd.onload=e=>{const c=e.target.result;let parsed;let fmt='';try{if(fn.endsWith('.xml')||c.trim().startsWith('<?xml')||c.includes('BkToCstmrStmt')){parsed=parseCAMT(c);fmt='CAMT.053'}else if(fn.endsWith('.csv')){parsed=parseCSVBank(c);fmt='CSV-MT940'}else{parsed=parseMT940(c);fmt='MT940'}setTxns(parsed);setFile(f);setFmt(fmt);setRes(null);log(`🏦 ${f.name}: ${parsed.length} Transaktionen geparsed (${fmt})`)}catch(err){log(`❌ Parse-Fehler: ${err.message}`,'error')}};
+        // CSV files from German banks are often ISO-8859-1
+        rd.readAsText(f,fn.endsWith('.csv')?'ISO-8859-1':'UTF-8')};
+    const onD=e=>{e.preventDefault();setDg(false);const f=Array.from(e.dataTransfer.files).find(f=>{const n=f.name.toLowerCase();return n.endsWith('.xml')||n.endsWith('.csv')||n.endsWith('.sta')||n.endsWith('.mt940')||n.endsWith('.txt')});if(f)hf(f)};
     const doImport=async()=>{if(!txns)return;setImp(true);log(`🏦 Import: ${txns.length} Transaktionen`,'warn');const bid=crypto.randomUUID();
-        const rows=txns.map(t=>({...t,import_batch_id:bid,import_dateiname:file.name,import_format:file.name.endsWith('.xml')?'CAMT.053':'MT940'}));
+        const rows=txns.map(t=>{const{info,...rest}=t;return{...rest,import_batch_id:bid,import_dateiname:file.name,import_format:fmt||'CSV-MT940'}});
         try{const r=await uBat('bank_transactions',rows,(c,t)=>{});setRes(r);log(`✅ Bank: ${r.inserted} neu, ${r.updated} aktualisiert${r.errors>0?`, ${r.errors} Fehler`:''}`,r.errors>0?'error':'success');rc()}catch(e){log(`❌ Bank: ${e.message}`,'error');setRes({inserted:0,updated:0,errors:txns.length})}setImp(false)};
-    const reset=()=>{setFile(null);setTxns(null);setRes(null)};
+    const reset=()=>{setFile(null);setTxns(null);setRes(null);setFmt('')};
     const fm=v=>typeof v==='number'?v.toLocaleString('de-DE',{minimumFractionDigits:2}):v;
     const sums=txns?{ein:txns.filter(t=>t.soll_haben==='CRDT').reduce((s,t)=>s+t.betrag,0),aus:txns.filter(t=>t.soll_haben==='DBIT').reduce((s,t)=>s+t.betrag,0)}:null;
     return(<React.Fragment>
         <div className="eg fi">
-            <div className="cd"><div className="cd-t">🏦 CAMT.053 / MT940 Import</div>
-                <p style={{fontSize:13,color:'var(--td)',marginBottom:14,lineHeight:1.6}}>Bank-Kontoauszüge importieren. Unterstützt <strong style={{color:'var(--a)'}}>CAMT.053</strong> (XML) und <strong style={{color:'var(--a)'}}>MT940</strong> (SWIFT).</p>
-                {!file&&<div className={`dz ${dg?'dv':''}`} onDragOver={e=>{e.preventDefault();setDg(true)}} onDragLeave={()=>setDg(false)} onDrop={onD} onClick={()=>ref.current?.click()}>CAMT.053 (.xml) oder MT940 (.sta/.txt) hierher ziehen oder <strong>klicken</strong><input ref={ref} type="file" accept=".xml,.sta,.mt940,.txt" onChange={e=>{if(e.target.files[0])hf(e.target.files[0]);e.target.value=''}}/></div>}
-                {file&&<div className="fi2"><span>📄</span><div><span className="fi2-n">{file.name}</span> <span className="fi2-m">· {txns?.length||0} Transaktionen · {(file.size/1024).toFixed(0)} KB</span></div>{!imp&&!res&&<button className="fi2-x" onClick={reset}>✕</button>}</div>}
+            <div className="cd"><div className="cd-t">🏦 Bank-Kontoauszug Import</div>
+                <p style={{fontSize:13,color:'var(--td)',marginBottom:14,lineHeight:1.6}}>Unterstützt <strong style={{color:'var(--a)'}}>CSV-MT940</strong> (Sparkasse Excel-Export), <strong style={{color:'var(--a)'}}>CAMT.053</strong> (XML) und <strong style={{color:'var(--a)'}}>MT940</strong> (SWIFT).</p>
+                {!file&&<div className={`dz ${dg?'dv':''}`} onDragOver={e=>{e.preventDefault();setDg(true)}} onDragLeave={()=>setDg(false)} onDrop={onD} onClick={()=>ref.current?.click()}>CSV (.csv), CAMT.053 (.xml) oder MT940 (.sta/.txt) hierher ziehen oder <strong>klicken</strong><input ref={ref} type="file" accept=".csv,.CSV,.xml,.XML,.sta,.mt940,.txt" onChange={e=>{if(e.target.files[0])hf(e.target.files[0]);e.target.value=''}}/></div>}
+                {file&&<div className="fi2"><span>📄</span><div><span className="fi2-n">{file.name}</span> <span className="fi2-m">· {txns?.length||0} Transaktionen · {fmt} · {(file.size/1024).toFixed(0)} KB</span></div>{!imp&&!res&&<button className="fi2-x" onClick={reset}>✕</button>}</div>}
                 {txns&&!imp&&!res&&<button className="btn by" style={{width:'100%',marginTop:10,justifyContent:'center'}} onClick={doImport}>⚡ {txns.length} Transaktionen importieren</button>}
                 {res&&<React.Fragment><div className="rg"><div className="ri nw"><div className="rn">{res.inserted}</div><div className="rl">Neu</div></div><div className="ri up"><div className="rn">{res.updated}</div><div className="rl">Aktualisiert</div></div><div className="ri er"><div className="rn">{res.errors}</div><div className="rl">Fehler</div></div></div><button className="btn bo bsm" style={{width:'100%',marginTop:6,justifyContent:'center'}} onClick={reset}>↻ Neuer Import</button></React.Fragment>}
             </div>
@@ -265,15 +424,17 @@ function BKT({log,rc}){
                 {sums?<React.Fragment><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
                     <div style={{background:'var(--gd)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--td)'}}>Eingänge</div><div style={{fontSize:18,fontWeight:700,color:'var(--g)'}}>+{fm(sums.ein)} €</div></div>
                     <div style={{background:'var(--rd)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--td)'}}>Ausgänge</div><div style={{fontSize:18,fontWeight:700,color:'var(--r)'}}>-{fm(sums.aus)} €</div></div></div>
-                    <div style={{maxHeight:200,overflowY:'auto',fontSize:11}}><table className="mt"><thead><tr><th>Datum</th><th>Betrag</th><th>Gegenkonto</th><th>Verwendungszweck</th></tr></thead><tbody>
-                    {txns.slice(0,20).map((t,i)=><tr key={i}><td>{t.buchungsdatum}</td><td style={{color:t.soll_haben==='CRDT'?'var(--g)':'var(--r)',fontWeight:600}}>{t.soll_haben==='CRDT'?'+':'-'}{fm(t.betrag)} €</td><td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.gegenkonto_name||t.gegenkonto_iban||'—'}</td><td style={{maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.verwendungszweck||'—'}</td></tr>)}
+                    <div style={{maxHeight:200,overflowY:'auto',fontSize:11}}><table className="mt"><thead><tr><th>Datum</th><th>Betrag</th><th>Gegenkonto</th><th>Verwendungszweck</th>{txns[0]?.info!==undefined&&<th>Status</th>}</tr></thead><tbody>
+                    {txns.slice(0,20).map((t,i)=><tr key={i}><td>{t.buchungsdatum||t.valutadatum}</td><td style={{color:t.soll_haben==='CRDT'?'var(--g)':'var(--r)',fontWeight:600,whiteSpace:'nowrap'}}>{t.soll_haben==='CRDT'?'+':'-'}{fm(t.betrag)} €</td><td style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.gegenkonto_name||t.gegenkonto_iban||'—'}</td><td style={{maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.verwendungszweck||'—'}</td>{t.info!==undefined&&<td><span className={`tg ${t.info?.includes('gebucht')?'tg-ok':'tg-w'}`}>{t.info?.includes('gebucht')?'gebucht':'vorgemerkt'}</span></td>}</tr>)}
                     </tbody></table>{txns.length>20&&<div style={{textAlign:'center',padding:8,color:'var(--td)'}}>... und {txns.length-20} weitere</div>}</div>
                 </React.Fragment>:<div style={{fontSize:12,color:'var(--td)',padding:30,textAlign:'center'}}>Datei hochladen um Vorschau zu sehen</div>}
             </div>
         </div>
+        <IBANFinder log={log}/>
+        <AutoSync syncKey="bank_import" log={log}/>
         <div className="cd fi"><div className="cd-t">🗺️ Feld-Mapping</div>
-            <table className="mt"><thead><tr><th>CAMT.053 / MT940</th><th>→ Supabase</th><th>Beispiel</th></tr></thead><tbody>
-                {[['BookgDt / :61: Datum','buchungsdatum','2025-02-15'],['Amt / Betrag','betrag','1.234,56'],['CdtDbtInd / C|D','soll_haben','CRDT / DBIT'],['RltdPties IBAN','gegenkonto_iban','DE89370400...'],['RltdPties Nm','gegenkonto_name','Max Mustermann'],['RmtInf Ustrd / :86:','verwendungszweck','Rechnung 12345'],['EndToEndId','end2end_id','E2E-REF-001'],['Acct IBAN / :25:','eigenes_konto_iban','DE123456...']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td style={{color:'var(--td)'}}>{r[2]}</td></tr>)}
+            <table className="mt"><thead><tr><th>Quelle</th><th>→ Supabase</th><th>Format</th></tr></thead><tbody>
+                {[['Buchungstag / BookgDt / :61:','buchungsdatum','CSV / CAMT / MT940'],['Valutadatum','valutadatum','CSV / CAMT / MT940'],['Betrag / Amt','betrag','CSV / CAMT / MT940'],['±Vorzeichen / CdtDbtInd','soll_haben','CRDT / DBIT'],['Begünstigter / RltdPties Nm','gegenkonto_name','CSV / CAMT'],['Kontonummer / RltdPties IBAN','gegenkonto_iban','CSV / CAMT'],['BLZ/BIC / RltdAgts','gegenkonto_bic','CSV / CAMT'],['Verwendungszweck / RmtInf','verwendungszweck','CSV / CAMT / MT940'],['Auftragskonto / Acct IBAN','eigenes_konto_iban','CSV / CAMT / MT940'],['EndToEndId','end2end_id','CAMT']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)'}}>{r[0]}</td><td>{r[1]}</td><td style={{color:'var(--td)'}}>{r[2]}</td></tr>)}
             </tbody></table>
         </div>
     </React.Fragment>);
@@ -373,48 +534,102 @@ function LST({log,rc}){
                 </React.Fragment>:<div style={{fontSize:12,color:'var(--td)',padding:30,textAlign:'center'}}>Sheet-URL eingeben und Sync starten</div>}
             </div>
         </div>
-        <div className="cd fi"><div className="cd-t">ℹ️ Einrichtung</div>
-            <div style={{fontSize:13,color:'var(--td)',lineHeight:1.8}}>
-                <div>1. Google Sheet öffnen → <strong style={{color:'var(--tb)'}}>Freigeben</strong> → "Jeder mit dem Link" als Betrachter</div>
-                <div>2. Sheet-URL hier einfügen und <strong style={{color:'var(--a)'}}>Sync</strong> klicken</div>
-                <div>3. Daten landen in <code style={{background:'var(--el)',padding:'2px 6px',borderRadius:4}}>lohn_sheet_data</code> mit allen Spalten als JSON</div>
-                <div style={{marginTop:8,fontSize:11,color:'var(--o)'}}>💡 Für automatischen täglichen Sync kann ein Vercel Cron Job eingerichtet werden</div>
-            </div>
-        </div>
+        <AutoSync syncKey="lohn_sheet" log={log} extraConfig={url?{sheet_url:url}:null}/>
     </React.Fragment>);
 }
 
 // ═══ MERGE TAB ═══
 function MT({log,rc,ct}){
     const[run,setRun]=useState(false);const[mr,setMr]=useState(null);
-    const go=async()=>{setRun(true);setMr(null);log('🔗 Auto-Merge gestartet','warn');let le=0,lc=0,ec=0;
-        try{log('Phase 1: EFS ↔ Leveto (PLZ + Name)...');
-            const er=await(await fetch(ap('efs_projekte')+'?select=efs_id,kunde_nachname,kunde_plz,leveto_id&leveto_id=is.null&limit=2000',{headers:hd()})).json();
-            if(er.length>0){const lr=await(await fetch(ap('leveto_leads')+'?select=id,leveto_id,nachname,plz&limit=10000',{headers:hd()})).json();const lk={};lr.forEach(l=>{const k=`${(l.nachname||'').toLowerCase().trim()}_${l.plz||''}`;if(!lk[k])lk[k]=[];lk[k].push(l)});
-                for(const e of er){const k=`${(e.kunde_nachname||'').toLowerCase().trim()}_${e.kunde_plz||''}`;if(lk[k]){await fetch(ap('efs_projekte')+`?efs_id=eq.${e.efs_id}`,{method:'PATCH',headers:hd(),body:JSON.stringify({leveto_id:lk[k][0].leveto_id})});le++}}
-                log(`✅ EFS ↔ Leveto: ${le} Matches`,'success')}else log('EFS ↔ Leveto: Alle gematcht');
-            log('Phase 2: CSV ↔ Leveto (Lead ID)...');const pr=await(await fetch(ap('import_provisions')+'?select=an_nr,lead_id&lead_id=not.is.null&limit=5000',{headers:hd()})).json();
-            if(pr.length>0){const li=await(await fetch(ap('leveto_leads')+'?select=id,leveto_id&limit=50000',{headers:hd()})).json();const ik={};li.forEach(l=>{ik[l.leveto_id]=l.id});for(const p of pr)if(ik[p.lead_id])lc++; log(`✅ CSV ↔ Leveto: ${lc} zuordenbar`,'success')}
-            log('Phase 3: EFS ↔ CSV (Name + PLZ)...');const ea=await(await fetch(ap('efs_projekte')+'?select=efs_id,kunde_nachname,kunde_plz&limit=2000',{headers:hd()})).json();const pa=await(await fetch(ap('import_provisions')+'?select=an_nr,kunde,kunde_plz&limit=5000',{headers:hd()})).json();
-            const pk={};pa.forEach(p=>{const nm=(p.kunde||'').split(/\s+/).pop()||'';const k=`${nm.toLowerCase()}_${p.kunde_plz||''}`;if(!pk[k])pk[k]=[];pk[k].push(p)});for(const e of ea){const k=`${(e.kunde_nachname||'').toLowerCase().trim()}_${e.kunde_plz||''}`;if(pk[k])ec++}log(`✅ EFS ↔ CSV: ${ec} Matches`,'success');
-            setMr({le,lc,ec});log(`🔗 Merge fertig: ${le+lc+ec} total`,'success')}catch(e){log(`❌ Merge: ${e.message}`,'error')}setRun(false);rc()};
+    const norm=s=>(s||'').toLowerCase().trim().replace(/\s+/g,' ');
+    const go=async()=>{setRun(true);setMr(null);log('🔗 Auto-Merge gestartet','warn');let le=0,lc=0,ec=0,ew=0;
+        try{
+            // Phase 1: EFS ↔ Leveto Matching (Nachname+PLZ, mit Vorname-Boost)
+            log('Phase 1: EFS ↔ Leveto matchen (Nachname+PLZ+Vorname)...');
+            const er=await(await fetch(ap('efs_projekte')+'?select=efs_id,kunde_nachname,kunde_vorname,kunde_plz,leveto_id&leveto_id=is.null&limit=2000',{headers:hd()})).json();
+            if(er.length>0){
+                const lr=await(await fetch(ap('leveto_leads')+'?select=id,leveto_id,vorname,nachname,plz&limit=25000',{headers:hd()})).json();
+                const lkNP={};lr.forEach(l=>{const k=`${norm(l.nachname)}_${(l.plz||'').trim()}`;if(!lkNP[k])lkNP[k]=[];lkNP[k].push(l)});
+                for(const e of er){
+                    const k=`${norm(e.kunde_nachname)}_${(e.kunde_plz||'').trim()}`;
+                    const cands=lkNP[k];
+                    if(cands){
+                        // Prefer vorname match if possible
+                        const evn=norm(e.kunde_vorname||'').split(' ')[0];
+                        let best=cands[0];
+                        if(evn.length>=2){const vnM=cands.find(c=>norm(c.vorname||'').startsWith(evn.substring(0,3)));if(vnM)best=vnM;}
+                        await fetch(ap('efs_projekte')+`?efs_id=eq.${e.efs_id}`,{method:'PATCH',headers:hd(),body:JSON.stringify({leveto_id:best.leveto_id})});le++
+                    }
+                }
+                log(`✅ Phase 1: ${le} neue Matches`,'success');
+            }else log('Phase 1: Alle bereits gematcht');
+
+            // Phase 2: EFS-Daten → Leveto schreiben (IMMER für alle gematchten)
+            log('Phase 2: EFS-Daten → Leveto Leads übertragen...');
+            const allEfs=[];
+            for(let off=0;off<2000;off+=1000){const batch=await(await fetch(ap('efs_projekte')+`?select=efs_id,leveto_id,status,simplified_status,gesamtpreis_eur,monatl_rate_eur,pv_kwp,bat_kwh,installed_at,grid_connected_at,zustaendiger,preismodell&leveto_id=not.is.null&limit=1000&offset=${off}`,{headers:hd()})).json();if(!batch.length)break;allEfs.push(...batch)}
+            if(allEfs.length>0){
+                // Load all leveto with leveto_id for lookup
+                const allLev=[];
+                for(let off=0;off<30000;off+=1000){const batch=await(await fetch(ap('leveto_leads')+`?select=id,leveto_id&limit=1000&offset=${off}`,{headers:hd()})).json();if(!batch.length)break;allLev.push(...batch)}
+                const levMap={};allLev.forEach(l=>{levMap[l.leveto_id]=l.id});
+                const now=new Date().toISOString();
+                for(const e of allEfs){
+                    const lid=levMap[e.leveto_id];
+                    if(!lid)continue;
+                    const patch={
+                        efs_id:e.efs_id,
+                        efs_status:e.status,
+                        efs_simplified_status:e.simplified_status,
+                        efs_gesamtpreis_eur:e.gesamtpreis_eur,
+                        efs_monatl_rate_eur:e.monatl_rate_eur,
+                        efs_pv_kwp:e.pv_kwp,
+                        efs_bat_kwh:e.bat_kwh,
+                        efs_installed_at:e.installed_at,
+                        efs_grid_connected_at:e.grid_connected_at,
+                        efs_zustaendiger:(e.zustaendiger||'').replace(/\t/g,'').trim(),
+                        efs_preismodell:e.preismodell,
+                        efs_merged_at:now
+                    };
+                    await fetch(ap('leveto_leads')+`?id=eq.${lid}`,{method:'PATCH',headers:hd(),body:JSON.stringify(patch)});ew++
+                }
+                log(`✅ Phase 2: ${ew} Leveto-Leads mit EFS-Daten aktualisiert`,'success');
+            }else log('Phase 2: Keine gematchten EFS-Projekte');
+
+            // Phase 3: CSV ↔ Leveto
+            log('Phase 3: CSV ↔ Leveto (Lead ID)...');const pr=await(await fetch(ap('import_provisions')+'?select=an_nr,lead_id&lead_id=not.is.null&limit=5000',{headers:hd()})).json();
+            if(pr.length>0){const li=await(await fetch(ap('leveto_leads')+'?select=id,leveto_id&limit=50000',{headers:hd()})).json();const ik={};li.forEach(l=>{ik[l.leveto_id]=l.id});for(const p of pr)if(ik[p.lead_id])lc++; log(`✅ Phase 3: ${lc} CSV ↔ Leveto zuordenbar`,'success')}
+
+            // Phase 4: EFS ↔ CSV
+            log('Phase 4: EFS ↔ CSV (Name + PLZ)...');const ea=await(await fetch(ap('efs_projekte')+'?select=efs_id,kunde_nachname,kunde_plz&limit=2000',{headers:hd()})).json();const pa=await(await fetch(ap('import_provisions')+'?select=an_nr,kunde,kunde_plz&limit=5000',{headers:hd()})).json();
+            const pk={};pa.forEach(p=>{const nm=(p.kunde||'').split(/\s+/).pop()||'';const k=`${nm.toLowerCase()}_${p.kunde_plz||''}`;if(!pk[k])pk[k]=[];pk[k].push(p)});for(const e of ea){const k=`${norm(e.kunde_nachname)}_${e.kunde_plz||''}`;if(pk[k])ec++}log(`✅ Phase 4: ${ec} EFS ↔ CSV Matches`,'success');
+
+            setMr({le,ew,lc,ec});log(`🔗 Merge fertig: ${le} neue Matches, ${ew} Leads aktualisiert`,'success');
+        }catch(e){log(`❌ Merge: ${e.message}`,'error')}setRun(false);rc()};
     const fm=v=>typeof v==='number'?v.toLocaleString('de-DE'):v;
     return(<React.Fragment>
         <div className="cd fi"><div className="cd-t">🔗 Datenquellen verknüpfen</div>
-            <p style={{fontSize:13,color:'var(--td)',marginBottom:16,lineHeight:1.6}}>Matcht Leveto ↔ EFS ↔ CSV über Name+PLZ und Lead-IDs. Verknüpfte Daten ermöglichen vollständige Provisions-Berechnung.</p>
+            <p style={{fontSize:13,color:'var(--td)',marginBottom:16,lineHeight:1.6}}>Matcht Leveto ↔ EFS ↔ CSV über Name+PLZ und Lead-IDs. Schreibt EFS-Status, Preis, kWp und Anlagendaten direkt in die Leveto-Leads.</p>
             <div className="mg">{[{i:'🔄',v:ct.leveto,l:'Leveto Leads'},{i:'📊',v:ct.efs,l:'EFS Projekte'},{i:'💰',v:ct.auftraege,l:'CSV Aufträge'},{i:'🏦',v:ct.bank,l:'Bank Trans.'}].map(s=><div key={s.l} className="mc"><div style={{fontSize:28}}>{s.i}</div><div className="mv">{fm(s.v)}</div><div className="ml">{s.l}</div></div>)}</div>
             <button className="btn by" disabled={run} onClick={go} style={{width:'100%',justifyContent:'center'}}>{run?<React.Fragment><span className="spinner"/> Merge läuft...</React.Fragment>:'🔗 Auto-Merge starten'}</button>
         </div>
         {mr&&<div className="cd fi"><div className="cd-t">✅ Merge-Ergebnis</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>{[{v:mr.le,l:'EFS ↔ Leveto',bg:'var(--ad)',c:'var(--a)'},{v:mr.lc,l:'CSV ↔ Leveto',bg:'var(--bld)',c:'var(--bl)'},{v:mr.ec,l:'EFS ↔ CSV',bg:'var(--gd)',c:'var(--g)'}].map(s=><div key={s.l} style={{background:s.bg,borderRadius:10,padding:16,textAlign:'center'}}><div style={{fontSize:24,fontWeight:700,color:s.c}}>{s.v}</div><div style={{fontSize:11,color:'var(--td)',marginTop:4}}>{s.l}</div></div>)}</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:14}}>
+                {[{v:mr.le,l:'Neue EFS↔Leveto Matches',bg:'var(--ad)',c:'var(--a)'},{v:mr.ew,l:'Leveto mit EFS aktualisiert',bg:'rgba(245,197,0,0.15)',c:'var(--a)'},{v:mr.lc,l:'CSV ↔ Leveto',bg:'var(--bld)',c:'var(--bl)'},{v:mr.ec,l:'EFS ↔ CSV',bg:'var(--gd)',c:'var(--g)'}].map(s=><div key={s.l} style={{background:s.bg,borderRadius:10,padding:16,textAlign:'center'}}><div style={{fontSize:24,fontWeight:700,color:s.c}}>{s.v}</div><div style={{fontSize:11,color:'var(--td)',marginTop:4}}>{s.l}</div></div>)}
+            </div>
         </div>}
         <div className="cd fi"><div className="cd-t">ℹ️ Merge-Logik</div>
-            <table className="mt"><thead><tr><th>Quelle A</th><th>↔</th><th>Quelle B</th><th>Match-Kriterium</th></tr></thead><tbody>
-                <tr><td style={{color:'var(--tb)'}}>EFS Projekte</td><td>↔</td><td>Leveto Leads</td><td>Nachname + PLZ</td></tr>
-                <tr><td style={{color:'var(--tb)'}}>CSV Aufträge</td><td>↔</td><td>Leveto Leads</td><td>Lead ID (direkt)</td></tr>
-                <tr><td style={{color:'var(--tb)'}}>EFS Projekte</td><td>↔</td><td>CSV Aufträge</td><td>Kunde Nachname + PLZ</td></tr>
+            <table className="mt"><thead><tr><th>Phase</th><th>Aktion</th><th>Match-Kriterium</th></tr></thead><tbody>
+                <tr><td style={{color:'var(--a)'}}>1</td><td>EFS ↔ Leveto verknüpfen</td><td>Nachname + PLZ + Vorname</td></tr>
+                <tr><td style={{color:'var(--a)'}}>2</td><td><strong>EFS → Leveto Daten schreiben</strong></td><td>Status, Preis, kWp, Batterie, Montage-Datum</td></tr>
+                <tr><td style={{color:'var(--bl)'}}>3</td><td>CSV ↔ Leveto</td><td>Lead ID (direkt)</td></tr>
+                <tr><td style={{color:'var(--g)'}}>4</td><td>EFS ↔ CSV</td><td>Kunde Nachname + PLZ</td></tr>
             </tbody></table>
+            <div style={{marginTop:12,fontSize:12,color:'var(--td)',lineHeight:1.6}}>
+                <strong style={{color:'var(--tb)'}}>EFS-Felder in Leveto:</strong> efs_status, efs_simplified_status, efs_gesamtpreis_eur, efs_monatl_rate_eur, efs_pv_kwp, efs_bat_kwh, efs_installed_at, efs_grid_connected_at, efs_zustaendiger, efs_preismodell
+            </div>
         </div>
+        <AutoSync syncKey="auto_merge" log={log}/>
     </React.Fragment>);
 }
 
@@ -422,3 +637,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
+
