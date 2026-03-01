@@ -260,58 +260,41 @@ function processLeads(leads) {
   return { total, status, quellen, beraterLeads };
 }
 
-function processTermine(termine, vertrMap) {
+function processTermine(termine) {
   const total = termine.length;
-  const isAbschluss = s => s === 'auftrag' || s === 'abschluss';
-  const isAbgeschlossen = s => s === 'abgeschlossen';
-  const isStorno = s => s === 'storniert';
-  const isOffen = s => s === 'bestaetigt' || s === 'offen';
-
-  // Count by normalized status keys
-  let nAbschluss = 0, nAbgeschlossen = 0, nStorno = 0, nOffen = 0, nSonstige = 0;
+  // Leveto: Closed=stattgefunden, Cancelled=ausgefallen, Open=offen/nicht ausgewertet
+  let nStattgefunden = 0, nAusgefallen = 0, nOffen = 0, nAbschluss = 0;
   termine.forEach(t => {
-    const s = t.status || 'unbekannt';
-    if (isAbschluss(s)) nAbschluss++;
-    else if (isAbgeschlossen(s)) nAbgeschlossen++;
-    else if (isStorno(s)) nStorno++;
-    else if (isOffen(s)) nOffen++;
-    else nSonstige++;
+    if (t.status === 'Closed') nStattgefunden++;
+    else if (t.status === 'Cancelled') nAusgefallen++;
+    else nOffen++;
+    if ((t.feedback_status || '').trim() === 'Abschluss') nAbschluss++;
   });
-  const byStatus = {
-    'Abschluss': nAbschluss,
-    'Abgeschlossen': nAbgeschlossen,
-    'Storniert': nStorno,
-    'Offen/Bestätigt': nOffen,
-    ...(nSonstige > 0 ? { 'Sonstige': nSonstige } : {})
-  };
 
-  // Daily
+  // Daily – grouped by start_date
   const dailyMap = {};
   termine.forEach(t => {
-    const d = t.datum;
+    const d = (t.start_date || '').slice(0, 10);
     if (!d) return;
-    if (!dailyMap[d]) dailyMap[d] = { d: fmtDate(d), raw: d, total: 0, auftrag: 0, storno: 0, offen: 0, bestaetigt: 0 };
+    if (!dailyMap[d]) dailyMap[d] = { d: fmtDate(d), raw: d, total: 0 };
     dailyMap[d].total++;
-    if (isAbschluss(t.status)) dailyMap[d].auftrag++;
-    else if (isStorno(t.status)) dailyMap[d].storno++;
-    else if (isOffen(t.status)) dailyMap[d].bestaetigt++;
-    else dailyMap[d].offen++;
   });
   const daily = Object.values(dailyMap).sort((a, b) => a.raw.localeCompare(b.raw));
 
-  // By Vertriebler – use berater_name (Leveto) or fallback to vertrieb_id mapping
+  // By Berater (direct from Leveto)
   const beraterTermMap = {};
   termine.forEach(t => {
-    const name = t.berater_name || vertrMap[t.vertrieb_id] || t.vertrieb_id || 'Nicht zugewiesen';
-    if (!beraterTermMap[name]) beraterTermMap[name] = { n: name, total: 0, auftrag: 0, storno: 0 };
+    const name = t.berater || 'Nicht zugewiesen';
+    if (!beraterTermMap[name]) beraterTermMap[name] = { n: name, total: 0, abschluss: 0, ausgefallen: 0, stattgefunden: 0 };
     beraterTermMap[name].total++;
-    if (isAbschluss(t.status)) beraterTermMap[name].auftrag++;
-    if (isStorno(t.status)) beraterTermMap[name].storno++;
+    if ((t.feedback_status || '').trim() === 'Abschluss') beraterTermMap[name].abschluss++;
+    if (t.status === 'Cancelled') beraterTermMap[name].ausgefallen++;
+    if (t.status === 'Closed') beraterTermMap[name].stattgefunden++;
   });
   const berater = Object.values(beraterTermMap)
     .sort((a, b) => a.n === 'Nicht zugewiesen' ? 1 : b.n === 'Nicht zugewiesen' ? -1 : b.total - a.total);
 
-  return { total, byStatus, daily, berater, nAbschluss, nStorno, nOffen, nAbgeschlossen };
+  return { total, nStattgefunden, nAusgefallen, nOffen, nAbschluss, daily, berater };
 }
 
 function processEFS(projekte) {
@@ -617,10 +600,10 @@ const TabTermine = ({ data }) => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
         <KPI label="Termine gesamt" value={fmt(d.total)} color={C.gold} />
-        <KPI label="Abschluss" value={fmt(d.nAbschluss)} sub={`${pct(d.nAbschluss, d.total)}% Close-Rate`} color={C.green} />
-        <KPI label="Bestätigt" value={fmt(d.nOffen)} color={C.blue} />
-        <KPI label="Storniert" value={fmt(d.nStorno)} sub={`${pct(d.nStorno, d.total)}% Ausfallquote`} color={C.red} />
-        <KPI label="Abgeschlossen" value={fmt(d.nAbgeschlossen)} color={C.amber} />
+        <KPI label="Stattgefunden" value={fmt(d.nStattgefunden)} sub={`${pct(d.nStattgefunden, d.total)}%`} color={C.green} />
+        <KPI label="Abschluss" value={fmt(d.nAbschluss)} sub={`${pct(d.nAbschluss, d.nStattgefunden)}% Close-Rate`} color={C.teal} />
+        <KPI label="Ausgefallen" value={fmt(d.nAusgefallen)} sub={`${pct(d.nAusgefallen, d.total)}% Ausfallquote`} color={C.red} />
+        <KPI label="Offen" value={fmt(d.nOffen)} sub="Nicht ausgewertet" color={C.amber} />
       </div>
 
       <Sec title="📅 Tägliche Termine">
@@ -630,10 +613,7 @@ const TabTermine = ({ data }) => {
             <XAxis dataKey="d" tick={{ fill: C.sec, fontSize: 10 }} interval={Math.max(0, Math.floor(d.daily.length / 12))} />
             <YAxis tick={{ fill: C.sec, fontSize: 10 }} />
             <Tooltip content={<TT />} />
-            <Bar dataKey="auftrag" stackId="a" fill={C.green} name="Abschluss" />
-            <Bar dataKey="bestaetigt" stackId="a" fill={C.blue} name="Bestätigt" />
-            <Bar dataKey="offen" stackId="a" fill={C.amber} name="Offen" />
-            <Bar dataKey="storno" stackId="a" fill={C.red} name="Storniert" radius={[4,4,0,0]} />
+            <Bar dataKey="total" fill={C.gold} name="Termine" radius={[4,4,0,0]} />
           </BarChart>
         </ResponsiveContainer>
       </Sec>
@@ -643,9 +623,10 @@ const TabTermine = ({ data }) => {
           { label: '#', render: (_, i) => i + 1, align: 'center' },
           { label: 'Berater', key: 'n', bold: true },
           { label: 'Gesamt', key: 'total', align: 'center', mono: true, bold: true },
-          { label: 'Abschluss', key: 'auftrag', align: 'center', mono: true, color: () => C.green },
-          { label: 'Storno', key: 'storno', align: 'center', mono: true, color: () => C.red },
-          { label: 'Close %', render: r => `${pct(r.auftrag, r.total)}%`, align: 'center', mono: true },
+          { label: 'Stattgef.', key: 'stattgefunden', align: 'center', mono: true, color: () => C.green },
+          { label: 'Abschluss', key: 'abschluss', align: 'center', mono: true, color: () => C.teal },
+          { label: 'Ausgefallen', key: 'ausgefallen', align: 'center', mono: true, color: () => C.red },
+          { label: 'Close %', render: r => `${pct(r.abschluss, r.stattgefunden)}%`, align: 'center', mono: true },
         ]} />
       </Sec>
     </div>
@@ -742,7 +723,7 @@ const App = () => {
       const [auftraegeData, leadsData, termineData, efsData, maData, vertrData] = await Promise.all([
         sbFetchAll('auftraege', `auftrags_datum=gte.${start}&auftrags_datum=lt.${nextMonth}&order=auftrags_datum.asc`),
         sbFetchAll('leveto_leads', `erster_status_datum=gte.${start}&erster_status_datum=lt.${nextMonth}&order=erster_status_datum.asc`),
-        sbFetchAll('termine', `datum=gte.${start}&datum=lt.${nextMonth}&order=datum.asc`),
+        sbFetchAll('leveto_termine', `start_date=gte.${start}&start_date=lt.${nextMonth}&appointment_type=in.("Termin vor Ort PV","Termin vor Ort ( SCOUT )","Folgetermin vor Ort")&order=start_date.asc`),
         sbFetchAll('efs_projekte', 'order=erstellt_am.desc'),
         sbFetch('mitarbeiter', 'select=id,vorname,nachname,kuerzel,typ&limit=500'),
         sbFetch('vertriebler', 'select=id,name&limit=100'),
@@ -767,7 +748,7 @@ const App = () => {
   // Processed data
   const salesData = useMemo(() => auftraege.length > 0 ? processAuftraege(auftraege, mitarbeiterMap) : null, [auftraege, mitarbeiterMap]);
   const leadsData = useMemo(() => leads.length > 0 ? processLeads(leads) : null, [leads]);
-  const termineData = useMemo(() => termine.length > 0 ? processTermine(termine, vertrMap) : null, [termine, vertrMap]);
+  const termineData = useMemo(() => termine.length > 0 ? processTermine(termine) : null, [termine]);
   const efsData = useMemo(() => efsProjekte.length > 0 ? processEFS(efsProjekte) : null, [efsProjekte]);
 
   const monthLabel = selectedMonth.year === 0 ? 'Gesamt (ab Okt 2025)' : `${monthNames[selectedMonth.month - 1]} ${selectedMonth.year}`;
