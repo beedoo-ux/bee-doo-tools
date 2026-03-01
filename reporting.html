@@ -287,13 +287,17 @@ function processTermine(termine) {
     if (cd === today) nGelegtHeute++;
   });
 
-  // Daily chart – by start_date
+  // Daily chart – by start_date, 3 bars: gesamt, stattgefunden, ausgefallen
   const dailyMap = {};
   termine.forEach(t => {
     const d = (t.start_date || '').slice(0, 10);
     if (!d) return;
-    if (!dailyMap[d]) dailyMap[d] = { d: fmtDate(d), raw: d, total: 0 };
-    dailyMap[d].total++;
+    if (!dailyMap[d]) dailyMap[d] = { d: fmtDate(d), raw: d, gesamt: 0, stattgef: 0, ausgef: 0 };
+    dailyMap[d].gesamt++;
+    if (d <= today) {
+      if (t.status === 'Cancelled') dailyMap[d].ausgef++;
+      else dailyMap[d].stattgef++;
+    }
   });
   const daily = Object.values(dailyMap).sort((a, b) => a.raw.localeCompare(b.raw));
 
@@ -645,7 +649,9 @@ const TabTermine = ({ data }) => {
             <XAxis dataKey="d" tick={{ fill: C.sec, fontSize: 10 }} interval={Math.max(0, Math.floor(d.daily.length / 12))} />
             <YAxis tick={{ fill: C.sec, fontSize: 10 }} />
             <Tooltip content={<TT />} />
-            <Bar dataKey="total" fill={C.gold} name="Termine" radius={[4,4,0,0]} />
+            <Bar dataKey="gesamt" fill={C.gold} name="Gesamt" radius={[4,4,0,0]} />
+            <Bar dataKey="stattgef" fill={C.green} name="Stattgefunden" radius={[4,4,0,0]} />
+            <Bar dataKey="ausgef" fill={C.red} name="Ausgefallen" radius={[4,4,0,0]} />
           </BarChart>
         </ResponsiveContainer>
       </Sec>
