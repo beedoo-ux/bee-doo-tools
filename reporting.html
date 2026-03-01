@@ -262,16 +262,32 @@ function processLeads(leads) {
 
 function processTermine(termine) {
   const total = termine.length;
-  // Leveto: Closed=stattgefunden, Cancelled=ausgefallen, Open=offen/nicht ausgewertet
-  let nStattgefunden = 0, nAusgefallen = 0, nOffen = 0, nAbschluss = 0;
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+
+  // Split past vs future
+  let nStattgefunden = 0, nAusgefallen = 0, nZukunft = 0, nHeute = 0;
+  // Past: Closed + Open = stattgefunden (Open in past = nicht ausgewertet aber stattgefunden)
+  // Cancelled = ausgefallen
   termine.forEach(t => {
-    if (t.status === 'Closed') nStattgefunden++;
-    else if (t.status === 'Cancelled') nAusgefallen++;
-    else nOffen++;
-    if ((t.feedback_status || '').trim() === 'Abschluss') nAbschluss++;
+    const d = (t.start_date || '').slice(0, 10);
+    if (d === today) nHeute++;
+    if (d > today) { nZukunft++; return; }
+    // Past or today
+    if (t.status === 'Cancelled') nAusgefallen++;
+    else nStattgefunden++; // Closed + Open in past = stattgefunden
+  });
+  const nVergangenheit = nStattgefunden + nAusgefallen;
+  const convRate = nVergangenheit > 0 ? (nStattgefunden / nVergangenheit * 100) : 0;
+
+  // Termine gelegt heute (by creation_date)
+  let nGelegtHeute = 0;
+  termine.forEach(t => {
+    const cd = (t.creation_date || '').slice(0, 10);
+    if (cd === today) nGelegtHeute++;
   });
 
-  // Daily – grouped by start_date
+  // Daily chart – by start_date
   const dailyMap = {};
   termine.forEach(t => {
     const d = (t.start_date || '').slice(0, 10);
@@ -281,20 +297,36 @@ function processTermine(termine) {
   });
   const daily = Object.values(dailyMap).sort((a, b) => a.raw.localeCompare(b.raw));
 
-  // By Berater (direct from Leveto)
+  // By Quelle
+  const quellenMap = {};
+  termine.forEach(t => {
+    const q = t.quelle || 'Unbekannt';
+    if (!quellenMap[q]) quellenMap[q] = { name: q, total: 0, stattgefunden: 0, ausgefallen: 0 };
+    quellenMap[q].total++;
+    const d = (t.start_date || '').slice(0, 10);
+    if (d <= today) {
+      if (t.status === 'Cancelled') quellenMap[q].ausgefallen++;
+      else quellenMap[q].stattgefunden++;
+    }
+  });
+  const quellen = Object.values(quellenMap).sort((a, b) => b.total - a.total);
+
+  // By Berater
   const beraterTermMap = {};
   termine.forEach(t => {
     const name = t.berater || 'Nicht zugewiesen';
-    if (!beraterTermMap[name]) beraterTermMap[name] = { n: name, total: 0, abschluss: 0, ausgefallen: 0, stattgefunden: 0 };
+    if (!beraterTermMap[name]) beraterTermMap[name] = { n: name, total: 0, stattgefunden: 0, ausgefallen: 0 };
     beraterTermMap[name].total++;
-    if ((t.feedback_status || '').trim() === 'Abschluss') beraterTermMap[name].abschluss++;
-    if (t.status === 'Cancelled') beraterTermMap[name].ausgefallen++;
-    if (t.status === 'Closed') beraterTermMap[name].stattgefunden++;
+    const d = (t.start_date || '').slice(0, 10);
+    if (d <= today) {
+      if (t.status === 'Cancelled') beraterTermMap[name].ausgefallen++;
+      else beraterTermMap[name].stattgefunden++;
+    }
   });
   const berater = Object.values(beraterTermMap)
     .sort((a, b) => a.n === 'Nicht zugewiesen' ? 1 : b.n === 'Nicht zugewiesen' ? -1 : b.total - a.total);
 
-  return { total, nStattgefunden, nAusgefallen, nOffen, nAbschluss, daily, berater };
+  return { total, nStattgefunden, nAusgefallen, nZukunft, nHeute, nGelegtHeute, convRate, daily, quellen, berater };
 }
 
 function processEFS(projekte) {
@@ -599,14 +631,14 @@ const TabTermine = ({ data }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
-        <KPI label="Termine gesamt" value={fmt(d.total)} color={C.gold} />
-        <KPI label="Stattgefunden" value={fmt(d.nStattgefunden)} sub={`${pct(d.nStattgefunden, d.total)}%`} color={C.green} />
-        <KPI label="Abschluss" value={fmt(d.nAbschluss)} sub={`${pct(d.nAbschluss, d.nStattgefunden)}% Close-Rate`} color={C.teal} />
-        <KPI label="Ausgefallen" value={fmt(d.nAusgefallen)} sub={`${pct(d.nAusgefallen, d.total)}% Ausfallquote`} color={C.red} />
-        <KPI label="Offen" value={fmt(d.nOffen)} sub="Nicht ausgewertet" color={C.amber} />
+        <KPI label="Termine gelegt" value={fmt(d.total)} sub={d.nGelegtHeute > 0 ? `+${d.nGelegtHeute} heute` : ''} color={C.gold} />
+        <KPI label="Stattgefunden" value={fmt(d.nStattgefunden)} sub={`${d.convRate.toFixed(1)}% Stattfinde-Quote`} color={C.green} />
+        <KPI label="Ausgefallen" value={fmt(d.nAusgefallen)} sub={`${pct(d.nAusgefallen, d.nStattgefunden + d.nAusgefallen)}% Ausfallquote`} color={C.red} />
+        <KPI label="Geplant" value={fmt(d.nZukunft)} sub="Zukünftige Termine" color={C.blue} />
+        {d.nHeute > 0 && <KPI label="Heute" value={fmt(d.nHeute)} sub="Termine heute" color={C.amber} />}
       </div>
 
-      <Sec title="📅 Tägliche Termine">
+      <Sec title="📅 Tägliche Termine" sub="Nach Termin-Datum">
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={d.daily}>
             <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
@@ -618,15 +650,25 @@ const TabTermine = ({ data }) => {
         </ResponsiveContainer>
       </Sec>
 
+      <Sec title="📡 Quellen" sub="Woher kommen die Termine?">
+        <RankTable data={d.quellen.slice(0, 15)} columns={[
+          { label: '#', render: (_, i) => i + 1, align: 'center' },
+          { label: 'Quelle', key: 'name', bold: true },
+          { label: 'Gesamt', key: 'total', align: 'center', mono: true, bold: true },
+          { label: 'Stattgef.', key: 'stattgefunden', align: 'center', mono: true, color: () => C.green },
+          { label: 'Ausgefallen', key: 'ausgefallen', align: 'center', mono: true, color: () => C.red },
+          { label: 'Quote %', render: r => { const t = r.stattgefunden + r.ausgefallen; return t > 0 ? `${pct(r.stattgefunden, t)}%` : '–'; }, align: 'center', mono: true },
+        ]} />
+      </Sec>
+
       <Sec title="🏆 Berater Termine" sub="Sortiert nach Termin-Anzahl">
         <RankTable data={d.berater.slice(0, 20)} columns={[
           { label: '#', render: (_, i) => i + 1, align: 'center' },
           { label: 'Berater', key: 'n', bold: true },
           { label: 'Gesamt', key: 'total', align: 'center', mono: true, bold: true },
           { label: 'Stattgef.', key: 'stattgefunden', align: 'center', mono: true, color: () => C.green },
-          { label: 'Abschluss', key: 'abschluss', align: 'center', mono: true, color: () => C.teal },
           { label: 'Ausgefallen', key: 'ausgefallen', align: 'center', mono: true, color: () => C.red },
-          { label: 'Close %', render: r => `${pct(r.abschluss, r.stattgefunden)}%`, align: 'center', mono: true },
+          { label: 'Quote %', render: r => { const t = r.stattgefunden + r.ausgefallen; return t > 0 ? `${pct(r.stattgefunden, t)}%` : '–'; }, align: 'center', mono: true },
         ]} />
       </Sec>
     </div>
