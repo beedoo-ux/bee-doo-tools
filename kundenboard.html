@@ -3,521 +3,436 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>bee-doo Kundenboard</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<title>bee-doo · Kundenboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
-:root {
-  --bg: #111113;
-  --bg2: #1a1a1e;
-  --bg3: #222228;
-  --bg4: #2a2a32;
-  --gold: #F5C500;
-  --gold-dim: #c9a200;
-  --gold-glow: rgba(245,197,0,0.15);
-  --text: #e8e8ec;
-  --text2: #a0a0aa;
-  --text3: #68687a;
-  --green: #34d399;
-  --red: #f87171;
-  --blue: #60a5fa;
-  --orange: #fb923c;
-  --purple: #a78bfa;
-  --border: rgba(255,255,255,0.06);
-  --radius: 12px;
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0f1117;--bg2:#1a1d27;--bg3:#22252f;--bg4:#2a2d3a;--bg5:#32364a;
+  --text:#f0f0f0;--text2:#b0b8c8;--text3:#6b7280;
+  --gold:#F5C500;--gold2:#FFD740;--gold-dim:rgba(245,197,0,.10);--gold-dim2:rgba(245,197,0,.05);
+  --green:#22c55e;--green-dim:rgba(34,197,94,.10);
+  --red:#ef4444;--red-dim:rgba(239,68,68,.10);
+  --blue:#3b82f6;--blue-dim:rgba(59,130,246,.10);
+  --orange:#f59e0b;--orange-dim:rgba(245,158,11,.10);
+  --purple:#a855f7;--purple-dim:rgba(168,85,247,.10);
+  --cyan:#06b6d4;--cyan-dim:rgba(6,182,212,.10);
+  --r:10px;--r2:14px;
 }
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
-::-webkit-scrollbar { width:6px; }
-::-webkit-scrollbar-track { background:transparent; }
-::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:3px; }
+html{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px}
+body{min-height:100vh}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+input,select,button{font-family:inherit}
 
-.header { 
-  background:var(--bg2); border-bottom:1px solid var(--border); 
-  padding:16px 24px; display:flex; align-items:center; gap:16px;
-  position:sticky; top:0; z-index:100; backdrop-filter:blur(20px);
-}
-.logo { display:flex; align-items:center; gap:10px; flex-shrink:0; }
-.logo-dot { width:28px; height:28px; background:var(--gold); border-radius:6px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; color:#111; }
-.logo-text { font-size:18px; font-weight:600; color:var(--text); white-space:nowrap; }
-.logo-text span { color:var(--text3); font-weight:400; margin-left:6px; font-size:15px; }
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:360px;border-right:1px solid var(--bg4);display:flex;flex-direction:column;background:var(--bg);flex-shrink:0}
+.main{flex:1;overflow-y:auto;background:var(--bg)}
 
-.search-wrap { flex:1; max-width:560px; position:relative; }
-.search-input {
-  width:100%; padding:10px 16px 10px 42px; background:var(--bg3); border:1px solid var(--border);
-  border-radius:10px; color:var(--text); font-size:15px; font-family:inherit; outline:none;
-  transition:border-color 0.2s, box-shadow 0.2s;
-}
-.search-input:focus { border-color:var(--gold); box-shadow:0 0 0 3px var(--gold-glow); }
-.search-input::placeholder { color:var(--text3); }
-.search-icon { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--text3); pointer-events:none; }
-.search-badge { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:var(--bg4); padding:2px 8px; border-radius:5px; font-size:11px; color:var(--text3); }
-.stats-bar { display:flex; gap:20px; margin-left:auto; }
-.stat-item { text-align:center; }
-.stat-num { font-size:20px; font-weight:700; color:var(--gold); line-height:1; }
-.stat-label { font-size:11px; color:var(--text3); margin-top:2px; }
+.sb-header{padding:16px;border-bottom:1px solid var(--bg3)}
+.sb-logo{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.sb-logo b{font-size:20px;font-weight:800;color:var(--gold)}
+.sb-logo span{font-size:12px;color:var(--text3)}
+.search-box{position:relative}
+.search-box input{width:100%;padding:10px 12px 10px 36px;background:var(--bg2);border:1.5px solid var(--bg4);border-radius:var(--r);color:var(--text);font-size:13px;outline:none;transition:.2s}
+.search-box input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+.search-box input::placeholder{color:var(--text3)}
+.search-box svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);width:16px;height:16px}
+.search-hint{font-size:10px;color:var(--text3);margin-top:6px}
 
-.main { display:flex; height:calc(100vh - 65px); }
-.sidebar { 
-  width:380px; min-width:380px; background:var(--bg2); border-right:1px solid var(--border);
-  overflow-y:auto; display:flex; flex-direction:column;
-}
-.content { flex:1; overflow-y:auto; padding:24px; }
+.filters{padding:10px 16px;border-bottom:1px solid var(--bg3);display:flex;flex-direction:column;gap:8px}
+.filter-row{display:flex;gap:6px;flex-wrap:wrap}
+.filter-select{padding:6px 10px;background:var(--bg2);border:1px solid var(--bg4);border-radius:7px;color:var(--text2);font-size:11px;outline:none;cursor:pointer;flex:1;min-width:0;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7280'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px}
+.filter-select:focus{border-color:var(--gold)}
+.filter-chip{padding:4px 10px;background:var(--bg2);border:1px solid var(--bg4);border-radius:20px;color:var(--text2);font-size:11px;cursor:pointer;transition:.15s;white-space:nowrap;user-select:none}
+.filter-chip:hover{border-color:var(--text3)}
+.filter-chip.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold)}
+.filter-chip .count{background:var(--bg4);padding:1px 5px;border-radius:8px;font-size:9px;margin-left:4px}
+.filter-chip.active .count{background:rgba(245,197,0,.2)}
 
-.list-header { 
-  padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; 
-  justify-content:space-between; position:sticky; top:0; background:var(--bg2); z-index:10;
-}
-.list-header h3 { font-size:13px; color:var(--text2); font-weight:500; }
-.list-count { font-size:12px; color:var(--text3); background:var(--bg3); padding:2px 8px; border-radius:8px; }
+.results-header{padding:10px 16px;font-size:11px;color:var(--text3);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--bg3)}
+.results-list{flex:1;overflow-y:auto}
+.result-item{padding:12px 16px;border-bottom:1px solid var(--bg3);cursor:pointer;transition:.1s}
+.result-item:hover{background:var(--gold-dim2)}
+.result-item.active{background:var(--gold-dim);border-left:3px solid var(--gold)}
+.ri-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.ri-name{font-weight:700;font-size:14px;line-height:1.2}
+.ri-badge{padding:2px 8px;border-radius:6px;font-size:9px;font-weight:700;white-space:nowrap;flex-shrink:0;letter-spacing:.3px}
+.ri-meta{font-size:11px;color:var(--text3);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px}
+.ri-meta span{display:inline-flex;align-items:center;gap:3px}
+.ri-tags{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
+.ri-tag{font-size:9px;padding:2px 6px;border-radius:4px;background:var(--bg3);color:var(--text2)}
 
-.customer-item {
-  padding:14px 16px; border-bottom:1px solid var(--border); cursor:pointer;
-  transition:background 0.15s;
-}
-.customer-item:hover { background:var(--bg3); }
-.customer-item.active { background:var(--gold-glow); border-left:3px solid var(--gold); }
-.ci-name { font-size:15px; font-weight:600; color:var(--text); margin-bottom:3px; }
-.ci-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.ci-tag { font-size:11px; padding:2px 7px; border-radius:5px; background:var(--bg4); color:var(--text2); white-space:nowrap; }
-.ci-tag.gold { background:var(--gold-glow); color:var(--gold); }
-.ci-tag.green { background:rgba(52,211,153,0.12); color:var(--green); }
-.ci-tag.red { background:rgba(248,113,113,0.12); color:var(--red); }
-.ci-tag.blue { background:rgba(96,165,250,0.12); color:var(--blue); }
-.ci-tag.orange { background:rgba(251,146,60,0.12); color:var(--orange); }
-.ci-sub { font-size:12px; color:var(--text3); margin-top:4px; }
+.main-inner{padding:20px;max-width:1200px;margin:0 auto}
+.empty-main{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text3);text-align:center;padding:40px}
+.empty-main h2{font-size:18px;color:var(--text2);margin-bottom:6px}
+.empty-main p{font-size:13px}
 
-.detail-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text3); gap:12px; }
-.detail-empty svg { opacity:0.3; }
-.detail-empty p { font-size:15px; }
+.dash-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}
+.dash-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--r);padding:14px 16px;text-align:center;transition:.2s}
+.dash-card:hover{border-color:var(--bg5)}
+.dash-val{font-size:24px;font-weight:800;line-height:1}
+.dash-label{font-size:10px;color:var(--text3);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
 
-.detail-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; gap:16px; flex-wrap:wrap; }
-.dh-left h1 { font-size:26px; font-weight:700; color:var(--text); line-height:1.2; }
-.dh-left .dh-sub { font-size:14px; color:var(--text2); margin-top:4px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.dh-status { padding:6px 14px; border-radius:8px; font-size:13px; font-weight:600; white-space:nowrap; }
-.dh-status.active { background:rgba(52,211,153,0.12); color:var(--green); }
-.dh-status.storno { background:rgba(248,113,113,0.12); color:var(--red); }
-.dh-status.pending { background:rgba(251,146,60,0.12); color:var(--orange); }
+.k-header{background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--r2);padding:20px;margin-bottom:14px}
+.k-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.k-name{font-size:26px;font-weight:800;line-height:1.1}
+.k-an{color:var(--gold);font-size:12px;font-weight:600;margin-top:3px;display:flex;align-items:center;gap:8px}
+.k-meta{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px}
+.k-meta-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2)}
+.k-meta-item svg{width:13px;height:13px;color:var(--text3);flex-shrink:0}
+.k-status-pill{padding:6px 14px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 
-.cards-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:16px; margin-bottom:24px; }
-.card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:20px; transition:border-color 0.2s; }
-.card:hover { border-color:rgba(255,255,255,0.1); }
-.card-title { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:var(--text3); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
-.card-title svg { color:var(--gold); }
-.card-row { display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px solid var(--border); }
-.card-row:last-child { border-bottom:none; }
-.card-label { font-size:13px; color:var(--text2); flex-shrink:0; }
-.card-value { font-size:14px; color:var(--text); font-weight:500; text-align:right; max-width:60%; word-break:break-word; }
-.card-value.gold { color:var(--gold); font-weight:700; }
-.card-value.green { color:var(--green); }
-.card-value.red { color:var(--red); }
-.card-full { grid-column:1 / -1; }
+.key-nums{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.key-num{background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--r);padding:16px;text-align:center}
+.kn-val{font-size:22px;font-weight:800;line-height:1}
+.kn-label{font-size:10px;color:var(--text3);margin-top:4px;text-transform:uppercase;letter-spacing:.4px}
 
-.timeline { padding:4px 0; }
-.tl-item { display:flex; gap:14px; position:relative; padding-bottom:16px; }
-.tl-item:last-child { padding-bottom:0; }
-.tl-line { position:absolute; left:11px; top:24px; bottom:0; width:2px; background:var(--bg4); }
-.tl-item:last-child .tl-line { display:none; }
-.tl-dot { 
-  width:24px; height:24px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
-  position:relative; z-index:1;
-}
-.tl-dot.green { background:rgba(52,211,153,0.2); border:2px solid var(--green); }
-.tl-dot.gold { background:var(--gold-glow); border:2px solid var(--gold); }
-.tl-dot.red { background:rgba(248,113,113,0.2); border:2px solid var(--red); }
-.tl-dot.blue { background:rgba(96,165,250,0.2); border:2px solid var(--blue); }
-.tl-dot.orange { background:rgba(251,146,60,0.2); border:2px solid var(--orange); }
-.tl-dot.default { background:var(--bg4); border:2px solid var(--bg4); }
-.tl-content { flex:1; min-width:0; }
-.tl-title { font-size:13px; color:var(--text); font-weight:500; }
-.tl-date { font-size:11px; color:var(--text3); margin-top:1px; }
+.cards-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.card{background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--r2);padding:18px;overflow:hidden}
+.card-t{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.card-t svg{width:13px;height:13px}
 
-.prov-table { width:100%; border-collapse:collapse; font-size:13px; }
-.prov-table th { text-align:left; color:var(--text3); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--border); font-size:12px; }
-.prov-table td { padding:6px 8px; border-bottom:1px solid var(--border); color:var(--text); }
-.prov-table tr:last-child td { border-bottom:none; }
-.prov-table .amount { text-align:right; font-weight:600; font-variant-numeric:tabular-nums; }
-.prov-table .amount.pos { color:var(--green); }
-.prov-table .amount.neg { color:var(--red); }
+.dg{display:grid;grid-template-columns:1fr 1fr;gap:1px}
+.dg-item{padding:7px 0;border-bottom:1px solid var(--bg3)}
+.dg-item:last-child,.dg-item:nth-last-child(2){border:none}
+.dg-l{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px}
+.dg-v{font-size:13px;font-weight:500;margin-top:1px;word-break:break-word}
 
-.loading { display:flex; align-items:center; justify-content:center; padding:40px; }
-.spinner { width:32px; height:32px; border:3px solid var(--bg4); border-top-color:var(--gold); border-radius:50%; animation:spin 0.8s linear infinite; }
-@keyframes spin { to { transform:rotate(360deg); } }
+.timeline{position:relative;padding-left:24px;max-height:350px;overflow-y:auto}
+.timeline::before{content:'';position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--bg4)}
+.tl-item{position:relative;padding-bottom:12px}
+.tl-item:last-child{padding-bottom:0}
+.tl-dot{position:absolute;left:-24px;top:2px;width:14px;height:14px;border-radius:50%;border:2px solid var(--bg4);background:var(--bg2)}
+.tl-dot.done{border-color:var(--green);background:var(--green-dim)}
+.tl-dot.active{border-color:var(--gold);background:var(--gold-dim)}
+.tl-dot.storno{border-color:var(--red);background:var(--red-dim)}
+.tl-label{font-size:12px;font-weight:600;line-height:1.3}
+.tl-date{font-size:10px;color:var(--text3)}
 
-@media (max-width:1024px) {
-  .main { flex-direction:column; height:auto; }
-  .sidebar { width:100%; min-width:unset; max-height:40vh; border-right:none; border-bottom:1px solid var(--border); }
-  .content { padding:16px; }
-  .cards-grid { grid-template-columns:1fr; }
-  .stats-bar { display:none; }
-}
-@media (max-width:640px) {
-  .header { padding:12px 16px; flex-wrap:wrap; }
-  .search-wrap { max-width:100%; order:3; width:100%; }
-  .logo-text span { display:none; }
-  .detail-header { flex-direction:column; }
-  .dh-left h1 { font-size:22px; }
-}
+.ptbl{width:100%;border-collapse:collapse;font-size:12px}
+.ptbl th{text-align:left;padding:6px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);border-bottom:2px solid var(--bg4);font-weight:600}
+.ptbl td{padding:6px 10px;border-bottom:1px solid var(--bg3)}
+.ptbl tr:hover td{background:var(--gold-dim2)}
+.ptbl .amt{font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.ptbl .pos{color:var(--green)}
+.ptbl .neg{color:var(--red)}
+.ptbl .total td{border-top:2px solid var(--gold);font-weight:700}
+
+.map-box{height:180px;border-radius:var(--r);overflow:hidden;border:1px solid var(--bg3)}
+.leaflet-container{background:var(--bg3)!important}
+
+.vp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.vp-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--r);padding:14px;cursor:pointer;transition:.15s}
+.vp-card:hover{border-color:var(--gold);transform:translateY(-1px)}
+.vp-name{font-weight:700;font-size:14px}
+.vp-id{font-size:10px;color:var(--text3)}
+.vp-stats{display:flex;gap:12px;margin-top:8px}
+.vp-stat{text-align:center}
+.vp-stat-val{font-size:18px;font-weight:800}
+.vp-stat-label{font-size:9px;color:var(--text3);text-transform:uppercase}
+
+.loading{display:flex;align-items:center;justify-content:center;padding:30px;color:var(--text3);font-size:13px}
+.spinner{width:16px;height:16px;border:2px solid var(--bg4);border-top-color:var(--gold);border-radius:50%;animation:spin .5s linear infinite;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:1024px){.sidebar{width:300px}.dash-grid{grid-template-columns:repeat(3,1fr)}.key-nums{grid-template-columns:repeat(2,1fr)}.cards-2{grid-template-columns:1fr}}
+@media(max-width:768px){.app{flex-direction:column}.sidebar{width:100%;height:auto;max-height:50vh;border-right:none;border-bottom:1px solid var(--bg4)}.main{height:50vh}.dash-grid{grid-template-columns:repeat(2,1fr)}.vp-grid{grid-template-columns:1fr}}
+@media(max-width:480px){.main-inner{padding:12px}.k-name{font-size:20px}.key-nums{grid-template-columns:1fr 1fr}.dg{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useRef } = React;
+const {useState,useEffect,useRef,useCallback,useMemo}=React;
+const SB="https://hqzpemfaljxcysyqssng.supabase.co/rest/v1";
+const ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const HD={"apikey":ANON,"Authorization":"Bearer "+ANON};
+async function sb(t,p=""){const r=await fetch(SB+"/"+t+"?"+p,{headers:HD});if(!r.ok)throw new Error(r.status);return r.json()}
+async function sbC(t,p=""){const r=await fetch(SB+"/"+t+"?"+p+"&limit=0",{headers:{...HD,"Prefer":"count=exact"}});return parseInt((r.headers.get("content-range")||"").split("/")[1])||0}
+const eur=n=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"}).format(n||0);
+const num=n=>new Intl.NumberFormat("de-DE").format(n||0);
+const df=d=>{if(!d)return"–";return new Date(d).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"})};
+const kwpF=v=>{if(!v)return"–";return v>100?(v/100).toFixed(2):v.toFixed(2)};
+function stC(s){if(!s)return{bg:"var(--bg4)",c:"var(--text3)"};const l=s.toLowerCase();if(l.includes("storniert")||l.includes("abgelehnt")||l.includes("nicht machbar"))return{bg:"var(--red-dim)",c:"var(--red)"};if(l.includes("komplett")||l.includes("abnahme")||l.includes("abgeschlossen")||l.includes("efs")||l.includes("golfstrom"))return{bg:"var(--green-dim)",c:"var(--green)"};if(l.includes("hold")||l.includes("warten")||l.includes("zurück"))return{bg:"var(--orange-dim)",c:"var(--orange)"};if(l.includes("montage")||l.includes("planung")||l.includes("freigabe")||l.includes("baustelle")||l.includes("lieferschein"))return{bg:"var(--blue-dim)",c:"var(--blue)"};if(l.includes("quali")||l.includes("vertrag")||l.includes("finanzierung")||l.includes("barzahler"))return{bg:"var(--purple-dim)",c:"var(--purple)"};if(l.includes("auftrag")||l.includes("angebot"))return{bg:"var(--cyan-dim)",c:"var(--cyan)"};return{bg:"var(--gold-dim)",c:"var(--gold)"};}
+const I=({d,s=14})=>React.createElement("svg",{width:s,height:s,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:"2",strokeLinecap:"round",strokeLinejoin:"round"},React.createElement("path",{d}));
+function parseWF(wf){if(!wf)return[];const e=[];const rx=/(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}:\d{2})-?\s*(.*?)(?=\d{2}\.\d{2}\.\d{4}|$)/g;let m;while((m=rx.exec(wf))!==null)e.push({date:m[1],time:m[2],text:m[3].trim().replace(/^-\s*/,"")});return e;}
 
-const SB = 'https://hqzpemfaljxcysyqssng.supabase.co/rest/v1';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
-
-async function sbFetch(table, params = '') {
-  const r = await fetch(`${SB}/${table}?${params}`, {
-    headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Prefer': 'count=exact' }
-  });
-  const count = r.headers.get('content-range')?.split('/')?.pop() || '0';
-  return { data: await r.json(), count: parseInt(count) };
+function KMap({lat,lng,name}){
+  const ref=useRef(null),inst=useRef(null);
+  useEffect(()=>{
+    if(!lat||!lng||!ref.current)return;
+    if(inst.current){inst.current.remove();inst.current=null;}
+    const m=L.map(ref.current,{zoomControl:false,attributionControl:false}).setView([lat,lng],15);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png").addTo(m);
+    L.circleMarker([lat,lng],{radius:8,color:"#F5C500",fillColor:"#F5C500",fillOpacity:.8,weight:2}).addTo(m);
+    inst.current=m;
+    return()=>{if(inst.current){inst.current.remove();inst.current=null;}};
+  },[lat,lng]);
+  if(!lat||!lng)return React.createElement("div",{style:{height:180,background:"var(--bg3)",borderRadius:"var(--r)",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text3)",fontSize:11}},"Keine GPS-Daten");
+  return React.createElement("div",{ref,className:"map-box"});
 }
 
-/* ── Icons ── */
-const Ico = {
-  search: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>,
-  user: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
-  sun: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
-  euro: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10h12M4 14h9M17 4a8 8 0 0 1 0 16"/></svg>,
-  clock: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-  zap: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
-  wrench: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>,
-  bank: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
-  home: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
-  empty: <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
-};
+function App(){
+  const[query,setQuery]=useState("");const[auftraege,setAuftraege]=useState([]);const[selected,setSelected]=useState(null);
+  const[kunde,setKunde]=useState(null);const[efsData,setEfsData]=useState(null);const[payouts,setPayouts]=useState([]);
+  const[loading,setLoading]=useState(false);const[detailLoading,setDetailLoading]=useState(false);
+  const[stats,setStats]=useState(null);const[vpList,setVpList]=useState([]);const[statusList,setStatusList]=useState([]);
+  const[filterVP,setFilterVP]=useState("");const[filterStatus,setFilterStatus]=useState("");const[filterTyp,setFilterTyp]=useState("");
+  const[mainView,setMainView]=useState("dashboard");const[vpCards,setVpCards]=useState([]);
+  const[vbName,setVbName]=useState("");const searchTimer=useRef(null);const vbCache=useRef(new Map());
 
-/* ── Helpers ── */
-const fmtEuro = v => (!v && v !== 0) ? '–' : new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(v);
-const fmtDate = d => { if(!d) return '–'; try{ return new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}); } catch{ return d; }};
-const fmtKwp = v => { if(!v) return '–'; const n=parseFloat(v); return (n>100?(n/100):n).toFixed(2)+' kWp'; };
+  useEffect(()=>{(async()=>{try{
+    const[kC,aC,eC,pC]=await Promise.all([sbC("customers"),sbC("auftraege"),sbC("efs_projekte"),sbC("pay_auszahlungen_historie")]);
+    const vps=await sb("mitarbeiter","typ=in.(vertriebler,hgb_84)&aktiv=eq.true&select=id,vorname,nachname,kuerzel&order=nachname");
+    setVpList(vps);
+    const aufAll=await sb("auftraege","select=beedoo_fortschritt&beedoo_fortschritt=not.is.null&limit=2000");
+    const sc={};aufAll.forEach(a=>{const s=a.beedoo_fortschritt;if(s)sc[s]=(sc[s]||0)+1;});
+    const sorted=Object.entries(sc).sort((a,b)=>b[1]-a[1]);setStatusList(sorted);
+    setStats({kunden:kC,auftraege:aC,efs:eC,payouts:pC,stornos:sorted.find(s=>s[0].toLowerCase().includes("storniert"))?.[1]||0,hold:sorted.filter(s=>s[0].toLowerCase().includes("hold")).reduce((a,b)=>a+b[1],0)});
+  }catch(e){console.error(e)}})();},[]);
 
-function parseWorkflow(wf) {
-  if (!wf) return [];
-  return wf.split(/(?=\d{2}\.\d{2}\.\d{4})/).map(p => {
-    const m = p.match(/(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}:\d{2})-?\s*(.*)/);
-    if (!m) return null;
-    let text = m[3].replace(/^\s*BeeDoo:\s*/i,'').replace(/^\s*[AD]C Montage:\s*/i,'🔧 ').trim();
-    return { date:m[1], time:m[2], text };
-  }).filter(Boolean).reverse();
-}
+  useEffect(()=>{clearTimeout(searchTimer.current);searchTimer.current=setTimeout(()=>doSearch(),250);},[query,filterVP,filterStatus,filterTyp]);
 
-function statusColor(s) {
-  if(!s) return 'default';
-  const l=s.toLowerCase();
-  if(l.includes('storniert')||l.includes('technisch nicht')) return 'red';
-  if(l.includes('erwarte')||l.includes('montage')||l.includes('lieferschein')||l.includes('netzanmeldung')||l.includes('fertiggestellt')) return 'green';
-  if(l.includes('on hold')||l.includes('nacharbeit')) return 'orange';
-  if(l.includes('auftrag')||l.includes('dc')||l.includes('ac')||l.includes('freigabe')||l.includes('quali')) return 'blue';
-  return 'gold';
-}
+  async function doSearch(){
+    const q=query.trim();
+    if(q.length<2&&!filterVP&&!filterStatus&&!filterTyp){setAuftraege([]);return;}
+    setLoading(true);
+    try{
+      let p=[];
+      if(q.length>=2){if(/^\d{3,5}$/.test(q))p.push("auftrag_nr=ilike.*"+q+"*");else if(/^\d{5}$/.test(q))p.push("kunde_plz=eq."+q);else p.push("kunde_name=ilike.*"+encodeURIComponent(q)+"*");}
+      if(filterVP)p.push("vertriebler_id=eq."+filterVP);
+      if(filterStatus)p.push("beedoo_fortschritt=eq."+encodeURIComponent(filterStatus));
+      if(filterTyp)p.push("produkt_typ=eq."+filterTyp);
+      p.push("order=auftrags_datum.desc","limit=200");
+      setAuftraege(await sb("auftraege",p.join("&")));
+    }catch(e){console.error(e);setAuftraege([]);}
+    setLoading(false);
+  }
 
-function statusBadge(f) {
-  if(!f) return {cls:'pending',label:'Unbekannt'};
-  const l=f.toLowerCase();
-  if(l.includes('storniert')) return {cls:'storno',label:f};
-  if(l.includes('erwarte')||l.includes('montage')||l.includes('netz')||l.includes('fertig')) return {cls:'active',label:f};
-  return {cls:'pending',label:f};
-}
+  async function loadDetail(row){
+    setSelected(row);setMainView("detail");setDetailLoading(true);
+    try{
+      const cust=await sb("customers","auftrag_nr=eq."+encodeURIComponent(row.auftrag_nr)+"&limit=1");setKunde(cust[0]||null);
+      if(row.efs_projekt_id){const e=await sb("efs_projekte","id=eq."+row.efs_projekt_id+"&limit=1");setEfsData(e[0]||null);}
+      else{const nn=row.kunde_name?.split(" ").pop()||"";if(nn.length>2){const e=await sb("efs_projekte","kunde_nachname=ilike.*"+encodeURIComponent(nn)+"*&limit=1");setEfsData(e[0]||null);}else setEfsData(null);}
+      const nn=row.kunde_name?.split(" ").pop()||"";
+      if(nn.length>2){const pa=await sb("pay_auszahlungen_historie","kunde=ilike.*"+encodeURIComponent(nn)+"*&order=periode.desc");setPayouts(pa.filter(x=>{const kn=row.kunde_name?.toLowerCase()||"";return kn.split(" ").some(w=>w.length>2&&(x.kunde||"").toLowerCase().includes(w));}));}else setPayouts([]);
+      if(row.vertriebler_id){if(vbCache.current.has(row.vertriebler_id))setVbName(vbCache.current.get(row.vertriebler_id));
+      else{const d=await sb("mitarbeiter","id=eq."+row.vertriebler_id+"&limit=1");const n=d[0]?d[0].vorname+" "+d[0].nachname:"–";vbCache.current.set(row.vertriebler_id,n);setVbName(n);}}else setVbName("");
+    }catch(e){console.error(e);}setDetailLoading(false);
+  }
 
-/* ── Card Row ── */
-const Row = ({label,value,cls}) => (
-  <div className="card-row">
-    <span className="card-label">{label}</span>
-    <span className={`card-value ${cls||''}`}>{value || '–'}</span>
-  </div>
-);
+  async function loadVPBoard(){setMainView("vp-board");try{
+    const pa=await sb("pay_auszahlungen_historie","select=vertriebler,vp_nummer,netto,periode&netto=neq.0");
+    const byVP={};pa.forEach(p=>{if(!byVP[p.vertriebler])byVP[p.vertriebler]={name:p.vertriebler,vp:p.vp_nummer,total:0,deals:0,months:{}};byVP[p.vertriebler].total+=p.netto;byVP[p.vertriebler].deals++;if(!byVP[p.vertriebler].months[p.periode])byVP[p.vertriebler].months[p.periode]=0;byVP[p.vertriebler].months[p.periode]+=p.netto;});
+    setVpCards(Object.values(byVP).sort((a,b)=>b.total-a.total));
+  }catch(e){console.error(e);}}
 
-/* ── Detail View ── */
-function DetailView({detail}) {
-  const {auftrag:a, efs, vb, scouter, prov, customer} = detail;
-  const timeline = parseWorkflow(a.workflow_history);
-  const sb = statusBadge(a.beedoo_fortschritt);
-  const provSum = prov.reduce((s,p)=>s+(p.netto||0),0);
-  const typ = a.produkt_typ==='pv_finanz'?'Finanzierung':a.produkt_typ==='pv_bar'?'Barzahler':a.produkt_typ||'–';
+  const quickChips=useMemo(()=>{const imp=["Storniert","Hold","Erwarte Baustellenbeginn","Quali Call","DC in Planung","Barzahler"];return statusList.filter(([s])=>imp.some(k=>s.toLowerCase().includes(k.toLowerCase()))).slice(0,6);},[statusList]);
 
-  return (
-    <div>
-      <div className="detail-header">
-        <div className="dh-left">
-          <h1>{a.kunde_name}</h1>
-          <div className="dh-sub">
-            <span style={{color:'var(--gold)',fontWeight:600}}>AN {a.auftrag_nr}</span>
-            <span>·</span>
-            <span>{fmtDate(a.auftrags_datum)}</span>
-            {a.produkt_bezeichnung && <><span>·</span><span>{a.produkt_bezeichnung}</span></>}
-          </div>
-        </div>
-        <div className={`dh-status ${sb.cls}`}>{sb.label}</div>
-      </div>
-
-      <div className="cards-grid">
-        {/* KUNDENDATEN */}
-        <div className="card">
-          <div className="card-title">{Ico.user} Kundendaten</div>
-          <Row label="Name" value={a.kunde_name}/>
-          <Row label="Adresse" value={[a.kunde_strasse,a.kunde_hausnr].filter(Boolean).join(' ')}/>
-          <Row label="PLZ / Ort" value={[a.kunde_plz,a.kunde_ort].filter(Boolean).join(' ')}/>
-          <Row label="Telefon" value={a.kunde_telefon||customer?.telefon||customer?.mobil}/>
-          <Row label="E-Mail" value={a.kunde_email||customer?.email}/>
-          {a.lead_quelle && <Row label="Lead-Quelle" value={a.lead_quelle}/>}
-          {customer?.lat && <Row label="GPS" value={`${customer.lat}, ${customer.lng}`}/>}
-        </div>
-
-        {/* ANLAGE */}
-        <div className="card">
-          <div className="card-title">{Ico.sun} Anlage</div>
-          <Row label="Leistung" value={fmtKwp(a.anlagen_kwp)} cls="gold"/>
-          <Row label="Module" value={a.angebot_solarmodule||a.produkt_bezeichnung}/>
-          <Row label="Anzahl Module" value={a.angebot_module}/>
-          <Row label="Typ" value={typ}/>
-          {efs && <>
-            <Row label="Wechselrichter" value={`${efs.wr_hersteller||''} ${efs.wr_kw||''}kW`}/>
-            <Row label="Batterie" value={`${efs.bat_hersteller||''} ${efs.bat_kwh||''}kWh`}/>
-          </>}
-        </div>
-
-        {/* VERTRIEB */}
-        <div className="card">
-          <div className="card-title">{Ico.zap} Vertrieb</div>
-          <Row label="Berater" value={vb?`${vb.vorname} ${vb.nachname}`:null}/>
-          {vb?.typ && <Row label="Typ" value={vb.typ}/>}
-          {vb?.email && <Row label="Email" value={vb.email}/>}
-          {scouter && <Row label="Scouter" value={`${scouter.vorname} ${scouter.nachname}`}/>}
-          <Row label="Lead-Quelle" value={a.lead_quelle}/>
-          {a.ist_eigenlead && <Row label="Eigenlead" value="✓ Ja" cls="green"/>}
-          {a.ist_empfehlung && <Row label="Empfehlung" value="✓ Ja" cls="green"/>}
-          <Row label="Abschlussdatum" value={fmtDate(a.datum_angenommen||a.auftrags_datum)}/>
-        </div>
-
-        {/* FINANZEN */}
-        <div className="card">
-          <div className="card-title">{Ico.euro} Finanzen</div>
-          <Row label="Auftragswert netto" value={a.an_wert_netto?fmtEuro(a.an_wert_netto/100):null} cls="gold"/>
-          {efs && <>
-            <Row label="Gesamtpreis" value={fmtEuro(efs.gesamtpreis_eur)}/>
-            <Row label="EFS-Auszahlung" value={fmtEuro(efs.efs_auszahlung_eur)} cls="green"/>
-            <Row label="Monatl. Rate" value={fmtEuro(efs.monatl_rate_eur)}/>
-            <Row label="Zinssatz" value={efs.nominalzins?(efs.nominalzins*100).toFixed(2)+'%':null}/>
-            <Row label="Preismodell" value={efs.preismodell}/>
-          </>}
-          <Row label="Zahlungsstatus" value={a.zahlungsstatus}/>
-        </div>
-
-        {/* MONTAGE / EFS */}
-        {efs && (
-          <div className="card">
-            <div className="card-title">{Ico.wrench} Montage / EFS</div>
-            <Row label="EFS-Status" value={efs.simplified_status||efs.status} cls={efs.simplified_status?.includes('SIGN')?'green':''}/>
-            <Row label="Vertragsstatus" value={efs.contract_status}/>
-            {efs.projekt_strasse && <Row label="Projektadresse" value={`${efs.projekt_strasse} ${efs.projekt_hausnr}, ${efs.projekt_plz} ${efs.projekt_stadt}`}/>}
-            {efs.zweitkunde_name && <Row label="Zweitkunde" value={efs.zweitkunde_name}/>}
-            <Row label="Zuständiger" value={efs.zustaendiger}/>
-            <Row label="PV-System" value={`${efs.pv_anzahl}× ${efs.pv_hersteller} ${efs.pv_watt}W`}/>
-          </div>
-        )}
-
-        {/* PROVISION */}
-        <div className="card">
-          <div className="card-title">{Ico.bank} Provisionen</div>
-          {prov.length===0 ? (
-            <div style={{color:'var(--text3)',fontSize:13,padding:'8px 0'}}>Keine Auszahlungen gefunden</div>
-          ) : (<>
-            <table className="prov-table">
-              <thead><tr><th>Periode</th><th>Berater</th><th style={{textAlign:'right'}}>Betrag</th></tr></thead>
-              <tbody>{prov.map((p,i) => (
-                <tr key={i}>
-                  <td>{p.periode}</td>
-                  <td>{p.vertriebler}</td>
-                  <td className={`amount ${p.netto>=0?'pos':'neg'}`}>{fmtEuro(p.netto)}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-            <div className="card-row" style={{marginTop:8,borderTop:'1px solid var(--border)',paddingTop:8}}>
-              <span className="card-label" style={{fontWeight:600}}>Gesamt</span>
-              <span className={`card-value ${provSum>=0?'green':'red'}`} style={{fontSize:16}}>{fmtEuro(provSum)}</span>
-            </div>
-          </>)}
-        </div>
-
-        {/* AUFTRAGSSTATUS */}
-        <div className="card">
-          <div className="card-title">{Ico.home} Auftragsstatus</div>
-          <Row label="Fortschritt" value={a.beedoo_fortschritt}/>
-          <Row label="Auftragsstatus" value={a.auftragsstatus}/>
-          {a.metrify_status && <Row label="Metrify" value={a.metrify_status}/>}
-          {a.dokumentstatus && <Row label="Dokumente" value={a.dokumentstatus}/>}
-          {a.speichererweiterung && <Row label="Speichererweiterung" value="✓ Ja" cls="green"/>}
-          {a.mvpp_name && a.mvpp_name!=='-' && <Row label="MVPP" value={a.mvpp_name}/>}
-          {a.kundennummer && <Row label="Kundennr." value={a.kundennummer}/>}
-        </div>
-
-        {/* TIMELINE */}
-        {timeline.length > 0 && (
-          <div className="card card-full">
-            <div className="card-title">{Ico.clock} Workflow-Timeline ({timeline.length} Events)</div>
-            <div className="timeline">
-              {timeline.slice(0,25).map((ev,i) => (
-                <div className="tl-item" key={i}>
-                  <div className="tl-line"></div>
-                  <div className={`tl-dot ${statusColor(ev.text)}`}>
-                    <div style={{width:8,height:8,borderRadius:'50%',background:'currentColor'}}></div>
-                  </div>
-                  <div className="tl-content">
-                    <div className="tl-title">{ev.text}</div>
-                    <div className="tl-date">{ev.date} um {ev.time}</div>
-                  </div>
-                </div>
-              ))}
-              {timeline.length > 25 && (
-                <div style={{color:'var(--text3)',fontSize:12,paddingLeft:38}}>... und {timeline.length-25} weitere Events</div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+  return React.createElement("div",{className:"app"},
+    React.createElement("div",{className:"sidebar"},
+      React.createElement("div",{className:"sb-header"},
+        React.createElement("div",{className:"sb-logo"},React.createElement("b",null,"bee-doo"),React.createElement("span",null,"Kundenboard")),
+        React.createElement("div",{className:"search-box"},
+          React.createElement("svg",{viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:"2"},React.createElement("circle",{cx:"11",cy:"11",r:"8"}),React.createElement("line",{x1:"21",y1:"21",x2:"16.65",y2:"16.65"})),
+          React.createElement("input",{value:query,onChange:e=>setQuery(e.target.value),placeholder:"Name, AN-Nr, PLZ suchen..."})
+        ),
+        React.createElement("div",{className:"search-hint"},auftraege.length>0?auftraege.length+" Treffer":"Mind. 2 Zeichen oder Filter wählen")
+      ),
+      React.createElement("div",{className:"filters"},
+        React.createElement("div",{className:"filter-row"},
+          React.createElement("select",{className:"filter-select",value:filterVP,onChange:e=>setFilterVP(e.target.value)},
+            React.createElement("option",{value:""},"Alle Berater"),
+            vpList.map(v=>React.createElement("option",{key:v.id,value:v.id},v.vorname+" "+v.nachname))
+          ),
+          React.createElement("select",{className:"filter-select",value:filterTyp,onChange:e=>setFilterTyp(e.target.value)},
+            React.createElement("option",{value:""},"Alle Typen"),
+            React.createElement("option",{value:"pv_finanz"},"Finanzierung"),
+            React.createElement("option",{value:"pv_bar"},"Barzahler")
+          )
+        ),
+        React.createElement("div",{className:"filter-row"},
+          React.createElement("select",{className:"filter-select",value:filterStatus,onChange:e=>setFilterStatus(e.target.value)},
+            React.createElement("option",{value:""},"Alle Status"),
+            statusList.map(([s,c])=>React.createElement("option",{key:s,value:s},s+" ("+c+")"))
+          )
+        ),
+        React.createElement("div",{className:"filter-row",style:{flexWrap:"wrap"}},
+          quickChips.map(([s,c])=>React.createElement("div",{key:s,className:"filter-chip"+(filterStatus===s?" active":""),onClick:()=>setFilterStatus(filterStatus===s?"":s)},
+            s.length>20?s.substring(0,18)+"…":s,React.createElement("span",{className:"count"},c)
+          ))
+        ),
+        React.createElement("div",{className:"filter-row"},
+          React.createElement("div",{className:"filter-chip"+(mainView==="dashboard"?" active":""),onClick:()=>setMainView("dashboard"),style:{flex:1,textAlign:"center"}},"📊 Dashboard"),
+          React.createElement("div",{className:"filter-chip"+(mainView==="vp-board"?" active":""),onClick:loadVPBoard,style:{flex:1,textAlign:"center"}},"👥 VP-Board")
+        )
+      ),
+      React.createElement("div",{className:"results-header"},React.createElement("span",null,"Suchergebnisse"),React.createElement("span",null,auftraege.length)),
+      React.createElement("div",{className:"results-list"},
+        loading?React.createElement("div",{className:"loading"},React.createElement("div",{className:"spinner"}),"Suche..."):
+        auftraege.length===0?React.createElement("div",{style:{padding:20,textAlign:"center",color:"var(--text3)",fontSize:12}},"Keine Treffer"):
+        auftraege.map(a=>{const sc=stC(a.beedoo_fortschritt);const isA=selected?.id===a.id;return React.createElement("div",{key:a.id,className:"result-item"+(isA?" active":""),onClick:()=>loadDetail(a)},
+          React.createElement("div",{className:"ri-top"},
+            React.createElement("div",{className:"ri-name"},a.kunde_name||"–"),
+            React.createElement("div",{className:"ri-badge",style:{background:sc.bg,color:sc.c}},(a.beedoo_fortschritt||"offen").substring(0,22))
+          ),
+          React.createElement("div",{className:"ri-meta"},
+            React.createElement("span",{style:{color:"var(--gold)",fontWeight:600}},"AN "+a.auftrag_nr),
+            React.createElement("span",null,kwpF(a.anlagen_kwp)+" kWp"),
+            React.createElement("span",null,df(a.auftrags_datum))
+          ),
+          React.createElement("div",{className:"ri-tags"},
+            a.lead_quelle&&React.createElement("div",{className:"ri-tag"},a.lead_quelle),
+            a.produkt_typ&&React.createElement("div",{className:"ri-tag"},a.produkt_typ==="pv_finanz"?"Finanzierung":"Barzahler"),
+            a.kunde_plz&&React.createElement("div",{className:"ri-tag"},a.kunde_plz)
+          )
+        );})
+      )
+    ),
+    React.createElement("div",{className:"main"},
+      mainView==="dashboard"&&React.createElement(DashboardView,{stats,statusList,onStatusClick:s=>{setFilterStatus(s)}}),
+      mainView==="detail"&&(detailLoading?React.createElement("div",{className:"loading",style:{height:"100%"}},React.createElement("div",{className:"spinner"}),"Lade..."):
+        selected?React.createElement(DetailView,{a:selected,k:kunde,e:efsData,pays:payouts,vbName}):React.createElement("div",{className:"empty-main"},React.createElement("h2",null,"Kunde auswählen"),React.createElement("p",null,"Links einen Auftrag anklicken"))),
+      mainView==="vp-board"&&React.createElement(VPBoardView,{cards:vpCards,onSelect:vp=>{setQuery(vp.name.split(" ").pop());setMainView("dashboard")}})
+    )
   );
 }
 
-/* ── App ── */
-function App() {
-  const [searchQ, setSearchQ] = useState('');
-  const [items, setItems] = useState([]);
-  const [selId, setSelId] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [loadList, setLoadList] = useState(false);
-  const [loadDet, setLoadDet] = useState(false);
-  const [stats, setStats] = useState({a:0,k:0});
-  const timer = useRef(null);
-
-  useEffect(() => {
-    (async()=>{
-      const [a,c] = await Promise.all([sbFetch('auftraege','select=id&limit=0'), sbFetch('customers','select=id&limit=0')]);
-      setStats({a:a.count,k:c.count});
-    })();
-  }, []);
-
-  useEffect(() => {
-    if(timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(()=>doSearch(searchQ), 300);
-    return ()=>clearTimeout(timer.current);
-  }, [searchQ]);
-
-  async function doSearch(q) {
-    setLoadList(true);
-    let filter = 'order=auftrags_datum.desc&limit=50';
-    if(q && q.length>=2) {
-      if(/^\d+$/.test(q.trim())) filter = `auftrag_nr=eq.${q.trim()}&limit=50`;
-      else if(/^an/i.test(q)) filter = `auftrag_nr=eq.${q.replace(/^AN[-\s]*/i,'')}&limit=50`;
-      else if(/^\d{5}$/.test(q.trim())) filter = `kunde_plz=eq.${q.trim()}&order=auftrags_datum.desc&limit=50`;
-      else filter = `kunde_name=ilike.*${encodeURIComponent(q)}*&order=auftrags_datum.desc&limit=50`;
-    }
-    const {data} = await sbFetch('auftraege', `select=id,auftrag_nr,kunde_name,kunde_plz,kunde_ort,anlagen_kwp,beedoo_fortschritt,auftrags_datum,produkt_bezeichnung,lead_quelle,vertriebler_id&${filter}`);
-    setItems(data||[]);
-    setLoadList(false);
-  }
-
-  async function loadDetail(item) {
-    setSelId(item.id);
-    setLoadDet(true);
-    
-    const [fullRes, ] = await Promise.all([sbFetch('auftraege', `id=eq.${item.id}`)]);
-    const a = fullRes.data?.[0] || item;
-
-    // Parallel loads
-    const promises = [];
-    promises.push(a.efs_projekt_id ? sbFetch('efs_projekte',`id=eq.${a.efs_projekt_id}`) : {data:[]});
-    promises.push(a.vertriebler_id ? sbFetch('mitarbeiter',`id=eq.${a.vertriebler_id}&select=id,vorname,nachname,typ,email,telefon`) : {data:[]});
-    promises.push(a.scouter_id ? sbFetch('mitarbeiter',`id=eq.${a.scouter_id}&select=id,vorname,nachname,typ`) : {data:[]});
-    
-    // Customer record
-    const anNr = a.auftrag_nr ? `AN-${a.auftrag_nr}` : null;
-    promises.push(anNr ? sbFetch('customers',`auftrag_nr=eq.${anNr}`) : {data:[]});
-
-    // Provision - search by last name
-    const nachname = a.kunde_name?.split(' ').pop();
-    promises.push(nachname?.length>2 ? sbFetch('pay_auszahlungen_historie',`kunde=ilike.*${encodeURIComponent(nachname)}*&order=periode.desc`) : {data:[]});
-
-    const [efsR, vbR, scR, custR, provR] = await Promise.all(promises);
-
-    // Filter prov to matching customer
-    const provFiltered = (provR.data||[]).filter(p => {
-      if(!p.kunde || !a.kunde_name) return false;
-      const words = a.kunde_name.toLowerCase().split(/\s+/).filter(w=>w.length>2);
-      const pk = p.kunde.toLowerCase();
-      return words.filter(w=>pk.includes(w)).length >= Math.min(2, words.length);
-    });
-
-    setDetail({
-      auftrag: a,
-      efs: efsR.data?.[0]||null,
-      vb: vbR.data?.[0]||null,
-      scouter: scR.data?.[0]||null,
-      customer: custR.data?.[0]||null,
-      prov: provFiltered
-    });
-    setLoadDet(false);
-  }
-
-  return (<>
-    <div className="header">
-      <div className="logo">
-        <div className="logo-dot">b</div>
-        <div className="logo-text">Kundenboard<span>— Alle Daten auf einen Blick</span></div>
-      </div>
-      <div className="search-wrap">
-        <span className="search-icon">{Ico.search}</span>
-        <input className="search-input" placeholder="Kunde, AN-Nr oder PLZ suchen..."
-          value={searchQ} onChange={e=>setSearchQ(e.target.value)} autoFocus/>
-        {searchQ && <span className="search-badge">{items.length} Treffer</span>}
-      </div>
-      <div className="stats-bar">
-        <div className="stat-item"><div className="stat-num">{stats.a.toLocaleString('de')}</div><div className="stat-label">Aufträge</div></div>
-        <div className="stat-item"><div className="stat-num">{stats.k.toLocaleString('de')}</div><div className="stat-label">Kunden</div></div>
-      </div>
-    </div>
-    
-    <div className="main">
-      <div className="sidebar">
-        <div className="list-header">
-          <h3>{searchQ ? 'Suchergebnisse' : 'Neueste Aufträge'}</h3>
-          <span className="list-count">{items.length}</span>
-        </div>
-        {loadList ? <div className="loading"><div className="spinner"></div></div> : 
-          items.map(c => {
-            const s = statusBadge(c.beedoo_fortschritt);
-            const tagCls = s.cls==='storno'?'red':s.cls==='active'?'green':'orange';
-            return (
-              <div key={c.id} className={`customer-item ${selId===c.id?'active':''}`} onClick={()=>loadDetail(c)}>
-                <div className="ci-name">{c.kunde_name||'—'}</div>
-                <div className="ci-row">
-                  <span className="ci-tag gold">AN {c.auftrag_nr}</span>
-                  {c.anlagen_kwp>0 && <span className="ci-tag">{fmtKwp(c.anlagen_kwp)}</span>}
-                  {c.beedoo_fortschritt && <span className={`ci-tag ${tagCls}`}>{c.beedoo_fortschritt?.substring(0,28)}</span>}
-                </div>
-                <div className="ci-sub">{c.kunde_plz} {c.kunde_ort} · {fmtDate(c.auftrags_datum)}{c.lead_quelle?` · ${c.lead_quelle}`:''}</div>
-              </div>
-            );
-          })
-        }
-      </div>
-
-      <div className="content">
-        {loadDet ? <div className="loading"><div className="spinner"></div></div> :
-         !detail ? <div className="detail-empty">{Ico.empty}<p>Kunde auswählen um alle Details zu sehen</p></div> :
-         <DetailView detail={detail}/>}
-      </div>
-    </div>
-  </>);
+function DashboardView({stats,statusList,onStatusClick}){
+  if(!stats)return React.createElement("div",{className:"loading",style:{height:"100%"}},React.createElement("div",{className:"spinner"}),"Lade Dashboard...");
+  const cats={"🟢 Abgeschlossen":[],"🔵 In Montage":[],"🟡 In Bearbeitung":[],"🟠 On Hold / Zurück":[],"🔴 Storniert":[]};
+  statusList.forEach(([s,c])=>{const l=s.toLowerCase();if(l.includes("storniert")||l.includes("nicht machbar")||l.includes("abgelehnt"))cats["🔴 Storniert"].push([s,c]);else if(l.includes("abnahme")||l.includes("komplett")||l.includes("efs")||l.includes("golfstrom"))cats["🟢 Abgeschlossen"].push([s,c]);else if(l.includes("montage")||l.includes("baustelle")||l.includes("lieferschein")||l.includes("planung")||l.includes("freigabe"))cats["🔵 In Montage"].push([s,c]);else if(l.includes("hold")||l.includes("zurück")||l.includes("nacharbeit"))cats["🟠 On Hold / Zurück"].push([s,c]);else cats["🟡 In Bearbeitung"].push([s,c]);});
+  return React.createElement("div",{className:"main-inner"},
+    React.createElement("div",{className:"dash-grid"},
+      React.createElement("div",{className:"dash-card"},React.createElement("div",{className:"dash-val",style:{color:"var(--gold)"}},num(stats.auftraege)),React.createElement("div",{className:"dash-label"},"Aufträge")),
+      React.createElement("div",{className:"dash-card"},React.createElement("div",{className:"dash-val",style:{color:"var(--green)"}},num(stats.kunden)),React.createElement("div",{className:"dash-label"},"Kunden")),
+      React.createElement("div",{className:"dash-card"},React.createElement("div",{className:"dash-val",style:{color:"var(--blue)"}},num(stats.efs)),React.createElement("div",{className:"dash-label"},"EFS Projekte")),
+      React.createElement("div",{className:"dash-card"},React.createElement("div",{className:"dash-val",style:{color:"var(--orange)"}},num(stats.hold)),React.createElement("div",{className:"dash-label"},"On Hold")),
+      React.createElement("div",{className:"dash-card"},React.createElement("div",{className:"dash-val",style:{color:"var(--red)"}},num(stats.stornos)),React.createElement("div",{className:"dash-label"},"Storniert"))
+    ),
+    React.createElement("h3",{style:{fontSize:13,fontWeight:700,color:"var(--text2)",marginBottom:12,textTransform:"uppercase",letterSpacing:1}},"Status-Übersicht"),
+    Object.entries(cats).map(([cat,items])=>{if(items.length===0)return null;const total=items.reduce((a,b)=>a+b[1],0);return React.createElement("div",{key:cat,style:{marginBottom:16}},
+      React.createElement("div",{style:{fontSize:12,fontWeight:700,color:"var(--text2)",marginBottom:8,display:"flex",justifyContent:"space-between"}},React.createElement("span",null,cat),React.createElement("span",{style:{color:"var(--text3)"}},total)),
+      React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},items.sort((a,b)=>b[1]-a[1]).map(([s,c])=>{const sc=stC(s);return React.createElement("div",{key:s,onClick:()=>onStatusClick(s),style:{padding:"6px 12px",background:sc.bg,color:sc.c,borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:".15s",border:"1px solid transparent"},onMouseEnter:e=>{e.currentTarget.style.borderColor=sc.c},onMouseLeave:e=>{e.currentTarget.style.borderColor="transparent"}},
+        s.length>30?s.substring(0,28)+"…":s,React.createElement("span",{style:{background:"rgba(0,0,0,.2)",padding:"1px 6px",borderRadius:6,fontSize:9}},c)
+      );}))
+    );})
+  );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+function VPBoardView({cards,onSelect}){
+  return React.createElement("div",{className:"main-inner"},
+    React.createElement("h3",{style:{fontSize:13,fontWeight:700,color:"var(--text2)",marginBottom:14,textTransform:"uppercase",letterSpacing:1}},"Vertriebler-Board · Auszahlungen Okt–Jan"),
+    React.createElement("div",{className:"vp-grid"},cards.map(vp=>{
+      const lm=Object.keys(vp.months).sort().pop();const lv=vp.months[lm]||0;
+      return React.createElement("div",{key:vp.name,className:"vp-card",onClick:()=>onSelect(vp)},
+        React.createElement("div",{className:"vp-name"},vp.name),
+        React.createElement("div",{className:"vp-id"},vp.vp),
+        React.createElement("div",{className:"vp-stats"},
+          React.createElement("div",{className:"vp-stat"},React.createElement("div",{className:"vp-stat-val",style:{color:"var(--gold)"}},eur(vp.total)),React.createElement("div",{className:"vp-stat-label"},"Gesamt")),
+          React.createElement("div",{className:"vp-stat"},React.createElement("div",{className:"vp-stat-val",style:{color:"var(--green)"}},vp.deals),React.createElement("div",{className:"vp-stat-label"},"Deals")),
+          React.createElement("div",{className:"vp-stat"},React.createElement("div",{className:"vp-stat-val",style:{color:"var(--blue)"}},eur(lv)),React.createElement("div",{className:"vp-stat-label"},lm))
+        )
+      );
+    }))
+  );
+}
+
+function DetailView({a,k,e,pays,vbName}){
+  const sc=stC(a.beedoo_fortschritt);const wf=parseWF(a.workflow_history);const payT=pays.reduce((s,p)=>s+(p.netto||0),0);
+  const lat=k?.lat||null,lng=k?.lng||null;
+  return React.createElement("div",{className:"main-inner"},
+    React.createElement("div",{className:"k-header"},React.createElement("div",{className:"k-top"},
+      React.createElement("div",null,
+        React.createElement("div",{className:"k-name"},a.kunde_name||"–"),
+        React.createElement("div",{className:"k-an"},"AN "+a.auftrag_nr,React.createElement("span",{style:{color:"var(--text3)"}}," · "),a.produkt_typ==="pv_finanz"?"☀️ Finanzierung":a.produkt_typ==="pv_bar"?"💵 Barzahler":"☀️ PV"),
+        React.createElement("div",{className:"k-meta"},
+          (k?.strasse||a.kunde_plz)&&React.createElement("div",{className:"k-meta-item"},React.createElement(I,{d:"M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10"}),(k?.strasse||"")+" "+(k?.hausnr||"")+(k?.strasse?", ":"")+(a.kunde_plz||k?.plz||"")+" "+(k?.ort||"")),
+          (a.kunde_telefon||k?.telefon||k?.mobil)&&React.createElement("div",{className:"k-meta-item"},React.createElement(I,{d:"M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"}),a.kunde_telefon||k?.telefon||k?.mobil),
+          (a.kunde_email||k?.email)&&React.createElement("div",{className:"k-meta-item"},React.createElement(I,{d:"M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6"}),a.kunde_email||k?.email),
+          vbName&&React.createElement("div",{className:"k-meta-item"},React.createElement(I,{d:"M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 3a4 4 0 100 8 4 4 0 000-8z"}),"Berater: ",React.createElement("strong",{style:{color:"var(--gold)",marginLeft:3}},vbName))
+        )
+      ),
+      React.createElement("div",{className:"k-status-pill",style:{background:sc.bg,color:sc.c}},a.beedoo_fortschritt||"Offen")
+    )),
+    React.createElement("div",{className:"key-nums"},
+      React.createElement("div",{className:"key-num"},React.createElement("div",{className:"kn-val",style:{color:"var(--gold)"}},kwpF(a.anlagen_kwp)+" kWp"),React.createElement("div",{className:"kn-label"},"Anlagengröße")),
+      React.createElement("div",{className:"key-num"},React.createElement("div",{className:"kn-val",style:{color:"var(--green)"}},a.an_wert_netto?eur(a.an_wert_netto/100):(e?.gesamtpreis_eur?eur(e.gesamtpreis_eur):"–")),React.createElement("div",{className:"kn-label"},"Auftragswert")),
+      React.createElement("div",{className:"key-num"},React.createElement("div",{className:"kn-val",style:{color:payT>=0?"var(--blue)":"var(--red)"}},eur(payT)),React.createElement("div",{className:"kn-label"},"Provision")),
+      React.createElement("div",{className:"key-num"},React.createElement("div",{className:"kn-val",style:{color:"var(--purple)"}},a.angebot_module||"–"),React.createElement("div",{className:"kn-label"},"Module"))
+    ),
+    React.createElement("div",{className:"cards-2"},
+      React.createElement("div",{className:"card"},
+        React.createElement("div",{className:"card-t"},React.createElement(I,{d:"M13 2L3 14h9l-1 8 10-12h-9l1-8z"})," Auftrag"),
+        React.createElement("div",{className:"dg"},
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Auftragsnr."),React.createElement("div",{className:"dg-v",style:{color:"var(--gold)"}},a.auftrag_nr)),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Datum"),React.createElement("div",{className:"dg-v"},df(a.auftrags_datum))),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Produkt"),React.createElement("div",{className:"dg-v"},a.produkt_bezeichnung||a.produkt_typ||"–")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Module"),React.createElement("div",{className:"dg-v"},(a.angebot_module||"–")+"× "+(a.angebot_solarmodule||"–").substring(0,25))),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Lead-Quelle"),React.createElement("div",{className:"dg-v"},a.lead_quelle||"–")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Eigenlead"),React.createElement("div",{className:"dg-v"},a.ist_eigenlead?"✅ Ja":a.ist_empfehlung?"🤝 Empfehlung":"–")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Zahlungsstatus"),React.createElement("div",{className:"dg-v"},a.zahlungsstatus||"–")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Dokumente"),React.createElement("div",{className:"dg-v"},a.dokumentstatus||"–")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Metrify"),React.createElement("div",{className:"dg-v"},a.metrify_status||"–")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Leveto-ID"),React.createElement("div",{className:"dg-v"},a.leveto_lead_id||"–"))
+        )
+      ),
+      React.createElement("div",{className:"card"},
+        React.createElement("div",{className:"card-t"},React.createElement(I,{d:"M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"})," ",e?"EFS Finanzierung":"Finanzen"),
+        e?React.createElement("div",{className:"dg"},
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Gesamtpreis"),React.createElement("div",{className:"dg-v",style:{color:"var(--gold)"}},eur(e.gesamtpreis_eur))),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"EFS Auszahlung"),React.createElement("div",{className:"dg-v",style:{color:"var(--green)"}},eur(e.efs_auszahlung_eur))),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Monatl. Rate"),React.createElement("div",{className:"dg-v"},eur(e.monatl_rate_eur))),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Zinssatz"),React.createElement("div",{className:"dg-v"},e.nominalzins?(e.nominalzins*100).toFixed(2)+"%":"–")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Preismodell"),React.createElement("div",{className:"dg-v"},e.preismodell||"–")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Vertragsstatus"),React.createElement("div",{className:"dg-v"},e.contract_status||"–")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"PV-Module"),React.createElement("div",{className:"dg-v"},e.pv_anzahl+"× "+e.pv_hersteller+" ("+e.pv_kwp+" kWp)")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Wechselrichter"),React.createElement("div",{className:"dg-v"},e.wr_hersteller+" "+e.wr_kw+" kW")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Batterie"),React.createElement("div",{className:"dg-v"},e.bat_hersteller+" "+e.bat_kwh+" kWh")),
+          React.createElement("div",{className:"dg-item"},React.createElement("div",{className:"dg-l"},"Zuständiger"),React.createElement("div",{className:"dg-v"},e.zustaendiger||"–"))
+        ):React.createElement("div",{style:{color:"var(--text3)",fontSize:12,textAlign:"center",padding:30}},"Kein EFS-Projekt verknüpft",a.an_wert_netto?React.createElement("div",{style:{marginTop:16}},React.createElement("div",{className:"dg-l"},"Netto-Auftragswert"),React.createElement("div",{className:"dg-v",style:{color:"var(--gold)",fontSize:18,fontWeight:700}},eur(a.an_wert_netto/100))):null)
+      )
+    ),
+    React.createElement("div",{className:"cards-2"},
+      React.createElement("div",{className:"card"},
+        React.createElement("div",{className:"card-t"},React.createElement(I,{d:"M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"})," Workflow-Timeline ",wf.length>0&&React.createElement("span",{style:{color:"var(--text3)",fontWeight:400}},"("+wf.length+")")),
+        wf.length>0?React.createElement("div",{className:"timeline"},wf.map((s,i)=>{
+          const isLast=i===wf.length-1;const isStorno=s.text.toLowerCase().includes("storniert");
+          return React.createElement("div",{className:"tl-item",key:i},
+            React.createElement("div",{className:"tl-dot "+(isStorno?"storno":isLast?"active":"done")}),
+            React.createElement("div",{className:"tl-label"},s.text),
+            React.createElement("div",{className:"tl-date"},s.date+" um "+s.time)
+          );})):React.createElement("div",{style:{color:"var(--text3)",fontSize:12,textAlign:"center",padding:30}},"Keine Workflow-Daten")
+      ),
+      React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:14}},
+        React.createElement("div",{className:"card"},
+          React.createElement("div",{className:"card-t"},React.createElement(I,{d:"M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10"})," Standort"),
+          React.createElement(KMap,{lat,lng,name:a.kunde_name})
+        ),
+        React.createElement("div",{className:"card",style:{flex:1}},
+          React.createElement("div",{className:"card-t"},React.createElement(I,{d:"M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"})," Provisionen ",pays.length>0&&React.createElement("span",{style:{color:"var(--text3)",fontWeight:400}},"("+pays.length+")")),
+          pays.length>0?React.createElement("div",{style:{overflowX:"auto"}},React.createElement("table",{className:"ptbl"},
+            React.createElement("thead",null,React.createElement("tr",null,React.createElement("th",null,"Periode"),React.createElement("th",null,"Berater"),React.createElement("th",{style:{textAlign:"right"}},"Betrag"))),
+            React.createElement("tbody",null,
+              pays.map((p,i)=>React.createElement("tr",{key:i},React.createElement("td",null,p.periode),React.createElement("td",null,p.vertriebler,React.createElement("br"),React.createElement("span",{style:{fontSize:9,color:"var(--text3)"}},p.vp_nummer)),React.createElement("td",{className:"amt "+(p.netto>=0?"pos":"neg")},eur(p.netto)))),
+              React.createElement("tr",{className:"total"},React.createElement("td",{colSpan:2},"Gesamt"),React.createElement("td",{className:"amt "+(payT>=0?"pos":"neg")},eur(payT)))
+            )
+          )):React.createElement("div",{style:{color:"var(--text3)",fontSize:12,textAlign:"center",padding:20}},"Keine Auszahlungsdaten")
+        )
+      )
+    )
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
 </script>
 </body>
 </html>
