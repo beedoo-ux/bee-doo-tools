@@ -133,24 +133,26 @@ async function uBat(t,rows,onP){let ins=0,upd=0,er=0;const eD=[];for(let i=0;i<r
 let lTk=null,lEx=0;
 async function lAuth(retry=0){if(lTk&&Date.now()<lEx-30000)return lTk;try{const r=await fetch(LU+'?path=auth',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:`username=${encodeURIComponent(LN)}&password=${encodeURIComponent(LP)}`});if(!r.ok)throw new Error(`HTTP ${r.status}: ${await r.text().catch(()=>'')}`);const d=await r.json();if(!d.login)throw new Error('Leveto Auth: '+d.message);lTk=d.token;lEx=Date.now()+4.5*60*1000;return lTk}catch(e){if(retry<2){await new Promise(r=>setTimeout(r,1000*(retry+1)));return lAuth(retry+1)}throw new Error(`Auth fehlgeschlagen (${retry+1} Versuche): ${e.message}`)}}
 async function lGet(p={},retry=0){const tk=await lAuth();const qs=new URLSearchParams({path:'leads',...p}).toString();try{const r=await fetch(`${LU}?${qs}`,{headers:{Authorization:`Bearer ${tk}`}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return await r.json()}catch(e){if(retry<2){await new Promise(r=>setTimeout(r,1000*(retry+1)));lTk=null;return lGet(p,retry+1)}throw new Error(`Leads-Abruf fehlgeschlagen (${retry+1} Versuche): ${e.message}`)}}
+async function lGetAppts(p={},retry=0){const tk=await lAuth();const qs=new URLSearchParams({path:'appointments',...p}).toString();try{const r=await fetch(`${LU}?${qs}`,{headers:{Authorization:`Bearer ${tk}`}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return await r.json()}catch(e){if(retry<2){await new Promise(r=>setTimeout(r,1000*(retry+1)));lTk=null;return lGetAppts(p,retry+1)}throw new Error(`Appointments-Abruf fehlgeschlagen (${retry+1} Versuche): ${e.message}`)}}
 function lMap(l){const a=l.homeAddress||{},s=l.status||{},sf=l.statusFirst||{},sv=l.survey||{};let sd=null;if(sv.data&&Array.isArray(sv.data)){sd={};sv.data.forEach(x=>{if(x.answer)sd[(x.question||'').replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_').toLowerCase()]=x.answer})}return{leveto_id:l.id,id_extern:l.idExtern||null,anrede:l.salutation||null,vorname:(l.firstName||'').trim(),nachname:(l.lastName||'').trim(),firma:l.companyName||null,email:l.email||null,telefon:l.telephone||null,telefon2:l.telephone2||null,mobil:l.mobile||null,erreichbarkeit:l.reachability||null,strasse:a.fullstreet||a.street||null,hausnr:a.housenr||null,plz:a.postalCode||null,ort:a.city||null,lat:a.lat||null,lng:a.lng||null,quelle:l.source||null,tags:l.tags||null,berater_name:l.berater||null,berater_ma_nummer:l.ma_nummer||null,notizen:l.notes||null,nachricht:l.message||null,status_id:s.id??null,status_name:s.name||null,status_indicator:s.indicator||null,status_datum:s.date&&s.date!=='0000-00-00 00:00:00'?s.date:null,erster_status_id:sf.id??null,erster_status_name:sf.name||null,erster_status_datum:sf.date&&sf.date!=='0000-00-00 00:00:00'?sf.date:null,letzter_status_wechsel:l.last_status_change&&l.last_status_change!=='0000-00-00 00:00:00'?l.last_status_change:null,zuweisungsstatus:l.zuweisungsstatus||null,assignments_count:l.assignmentsCount||0,accepted_count:l.acceptedCount||0,declined_count:l.declinedCount||0,objekt_typ:l.objectType||null,personen_haushalt:l.personsInHousehold||null,dach_groesse:l.roofSize||null,dach_form:l.roofShape||null,stromverbrauch:l.powerConsumption||null,monatl_abschlag:l.partPayment||null,finanzierung:l.financingModel||null,survey_data:sd?JSON.stringify(sd):null,opt_in_bestaetigt:l.optIn?.confirmed||false,leveto_erstellt_am:l.createdOn&&l.createdOn!=='0000-00-00 00:00:00'?l.createdOn:null,leveto_importiert_am:l.importedOn&&l.importedOn!=='0000-00-00 00:00:00'?l.importedOn:null,leveto_abgeschlossen_am:l.finishedOn&&l.finishedOn!=='0000-00-00 00:00:00'?l.finishedOn:null,leveto_letzte_bearbeitung:l.lastEditOn&&l.lastEditOn!=='0000-00-00 00:00:00'?l.lastEditOn:null,sync_aktualisiert_am:new Date().toISOString()}}
 
 // ═══ MAIN APP ═══
 function App(){
     const[tab,setTab]=useState('leveto');
-    const[ct,setCt]=useState({leveto:'-',efs:'-',leads:'-',termine:'-',auftraege:'-',bank:'-',lohnjournal:'-',lohnsheet:'-'});
+    const[ct,setCt]=useState({leveto:'-',efs:'-',leads:'-',termine:'-',auftraege:'-',bank:'-',lohnjournal:'-',lohnsheet:'-',appts:'-'});
     const[logs,setLogs]=useState([]);
     const log=useCallback((m,l='info')=>setLogs(p=>[{t:new Date().toLocaleTimeString('de-DE'),m,l,id:Date.now()+Math.random()},...p].slice(0,100)),[]);
-    const rc=useCallback(async()=>{try{const[a,b,c,d,e,f,g,h]=await Promise.allSettled([sCnt('leveto_leads'),sCnt('efs_projekte'),sCnt('import_leads'),sCnt('import_appointments'),sCnt('import_provisions'),sCnt('bank_transactions'),sCnt('lohnjournal_imports'),sCnt('lohn_sheet_data')]);setCt({leveto:a.status==='fulfilled'?a.value:'-',efs:b.status==='fulfilled'?b.value:'-',leads:c.status==='fulfilled'?c.value:'-',termine:d.status==='fulfilled'?d.value:'-',auftraege:e.status==='fulfilled'?e.value:'-',bank:f.status==='fulfilled'?f.value:'-',lohnjournal:g.status==='fulfilled'?g.value:'-',lohnsheet:h.status==='fulfilled'?h.value:'-'})}catch(e){log('Count-Fehler: '+e.message,'error')}},[log]);
+    const rc=useCallback(async()=>{try{const[a,b,c,d,e,f,g,h,j]=await Promise.allSettled([sCnt('leveto_leads'),sCnt('efs_projekte'),sCnt('import_leads'),sCnt('import_appointments'),sCnt('import_provisions'),sCnt('bank_transactions'),sCnt('lohnjournal_imports'),sCnt('lohn_sheet_data'),sCnt('leveto_appointments')]);setCt({leveto:a.status==='fulfilled'?a.value:'-',efs:b.status==='fulfilled'?b.value:'-',leads:c.status==='fulfilled'?c.value:'-',termine:d.status==='fulfilled'?d.value:'-',auftraege:e.status==='fulfilled'?e.value:'-',bank:f.status==='fulfilled'?f.value:'-',lohnjournal:g.status==='fulfilled'?g.value:'-',lohnsheet:h.status==='fulfilled'?h.value:'-',appts:j.status==='fulfilled'?j.value:'-'})}catch(e){log('Count-Fehler: '+e.message,'error')}},[log]);
     useEffect(()=>{rc()},[rc]);
     const fm=v=>typeof v==='number'?v.toLocaleString('de-DE'):v;
-    const TS=[{k:'leveto',l:'Leveto Sync',i:'🔄'},{k:'efs',l:'EFS Sync',i:'📊'},{k:'csv',l:'CSV Import',i:'📋'},{k:'bank',l:'Bank / EBICS',i:'🏦'},{k:'lohnjournal',l:'Lohnjournal',i:'💼'},{k:'lohnsheet',l:'Lohn Sheet',i:'📊'},{k:'merge',l:'Auto-Merge',i:'🔗'}];
+    const TS=[{k:'leveto',l:'Leveto Sync',i:'🔄'},{k:'appts',l:'Termine API',i:'🏗️'},{k:'efs',l:'EFS Sync',i:'📊'},{k:'csv',l:'CSV Import',i:'📋'},{k:'bank',l:'Bank / EBICS',i:'🏦'},{k:'lohnjournal',l:'Lohnjournal',i:'💼'},{k:'lohnsheet',l:'Lohn Sheet',i:'📊'},{k:'merge',l:'Auto-Merge',i:'🔗'}];
     return(<React.Fragment>
         <div className="hdr"><div className="hdr-l"><div className="logo"><img src="https://bee-doo-tools.vercel.app/bee-doo-Logo-white.svg" style={{height:28}} alt="bee-doo" /> <span>Import Cockpit</span></div></div><a href="https://bee-doo-tools.vercel.app/" className="hdr-lk">← Toolbox</a></div>
         <div className="tabs">{TS.map(t=><div key={t.k} className={`tab ${tab===t.k?'on':''}`} onClick={()=>setTab(t.k)}>{t.i} {t.l}</div>)}</div>
         <div className="mn">
-            <div className="sts fi">{[{l:'Leveto Leads',v:ct.leveto,s:'leveto_leads'},{l:'EFS Projekte',v:ct.efs,s:'efs_projekte'},{l:'CSV Leads',v:ct.leads,s:'import_leads'},{l:'CSV Termine',v:ct.termine,s:'import_appointments'},{l:'CSV Aufträge',v:ct.auftraege,s:'import_provisions'},{l:'Bank Trans.',v:ct.bank,s:'bank_transactions'},{l:'Lohnjournal',v:ct.lohnjournal,s:'lohnjournal_imports'},{l:'Lohn Sheet',v:ct.lohnsheet,s:'lohn_sheet_data'}].map(s=><div key={s.l} className="st"><div className="st-l">{s.l}</div><div className="st-v">{fm(s.v)}</div><div className="st-s">{s.s}</div></div>)}</div>
+            <div className="sts fi">{[{l:'Leveto Leads',v:ct.leveto,s:'leveto_leads'},{l:'Montage-Termine',v:ct.appts,s:'leveto_appointments'},{l:'EFS Projekte',v:ct.efs,s:'efs_projekte'},{l:'CSV Leads',v:ct.leads,s:'import_leads'},{l:'CSV Termine',v:ct.termine,s:'import_appointments'},{l:'CSV Aufträge',v:ct.auftraege,s:'import_provisions'},{l:'Bank Trans.',v:ct.bank,s:'bank_transactions'},{l:'Lohnjournal',v:ct.lohnjournal,s:'lohnjournal_imports'},{l:'Lohn Sheet',v:ct.lohnsheet,s:'lohn_sheet_data'}].map(s=><div key={s.l} className="st"><div className="st-l">{s.l}</div><div className="st-v">{fm(s.v)}</div><div className="st-s">{s.s}</div></div>)}</div>
             {tab==='leveto'&&<LT log={log} rc={rc}/>}
+            {tab==='appts'&&<APPT log={log} rc={rc}/>}
             {tab==='efs'&&<ET log={log} rc={rc}/>}
             {tab==='csv'&&<CT log={log} rc={rc}/>}
             {tab==='bank'&&<BKT log={log} rc={rc}/>}
@@ -192,6 +194,198 @@ function LT({log,rc}){
             </tbody></table>
         </div>
         <AutoSync syncKey="leveto_sync" log={log}/>
+    </React.Fragment>);
+}
+
+// ═══ APPOINTMENTS API TAB ═══
+const APPT_TYPES=['AC Montage','DC Montage','AC Nacharbeit','DC Nacharbeit'];
+const isRelevant=t=>{const tl=(t||'').toLowerCase();return tl.includes('montage')||tl.includes('nacharbeit')};
+const validDate=d=>d&&d!=='0000-00-00 00:00:00'&&!d.startsWith('0000')?d:null;
+function aMap(a){return{leveto_id:a.id,lead_id:a.leadID&&a.leadID!=='None'?parseInt(a.leadID)||null:null,project_id:a.projectID&&a.projectID!=='None'&&a.projectID!==1?parseInt(a.projectID)||null:null,appointment_type:(a.appointment_type||'').trim()||null,start_date:validDate(a.start_date),end_date:validDate(a.end_date),status:(a.status||'').trim()||null,feedback_status:(a.feedback_status||'').trim()||null,feedback_detail:(a.feedback_detail||'').trim()||null,user_created:(a.user_created||'').trim()||null,user_received:(a.user_received||'').trim()||null,creation_date:validDate(a.creation_date),closed_date:validDate(a.closed_date),storno_date:validDate(a.storno_date),storno_reason:(a.storno_reason||'').trim()||null,storno_reason_detail:(a.storno_reason_detail||'').trim()||null,kunde_vorname:(a.vorname||'').trim()||null,kunde_nachname:(a.nachname||'').trim()||null,kunde_plz:(a.plz||'').trim()||null,kunde_stadt:(a.stadt||'').trim()||null,kunde_strasse:(a.strasse||'').trim()||null,kunde_hausnr:(a.hausnr||'').trim()||null,quelle:(a.quelle||'').trim()||null,termin_text:(a.text||'').substring(0,2000)||null,id_extern:a.id_extern||null,sync_aktualisiert_am:new Date().toISOString()}}
+
+function APPT({log,rc}){
+    const[run,setRun]=useState(false);const[prog,setProg]=useState(null);const[stats,setStats]=useState(null);const ab=useRef(false);const[dbStats,setDbStats]=useState(null);
+    // Load DB stats on mount
+    useEffect(()=>{(async()=>{try{
+        const types=['AC Montage','DC Montage','AC Nacharbeit','DC Nacharbeit'];
+        const counts={};let total=0;
+        for(const t of types){const r=await fetch(ap('leveto_appointments')+`?appointment_type=eq.${encodeURIComponent(t)}&select=id&limit=0`,{headers:{...hd(),'Prefer':'count=exact'}});const rng=r.headers.get('content-range');const c=rng?parseInt(rng.split('/')[1])||0:0;counts[t]=c;total+=c}
+        // Date range
+        const oldest=await(await fetch(ap('leveto_appointments')+'?select=start_date&order=start_date.asc&limit=1&start_date=not.is.null',{headers:hd()})).json();
+        const newest=await(await fetch(ap('leveto_appointments')+'?select=start_date&order=start_date.desc&limit=1&start_date=not.is.null',{headers:hd()})).json();
+        setDbStats({counts,total,oldest:oldest[0]?.start_date,newest:newest[0]?.start_date})
+    }catch(e){console.error(e)}})()},[]);
+    
+    const sync=async(mode)=>{if(run)return;setRun(true);ab.current=false;
+        const RL=14;const RLPAUSE=22000;const PER_PAGE=500;
+        const modeLabel=mode==='quick'?'Quick (letzte 200 Seiten)':'Voll';
+        log(`🏗️ Montage-Termine ${modeLabel}-Sync gestartet`,'warn');
+        const typeCounts={'AC Montage':0,'DC Montage':0,'AC Nacharbeit':0,'DC Nacharbeit':0,'Sonstige':0};
+        let saved=0,scanned=0,skipped=0,reqCount=0;
+        try{
+            // Step 1: Get total count
+            log('📊 Lade Gesamtanzahl...');
+            const first=await lGetAppts({limit:1});
+            const totalRecords=first.totalrecords||0;
+            const totalPages=Math.ceil(totalRecords/PER_PAGE);
+            log(`📊 ${totalRecords.toLocaleString()} Termine gesamt, ${totalPages} Seiten à ${PER_PAGE}`);
+            reqCount++;
+            
+            // Determine page range
+            const maxPages=mode==='quick'?200:totalPages;
+            const startPage=mode==='quick'?Math.max(1,totalPages-199):1;
+            const endPage=totalPages;
+            const direction=mode==='quick'?'rückwärts (neueste zuerst)':'vorwärts';
+            log(`🔍 Scanne Seite ${startPage}→${endPage} (${maxPages} Seiten, ${direction})`);
+            
+            let currentPage=mode==='quick'?endPage:startPage;
+            let pagesProcessed=0;
+            
+            while(!ab.current&&pagesProcessed<maxPages){
+                if(mode==='quick'&&currentPage<startPage)break;
+                if(mode!=='quick'&&currentPage>endPage)break;
+                
+                let d;
+                try{d=await lGetAppts({limit:PER_PAGE,page:currentPage});reqCount++}
+                catch(fe){
+                    log(`⚠️ Seite ${currentPage}: ${fe.message}, warte 22s...`,'warn');
+                    await new Promise(r=>setTimeout(r,RLPAUSE));lTk=null;lEx=0;
+                    try{d=await lGetAppts({limit:PER_PAGE,page:currentPage});reqCount++}catch(fe2){throw fe2}
+                }
+                
+                if(d.msg==='maximum_requests_exceeded'||d.allowed===false){
+                    log(`⏳ Rate-Limit — 22s Pause (${saved} gespeichert)...`,'warn');
+                    await new Promise(r=>setTimeout(r,RLPAUSE));lTk=null;lEx=0;continue
+                }
+                
+                const appts=d.appointments||[];
+                if(!appts.length){
+                    if(mode==='quick'){currentPage--;pagesProcessed++;continue}
+                    else break
+                }
+                
+                // Filter for relevant types
+                const relevant=appts.filter(a=>isRelevant(a.appointment_type));
+                skipped+=appts.length-relevant.length;
+                
+                if(relevant.length>0){
+                    const rows=relevant.map(aMap);
+                    // Count types
+                    relevant.forEach(a=>{const t=(a.appointment_type||'').trim();if(typeCounts[t]!==undefined)typeCounts[t]++;else typeCounts['Sonstige']++});
+                    
+                    // Upsert to Supabase
+                    const r=await fetch(ap('leveto_appointments')+'?on_conflict=leveto_id',{
+                        method:'POST',
+                        headers:{apikey:SRK,Authorization:`Bearer ${SRK}`,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+                        body:JSON.stringify(rows)
+                    });
+                    if(!r.ok){const err=await r.text();log(`⚠️ Supabase Fehler Seite ${currentPage}: ${err.substring(0,200)}`,'error')}
+                    else saved+=rows.length;
+                }
+                
+                scanned+=appts.length;
+                pagesProcessed++;
+                setProg({page:currentPage,pages:maxPages,pagesProcessed,saved,scanned,skipped,typeCounts:{...typeCounts}});
+                
+                if(pagesProcessed%10===0||relevant.length>0){
+                    log(`📦 Seite ${currentPage}: ${relevant.length}/${appts.length} relevant → ${saved.toLocaleString()} gespeichert (${scanned.toLocaleString()} gescannt)`);
+                }
+                
+                // Rate limiting
+                if(reqCount>=RL){
+                    log(`⏳ Rate-Limit Pause (${reqCount} Requests)...`,'warn');
+                    await new Promise(r=>setTimeout(r,RLPAUSE));reqCount=0
+                }else{await new Promise(r=>setTimeout(r,250))}
+                
+                if(mode==='quick')currentPage--;else currentPage++
+            }
+            
+            setStats({saved,scanned,skipped,typeCounts,aborted:ab.current});
+            log(ab.current?`⏹ Abgebrochen bei ${saved.toLocaleString()} gespeichert`:`✅ Fertig: ${saved.toLocaleString()} Montage/Nacharbeit-Termine gespeichert (${scanned.toLocaleString()} gescannt)`,ab.current?'warn':'success');
+            
+        }catch(e){log(`❌ Appointments-Sync: ${e.message}`,'error')}
+        setRun(false);rc()
+    };
+    
+    const fm=v=>typeof v==='number'?v.toLocaleString('de-DE'):v;
+    const pct=prog?Math.round(prog.pagesProcessed/prog.pages*100):0;
+    
+    return(<React.Fragment>
+        <div className="cd fi"><div className="cd-t">🏗️ Leveto Montage-Termine → Supabase</div>
+            <p style={{fontSize:13,color:'var(--td)',marginBottom:16,lineHeight:1.6}}>
+                Synchronisiert <strong style={{color:'var(--a)'}}>AC/DC Montage</strong> und <strong style={{color:'var(--a)'}}>AC/DC Nacharbeit</strong> Termine aus der Leveto API. 
+                Filtert client-seitig aus ~1,37 Mio. Gesamt-Terminen.
+            </p>
+            
+            {/* DB Stats */}
+            {dbStats&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:18}}>
+                {Object.entries(dbStats.counts).map(([t,c])=><div key={t} style={{background:t.includes('Nacharbeit')?'var(--od)':'var(--bld)',borderRadius:10,padding:14,textAlign:'center'}}>
+                    <div style={{fontSize:22,fontWeight:700,color:t.includes('Nacharbeit')?'var(--o)':'var(--bl)'}}>{fm(c)}</div>
+                    <div style={{fontSize:11,color:'var(--td)',marginTop:2}}>{t}</div>
+                </div>)}
+                <div style={{background:'var(--gd)',borderRadius:10,padding:14,textAlign:'center'}}>
+                    <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>{fm(dbStats.total)}</div>
+                    <div style={{fontSize:11,color:'var(--td)',marginTop:2}}>Gesamt in DB</div>
+                </div>
+            </div>}
+            {dbStats&&dbStats.oldest&&<div style={{fontSize:11,color:'var(--td)',marginBottom:14}}>
+                Zeitraum: <strong style={{color:'var(--tb)'}}>{new Date(dbStats.oldest).toLocaleDateString('de-DE')}</strong> bis <strong style={{color:'var(--tb)'}}>{new Date(dbStats.newest).toLocaleDateString('de-DE')}</strong>
+            </div>}
+            
+            {/* Sync Buttons */}
+            <div className="brow" style={{marginBottom:14}}>
+                <button className="btn by" disabled={run} onClick={()=>sync('quick')}>{run?<React.Fragment><span className="spinner"/> Sync läuft...</React.Fragment>:'⚡ Quick-Sync (neueste ~200 Seiten)'}</button>
+                <button className="btn bo" disabled={run} onClick={()=>sync('full')}>🔄 Voll-Sync (alle Seiten)</button>
+                {run&&<button className="btn br" onClick={()=>{ab.current=true}}>⏹ Stop</button>}
+            </div>
+            
+            {/* Progress */}
+            {prog&&<React.Fragment>
+                <div className="pb"><div className="pf" style={{width:`${pct}%`}}/></div>
+                <div className="pt"><span>Seite {prog.pagesProcessed} / {prog.pages}</span><span>{pct}%</span></div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginTop:10}}>
+                    <div style={{background:'var(--gd)',borderRadius:8,padding:10,textAlign:'center'}}>
+                        <div style={{fontSize:18,fontWeight:700,color:'var(--g)'}}>{fm(prog.saved)}</div>
+                        <div style={{fontSize:10,color:'var(--td)'}}>Gespeichert</div>
+                    </div>
+                    <div style={{background:'var(--bld)',borderRadius:8,padding:10,textAlign:'center'}}>
+                        <div style={{fontSize:18,fontWeight:700,color:'var(--bl)'}}>{fm(prog.scanned)}</div>
+                        <div style={{fontSize:10,color:'var(--td)'}}>Gescannt</div>
+                    </div>
+                    <div style={{background:'rgba(255,255,255,.03)',borderRadius:8,padding:10,textAlign:'center'}}>
+                        <div style={{fontSize:18,fontWeight:700,color:'var(--td)'}}>{fm(prog.skipped)}</div>
+                        <div style={{fontSize:10,color:'var(--td)'}}>Übersprungen</div>
+                    </div>
+                </div>
+                {prog.typeCounts&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
+                    {Object.entries(prog.typeCounts).filter(([,c])=>c>0).map(([t,c])=><span key={t} style={{fontSize:10,padding:'3px 8px',borderRadius:12,background:t.includes('Nacharbeit')?'var(--od)':'var(--bld)',color:t.includes('Nacharbeit')?'var(--o)':'var(--bl)'}}>{t}: {fm(c)}</span>)}
+                </div>}
+            </React.Fragment>}
+        </div>
+        
+        {/* Results */}
+        {stats&&<div className="cd fi"><div className="cd-t">{stats.aborted?'⏹ Sync abgebrochen':'✅ Sync-Ergebnis'}</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10}}>
+                {Object.entries(stats.typeCounts).filter(([,c])=>c>0).map(([t,c])=><div key={t} style={{background:t.includes('Nacharbeit')?'var(--od)':t==='Sonstige'?'rgba(255,255,255,.03)':'var(--bld)',borderRadius:10,padding:14,textAlign:'center'}}>
+                    <div style={{fontSize:22,fontWeight:700,color:t.includes('Nacharbeit')?'var(--o)':t==='Sonstige'?'var(--td)':'var(--bl)'}}>{fm(c)}</div>
+                    <div style={{fontSize:11,color:'var(--td)',marginTop:2}}>{t}</div>
+                </div>)}
+            </div>
+            <div style={{marginTop:12,fontSize:12,color:'var(--td)'}}>
+                {fm(stats.saved)} gespeichert · {fm(stats.scanned)} gescannt · {fm(stats.skipped)} irrelevant
+            </div>
+        </div>}
+        
+        <div className="cd fi"><div className="cd-t">ℹ️ Sync-Logik</div>
+            <table className="mt"><thead><tr><th>Typ</th><th>Beschreibung</th><th>Erwartet</th></tr></thead><tbody>
+                {[['AC Montage','AC-Installationstermine','~40.000'],['DC Montage','DC-Installationstermine','~39.000'],['AC Nacharbeit','Nachbesserung AC','~10.000'],['DC Nacharbeit','Nachbesserung DC','~5.700']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)',fontWeight:600}}>{r[0]}</td><td>{r[1]}</td><td style={{color:'var(--a)'}}>{r[2]}</td></tr>)}
+            </tbody></table>
+            <div style={{marginTop:12,fontSize:12,color:'var(--td)',lineHeight:1.6}}>
+                <strong style={{color:'var(--tb)'}}>Quick-Sync:</strong> Letzte ~200 Seiten (neueste Daten), ca. 15 Min<br/>
+                <strong style={{color:'var(--tb)'}}>Voll-Sync:</strong> Alle ~2.740 Seiten, ca. 1,5 Std (Rate-Limit: 14 Req / 22s Pause)<br/>
+                <strong style={{color:'var(--tb)'}}>Filter:</strong> Nur Typen mit "Montage" oder "Nacharbeit" werden gespeichert
+            </div>
+        </div>
     </React.Fragment>);
 }
 
