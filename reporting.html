@@ -510,6 +510,37 @@ function processCashflow(transactions) {
   const totalEin = transactions.filter(t => t.soll_haben === 'CRDT').reduce((s, t) => s + Math.abs(parseFloat(t.betrag) || 0), 0);
   const totalAus = transactions.filter(t => t.soll_haben === 'DBIT').reduce((s, t) => s + Math.abs(parseFloat(t.betrag) || 0), 0);
 
+  // Auto-Kategorisierung
+  const catRules = [
+    { name: 'Gehälter & Löhne', test: t => /gehalt|lohn|salary|sozialversicherung|krankenkasse|aok|barmer|dak|tk |ikk|knappschaft|beiträge/i.test(`${t.gegenkonto_name||''} ${t.verwendungszweck||''}`) },
+    { name: 'Provisionen', test: t => /provision|gutschrift|abrech/i.test(`${t.verwendungszweck||''}`) },
+    { name: 'Material & Einkauf', test: t => /solar|modul|speicher|wechselrichter|pv|montage|material|fox ess|sungrow|huawei|enphase/i.test(`${t.gegenkonto_name||''} ${t.verwendungszweck||''}`) },
+    { name: 'Miete & Büro', test: t => /miete|stadtwerk|strom|gas|wasser|büro|office|immobil/i.test(`${t.gegenkonto_name||''} ${t.verwendungszweck||''}`) },
+    { name: 'Fahrzeuge & Reisen', test: t => /tanken|benzin|diesel|kfz|leasing|fleet|sixt|shell|aral|total|esso|reise|hotel|bahn/i.test(`${t.gegenkonto_name||''} ${t.verwendungszweck||''}`) },
+    { name: 'Software & IT', test: t => /vercel|github|google|amazon|aws|hetzner|software|saas|api|twilio|brevo|supabase|stripe|microsoft|adobe/i.test(`${t.gegenkonto_name||''} ${t.verwendungszweck||''}`) },
+    { name: 'Versicherung', test: t => /versicherung|allianz|axa|hdi|signal|zurich|ergo/i.test(`${t.gegenkonto_name||''} ${t.verwendungszweck||''}`) },
+    { name: 'Steuern & Gebühren', test: t => /finanzamt|steuer|ust|umsatzsteuer|notar|gez|ihk|gema/i.test(`${t.gegenkonto_name||''} ${t.verwendungszweck||''}`) },
+    { name: 'Marketing', test: t => /marketing|werbung|facebook|meta|instagram|google ads|flyer|druck/i.test(`${t.gegenkonto_name||''} ${t.verwendungszweck||''}`) },
+  ];
+  const categories = {};
+  const catMonthly = {};
+  transactions.filter(t => t.soll_haben === 'DBIT').forEach(t => {
+    const b = Math.abs(parseFloat(t.betrag) || 0);
+    const m = (t.buchungsdatum || '').slice(0, 7);
+    let cat = 'Sonstiges';
+    for (const r of catRules) { if (r.test(t)) { cat = r.name; break; } }
+    if (!categories[cat]) categories[cat] = { name: cat, sum: 0, cnt: 0 };
+    categories[cat].sum += b; categories[cat].cnt++;
+    if (m && m >= '2025-01') {
+      if (!catMonthly[m]) catMonthly[m] = {};
+      if (!catMonthly[m][cat]) catMonthly[m][cat] = 0;
+      catMonthly[m][cat] += b;
+    }
+  });
+  const catBreakdown = Object.values(categories).sort((a, b) => b.sum - a.sum);
+  const catMonthlyData = Object.entries(catMonthly).sort(([a],[b]) => a.localeCompare(b)).map(([m, cats]) => ({ m, label: monthNames[parseInt(m.slice(5,7))-1] + ' ' + m.slice(2,4), ...cats }));
+  const catNames = catBreakdown.slice(0, 6).map(c => c.name);
+
   // Top Empfänger (Ausgaben)
   const empfMap = {};
   transactions.filter(t => t.soll_haben === 'DBIT').forEach(t => {
@@ -534,8 +565,11 @@ function processCashflow(transactions) {
   const last3 = monthly.slice(-3);
   const avgBurn = last3.length > 0 ? last3.reduce((s, m) => s + m.aus, 0) / last3.length : 0;
   const avgIncome = last3.length > 0 ? last3.reduce((s, m) => s + m.ein, 0) / last3.length : 0;
+  const netBurn = avgBurn - avgIncome;
+  const lastCum = monthly.length > 0 ? monthly[monthly.length - 1].cumSaldo : 0;
+  const runwayMonths = netBurn > 0 ? Math.max(0, lastCum / netBurn) : 99;
 
-  // Weekly trend (last 8 weeks)
+  // Weekly trend (last 12 weeks)
   const weekMap = {};
   transactions.forEach(t => {
     const d = t.buchungsdatum;
@@ -548,10 +582,29 @@ function processCashflow(transactions) {
     if (t.soll_haben === 'CRDT') weekMap[key].ein += b;
     else weekMap[key].aus += b;
   });
-  const weekly = Object.values(weekMap).sort((a, b) => a.d.localeCompare(b.d)).slice(-8);
+  const weekly = Object.values(weekMap).sort((a, b) => a.d.localeCompare(b.d)).slice(-12);
   weekly.forEach(w => { w.saldo = w.ein - w.aus; });
 
-  return { monthly, totalEin, totalAus, topEmpfaenger, topEinzahler, avgBurn, avgIncome, weekly, total: transactions.length };
+  // Top Einzeltransaktionen
+  const biggestOut = transactions.filter(t => t.soll_haben === 'DBIT').map(t => ({
+    datum: (t.buchungsdatum || '').slice(0, 10), name: (t.gegenkonto_name || '').substring(0, 35),
+    betrag: Math.abs(parseFloat(t.betrag) || 0), zweck: (t.verwendungszweck || '').substring(0, 50)
+  })).sort((a, b) => b.betrag - a.betrag).slice(0, 10);
+
+  const biggestIn = transactions.filter(t => t.soll_haben === 'CRDT').map(t => ({
+    datum: (t.buchungsdatum || '').slice(0, 10), name: (t.gegenkonto_name || '').substring(0, 35),
+    betrag: Math.abs(parseFloat(t.betrag) || 0), zweck: (t.verwendungszweck || '').substring(0, 50)
+  })).sort((a, b) => b.betrag - a.betrag).slice(0, 10);
+
+  // MoM growth
+  monthly.forEach((m, i) => {
+    if (i > 0) {
+      m.einGrowth = monthly[i-1].ein > 0 ? ((m.ein - monthly[i-1].ein) / monthly[i-1].ein * 100) : 0;
+      m.ausGrowth = monthly[i-1].aus > 0 ? ((m.aus - monthly[i-1].aus) / monthly[i-1].aus * 100) : 0;
+    } else { m.einGrowth = 0; m.ausGrowth = 0; }
+  });
+
+  return { monthly, totalEin, totalAus, topEmpfaenger, topEinzahler, avgBurn, avgIncome, weekly, total: transactions.length, catBreakdown, catMonthlyData, catNames, netBurn, runwayMonths, lastCum, biggestOut, biggestIn };
 }
 
 // ═══ TEAM PERFORMANCE PROCESSING ═══
@@ -561,14 +614,15 @@ function processTeam(auftraege, termine, leads, mitarbeiterList) {
     maMap[m.id] = { id: m.id, name: `${m.vorname} ${m.nachname}`.trim(), typ: m.typ || '', kuerzel: m.kuerzel || '' };
   });
 
-  // Sales per person
+  // Sales per person with monthly breakdown
   const vtPerf = {};
   auftraege.forEach(a => {
     const vid = a.vertriebler_id;
     if (!vid) return;
     const name = maMap[vid]?.name || `ID ${vid.slice(0,6)}`;
     const typ = maMap[vid]?.typ || '';
-    if (!vtPerf[vid]) vtPerf[vid] = { id: vid, name, typ, sales: 0, storno: 0, netto: 0, speicher: 0, eigenlead: 0, empfehlung: 0, kwpSum: 0 };
+    if (!vtPerf[vid]) vtPerf[vid] = { id: vid, name, typ, sales: 0, storno: 0, netto: 0, speicher: 0, eigenlead: 0, empfehlung: 0, kwpSum: 0, byMonth: {} };
+    const m = (a.auftrags_datum || '').slice(0, 7);
     if (a.storniert) vtPerf[vid].storno++;
     else {
       vtPerf[vid].sales++;
@@ -577,13 +631,21 @@ function processTeam(auftraege, termine, leads, mitarbeiterList) {
       if (a.ist_eigenlead) vtPerf[vid].eigenlead++;
       if (a.ist_empfehlung) vtPerf[vid].empfehlung++;
       vtPerf[vid].kwpSum += (a.anlagen_kwp || 0) / 100;
+      if (m) { if (!vtPerf[vid].byMonth[m]) vtPerf[vid].byMonth[m] = 0; vtPerf[vid].byMonth[m]++; }
     }
   });
+  // Collect all months for sparklines
+  const allMonths = [...new Set(auftraege.filter(a=>!a.storniert).map(a=>(a.auftrags_datum||'').slice(0,7)).filter(m=>m>='2025-01'))].sort();
   Object.values(vtPerf).forEach(v => {
     v.stornoRate = v.sales + v.storno > 0 ? (v.storno / (v.sales + v.storno) * 100) : 0;
     v.avgKwp = v.sales > 0 ? v.kwpSum / v.sales : 0;
     v.avgNetto = v.sales > 0 ? v.netto / v.sales : 0;
     v.speicherRate = v.sales > 0 ? (v.speicher / v.sales * 100) : 0;
+    v.eigenleadRate = v.sales > 0 ? (v.eigenlead / v.sales * 100) : 0;
+    v.sparkline = allMonths.map(m => v.byMonth[m] || 0);
+    // Trend: last month vs previous
+    const last2 = allMonths.slice(-2).map(m => v.byMonth[m] || 0);
+    v.trend = last2.length === 2 && last2[0] > 0 ? ((last2[1] - last2[0]) / last2[0] * 100) : 0;
   });
   const vtRanking = Object.values(vtPerf).filter(v => v.sales + v.storno > 0).sort((a, b) => b.sales - a.sales);
 
@@ -609,19 +671,67 @@ function processTeam(auftraege, termine, leads, mitarbeiterList) {
   const typSummary = {};
   vtRanking.forEach(v => {
     const t = v.typ || 'Sonstige';
-    if (!typSummary[t]) typSummary[t] = { typ: t, persons: 0, sales: 0, storno: 0, netto: 0 };
+    if (!typSummary[t]) typSummary[t] = { typ: t, persons: 0, sales: 0, storno: 0, netto: 0, speicher: 0, eigenlead: 0 };
     typSummary[t].persons++;
     typSummary[t].sales += v.sales;
     typSummary[t].storno += v.storno;
     typSummary[t].netto += v.netto;
+    typSummary[t].speicher += v.speicher;
+    typSummary[t].eigenlead += v.eigenlead;
   });
   Object.values(typSummary).forEach(t => {
     t.avgPerPerson = t.persons > 0 ? t.sales / t.persons : 0;
     t.stornoRate = t.sales + t.storno > 0 ? (t.storno / (t.sales + t.storno) * 100) : 0;
+    t.avgNetto = t.sales > 0 ? t.netto / t.sales : 0;
+    t.speicherRate = t.sales > 0 ? (t.speicher / t.sales * 100) : 0;
   });
   const typBreakdown = Object.values(typSummary).sort((a, b) => b.sales - a.sales);
 
-  return { vtRanking, termRanking, typBreakdown };
+  // Efficiency metrics
+  const totalSales = vtRanking.reduce((s, v) => s + v.sales, 0);
+  const totalTermine = termine.length;
+  const totalLeads = leads.length;
+  const terminToSale = totalTermine > 0 ? (totalSales / totalTermine * 100) : 0;
+  const leadToSale = totalLeads > 0 ? (totalSales / totalLeads * 100) : 0;
+  const avgRevenuePerTermin = totalTermine > 0 ? vtRanking.reduce((s, v) => s + v.netto, 0) / totalTermine : 0;
+  const activeVTs = vtRanking.filter(v => v.sales > 0).length;
+  const avgSalesPerVT = activeVTs > 0 ? totalSales / activeVTs : 0;
+
+  // Scout chain: Scouter → Leads assigned → Termine → Sales
+  const scoutPerf = {};
+  leads.forEach(l => {
+    const b = l.berater_name || '';
+    if (!b) return;
+    if (!scoutPerf[b]) scoutPerf[b] = { name: b, leads: 0, term: 0, auftrag: 0, storno: 0 };
+    scoutPerf[b].leads++;
+    const sn = (l.status_name || '');
+    if (/terminiert|termin gelegt|termin vor ort|angebot|auftrag|vertrag/i.test(sn)) scoutPerf[b].term++;
+    if (/auftrag|vertrag|sale/i.test(sn)) scoutPerf[b].auftrag++;
+    if (/storn/i.test(sn)) scoutPerf[b].storno++;
+  });
+  Object.values(scoutPerf).forEach(s => {
+    s.termRate = s.leads > 0 ? (s.term / s.leads * 100) : 0;
+    s.saleRate = s.leads > 0 ? (s.auftrag / s.leads * 100) : 0;
+  });
+  const scoutChain = Object.values(scoutPerf).filter(s => s.leads >= 5).sort((a, b) => b.saleRate - a.saleRate).slice(0, 20);
+
+  // Monthly Sales Trend (for stacked area chart)
+  const monthlyByTyp = {};
+  auftraege.filter(a => !a.storniert).forEach(a => {
+    const m = (a.auftrags_datum || '').slice(0, 7);
+    const vid = a.vertriebler_id;
+    const typ = maMap[vid]?.typ || 'Sonstige';
+    const simTyp = /haupt/i.test(typ) ? 'HGB Haupt' : /hgb/i.test(typ) ? 'HGB Agentur' : /angest.*vert/i.test(typ) ? 'Angest. VT' : /scout/i.test(typ) ? 'Scouter' : 'Sonstige';
+    if (m && m >= '2025-01') {
+      if (!monthlyByTyp[m]) monthlyByTyp[m] = { m, label: monthNames[parseInt(m.slice(5,7))-1]+' '+m.slice(2,4) };
+      if (!monthlyByTyp[m][simTyp]) monthlyByTyp[m][simTyp] = 0;
+      monthlyByTyp[m][simTyp]++;
+    }
+  });
+  const monthlyTypData = Object.values(monthlyByTyp).sort((a, b) => a.m.localeCompare(b.m));
+  const typNames = ['HGB Haupt', 'HGB Agentur', 'Angest. VT', 'Scouter'];
+
+  return { vtRanking, termRanking, typBreakdown, allMonths, efficiency: { terminToSale, leadToSale, avgRevenuePerTermin, avgSalesPerVT, activeVTs, totalSales, totalTermine, totalLeads }, scoutChain, monthlyTypData, typNames };
 }
 
 // ═══ PIPELINE VELOCITY PROCESSING ═══
@@ -742,17 +852,35 @@ function processProvisionen(historie) {
   });
   const monthly = Object.values(byPeriode).sort((a, b) => a.p.localeCompare(b.p));
 
+  // MoM growth
+  monthly.forEach((m, i) => {
+    m.avgPerPos = m.cnt > 0 ? m.sum / m.cnt : 0;
+    m.sumGrowth = i > 0 && monthly[i-1].sum > 0 ? ((m.sum - monthly[i-1].sum) / monthly[i-1].sum * 100) : 0;
+  });
+
   // Per VT total
   const vtMap = {};
   historie.forEach(h => {
     const vt = h.vertriebler || 'Unbekannt';
-    if (!vtMap[vt]) vtMap[vt] = { name: vt, sum: 0, cnt: 0, perioden: new Set() };
-    vtMap[vt].sum += parseFloat(h.netto) || 0;
+    if (!vtMap[vt]) vtMap[vt] = { name: vt, sum: 0, cnt: 0, perioden: new Set(), byMonth: {} };
+    const netto = parseFloat(h.netto) || 0;
+    vtMap[vt].sum += netto;
     vtMap[vt].cnt++;
     vtMap[vt].perioden.add(h.periode);
+    const p = h.periode || '?';
+    if (!vtMap[vt].byMonth[p]) vtMap[vt].byMonth[p] = 0;
+    vtMap[vt].byMonth[p] += netto;
   });
-  Object.values(vtMap).forEach(v => { v.avgPerMonth = v.perioden.size > 0 ? v.sum / v.perioden.size : 0; v.periodenCount = v.perioden.size; });
-  const vtRanking = Object.values(vtMap).sort((a, b) => b.sum - a.sum).slice(0, 25);
+  const allPerioden = [...new Set(historie.map(h => h.periode))].sort();
+  Object.values(vtMap).forEach(v => {
+    v.avgPerMonth = v.perioden.size > 0 ? v.sum / v.perioden.size : 0;
+    v.periodenCount = v.perioden.size;
+    v.sparkline = allPerioden.map(p => v.byMonth[p] || 0);
+    // Trend
+    const last2 = allPerioden.slice(-2).map(p => v.byMonth[p] || 0);
+    v.trend = last2.length === 2 && last2[0] > 0 ? ((last2[1] - last2[0]) / last2[0] * 100) : 0;
+  });
+  const vtRanking = Object.values(vtMap).sort((a, b) => b.sum - a.sum).slice(0, 30);
 
   // Totals
   const totalSum = historie.reduce((s, h) => s + (parseFloat(h.netto) || 0), 0);
@@ -760,6 +888,26 @@ function processProvisionen(historie) {
   const avgPerPosition = totalCnt > 0 ? totalSum / totalCnt : 0;
   const perioden = new Set(historie.map(h => h.periode)).size;
   const avgPerMonth = perioden > 0 ? totalSum / perioden : 0;
+
+  // Commission bracket distribution
+  const bracketMap = {};
+  historie.forEach(h => {
+    const netto = parseFloat(h.netto) || 0;
+    let bracket = '0–500€';
+    if (netto > 5000) bracket = '>5.000€';
+    else if (netto > 3000) bracket = '3.000–5.000€';
+    else if (netto > 2000) bracket = '2.000–3.000€';
+    else if (netto > 1500) bracket = '1.500–2.000€';
+    else if (netto > 1000) bracket = '1.000–1.500€';
+    else if (netto > 500) bracket = '500–1.000€';
+    if (!bracketMap[bracket]) bracketMap[bracket] = { name: bracket, cnt: 0, sum: 0 };
+    bracketMap[bracket].cnt++;
+    bracketMap[bracket].sum += netto;
+  });
+  const brackets = Object.values(bracketMap).sort((a, b) => {
+    const order = ['0–500€','500–1.000€','1.000–1.500€','1.500–2.000€','2.000–3.000€','3.000–5.000€','>5.000€'];
+    return order.indexOf(a.name) - order.indexOf(b.name);
+  });
 
   // Scout provisionen
   const scoutMap = {};
@@ -771,7 +919,27 @@ function processProvisionen(historie) {
   });
   const scoutRanking = Object.values(scoutMap).sort((a, b) => b.sum - a.sum).slice(0, 15);
 
-  return { monthly, vtRanking, scoutRanking, totalSum, totalCnt, avgPerPosition, avgPerMonth, perioden };
+  // Produkt-Mix
+  const produktMap = {};
+  historie.forEach(h => {
+    const p = h.produkt || 'PV';
+    if (!produktMap[p]) produktMap[p] = { name: p, sum: 0, cnt: 0 };
+    produktMap[p].sum += parseFloat(h.netto) || 0;
+    produktMap[p].cnt++;
+  });
+  const produktMix = Object.values(produktMap).sort((a,b) => b.sum - a.sum);
+
+  // Quelle analysis
+  const quelleMap = {};
+  historie.forEach(h => {
+    const q = h.quelle || 'Standard';
+    if (!quelleMap[q]) quelleMap[q] = { name: q, sum: 0, cnt: 0 };
+    quelleMap[q].sum += parseFloat(h.netto) || 0;
+    quelleMap[q].cnt++;
+  });
+  const quelleBreakdown = Object.values(quelleMap).sort((a,b) => b.sum - a.sum);
+
+  return { monthly, vtRanking, scoutRanking, totalSum, totalCnt, avgPerPosition, avgPerMonth, perioden, brackets, produktMix, quelleBreakdown, allPerioden };
 }
 
 // ═══ FORECAST PROCESSING ═══
@@ -1332,6 +1500,7 @@ const TabCashflow = ({ data }) => {
   if (!data) return null;
   const d = data;
   const lastMonth = d.monthly.length > 0 ? d.monthly[d.monthly.length - 1] : null;
+  const GrowthBadge2 = ({ v }) => { if (!v || isNaN(v)) return <span style={{ color: C.dim }}>–</span>; return <span style={{ color: v > 0 ? C.red : C.green, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>{v > 0 ? '▲' : '▼'} {Math.abs(v).toFixed(0)}%</span>; };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
@@ -1339,21 +1508,70 @@ const TabCashflow = ({ data }) => {
         <KPI label="Gesamtausgaben" value={eur(d.totalAus)} color={C.red} />
         <KPI label="Netto-Saldo" value={eur(d.totalEin - d.totalAus)} color={d.totalEin > d.totalAus ? C.green : C.red} />
         <KPI label="Ø Burn-Rate/Monat" value={eur(d.avgBurn)} sub={`Ø Einnahmen: ${eur(d.avgIncome)}`} color={C.orange} />
+        <KPI label="Liquiditäts-Runway" value={d.runwayMonths >= 99 ? '∞' : `${d.runwayMonths.toFixed(1)} Mon.`} sub={d.netBurn > 0 ? `Netto-Burn: ${eur(d.netBurn)}/Mo` : 'Positiver Cashflow!'} color={d.runwayMonths > 6 ? C.green : d.runwayMonths > 3 ? C.orange : C.red} />
+        <KPI label="Kumulierter Saldo" value={eur(d.lastCum)} color={d.lastCum >= 0 ? C.green : C.red} />
       </div>
-      <Sec title="Monatlicher Cashflow" sub="Einnahmen vs. Ausgaben mit Saldo-Trend">
+
+      <Sec title="💰 Monatlicher Cashflow" sub="Einnahmen vs. Ausgaben mit kumuliertem Saldo">
         <ResponsiveContainer width="100%" height={320}>
           <ComposedChart data={d.monthly}>
             <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
             <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
-            <YAxis tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <YAxis yAxisId="left" tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <YAxis yAxisId="right" orientation="right" tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
             <Tooltip content={<TT />} />
-            <Bar dataKey="ein" name="Einnahmen" fill={C.green} radius={[4,4,0,0]} />
-            <Bar dataKey="aus" name="Ausgaben" fill={`${C.red}90`} radius={[4,4,0,0]} />
-            <Line dataKey="saldo" name="Saldo" stroke={C.gold} strokeWidth={2} dot={{ fill: C.gold, r: 4 }} />
+            <Bar dataKey="ein" name="Einnahmen" fill={C.green} radius={[4,4,0,0]} yAxisId="left" />
+            <Bar dataKey="aus" name="Ausgaben" fill={`${C.red}90`} radius={[4,4,0,0]} yAxisId="left" />
+            <Line dataKey="saldo" name="Monatssaldo" stroke={C.gold} strokeWidth={2} dot={{ fill: C.gold, r: 4 }} yAxisId="left" />
+            <Line dataKey="cumSaldo" name="Kumuliert" stroke={C.cyan} strokeWidth={2} strokeDasharray="5 3" dot={{ fill: C.cyan, r: 3 }} yAxisId="right" />
           </ComposedChart>
         </ResponsiveContainer>
       </Sec>
-      {lastMonth && <Sec title={`Aktueller Monat: ${lastMonth.label}`} sub={`${lastMonth.einCnt} Eingänge · ${lastMonth.ausCnt} Ausgänge`}>
+
+      {d.catBreakdown.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="grid-1">
+        <Sec title="📊 Ausgaben nach Kategorie" sub="Automatische Klassifizierung">
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie data={d.catBreakdown.slice(0,8)} cx="50%" cy="50%" outerRadius={85} innerRadius={35} dataKey="sum" paddingAngle={2}
+                label={({name,sum}) => sum > d.totalAus*0.05 ? `${name.split(' ')[0]}` : ''} labelLine={false} style={{fontSize:10}}>
+                {d.catBreakdown.slice(0,8).map((_, i) => <Cell key={i} fill={CL[i % CL.length]} />)}
+              </Pie>
+              <Tooltip contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:12 }} formatter={v => eur(v)} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:8, justifyContent:'center' }}>
+            {d.catBreakdown.slice(0,8).map((c,i) => (
+              <span key={i} style={{ fontSize:10, color:C.sec, display:'flex', alignItems:'center', gap:4 }}>
+                <span style={{ width:8, height:8, borderRadius:2, background:CL[i%CL.length], flexShrink:0 }} />
+                {c.name} ({eur(c.sum)})
+              </span>
+            ))}
+          </div>
+        </Sec>
+        <Sec title="📋 Kategorie-Details">
+          <RankTable data={d.catBreakdown} columns={[
+            { label: '#', render: (r, i) => i + 1, align: 'center' },
+            { label: 'Kategorie', key: 'name', bold: true },
+            { label: 'Betrag', render: r => eur(r.sum), align: 'right', mono: true, color: C.red },
+            { label: 'Anteil', render: r => `${(r.sum / d.totalAus * 100).toFixed(1)}%`, align: 'center', mono: true },
+            { label: 'Anz.', key: 'cnt', align: 'center', mono: true },
+          ]} />
+        </Sec>
+      </div>}
+
+      {d.catMonthlyData.length > 1 && <Sec title="📈 Ausgaben-Kategorien im Zeitverlauf" sub="Top-Kategorien pro Monat">
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={d.catMonthlyData}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <Tooltip content={<TT />} />
+            {d.catNames.map((cn, i) => <Bar key={cn} dataKey={cn} name={cn} stackId="a" fill={CL[i % CL.length]} />)}
+          </BarChart>
+        </ResponsiveContainer>
+      </Sec>}
+
+      {lastMonth && <Sec title={`📅 Aktueller Monat: ${lastMonth.label}`} sub={`${lastMonth.einCnt} Eingänge · ${lastMonth.ausCnt} Ausgänge`}>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
@@ -1369,6 +1587,38 @@ const TabCashflow = ({ data }) => {
           </div>
         </div>
       </Sec>}
+
+      <Sec title="📊 Monatsvergleich (MoM)" sub="Ein- und Ausgaben-Wachstum">
+        <div style={{ overflowX: 'auto' }}>
+          <RankTable data={d.monthly} columns={[
+            { label: 'Monat', key: 'label', bold: true },
+            { label: 'Einnahmen', render: r => eur(r.ein), align: 'right', mono: true, color: C.green },
+            { label: 'MoM', render: r => <GrowthBadge2 v={r.einGrowth} />, align: 'center' },
+            { label: 'Ausgaben', render: r => eur(r.aus), align: 'right', mono: true, color: C.red },
+            { label: 'MoM', render: r => <GrowthBadge2 v={r.ausGrowth} />, align: 'center' },
+            { label: 'Saldo', render: r => <span style={{color: r.saldo >= 0 ? C.green : C.red, fontWeight:700}}>{r.saldo >= 0?'+':''}{eur(r.saldo)}</span>, align: 'right', mono: true },
+            { label: 'Kumuliert', render: r => eur(r.cumSaldo), align: 'right', mono: true, color: r => r.cumSaldo >= 0 ? C.cyan : C.red },
+          ]} />
+        </div>
+      </Sec>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="grid-1">
+        <Sec title="🔝 Größte Einzelausgaben">
+          <RankTable data={d.biggestOut} columns={[
+            { label: 'Datum', key: 'datum', mono: true, color: C.sec },
+            { label: 'Empfänger', key: 'name', bold: true },
+            { label: 'Betrag', render: r => eur(r.betrag), align: 'right', mono: true, color: C.red, bold: true },
+          ]} />
+        </Sec>
+        <Sec title="🔝 Größte Einzeleingänge">
+          <RankTable data={d.biggestIn} columns={[
+            { label: 'Datum', key: 'datum', mono: true, color: C.sec },
+            { label: 'Einzahler', key: 'name', bold: true },
+            { label: 'Betrag', render: r => eur(r.betrag), align: 'right', mono: true, color: C.green, bold: true },
+          ]} />
+        </Sec>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="grid-1">
         <Sec title="Top Ausgaben (Empfänger)">
           <RankTable data={d.topEmpfaenger} columns={[
@@ -1387,16 +1637,18 @@ const TabCashflow = ({ data }) => {
           ]} />
         </Sec>
       </div>
-      <Sec title="Wöchentlicher Trend (letzte 8 Wochen)">
+
+      <Sec title="Wöchentlicher Trend (letzte 12 Wochen)">
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={d.weekly}>
+          <ComposedChart data={d.weekly}>
             <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
             <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
             <YAxis tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
             <Tooltip content={<TT />} />
             <Bar dataKey="ein" name="Einnahmen" fill={C.green} radius={[3,3,0,0]} />
             <Bar dataKey="aus" name="Ausgaben" fill={`${C.red}80`} radius={[3,3,0,0]} />
-          </BarChart>
+            <Line dataKey="saldo" name="Saldo" stroke={C.gold} strokeWidth={2} dot={{ fill: C.gold, r: 3 }} />
+          </ComposedChart>
         </ResponsiveContainer>
       </Sec>
     </div>
@@ -1407,9 +1659,34 @@ const TabCashflow = ({ data }) => {
 const TabTeam = ({ data }) => {
   if (!data) return null;
   const d = data;
-  const typLabels = { hgb_vertriebler_haupt: 'HGB Haupt §84', hgb_vertriebler: 'HGB Agentur', angestellt_vertriebler: 'Angestellt VT', angestellt_scouter: 'Angestellt Scout', hgb_scouter: 'HGB Scout' };
+  const e = d.efficiency;
+  const typLabels = { hgb_vertriebler_haupt: 'HGB Haupt §84', hgb_vertriebler: 'HGB Agentur', angestellt_vertriebler: 'Angestellt VT', angestellt_scouter: 'Angestellt Scout', hgb_scouter: 'HGB Scout', angestellt_vt: 'Angestellt VT', hgb_vertriebler_agentur: 'HGB Agentur' };
+  const typColors = { 'HGB Haupt': C.gold, 'HGB Agentur': C.blue, 'Angest. VT': C.green, 'Scouter': C.purple };
+  const TrendArrow = ({ v }) => !v || isNaN(v) ? null : <span style={{ fontSize: 10, color: v > 0 ? C.green : v < 0 ? C.red : C.dim, fontWeight: 700 }}>{v > 0 ? '▲' : v < 0 ? '▼' : '–'}{Math.abs(v).toFixed(0)}%</span>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Efficiency KPIs */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <MiniStat label="Aktive VTs" value={e.activeVTs} sub={`${e.totalSales} Sales gesamt`} color={C.gold} />
+        <MiniStat label="Ø Sales / VT" value={e.avgSalesPerVT.toFixed(1)} color={C.green} />
+        <MiniStat label="Termin → Sale" value={`${e.terminToSale.toFixed(1)}%`} sub={`${e.totalTermine} Termine`} color={C.blue} />
+        <MiniStat label="Lead → Sale" value={`${e.leadToSale.toFixed(1)}%`} sub={`${fmt(e.totalLeads)} Leads`} color={C.purple} />
+        <MiniStat label="Ø Umsatz/Termin" value={eur(e.avgRevenuePerTermin)} color={C.cyan} />
+      </div>
+
+      {/* Monthly Sales by Type */}
+      {d.monthlyTypData.length > 1 && <Sec title="📈 Monatliche Sales nach VT-Typ" sub="Stacked: Wer liefert wieviel?">
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={d.monthlyTypData}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis tick={{ fill: C.sec, fontSize: 11 }} />
+            <Tooltip content={<TT />} />
+            {d.typNames.map((tn, i) => <Bar key={tn} dataKey={tn} name={tn} stackId="a" fill={typColors[tn] || CL[i]} />)}
+          </BarChart>
+        </ResponsiveContainer>
+      </Sec>}
+
       <Sec title="VT-Typ Übersicht" sub="Performance nach Vertragstyp">
         <RankTable data={d.typBreakdown} columns={[
           { label: 'Typ', render: r => typLabels[r.typ] || r.typ, bold: true },
@@ -1417,25 +1694,46 @@ const TabTeam = ({ data }) => {
           { label: 'Sales', key: 'sales', align: 'center', mono: true, color: C.gold },
           { label: 'Ø/Person', render: r => r.avgPerPerson.toFixed(1), align: 'center', mono: true, color: C.green },
           { label: 'Storno', key: 'storno', align: 'center', mono: true, color: C.red },
-          { label: 'Quote', render: r => `${r.stornoRate.toFixed(1)}%`, align: 'center', color: r => r.stornoRate > 25 ? C.red : C.sec },
+          { label: 'S-Quote', render: r => `${r.stornoRate.toFixed(1)}%`, align: 'center', color: r => r.stornoRate > 25 ? C.red : C.sec },
           { label: 'Netto', render: r => eur(r.netto), align: 'right', mono: true },
+          { label: 'Ø Netto/Sale', render: r => eur(r.avgNetto), align: 'right', mono: true, color: C.sec },
+          { label: 'Speicher%', render: r => `${r.speicherRate.toFixed(0)}%`, align: 'center', color: r => r.speicherRate > 50 ? C.green : C.dim },
         ]} />
       </Sec>
-      <Sec title="🏆 VT-Ranking nach Sales" sub="Sortiert nach aktiven Aufträgen">
-        <div style={{ maxHeight: 500, overflowY: 'auto' }}>
-          <RankTable data={d.vtRanking.slice(0, 30)} columns={[
+
+      <Sec title="🏆 VT-Ranking nach Sales" sub="Mit Trend, Eigenlead-Quote und Speicher-Rate">
+        <div style={{ maxHeight: 550, overflowY: 'auto' }}>
+          <RankTable data={d.vtRanking.slice(0, 35)} columns={[
             { label: '#', render: (r, i) => <span style={{ color: i < 3 ? C.gold : C.sec, fontWeight: i < 3 ? 800 : 400 }}>{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span>, align: 'center' },
             { label: 'Vertriebler', key: 'name', bold: true },
             { label: 'Typ', render: r => (typLabels[r.typ] || r.typ || '').split(' ')[0], color: C.sec },
             { label: 'Sales', key: 'sales', align: 'center', mono: true, color: C.gold, bold: true },
+            { label: 'Trend', render: r => <TrendArrow v={r.trend} />, align: 'center' },
             { label: 'Storno', key: 'storno', align: 'center', mono: true, color: r => r.storno > 0 ? C.red : C.dim },
             { label: 'S-Quote', render: r => `${r.stornoRate.toFixed(0)}%`, align: 'center', color: r => r.stornoRate > 30 ? C.red : r.stornoRate > 15 ? C.orange : C.green },
             { label: 'Netto', render: r => eur(r.netto), align: 'right', mono: true },
             { label: 'Ø kWp', render: r => r.avgKwp.toFixed(1), align: 'center', mono: true },
+            { label: 'Eigen%', render: r => `${r.eigenleadRate.toFixed(0)}%`, align: 'center', color: r => r.eigenleadRate > 30 ? C.green : C.dim },
             { label: 'Speicher%', render: r => `${r.speicherRate.toFixed(0)}%`, align: 'center', color: r => r.speicherRate > 50 ? C.green : C.sec },
           ]} />
         </div>
       </Sec>
+
+      {d.scoutChain.length > 0 && <Sec title="🔗 Lead-Kette: Berater → Termin → Sale" sub="Wer generiert die besten Leads? (min. 5 Leads)">
+        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+          <RankTable data={d.scoutChain} columns={[
+            { label: '#', render: (r, i) => i + 1, align: 'center' },
+            { label: 'Berater', key: 'name', bold: true },
+            { label: 'Leads', key: 'leads', align: 'center', mono: true, color: C.blue },
+            { label: 'Terminiert', key: 'term', align: 'center', mono: true, color: C.green },
+            { label: 'T-Quote', render: r => `${r.termRate.toFixed(0)}%`, align: 'center', color: r => r.termRate > 20 ? C.green : r.termRate > 10 ? C.orange : C.red },
+            { label: 'Sale', key: 'auftrag', align: 'center', mono: true, color: C.gold, bold: true },
+            { label: 'Sale-Quote', render: r => `${r.saleRate.toFixed(1)}%`, align: 'center', color: r => r.saleRate > 5 ? C.green : C.sec },
+            { label: 'Storno', key: 'storno', align: 'center', mono: true, color: r => r.storno > 0 ? C.red : C.dim },
+          ]} />
+        </div>
+      </Sec>}
+
       <Sec title="📅 Termin-Ranking" sub="Sortiert nach Anzahl Termine">
         <div style={{ maxHeight: 400, overflowY: 'auto' }}>
           <RankTable data={d.termRanking.slice(0, 25)} columns={[
@@ -1531,38 +1829,97 @@ const TabPipeline = ({ data }) => {
 const TabProvisionen = ({ data }) => {
   if (!data) return null;
   const d = data;
+  const TrendArrow2 = ({ v }) => !v || isNaN(v) ? null : <span style={{ fontSize: 10, color: v > 0 ? C.green : v < 0 ? C.red : C.dim, fontWeight: 700 }}>{v > 0 ? '▲' : v < 0 ? '▼' : '–'}{Math.abs(v).toFixed(0)}%</span>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
         <KPI label="Gesamt ausgezahlt" value={eur(d.totalSum)} sub={`${d.perioden} Perioden`} color={C.gold} />
         <KPI label="Positionen" value={fmt(d.totalCnt)} sub={`Ø ${eur(d.avgPerPosition)} / Position`} color={C.blue} />
-        <KPI label="Ø pro Monat" value={eur(d.avgPerMonth)} color={C.purple} />
+        <KPI label="Ø pro Monat" value={eur(d.avgPerMonth)} sub={`${fmt(Math.round(d.totalCnt / Math.max(1, d.perioden)))} Pos./Monat`} color={C.purple} />
       </div>
-      <Sec title="Provisionen pro Monat" sub="Gesamtauszahlung je Abrechnungsperiode">
-        <ResponsiveContainer width="100%" height={280}>
+
+      <Sec title="💳 Provisionen pro Monat" sub="Mit Ø pro Position und MoM-Wachstum">
+        <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={d.monthly}>
             <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
             <XAxis dataKey="p" tick={{ fill: C.sec, fontSize: 11 }} />
-            <YAxis tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <YAxis yAxisId="left" tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <YAxis yAxisId="right" orientation="right" tick={{ fill: C.sec, fontSize: 11 }} />
             <Tooltip content={<TT />} />
-            <Bar dataKey="sum" name="Auszahlung" fill={C.gold} radius={[4,4,0,0]} />
-            <Bar dataKey="cnt" name="Positionen" fill={`${C.blue}60`} radius={[4,4,0,0]} yAxisId="right" hide />
-            <Line dataKey="cnt" name="Positionen" stroke={C.blue} strokeWidth={2} dot={{ fill: C.blue, r: 3 }} />
+            <Bar dataKey="sum" name="Auszahlung (€)" fill={C.gold} radius={[4,4,0,0]} yAxisId="left" />
+            <Line dataKey="cnt" name="Positionen" stroke={C.blue} strokeWidth={2} dot={{ fill: C.blue, r: 3 }} yAxisId="right" />
+            <Line dataKey="avgPerPos" name="Ø/Position (€)" stroke={C.green} strokeWidth={2} strokeDasharray="5 3" dot={{ fill: C.green, r: 3 }} yAxisId="left" />
           </ComposedChart>
         </ResponsiveContainer>
       </Sec>
+
+      <Sec title="📊 Monatsdetails">
+        <RankTable data={d.monthly} columns={[
+          { label: 'Periode', key: 'p', bold: true },
+          { label: 'Auszahlung', render: r => eur(r.sum), align: 'right', mono: true, color: C.gold, bold: true },
+          { label: 'MoM', render: r => <TrendArrow2 v={r.sumGrowth} />, align: 'center' },
+          { label: 'Positionen', key: 'cnt', align: 'center', mono: true, color: C.blue },
+          { label: 'Ø/Position', render: r => eur(r.avgPerPos), align: 'right', mono: true, color: C.sec },
+        ]} />
+      </Sec>
+
+      {d.brackets.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="grid-1">
+        <Sec title="📏 Provisions-Staffel Verteilung" sub="Wie verteilen sich die Einzelpositionen?">
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={d.brackets}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+              <XAxis dataKey="name" tick={{ fill: C.sec, fontSize: 10 }} />
+              <YAxis tick={{ fill: C.sec, fontSize: 11 }} />
+              <Tooltip content={<TT />} />
+              <Bar dataKey="cnt" name="Anzahl" fill={C.gold} radius={[4,4,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Sec>
+        {d.produktMix.length > 0 && <Sec title="📦 Produkt-Mix">
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={d.produktMix.slice(0,6)} cx="50%" cy="50%" outerRadius={75} innerRadius={30} dataKey="sum" paddingAngle={2}
+                label={({name,sum}) => sum > d.totalSum*0.05 ? name.substring(0,15) : ''} labelLine={false} style={{fontSize:10}}>
+                {d.produktMix.slice(0,6).map((_,i) => <Cell key={i} fill={CL[i%CL.length]} />)}
+              </Pie>
+              <Tooltip contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:12 }} formatter={v => eur(v)} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:6, justifyContent:'center' }}>
+            {d.produktMix.slice(0,6).map((p,i) => (
+              <span key={i} style={{ fontSize:10, color:C.sec, display:'flex', alignItems:'center', gap:4 }}>
+                <span style={{ width:8, height:8, borderRadius:2, background:CL[i%CL.length], flexShrink:0 }} />
+                {p.name} ({eur(p.sum)})
+              </span>
+            ))}
+          </div>
+        </Sec>}
+      </div>}
+
+      {d.quelleBreakdown.length > 1 && <Sec title="📡 Provisionen nach Lead-Quelle" sub="Welche Quellen generieren die höchsten Provisionen?">
+        <RankTable data={d.quelleBreakdown.slice(0, 10)} columns={[
+          { label: 'Quelle', key: 'name', bold: true },
+          { label: 'Gesamt', render: r => eur(r.sum), align: 'right', mono: true, color: C.gold, bold: true },
+          { label: 'Anteil', render: r => `${(r.sum / d.totalSum * 100).toFixed(1)}%`, align: 'center', mono: true },
+          { label: 'Positionen', key: 'cnt', align: 'center', mono: true },
+          { label: 'Ø/Position', render: r => eur(r.cnt > 0 ? r.sum / r.cnt : 0), align: 'right', mono: true, color: C.sec },
+        ]} />
+      </Sec>}
+
       <Sec title="🏆 VT-Ranking nach Auszahlung" sub="Kumuliert über alle Perioden">
-        <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+        <div style={{ maxHeight: 550, overflowY: 'auto' }}>
           <RankTable data={d.vtRanking} columns={[
             { label: '#', render: (r, i) => <span style={{ color: i < 3 ? C.gold : C.sec, fontWeight: i < 3 ? 800 : 400 }}>{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span>, align: 'center' },
             { label: 'Vertriebler', key: 'name', bold: true },
             { label: 'Gesamt', render: r => eur(r.sum), align: 'right', mono: true, color: C.gold, bold: true },
+            { label: 'Trend', render: r => <TrendArrow2 v={r.trend} />, align: 'center' },
             { label: 'Positionen', key: 'cnt', align: 'center', mono: true },
             { label: 'Ø/Monat', render: r => eur(r.avgPerMonth), align: 'right', mono: true, color: C.sec },
             { label: 'Perioden', key: 'periodenCount', align: 'center', mono: true },
           ]} />
         </div>
       </Sec>
+
       {d.scoutRanking.length > 0 && <Sec title="Scout-Provisionen" sub="Bonus-Auszahlungen an Scouter">
         <RankTable data={d.scoutRanking} columns={[
           { label: '#', render: (r, i) => i + 1, align: 'center' },
