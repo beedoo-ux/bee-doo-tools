@@ -129,102 +129,89 @@ function TimeBar({view,setView,refDate,setRefDate}){
 }
 
 // ===== BEMERKUNGEN COMPONENT =====
+const acDcPat=/(?:^|[^a-zA-Z])(?:AC|DC)(?:[^a-zA-Z]|$)|AC\/DC/i;
 function Bemerkungen({d,range}){
     const{appts}=d;
-    const[vt,setVt]=useState('');
+    const[selVts,setSelVts]=useState([]);
+    const[vtOpen,setVtOpen]=useState(false);
     const[statusF,setStatusF]=useState('');
-    const[quelleF,setQuelleF]=useState('');
     const[search,setSearch]=useState('');
-    const[aiResult,setAiResult]=useState('');
-    const[aiLoading,setAiLoading]=useState(false);
-    const[aiOpen,setAiOpen]=useState(false);
+    const[saving,setSaving]=useState({});
+    const[saved,setSaved]=useState({});
+    const[showNB,setShowNB]=useState(false);
+    const[nbList,setNbList]=useState([]);
+    const[nbLoading,setNbLoading]=useState(false);
+    const vtRef=useRef(null);
+    useEffect(()=>{const h=e=>{if(vtRef.current&&!vtRef.current.contains(e.target))setVtOpen(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[]);
     const berater=useMemo(()=>{
         const cut=new Date();cut.setDate(cut.getDate()-90);
-        const active={};appts.forEach(a=>{
-            if(!a.user_received)return;
-            const n=a.user_received.trim();
-            if(a.start_date&&new Date(a.start_date)>=cut)active[n]=true;
-        });
+        const active={};appts.forEach(a=>{if(!a.user_received)return;const n=a.user_received.trim();if(a.start_date&&new Date(a.start_date)>=cut&&!acDcPat.test(n))active[n]=true});
         return Object.keys(active).sort((a,b)=>a.localeCompare(b,'de'))
     },[appts]);
-    const quellen=useMemo(()=>{
-        const q={};appts.forEach(a=>{const s=(a.quelle||'').trim();if(s)q[s]=(q[s]||0)+1});
-        return Object.entries(q).sort((a,b)=>b[1]-a[1])
-    },[appts]);
+    const toggleVt=n=>setSelVts(p=>p.includes(n)?p.filter(x=>x!==n):[...p,n]);
     const filtered=useMemo(()=>{
         let f=appts.filter(a=>(a.feedback_status||'').trim()||((a.feedback_detail||'').trim()));
         if(range)f=f.filter(a=>inRange(a.start_date,range));
-        if(vt)f=f.filter(a=>(a.user_received||'').trim()===vt);
+        if(selVts.length)f=f.filter(a=>selVts.includes((a.user_received||'').trim()));
         if(statusF)f=f.filter(a=>fbCat((a.feedback_status||'').trim())===statusF);
-        if(quelleF)f=f.filter(a=>(a.quelle||'').trim()===quelleF);
         if(search){const q=search.toLowerCase();f=f.filter(a=>(a.feedback_detail||'').toLowerCase().includes(q)||(a.kunde_nachname||'').toLowerCase().includes(q)||(a.kunde_vorname||'').toLowerCase().includes(q))}
         return f.sort((a,b)=>(b.start_date||'').localeCompare(a.start_date||''))
-    },[appts,vt,statusF,quelleF,search,range]);
+    },[appts,selVts,statusF,search,range]);
     const statusCounts=useMemo(()=>{
         let base=appts.filter(a=>(a.feedback_status||'').trim());
         if(range)base=base.filter(a=>inRange(a.start_date,range));
-        if(vt)base=base.filter(a=>(a.user_received||'').trim()===vt);
-        if(quelleF)base=base.filter(a=>(a.quelle||'').trim()===quelleF);
+        if(selVts.length)base=base.filter(a=>selVts.includes((a.user_received||'').trim()));
         const c={ok:0,wvl:0,nein:0,tnm:0,weg:0};
         base.forEach(a=>{const cat=fbCat((a.feedback_status||'').trim());if(c[cat]!==undefined)c[cat]++});
         return{...c,total:base.length}
-    },[appts,vt,quelleF,range]);
+    },[appts,selVts,range]);
     const cleanHTML=s=>(s||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
-
-    const runAI=async()=>{
-        if(aiLoading)return;
-        const items=filtered.slice(0,80).map(a=>{
-            const txt=cleanHTML(a.feedback_detail);
-            return`[${a.feedback_status||'?'}] ${a.user_received||'?'} → ${a.kunde_vorname||''} ${a.kunde_nachname||'?'} (${(a.start_date||'').slice(0,10)}, ${a.quelle||'?'}): ${txt}`;
-        });
-        if(!items.length){setAiResult('Keine Daten zum Analysieren.');setAiOpen(true);return}
-        setAiLoading(true);setAiOpen(true);setAiResult('');
-        const filterInfo=[];
-        if(vt)filterInfo.push('Berater: '+vt);
-        if(quelleF)filterInfo.push('Quelle: '+quelleF);
-        if(statusF)filterInfo.push('Status: '+statusF);
-        const filterStr=filterInfo.length?'Filter: '+filterInfo.join(', '):'Alle Berater/Quellen';
-        try{
-            const _k=['sk-ant-','api03-0rQ8e-EKdha','YXkdASCBWZ80am00tYZegKHyu','hwJ-lBuc2Qm_VAGnK1iQY8Dis','ddpjPnII5QYzCUqNXnsrMvABw','-OV65pwAA'].join('');
-            const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':_k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-                body:JSON.stringify({model:'claude-sonnet-4-5-20250514',max_tokens:2000,
-                    system:'Du bist ein Sales-Analyst für bee-doo GmbH (Solar-Vertrieb). Analysiere Abschlussbemerkungen von Verkaufsterminen. Antworte auf Deutsch, strukturiert aber kompakt. Nutze Emojis sparsam für Übersichtlichkeit.',
-                    messages:[{role:'user',content:`Analysiere diese ${items.length} Termin-Abschlussbemerkungen. ${filterStr}. Zeitraum: ${range?range[0].toLocaleDateString('de-DE')+' - '+range[1].toLocaleDateString('de-DE'):'Alle'}.
-
-Bitte liefere:
-1. ZUSAMMENFASSUNG: Was sind die häufigsten Ergebnisse/Muster?
-2. LEAD-QUALITÄT: Wie gut sind die Leads? Häufigste Absagegründe?
-3. TOP-ERKENNTNISSE: Was fällt besonders auf? Probleme? Chancen?
-4. HANDLUNGSEMPFEHLUNGEN: Was sollte bee-doo konkret ändern?
-5. BERATER-FEEDBACK: Fallen bestimmte Berater positiv/negativ auf?
-
-Hier die Bemerkungen:
-${items.join('\n')}`}]})
-            });
-            const data=await r.json();
-            setAiResult(data.content?data.content[0].text:'Keine Antwort erhalten.');
-        }catch(e){setAiResult('Fehler: '+e.message)}
-        setAiLoading(false);
-    };
-
+    const saveNB=useCallback(async(a)=>{
+        const lid=a.leveto_id||a.id;setSaving(p=>({...p,[lid]:true}));
+        try{const body={leveto_id:lid,berater:(a.user_received||'').trim(),kunde_name:((a.kunde_vorname||'')+' '+(a.kunde_nachname||'')).trim(),kunde_plz:a.kunde_plz||'',termin_datum:a.start_date,feedback_status:(a.feedback_status||'').trim(),feedback_detail:cleanHTML(a.feedback_detail)};
+        await fetch(ap('nachzubesprechen'),{method:'POST',headers:{...hd(),'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(body)});
+        setSaved(p=>({...p,[lid]:true}));setTimeout(()=>setSaved(p=>({...p,[lid]:false})),3000)}catch(e){console.error(e);alert('Fehler beim Speichern')}
+        setSaving(p=>({...p,[lid]:false}))
+    },[]);
+    const loadNB=useCallback(async()=>{setNbLoading(true);try{const r=await fetch(ap('nachzubesprechen')+'?erledigt=eq.false&order=erstellt_am.desc&limit=200',{headers:hd()});setNbList(await r.json())}catch(e){console.error(e)}setNbLoading(false)},[]);
+    const markDone=useCallback(async(id)=>{try{await fetch(ap('nachzubesprechen')+'?id=eq.'+id,{method:'PATCH',headers:{...hd(),'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({erledigt:true,erledigt_am:new Date().toISOString()})});setNbList(p=>p.filter(x=>x.id!==id))}catch(e){console.error(e)}},[]);
+    useEffect(()=>{if(showNB)loadNB()},[showNB]);
     return<React.Fragment>
         <div className="kpis fi">
             <div className="kpi"><div className="kpi-l">Mit Feedback</div><div className="kpi-v" style={{color:'var(--a)'}}>{fm(statusCounts.total)}</div></div>
             <div className="kpi"><div className="kpi-l">✅ Abschlüsse</div><div className="kpi-v" style={{color:'var(--g)'}}>{fm(statusCounts.ok)}</div><div className="kpi-s" style={{color:'var(--g)'}}>{pct(statusCounts.ok,statusCounts.total)}%</div></div>
             <div className="kpi"><div className="kpi-l">⏳ WVL</div><div className="kpi-v" style={{color:'var(--o)'}}>{fm(statusCounts.wvl)}</div></div>
             <div className="kpi"><div className="kpi-l">❌ Kein Interesse</div><div className="kpi-v" style={{color:'var(--r)'}}>{fm(statusCounts.nein)}</div></div>
-            <div className="kpi"><div className="kpi-l">🏠 T.n.M.</div><div className="kpi-v" style={{color:'var(--p)'}}>{fm(statusCounts.tnm)}</div></div>
+            <div className="kpi" style={{cursor:'pointer',border:showNB?'1px solid var(--a)':'1px solid var(--b)'}} onClick={()=>setShowNB(!showNB)}><div className="kpi-l">📋 Nachbesprechung</div><div className="kpi-v" style={{color:'var(--cy)'}}>{showNB?'▼ Offen':'→ Öffnen'}</div></div>
         </div>
+        {showNB&&<div className="cd fi" style={{marginBottom:16}}>
+            <div className="cd-t">📋 Nachzubesprechen {nbLoading&&<span className="spinner" style={{marginLeft:8}}/>}</div>
+            {nbList.length===0&&!nbLoading&&<div className="bem-empty">Keine offenen Nachbesprechungen.</div>}
+            {nbList.map(nb=><div key={nb.id} className="bem-card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
+                <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,color:'var(--tb)',fontSize:13}}>{nb.kunde_name} <span style={{color:'var(--td)',fontWeight:400,fontSize:11}}>{nb.kunde_plz}</span></div>
+                    <div style={{fontSize:12,color:'var(--td)',marginTop:2}}>👤 {nb.berater} · {nb.termin_datum?new Date(nb.termin_datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</div>
+                    {nb.feedback_detail&&<div style={{fontSize:12,color:'var(--t)',marginTop:4,maxHeight:60,overflow:'hidden',textOverflow:'ellipsis'}}>{nb.feedback_detail.substring(0,150)}{nb.feedback_detail.length>150?'\u2026':''}</div>}
+                    <span className={`tg ${nb.feedback_status&&fbCat(nb.feedback_status)==='ok'?'tg-g':fbCat(nb.feedback_status)==='wvl'?'tg-o':'tg-r'}`} style={{marginTop:4,display:'inline-block'}}>{nb.feedback_status||'\u2014'}</span>
+                </div>
+                <button onClick={()=>markDone(nb.id)} style={{background:'var(--gd)',border:'1px solid var(--g)',borderRadius:8,padding:'8px 14px',cursor:'pointer',color:'var(--g)',fontWeight:700,fontSize:12,whiteSpace:'nowrap',fontFamily:'DM Sans'}}>✓ Erledigt</button>
+            </div>)}
+        </div>}
         <div className="bem-wrap">
-            <select className="bem-sel" value={vt} onChange={e=>setVt(e.target.value)}>
-                <option value="">👤 Alle Berater ({berater.length})</option>
-                {berater.map(b=><option key={b} value={b}>{b}</option>)}
-            </select>
-            <select className="bem-sel" value={quelleF} onChange={e=>setQuelleF(e.target.value)} style={{minWidth:150}}>
-                <option value="">📡 Alle Quellen</option>
-                {quellen.map(([q,c])=><option key={q} value={q}>{q} ({c})</option>)}
-            </select>
-            <select className="bem-sel" value={statusF} onChange={e=>setStatusF(e.target.value)} style={{minWidth:140}}>
+            <div ref={vtRef} style={{position:'relative',minWidth:220}}>
+                <div className="bem-sel" onClick={()=>setVtOpen(!vtOpen)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',userSelect:'none'}}>
+                    <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selVts.length===0?`👤 Alle Berater (${berater.length})`:selVts.length===1?selVts[0]:`👤 ${selVts.length} Berater`}</span>
+                    <span style={{fontSize:10,marginLeft:8}}>{vtOpen?'▲':'▼'}</span>
+                </div>
+                {vtOpen&&<div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:50,background:'var(--c)',border:'1px solid var(--b)',borderRadius:'0 0 8px 8px',maxHeight:320,overflowY:'auto',boxShadow:'0 8px 32px rgba(0,0,0,.5)'}}>
+                    {selVts.length>0&&<div style={{padding:'8px 12px',borderBottom:'1px solid var(--b)',cursor:'pointer',fontSize:12,color:'var(--r)',fontWeight:600}} onClick={()=>{setSelVts([]);setVtOpen(false)}}>✕ Auswahl löschen</div>}
+                    {berater.map(b=><div key={b} onClick={()=>toggleVt(b)} style={{padding:'8px 12px',cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',gap:8,borderBottom:'1px solid rgba(255,255,255,.03)',background:selVts.includes(b)?'var(--ad)':'transparent',color:selVts.includes(b)?'var(--a)':'var(--t)',transition:'all .1s'}}>
+                        <span style={{width:18,height:18,borderRadius:4,border:selVts.includes(b)?'2px solid var(--a)':'2px solid var(--b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,background:selVts.includes(b)?'var(--ad)':'transparent'}}>{selVts.includes(b)?'✓':''}</span>
+                        {b}
+                    </div>)}
+                </div>}
+            </div>
+            <select className="bem-sel" value={statusF} onChange={e=>setStatusF(e.target.value)} style={{minWidth:160}}>
                 <option value="">Alle Status</option>
                 <option value="ok">✅ Abschluss</option>
                 <option value="wvl">⏳ WVL / Überleger</option>
@@ -233,44 +220,37 @@ ${items.join('\n')}`}]})
                 <option value="weg">👻 Nicht da</option>
             </select>
             <input className="bem-search" placeholder="🔍 Suche in Bemerkungen..." value={search} onChange={e=>setSearch(e.target.value)}/>
-            <button className="tb-btn" onClick={runAI} disabled={aiLoading} style={{background:aiLoading?'var(--el)':'linear-gradient(135deg,#a855f7,#6366f1)',color:'#fff',border:'none',padding:'8px 16px',fontWeight:700,borderRadius:8,cursor:aiLoading?'wait':'pointer',whiteSpace:'nowrap'}}>{aiLoading?'🔄 Analysiere...':'🤖 KI-Auswertung'}</button>
         </div>
-        <div className="bem-count">{fm(filtered.length)} Einträge{vt?' von '+vt:''}{quelleF?' · Quelle: '+quelleF:''}</div>
-
-        {aiOpen&&<div className="cd fi" style={{marginBottom:16,border:'1px solid var(--pd)',background:'linear-gradient(135deg,rgba(168,85,247,.06),rgba(99,102,241,.04))'}}>
-            <div className="cd-t" style={{justifyContent:'space-between'}}>
-                <span>🤖 KI-Analyse{quelleF?' · '+quelleF:''}{vt?' · '+vt:''}</span>
-                <span style={{cursor:'pointer',fontSize:16,color:'var(--td)'}} onClick={()=>setAiOpen(false)}>✕</span>
-            </div>
-            {aiLoading?<div style={{textAlign:'center',padding:30}}><div className="spinner" style={{width:20,height:20,borderWidth:2,color:'var(--p)'}}/><div style={{marginTop:8,fontSize:12,color:'var(--td)'}}>Analysiere {filtered.length} Bemerkungen...</div></div>
-            :<div style={{fontSize:13,lineHeight:1.7,color:'var(--t)',whiteSpace:'pre-wrap'}}>{aiResult}</div>}
-        </div>}
-
+        <div className="bem-count">{fm(filtered.length)} Einträge{selVts.length===1?` von ${selVts[0]}`:selVts.length>1?` von ${selVts.length} Beratern`:''}</div>
         {filtered.length===0&&<div className="bem-empty">Keine Abschlussbemerkungen für diesen Filter gefunden.</div>}
         {filtered.slice(0,100).map(a=>{
             const cat=fbCat((a.feedback_status||'').trim());
             const detail=cleanHTML(a.feedback_detail);
             const tgCls=cat==='ok'?'tg-g':cat==='wvl'?'tg-o':cat==='nein'?'tg-r':cat==='tnm'?'tg-p':'tg-b';
-            return<div key={a.leveto_id||a.id} className="bem-card">
+            const lid=a.leveto_id||a.id;
+            return<div key={lid} className="bem-card">
                 <div className="bem-head">
                     <div>
-                        <span className="bem-kunde">{a.kunde_vorname||''} {a.kunde_nachname||'—'}</span>
+                        <span className="bem-kunde">{a.kunde_vorname||''} {a.kunde_nachname||'\u2014'}</span>
                         <span style={{fontSize:11,color:'var(--td)',marginLeft:8}}>{a.kunde_plz} {a.kunde_stadt||''}</span>
                     </div>
                     <div className="bem-date">{a.start_date?new Date(a.start_date).toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):''}</div>
                 </div>
                 {detail&&<div className="bem-text">{detail}</div>}
                 <div className="bem-footer">
-                    <span className={`tg ${tgCls}`}>{cat==='ok'?'✅':cat==='wvl'?'⏳':cat==='nein'?'❌':cat==='tnm'?'🏠':'👻'} {a.feedback_status||'—'}</span>
+                    <span className={`tg ${tgCls}`}>{cat==='ok'?'✅':cat==='wvl'?'⏳':cat==='nein'?'❌':cat==='tnm'?'🏠':'👻'} {a.feedback_status||'\u2014'}</span>
                     <span className="tg tg-c">{(a.appointment_type||'').replace('Termin vor Ort ','').replace('Termin vor Ort','Vor Ort')}</span>
-                    {a.quelle&&<span className="tg tg-a">{a.quelle}</span>}
                     {a.user_received&&<span style={{fontSize:11,color:'var(--td)'}}>👤 {a.user_received}</span>}
+                    <button onClick={()=>saveNB(a)} disabled={saving[lid]||saved[lid]} style={{marginLeft:'auto',background:saved[lid]?'var(--gd)':'var(--od)',border:saved[lid]?'1px solid var(--g)':'1px solid var(--o)',borderRadius:6,padding:'4px 10px',cursor:saving[lid]||saved[lid]?'default':'pointer',color:saved[lid]?'var(--g)':'var(--o)',fontWeight:700,fontSize:11,fontFamily:'DM Sans',transition:'all .2s',opacity:saving[lid]?.5:1}}>
+                        {saving[lid]?'⏳':saved[lid]?'✓ Gespeichert':'📋 Nachbesprechung'}
+                    </button>
                 </div>
             </div>
         })}
         {filtered.length>100&&<div className="bem-count" style={{textAlign:'center',marginTop:12}}>Zeige 100 von {fm(filtered.length)} — Filter eingrenzen für mehr Details</div>}
     </React.Fragment>
 }
+
 const FB_ABSCHLUSS=['Abschluss','Abgeschlossen','1. Auftrag'];
 const FB_WVL=['WVL Überleger','WVL Gegenangebot','WVL Frau nicht da','3. Angebot','4. Folgetermin'];
 const FB_NEIN=['Kein Interesse zu teuer','Kein Interesse Wettbewerb','Kein Interesse Partner dagegen','Kein Interesse zu alt','6. Kein Interesse'];
