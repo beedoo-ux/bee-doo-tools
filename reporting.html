@@ -122,7 +122,7 @@ function getMonthRange(year, month) {
 }
 
 function getAvailableMonths() {
-  const months = [];
+  const months = [{ year: 0, month: 0, label: 'Alle (ab Okt 2025)' }];
   const now = new Date();
   const minDate = new Date(2025, 9, 1); // Oktober 2025
   for (let i = 0; i < 24; i++) {
@@ -718,7 +718,9 @@ const App = () => {
     setLoading(true);
     setError(null);
     try {
-      const { start, nextMonth } = getMonthRange(selectedMonth.year, selectedMonth.month);
+      const isAll = selectedMonth.year === 0;
+      const start = isAll ? '2025-10-01' : `${selectedMonth.year}-${String(selectedMonth.month).padStart(2,'0')}-01`;
+      const nextMonth = isAll ? `${new Date().getFullYear() + 1}-01-01` : (selectedMonth.month === 12 ? `${selectedMonth.year+1}-01-01` : `${selectedMonth.year}-${String(selectedMonth.month+1).padStart(2,'0')}-01`);
 
       const [auftraegeData, leadsData, termineData, efsData, maData, vertrData] = await Promise.all([
         sbFetchAll('auftraege', `auftrags_datum=gte.${start}&auftrags_datum=lt.${nextMonth}&order=auftrags_datum.asc`),
@@ -751,7 +753,7 @@ const App = () => {
   const termineData = useMemo(() => termine.length > 0 ? processTermine(termine, vertrMap) : null, [termine, vertrMap]);
   const efsData = useMemo(() => efsProjekte.length > 0 ? processEFS(efsProjekte) : null, [efsProjekte]);
 
-  const monthLabel = `${monthNames[selectedMonth.month - 1]} ${selectedMonth.year}`;
+  const monthLabel = selectedMonth.year === 0 ? 'Gesamt (ab Okt 2025)' : `${monthNames[selectedMonth.month - 1]} ${selectedMonth.year}`;
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto', padding: '60px 20px 40px' }}>
