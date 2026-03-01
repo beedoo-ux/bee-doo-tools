@@ -46,6 +46,28 @@
         @media(max-width:768px){.mn{padding:12px}.nav{padding:8px 12px;grid-template-columns:repeat(3,1fr);gap:6px}.kpis{grid-template-columns:repeat(2,1fr)}.hdr{padding:10px 14px}}
         @media(max-width:400px){.nav{grid-template-columns:repeat(3,1fr);gap:5px}.nav-i{padding:10px 4px}.nav-ic{font-size:20px}.nav-i span:last-child{font-size:10px}}
         @media(max-width:480px){.kpis{grid-template-columns:1fr 1fr}.kpi-v{font-size:20px}}
+        .time-bar{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 28px;border-bottom:1px solid var(--b);background:var(--bg)}
+        .tb-btn{background:var(--c);border:1px solid var(--b);border-radius:8px;padding:6px 14px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;color:var(--td);cursor:pointer;transition:all .15s}
+        .tb-btn:hover{border-color:var(--ba);color:var(--t)}
+        .tb-btn.on{background:var(--ad);border-color:var(--a);color:var(--a)}
+        .tb-nav{background:none;border:1px solid var(--b);border-radius:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--td);font-size:14px;transition:all .15s}
+        .tb-nav:hover{border-color:var(--a);color:var(--a)}
+        .tb-label{font-size:13px;font-weight:600;color:var(--tb);min-width:160px;text-align:center}
+        .bem-wrap{display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+        .bem-sel{background:var(--c);border:1px solid var(--b);border-radius:8px;padding:8px 14px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--t);outline:none;cursor:pointer;min-width:200px;max-width:100%}
+        .bem-sel:focus{border-color:var(--a)}
+        .bem-card{background:var(--c);border:1px solid var(--b);border-radius:10px;padding:14px 16px;margin-bottom:8px;transition:border .2s}
+        .bem-card:hover{border-color:var(--ba)}
+        .bem-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+        .bem-kunde{font-size:14px;font-weight:600;color:var(--tb)}
+        .bem-date{font-size:11px;color:var(--td);white-space:nowrap}
+        .bem-text{font-size:13px;color:var(--t);line-height:1.5;white-space:pre-wrap;word-break:break-word}
+        .bem-footer{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center}
+        .bem-empty{text-align:center;padding:40px;color:var(--td);font-size:14px}
+        .bem-count{font-size:12px;color:var(--td);margin-bottom:12px}
+        .bem-search{background:var(--el);border:1px solid var(--b);border-radius:8px;padding:7px 12px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--t);outline:none;flex:1;min-width:150px}
+        .bem-search:focus{border-color:var(--a)}
+        @media(max-width:768px){.time-bar{padding:8px 12px;gap:4px;flex-wrap:wrap}.tb-label{min-width:auto;font-size:12px}.bem-wrap{flex-direction:column;align-items:stretch}}
     </style>
 </head>
 <body>
@@ -69,6 +91,121 @@ const FOLGE=['Folgetermin vor Ort'];
 const isVTA=t=>VT_APPT.includes(t)||SCOUT_APPT.includes(t)||FOLGE.includes(t);
 const isScQ=q=>{if(!q)return false;const l=q.toLowerCase();return l.startsWith('mvpp')||l.includes('sadd')||l.includes('omega')};
 const isScAppt=a=>SCOUT_APPT.includes(a.appointment_type)||(a.user_created||'').trim()==='Scouty';
+
+// ===== TIME RANGE HELPERS =====
+function getRange(view,ref){
+    const d=new Date(ref);d.setHours(0,0,0,0);
+    if(view==='tag'){const e=new Date(d);e.setHours(23,59,59,999);return[d,e]}
+    if(view==='woche'){const day=d.getDay()||7;const mon=new Date(d);mon.setDate(d.getDate()-(day-1));mon.setHours(0,0,0,0);const sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);return[mon,sun]}
+    const s=new Date(d.getFullYear(),d.getMonth(),1);const e=new Date(d.getFullYear(),d.getMonth()+1,0,23,59,59,999);return[s,e]
+}
+function shiftDate(view,ref,dir){
+    const d=new Date(ref);
+    if(view==='tag')d.setDate(d.getDate()+dir);
+    else if(view==='woche')d.setDate(d.getDate()+dir*7);
+    else d.setMonth(d.getMonth()+dir);
+    return d
+}
+function rangeLabel(view,ref){
+    const[s,e]=getRange(view,ref);const o={day:'2-digit',month:'2-digit',year:'numeric'};
+    if(view==='tag')return s.toLocaleDateString('de-DE',{weekday:'long',...o});
+    if(view==='woche')return s.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})+' – '+e.toLocaleDateString('de-DE',o);
+    return s.toLocaleDateString('de-DE',{month:'long',year:'numeric'})
+}
+function inRange(dateStr,range){if(!dateStr||!range)return true;const d=new Date(dateStr);return d>=range[0]&&d<=range[1]}
+
+// ===== TIMEBAR COMPONENT =====
+function TimeBar({view,setView,refDate,setRefDate}){
+    const shift=dir=>setRefDate(shiftDate(view,refDate,dir));
+    const goToday=()=>setRefDate(new Date());
+    return<div className="time-bar">
+        {['monat','woche','tag'].map(v=><button key={v} className={`tb-btn${view===v?' on':''}`} onClick={()=>setView(v)}>{v==='tag'?'📅 Tag':v==='woche'?'📆 Woche':'📊 Monat'}</button>)}
+        <div style={{width:1,height:20,background:'var(--b)',margin:'0 6px'}}/>
+        <button className="tb-nav" onClick={()=>shift(-1)}>←</button>
+        <div className="tb-label">{rangeLabel(view,refDate)}</div>
+        <button className="tb-nav" onClick={()=>shift(1)}>→</button>
+        <button className="tb-btn" onClick={goToday} style={{fontSize:11}}>Heute</button>
+    </div>
+}
+
+// ===== BEMERKUNGEN COMPONENT =====
+function Bemerkungen({d,range}){
+    const{appts}=d;
+    const[vt,setVt]=useState('');
+    const[statusF,setStatusF]=useState('');
+    const[search,setSearch]=useState('');
+    const berater=useMemo(()=>{
+        const s=new Set();appts.forEach(a=>{if(a.user_received)s.add(a.user_received.trim())});
+        return Array.from(s).sort((a,b)=>a.localeCompare(b,'de'))
+    },[appts]);
+    const filtered=useMemo(()=>{
+        let f=appts.filter(a=>(a.feedback_status||'').trim()||((a.feedback_detail||'').trim()));
+        if(range)f=f.filter(a=>inRange(a.start_date,range));
+        if(vt)f=f.filter(a=>(a.user_received||'').trim()===vt);
+        if(statusF)f=f.filter(a=>fbCat((a.feedback_status||'').trim())===statusF);
+        if(search){const q=search.toLowerCase();f=f.filter(a=>(a.feedback_detail||'').toLowerCase().includes(q)||(a.kunde_nachname||'').toLowerCase().includes(q)||(a.kunde_vorname||'').toLowerCase().includes(q))}
+        return f.sort((a,b)=>(b.start_date||'').localeCompare(a.start_date||''))
+    },[appts,vt,statusF,search,range]);
+    const statusCounts=useMemo(()=>{
+        let base=appts.filter(a=>(a.feedback_status||'').trim());
+        if(range)base=base.filter(a=>inRange(a.start_date,range));
+        if(vt)base=base.filter(a=>(a.user_received||'').trim()===vt);
+        const c={ok:0,wvl:0,nein:0,tnm:0,weg:0};
+        base.forEach(a=>{const cat=fbCat((a.feedback_status||'').trim());if(c[cat]!==undefined)c[cat]++});
+        return{...c,total:base.length}
+    },[appts,vt,range]);
+    const cleanHTML=s=>(s||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
+    const fbColor=cat=>cat==='ok'?'var(--g)':cat==='wvl'?'var(--o)':cat==='nein'?'var(--r)':cat==='tnm'?'var(--p)':'var(--td)';
+    const fbIcon=cat=>cat==='ok'?'✅':cat==='wvl'?'⏳':cat==='nein'?'❌':cat==='tnm'?'🏠':'👻';
+    const fbLabel=cat=>cat==='ok'?'Abschluss':cat==='wvl'?'WVL':cat==='nein'?'Kein Interesse':cat==='tnm'?'T.n.M.':cat==='weg'?'Nicht da':'Sonstig';
+    return<React.Fragment>
+        <div className="kpis fi">
+            <div className="kpi"><div className="kpi-l">Mit Feedback</div><div className="kpi-v" style={{color:'var(--a)'}}>{fm(statusCounts.total)}</div></div>
+            <div className="kpi"><div className="kpi-l">✅ Abschlüsse</div><div className="kpi-v" style={{color:'var(--g)'}}>{fm(statusCounts.ok)}</div><div className="kpi-s" style={{color:'var(--g)'}}>{pct(statusCounts.ok,statusCounts.total)}%</div></div>
+            <div className="kpi"><div className="kpi-l">⏳ WVL</div><div className="kpi-v" style={{color:'var(--o)'}}>{fm(statusCounts.wvl)}</div></div>
+            <div className="kpi"><div className="kpi-l">❌ Kein Interesse</div><div className="kpi-v" style={{color:'var(--r)'}}>{fm(statusCounts.nein)}</div></div>
+            <div className="kpi"><div className="kpi-l">🏠 T.n.M.</div><div className="kpi-v" style={{color:'var(--p)'}}>{fm(statusCounts.tnm)}</div></div>
+        </div>
+        <div className="bem-wrap">
+            <select className="bem-sel" value={vt} onChange={e=>setVt(e.target.value)}>
+                <option value="">👤 Alle Berater ({berater.length})</option>
+                {berater.map(b=><option key={b} value={b}>{b}</option>)}
+            </select>
+            <select className="bem-sel" value={statusF} onChange={e=>setStatusF(e.target.value)} style={{minWidth:160}}>
+                <option value="">Alle Status</option>
+                <option value="ok">✅ Abschluss</option>
+                <option value="wvl">⏳ WVL / Überleger</option>
+                <option value="nein">❌ Kein Interesse</option>
+                <option value="tnm">🏠 T.n.M.</option>
+                <option value="weg">👻 Nicht da</option>
+            </select>
+            <input className="bem-search" placeholder="🔍 Suche in Bemerkungen..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        </div>
+        <div className="bem-count">{fm(filtered.length)} Einträge{vt?` von ${vt}`:''}</div>
+        {filtered.length===0&&<div className="bem-empty">Keine Abschlussbemerkungen für diesen Filter gefunden.</div>}
+        {filtered.slice(0,100).map(a=>{
+            const cat=fbCat((a.feedback_status||'').trim());
+            const detail=cleanHTML(a.feedback_detail);
+            const tgCls=cat==='ok'?'tg-g':cat==='wvl'?'tg-o':cat==='nein'?'tg-r':cat==='tnm'?'tg-p':'tg-b';
+            return<div key={a.leveto_id||a.id} className="bem-card">
+                <div className="bem-head">
+                    <div>
+                        <span className="bem-kunde">{a.kunde_vorname||''} {a.kunde_nachname||'—'}</span>
+                        <span style={{fontSize:11,color:'var(--td)',marginLeft:8}}>{a.kunde_plz} {a.kunde_stadt||''}</span>
+                    </div>
+                    <div className="bem-date">{a.start_date?new Date(a.start_date).toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):''}</div>
+                </div>
+                {detail&&<div className="bem-text">{detail}</div>}
+                <div className="bem-footer">
+                    <span className={`tg ${tgCls}`}>{fbIcon(cat)} {a.feedback_status||'—'}</span>
+                    <span className="tg tg-c">{(a.appointment_type||'').replace('Termin vor Ort ','').replace('Termin vor Ort','Vor Ort')}</span>
+                    {a.user_received&&<span style={{fontSize:11,color:'var(--td)'}}>👤 {a.user_received}</span>}
+                </div>
+            </div>
+        })}
+        {filtered.length>100&&<div className="bem-count" style={{textAlign:'center',marginTop:12}}>Zeige 100 von {fm(filtered.length)} — Filter eingrenzen für mehr Details</div>}
+    </React.Fragment>
+}
 const FB_ABSCHLUSS=['Abschluss','Abgeschlossen','1. Auftrag'];
 const FB_WVL=['WVL Überleger','WVL Gegenangebot','WVL Frau nicht da','3. Angebot','4. Folgetermin'];
 const FB_NEIN=['Kein Interesse zu teuer','Kein Interesse Wettbewerb','Kein Interesse Partner dagegen','Kein Interesse zu alt','6. Kein Interesse'];
@@ -79,33 +216,39 @@ function RT({items,cols,mc='var(--a)'}){const mx=items.length?items[0].v:1;retur
 
 function App(){
     const[sec,setSec]=useState('sales');const[data,setData]=useState({});const[loading,setLoading]=useState({});const loaded=useRef({});
+    const[tView,setTView]=useState('monat');const[tRef,setTRef]=useState(new Date());
+    const range=useMemo(()=>getRange(tView,tRef),[tView,tRef]);
     const load=useCallback(async(section)=>{if(loaded.current[section])return;setLoading(p=>({...p,[section]:true}));try{let d={};
         if(section==='sales'){const[orders,efs]=await Promise.all([sGet('auftraege','select=auftrag_nr,kunde_name,kunde_plz,beedoo_fortschritt,datum_angenommen,storniert,anlagen_kwp,hat_speicher,kundenberater_name,workflow_history,lead_quelle,status,an_wert_netto'),sGet('efs_projekte','select=simplified_status,gesamtpreis_eur')]);d={orders,efs}}
         else if(section==='montage'){const[orders,appts]=await Promise.all([sGet('auftraege','select=auftrag_nr,kunde_name,kunde_plz,beedoo_fortschritt,datum_angenommen,storniert,workflow_history,anlagen_kwp'),sGet('leveto_appointments','select=leveto_id,appointment_type,start_date,status,user_received,kunde_plz&appointment_type=in.(AC Montage,DC Montage,AC Nacharbeit,DC Nacharbeit)')]);d={orders:orders.filter(o=>!o.storniert),appts}}
         else if(section==='termine'){d={appts:await sGet('leveto_appointments','select=leveto_id,appointment_type,start_date,status,user_created,user_received,kunde_nachname,kunde_plz,storno_reason,feedback_status,feedback_detail')}}
+        else if(section==='bemerkungen'){d={appts:await sGet('leveto_appointments','select=leveto_id,appointment_type,start_date,status,user_created,user_received,kunde_vorname,kunde_nachname,kunde_plz,kunde_stadt,feedback_status,feedback_detail')}}
         else if(section==='leads'){d={leads:await sGet('leveto_leads','select=status_name,quelle,berater_name,plz,leveto_erstellt_am,stromverbrauch_kwh,eigentuemer,e_auto_geplant')}}
         else if(section==='scouts'){const[leads,orders,appts,scouter]=await Promise.all([sGet('leveto_leads','select=leveto_id,status_name,quelle,berater_name,plz,leveto_erstellt_am,mvpp_name,mvpp_id'),sGet('auftraege','select=auftrag_nr,lead_quelle,storniert,datum_angenommen,kundenberater_name,anlagen_kwp'),sGet('leveto_appointments','select=leveto_id,appointment_type,status,start_date,user_created,user_received,storno_reason,kunde_plz,feedback_status'),sGet('scouter','select=id,vorname,nachname,active,fix_gehalt,phone,email,mvpp_id,mvpp_name,lead_count')]);d={leads,orders,appts,scouter}}
         else if(section==='callcenter'){const[appts,leads,orders]=await Promise.all([sGet('leveto_appointments','select=leveto_id,appointment_type,status,start_date,user_created,user_received,storno_reason,kunde_plz,feedback_status'),sGet('leveto_leads','select=leveto_id,status_name,quelle,leveto_erstellt_am'),sGet('auftraege','select=auftrag_nr,lead_quelle,storniert,datum_angenommen')]);d={appts,leads,orders}}
         setData(p=>({...p,[section]:d}));loaded.current[section]=true}catch(e){console.error(e)}setLoading(p=>({...p,[section]:false}))
     },[]);
     useEffect(()=>{load(sec)},[sec,load]);
-    const NAV=[{k:'sales',i:'📊',l:'Sales'},{k:'montage',i:'🏗️',l:'Montage'},{k:'termine',i:'📅',l:'Termine'},{k:'leads',i:'📥',l:'Leads'},{k:'scouts',i:'🏃',l:'Scouts'},{k:'callcenter',i:'📞',l:'Call Center'}];
+    const NAV=[{k:'sales',i:'📊',l:'Sales'},{k:'montage',i:'🏗️',l:'Montage'},{k:'termine',i:'📅',l:'Termine'},{k:'bemerkungen',i:'📝',l:'Bemerkungen'},{k:'leads',i:'📥',l:'Leads'},{k:'scouts',i:'🏃',l:'Scouts'},{k:'callcenter',i:'📞',l:'Call Center'}];
     return<React.Fragment>
         <div className="hdr"><div className="hdr-l"><div className="logo"><img src="https://bee-doo-tools.vercel.app/Logo%20bee-doo%20Schriftzug.svg" alt=""/><span>Dashboard</span></div></div><div className="hdr-r"><a className="hdr-lk" href="reporting.html">Reporting</a><a className="hdr-lk" href="index.html">Toolbox</a></div></div>
-        <nav className="nav">{NAV.map(n=><div key={n.k} className={`nav-i ${sec===n.k?'on':''}`} onClick={()=>setSec(n.k)}><span className="nav-ic">{n.i}</span><span>{n.l}</span></div>)}</nav>
+        <nav className="nav" style={{gridTemplateColumns:`repeat(${NAV.length},1fr)`}}>{NAV.map(n=><div key={n.k} className={`nav-i ${sec===n.k?'on':''}`} onClick={()=>setSec(n.k)}><span className="nav-ic">{n.i}</span><span>{n.l}</span></div>)}</nav>
+        <TimeBar view={tView} setView={setTView} refDate={tRef} setRefDate={setTRef}/>
         <main className="main">{loading[sec]&&!data[sec]?<div style={{textAlign:'center',padding:60}}><div className="spinner" style={{width:24,height:24,borderWidth:3,color:'var(--a)'}}/></div>:null}
-            {sec==='sales'&&data.sales&&<Sales d={data.sales}/>}
-            {sec==='montage'&&data.montage&&<Montage d={data.montage}/>}
-            {sec==='termine'&&data.termine&&<Termine d={data.termine}/>}
-            {sec==='leads'&&data.leads&&<Leads d={data.leads}/>}
-            {sec==='scouts'&&data.scouts&&<Scouts d={data.scouts}/>}
-            {sec==='callcenter'&&data.callcenter&&<CallCenter d={data.callcenter}/>}
+            {sec==='sales'&&data.sales&&<Sales d={data.sales} range={range}/>}
+            {sec==='montage'&&data.montage&&<Montage d={data.montage} range={range}/>}
+            {sec==='termine'&&data.termine&&<Termine d={data.termine} range={range}/>}
+            {sec==='bemerkungen'&&data.bemerkungen&&<Bemerkungen d={data.bemerkungen} range={range}/>}
+            {sec==='leads'&&data.leads&&<Leads d={data.leads} range={range}/>}
+            {sec==='scouts'&&data.scouts&&<Scouts d={data.scouts} range={range}/>}
+            {sec==='callcenter'&&data.callcenter&&<CallCenter d={data.callcenter} range={range}/>}
         </main>
     </React.Fragment>
 }
 
-function Sales({d}){
-    const[sub,setSub]=useState('overview');const{orders,efs}=d;
+function Sales({d,range}){
+    const[sub,setSub]=useState('overview');const{orders:allOrders,efs}=d;
+    const orders=useMemo(()=>allOrders.filter(o=>inRange(o.datum_angenommen,range)),[allOrders,range]);
     const aktiv=orders.filter(o=>!o.storniert);const storno=orders.filter(o=>o.storniert);const kwp=aktiv.reduce((s,o)=>s+(parseFloat(o.anlagen_kwp)||0),0);
     const byVt={};aktiv.forEach(o=>{const n=(o.kundenberater_name||'?').trim();byVt[n]=(byVt[n]||0)+1});
     const moD={};aktiv.forEach(o=>{if(o.datum_angenommen){const ym=o.datum_angenommen.substring(0,7);moD[ym]=(moD[ym]||0)+1}});
@@ -127,8 +270,10 @@ function Sales({d}){
     </React.Fragment>
 }
 
-function Montage({d}){
-    const[sub,setSub]=useState('pipeline');const{orders,appts}=d;
+function Montage({d,range}){
+    const[sub,setSub]=useState('pipeline');const{orders:allOrders,appts:allAppts}=d;
+    const orders=useMemo(()=>allOrders.filter(o=>inRange(o.datum_angenommen,range)),[allOrders,range]);
+    const appts=useMemo(()=>allAppts.filter(a=>inRange(a.start_date,range)),[allAppts,range]);
     const pipeline=useMemo(()=>{const stages={};STAGES.forEach(s=>stages[s.key]=[]);const unmatched=[];
         orders.forEach(o=>{const steps=parseWH(o.workflow_history);if(!steps.length){unmatched.push(o);return}const last=steps[steps.length-1];const sk=matchStage(last.to);if(sk)stages[sk].push({...o,lastStep:last});else unmatched.push(o)});
         return{stages,unmatched}},[orders]);
@@ -145,8 +290,9 @@ function Montage({d}){
     </React.Fragment>
 }
 
-function Termine({d}){
-    const[sub,setSub]=useState('overview');const{appts}=d;
+function Termine({d,range}){
+    const[sub,setSub]=useState('overview');const{appts:allAppts}=d;
+    const appts=useMemo(()=>allAppts.filter(a=>inRange(a.start_date,range)),[allAppts,range]);
     const sales=appts.filter(a=>isVTA(a.appointment_type));const montage=appts.filter(a=>['AC Montage','DC Montage','AC Nacharbeit','DC Nacharbeit'].includes(a.appointment_type));
     const up=sales.filter(a=>a.status==='Open'&&a.start_date).sort((a,b)=>a.start_date.localeCompare(b.start_date));
     const byTm={};sales.forEach(a=>{const t=(a.user_received||'?').trim();byTm[t]=(byTm[t]||0)+1});
@@ -187,8 +333,9 @@ function Termine({d}){
     </React.Fragment>
 }
 
-function Leads({d}){
-    const[sub,setSub]=useState('overview');const{leads}=d;
+function Leads({d,range}){
+    const[sub,setSub]=useState('overview');const{leads:allLeads}=d;
+    const leads=useMemo(()=>allLeads.filter(l=>inRange(l.leveto_erstellt_am,range)),[allLeads,range]);
     const byQ={};const byB={};const byP={};
     leads.forEach(l=>{const q=l.quelle||'?';byQ[q]=(byQ[q]||0)+1;const b=l.berater_name||'(kein)';byB[b]=(byB[b]||0)+1;const p=(l.plz||'').substring(0,2);if(p)byP[p]=(byP[p]||0)+1});
     // NEW: Enriched data stats
@@ -214,8 +361,11 @@ function Leads({d}){
     </React.Fragment>
 }
 
-function Scouts({d}){
-    const[sub,setSub]=useState('funnel');const{leads,orders,appts,scouter}=d;
+function Scouts({d,range}){
+    const[sub,setSub]=useState('funnel');const{leads:allLeads,orders:allOrders,appts:allAppts,scouter}=d;
+    const leads=useMemo(()=>allLeads.filter(l=>inRange(l.leveto_erstellt_am,range)),[allLeads,range]);
+    const orders=useMemo(()=>allOrders.filter(o=>inRange(o.datum_angenommen,range)),[allOrders,range]);
+    const appts=useMemo(()=>allAppts.filter(a=>inRange(a.start_date,range)),[allAppts,range]);
     const an=useMemo(()=>{
         const sl=leads.filter(l=>isScQ(l.quelle));const so=orders.filter(o=>isScQ(o.lead_quelle));
         const sa=appts.filter(a=>isScAppt(a));
@@ -279,8 +429,11 @@ function Scouts({d}){
     </React.Fragment>
 }
 
-function CallCenter({d}){
-    const[sub,setSub]=useState('overview');const{appts,leads,orders}=d;
+function CallCenter({d,range}){
+    const[sub,setSub]=useState('overview');const{appts:allAppts,leads:allLeads,orders:allOrders}=d;
+    const appts=useMemo(()=>allAppts.filter(a=>inRange(a.start_date,range)),[allAppts,range]);
+    const leads=useMemo(()=>allLeads.filter(l=>inRange(l.leveto_erstellt_am,range)),[allLeads,range]);
+    const orders=useMemo(()=>allOrders.filter(o=>inRange(o.datum_angenommen,range)),[allOrders,range]);
     const an=useMemo(()=>{
         const sa=appts.filter(a=>isVTA(a.appointment_type));
         const cc=sa.filter(a=>!SCOUT_APPT.includes(a.appointment_type)&&a.appointment_type!=='Folgetermin vor Ort'&&(a.user_created||'').trim()!=='Scouty');
