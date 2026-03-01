@@ -604,7 +604,48 @@ function processCashflow(transactions) {
     } else { m.einGrowth = 0; m.ausGrowth = 0; }
   });
 
-  return { monthly, totalEin, totalAus, topEmpfaenger, topEinzahler, avgBurn, avgIncome, weekly, total: transactions.length, catBreakdown, catMonthlyData, catNames, netBurn, runwayMonths, lastCum, biggestOut, biggestIn };
+  // ── Revenue Streams (Einnahmen-Quellen) ──
+  const revRules = [
+    { name: 'Hanwha (Module)', test: t => /hanwha|q.cells/i.test(t.gegenkonto_name||''), color: '#3B82F6' },
+    { name: 'ABS/EFS Factoring', test: t => /a\.b\.s|abs.*factor/i.test(t.gegenkonto_name||''), color: '#F59E0B' },
+    { name: 'EFS Direkt', test: t => /efs.*deutsch/i.test(t.gegenkonto_name||''), color: '#10B981' },
+    { name: 'Barzahler', test: t => { const vz = (t.verwendungszweck||'').toUpperCase(); const gn = (t.gegenkonto_name||''); return (/RE-\d|KD-\d|Abschlag|Schlussrech|Teilzah/i.test(vz) && !/hanwha|a\.b\.s|efs|united|enpal|golfstrom|encrease/i.test(gn)); }, color: '#8B5CF6' },
+    { name: 'United Promotion', test: t => /united.*promotion/i.test(t.gegenkonto_name||''), color: '#EC4899' },
+    { name: 'Krankenkassen/AAG', test: t => /aok|dak|tk |ikk|barmer|hkk|bkk|krankenkasse|bahn-bkk|knappschaft/i.test(t.gegenkonto_name||''), color: '#6B7280' },
+  ];
+  const revStreams = {};
+  const revMonthly = {};
+  transactions.filter(t => t.soll_haben === 'CRDT').forEach(t => {
+    const b = Math.abs(parseFloat(t.betrag) || 0);
+    const m = (t.buchungsdatum || '').slice(0, 7);
+    let stream = 'Sonstiges';
+    for (const r of revRules) { if (r.test(t)) { stream = r.name; break; } }
+    if (!revStreams[stream]) revStreams[stream] = { name: stream, sum: 0, cnt: 0, color: (revRules.find(r=>r.name===stream)||{}).color || '#9CA3AF' };
+    revStreams[stream].sum += b; revStreams[stream].cnt++;
+    if (m && m >= '2025-01') {
+      if (!revMonthly[m]) revMonthly[m] = {};
+      if (!revMonthly[m][stream]) revMonthly[m][stream] = 0;
+      revMonthly[m][stream] += b;
+    }
+  });
+  const revBreakdown = Object.values(revStreams).sort((a, b) => b.sum - a.sum);
+  const revMonthlyData = Object.entries(revMonthly).sort(([a],[b]) => a.localeCompare(b)).map(([m, streams]) => ({ m, label: monthNames[parseInt(m.slice(5,7))-1] + ' ' + m.slice(2,4), ...streams }));
+  const revNames = revBreakdown.slice(0, 6).map(c => c.name);
+
+  // ── ABS-Zahlungen: Kundennamen extrahieren ──
+  const absPayments = [];
+  transactions.filter(t => t.soll_haben === 'CRDT' && /a\.b\.s|abs.*factor/i.test(t.gegenkonto_name||'')).forEach(t => {
+    const b = Math.abs(parseFloat(t.betrag) || 0);
+    const vz = (t.verwendungszweck || '');
+    // Extract customer names from Verwendungszweck
+    let clean = vz.replace(/GUTSCHR\.\s*UEBERWEISUNG\s*·\s*SVWZ\+/i, '');
+    clean = clean.replace(/Auszahlung.*$/i, '').replace(/-\s*EFS.*$/i, '').replace(/fuer\s*EFS.*$/i, '').replace(/EFS\s*Deutschland.*$/i, '');
+    const names = clean.split(/[,]/).map(n => n.trim().replace(/-$/, '').trim()).filter(n => n.length > 2);
+    absPayments.push({ datum: (t.buchungsdatum||'').slice(0,10), betrag: b, kunden: names, kundenAnz: names.length, avgPerKunde: names.length > 0 ? b / names.length : b });
+  });
+  absPayments.sort((a,b) => b.datum.localeCompare(a.datum));
+
+  return { monthly, totalEin, totalAus, topEmpfaenger, topEinzahler, avgBurn, avgIncome, weekly, total: transactions.length, catBreakdown, catMonthlyData, catNames, netBurn, runwayMonths, lastCum, biggestOut, biggestIn, revBreakdown, revMonthlyData, revNames, absPayments };
 }
 
 // ═══ TEAM PERFORMANCE PROCESSING ═══
@@ -738,7 +779,7 @@ function processTeam(auftraege, termine, leads, mitarbeiterList) {
 function processPipeline(leads, auftraege) {
   const now = new Date();
 
-  // Lead age analysis
+  // ── Lead age analysis ──
   const ageGroups = [
     { label: '< 7 Tage', min: 0, max: 7, cnt: 0, term: 0 },
     { label: '7–14 Tage', min: 7, max: 14, cnt: 0, term: 0 },
@@ -770,7 +811,7 @@ function processPipeline(leads, auftraege) {
   });
   stalledList.sort((a, b) => b.age - a.age);
 
-  // Status flow / dropout funnel
+  // ── Funnel ──
   let total = leads.length, terminiert = 0, auftragN = 0, stornoN = 0, neN = 0, keinIntN = 0;
   leads.forEach(l => {
     const sn = (l.status_name || '').trim();
@@ -791,7 +832,7 @@ function processPipeline(leads, auftraege) {
     { name: 'Storniert', v: stornoN, color: C.red },
   ];
 
-  // Processing speed (lead to termin)
+  // ── Lead speed ──
   const speeds = [];
   leads.forEach(l => {
     if (l.leveto_erstellt_am && l.status_datum) {
@@ -803,35 +844,136 @@ function processPipeline(leads, auftraege) {
   const medianSpeed = speeds.length > 0 ? speeds[Math.floor(speeds.length / 2)] : 0;
   const avgSpeed = speeds.length > 0 ? speeds.reduce((s, v) => s + v, 0) / speeds.length : 0;
 
-  // Auftrags-Phase durations (from workflow_history)
+  // ── WORKFLOW HISTORY PARSING (Leveto string format) ──
+  // Format: "DD.MM.YYYY - HH:MM- BeeDoo: StatusFrom > StatusTo"
+  function parseWfString(wfStr) {
+    const steps = [];
+    const parts = wfStr.split(/(\d{2}\.\d{2}\.\d{4}\s*-\s*\d{2}:\d{2})/);
+    for (let i = 1; i < parts.length; i += 2) {
+      const tsStr = parts[i].trim();
+      const detail = parts[i + 1] || '';
+      const tsParts = tsStr.match(/(\d{2})\.(\d{2})\.(\d{4})\s*-\s*(\d{2}):(\d{2})/);
+      if (!tsParts) continue;
+      const ts = new Date(+tsParts[3], +tsParts[2] - 1, +tsParts[1], +tsParts[4], +tsParts[5]);
+      if (isNaN(ts)) continue;
+      const m = detail.match(/BeeDoo:\s*(.+?)\s*>\s*(.+?)(?:\s*$)/);
+      if (m) steps.push({ ts, from: m[1].trim(), to: m[2].trim() });
+    }
+    return steps;
+  }
+
   const phaseDurations = {};
-  auftraege.filter(a => a.workflow_history && !a.storniert).forEach(a => {
-    let wf = a.workflow_history;
-    if (typeof wf === 'string') try { wf = JSON.parse(wf); } catch(e) { return; }
-    if (!Array.isArray(wf)) return;
-    for (let i = 0; i < wf.length - 1; i++) {
-      const from = wf[i]?.status || wf[i]?.name || '';
-      const to = wf[i + 1]?.status || wf[i + 1]?.name || '';
-      const d1 = wf[i]?.date || wf[i]?.datum || '';
-      const d2 = wf[i + 1]?.date || wf[i + 1]?.datum || '';
-      if (!d1 || !d2 || !from) continue;
-      const days = (new Date(d2) - new Date(d1)) / 86400000;
+  const journeys = [];
+  const reworkCount = { ac: 0, dc: 0, vertrieb: 0 };
+  let wfParsed = 0;
+
+  auftraege.forEach(a => {
+    const wf = a.workflow_history;
+    if (!wf || typeof wf !== 'string') return;
+    const steps = parseWfString(wf);
+    if (steps.length < 2) return;
+    wfParsed++;
+
+    // Phase durations
+    for (let i = 0; i < steps.length - 1; i++) {
+      const days = (steps[i + 1].ts - steps[i].ts) / 86400000;
       if (days >= 0 && days < 365) {
-        const key = from.substring(0, 30);
-        if (!phaseDurations[key]) phaseDurations[key] = { phase: key, durations: [], count: 0 };
-        phaseDurations[key].durations.push(days);
-        phaseDurations[key].count++;
+        const phase = steps[i].to;
+        if (!phaseDurations[phase]) phaseDurations[phase] = { phase, durations: [], count: 0 };
+        phaseDurations[phase].durations.push(days);
+        phaseDurations[phase].count++;
       }
     }
+
+    // Rework detection
+    steps.forEach(s => {
+      if (/Zurück.*Vertrieb AC/i.test(s.to)) reworkCount.ac++;
+      if (/Zurück.*Vertrieb DC/i.test(s.to)) reworkCount.dc++;
+      if (/Zurück.*Vertrieb(?!\s*(AC|DC))/i.test(s.to)) reworkCount.vertrieb++;
+    });
+
+    // Journey tracking
+    const firstTs = steps[0].ts;
+    const lastTs = steps[steps.length - 1].ts;
+    const totalDays = (lastTs - firstTs) / 86400000;
+    const finalStatus = steps[steps.length - 1].to;
+    const statusChain = [steps[0].from, ...steps.map(s => s.to)];
+
+    // Key milestones
+    let acDate = null, dcDate = null, qualiDate = null, abDate = null, finDate = null, montageDate = null, efsDate = null;
+    steps.forEach(s => {
+      if (/AC Freigabe/i.test(s.to) && !acDate) acDate = s.ts;
+      if (/DC Freigabe/i.test(s.to) && !dcDate) dcDate = s.ts;
+      if (/Quali Call/i.test(s.to) && !qualiDate) qualiDate = s.ts;
+      if (/AB erhalten/i.test(s.to) && !abDate) abDate = s.ts;
+      if (/Finanzierung(?! aus)/i.test(s.to) && !finDate) finDate = s.ts;
+      if (/Montage abgeschlossen/i.test(s.to) && !montageDate) montageDate = s.ts;
+      if (/EFS Abnahme/i.test(s.to) && !efsDate) efsDate = s.ts;
+    });
+
+    journeys.push({
+      nr: a.auftrag_nr || '?',
+      kunde: a.kunde_name || '?',
+      storniert: a.storniert || /Storniert/i.test(finalStatus),
+      totalDays,
+      steps: steps.length,
+      finalStatus,
+      firstTs,
+      montageDate,
+      efsDate,
+      // Milestone durations (days from start)
+      toAC: acDate ? (acDate - firstTs) / 86400000 : null,
+      toDC: dcDate ? (dcDate - firstTs) / 86400000 : null,
+      toQuali: qualiDate ? (qualiDate - firstTs) / 86400000 : null,
+      toAB: abDate ? (abDate - firstTs) / 86400000 : null,
+      toFin: finDate ? (finDate - firstTs) / 86400000 : null,
+      toMontage: montageDate ? (montageDate - firstTs) / 86400000 : null,
+      toEFS: efsDate ? (efsDate - firstTs) / 86400000 : null,
+    });
   });
+
+  // Compute phase stats
   const phases = Object.values(phaseDurations).map(p => {
     p.durations.sort((a, b) => a - b);
     p.median = p.durations[Math.floor(p.durations.length / 2)] || 0;
     p.avg = p.durations.reduce((s, v) => s + v, 0) / p.durations.length;
+    p.p90 = p.durations[Math.floor(p.durations.length * 0.9)] || 0;
     return p;
-  }).filter(p => p.count >= 3).sort((a, b) => b.count - a.count).slice(0, 12);
+  }).filter(p => p.count >= 3).sort((a, b) => b.count - a.count);
 
-  return { ageGroups, openLeads, stalledLeads, stalledList, funnel, dropouts, medianSpeed, avgSpeed, phases };
+  // Milestone waterfall (median days to each milestone)
+  function medianOf(arr) { if (!arr.length) return null; const s = arr.filter(v => v !== null).sort((a,b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; }
+  const milestones = [
+    { name: 'AC Freigabe', days: medianOf(journeys.map(j => j.toAC)), count: journeys.filter(j => j.toAC !== null).length, color: C.blue },
+    { name: 'DC Freigabe', days: medianOf(journeys.map(j => j.toDC)), count: journeys.filter(j => j.toDC !== null).length, color: C.cyan },
+    { name: 'Quali Call', days: medianOf(journeys.map(j => j.toQuali)), count: journeys.filter(j => j.toQuali !== null).length, color: C.purple },
+    { name: 'AB erhalten', days: medianOf(journeys.map(j => j.toAB)), count: journeys.filter(j => j.toAB !== null).length, color: C.green },
+    { name: 'Finanzierung', days: medianOf(journeys.map(j => j.toFin)), count: journeys.filter(j => j.toFin !== null).length, color: C.orange },
+    { name: 'Montage fertig', days: medianOf(journeys.map(j => j.toMontage)), count: journeys.filter(j => j.toMontage !== null).length, color: C.gold },
+    { name: 'EFS Abnahme', days: medianOf(journeys.map(j => j.toEFS)), count: journeys.filter(j => j.toEFS !== null).length, color: C.teal },
+  ].filter(m => m.days !== null);
+
+  // Completed vs storniert journey stats
+  const completedJ = journeys.filter(j => j.toMontage !== null && !j.storniert);
+  const storniertJ = journeys.filter(j => j.storniert);
+  const completedDays = completedJ.map(j => j.toMontage).sort((a,b) => a - b);
+  const storniertDays = storniertJ.map(j => j.totalDays).filter(d => d > 0).sort((a,b) => a - b);
+  const journeyStats = {
+    total: wfParsed,
+    completed: completedJ.length,
+    storniert: storniertJ.length,
+    inProgress: wfParsed - completedJ.length - storniertJ.length,
+    medianCompleted: completedDays.length > 0 ? completedDays[Math.floor(completedDays.length / 2)] : 0,
+    medianStorniert: storniertDays.length > 0 ? storniertDays[Math.floor(storniertDays.length / 2)] : 0,
+  };
+
+  // Bottleneck analysis: top 8 phases sorted by median duration
+  const bottlenecks = phases.filter(p => p.median > 0.5).sort((a, b) => b.median - a.median).slice(0, 8);
+
+  // Longest running active orders
+  const activeJourneys = journeys.filter(j => !j.storniert && !j.toMontage).sort((a,b) => b.totalDays - a.totalDays).slice(0, 15);
+
+  return { ageGroups, openLeads, stalledLeads, stalledList, funnel, dropouts, medianSpeed, avgSpeed, phases, milestones, journeyStats, bottlenecks, reworkCount, activeJourneys, wfParsed };
 }
 
 // ═══ PROVISIONS PROCESSING ═══
@@ -1651,6 +1793,77 @@ const TabCashflow = ({ data }) => {
           </ComposedChart>
         </ResponsiveContainer>
       </Sec>
+
+      {/* Revenue Streams */}
+      {d.revBreakdown && d.revBreakdown.length > 0 && <Sec title="📡 Revenue Streams" sub="Woher kommen die Einnahmen? (Hanwha, ABS/EFS, Barzahler, etc.)">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="grid-1">
+          <div>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={d.revBreakdown.slice(0,7)} cx="50%" cy="50%" outerRadius={80} innerRadius={30} dataKey="sum" paddingAngle={2}
+                  label={({name,sum}) => sum > d.totalEin*0.03 ? name.substring(0,12) : ''} labelLine={false} style={{fontSize:10}}>
+                  {d.revBreakdown.slice(0,7).map((r,i) => <Cell key={i} fill={r.color || CL[i%CL.length]} />)}
+                </Pie>
+                <Tooltip contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:12 }} formatter={v => eur(v)} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div>
+            <RankTable data={d.revBreakdown} columns={[
+              { label: 'Quelle', key: 'name', bold: true },
+              { label: 'Summe', render: r => eur(r.sum), align: 'right', mono: true, color: C.green, bold: true },
+              { label: 'Anteil', render: r => `${(r.sum / d.totalEin * 100).toFixed(1)}%`, align: 'center', mono: true },
+              { label: 'Anz.', key: 'cnt', align: 'center', mono: true },
+            ]} />
+          </div>
+        </div>
+      </Sec>}
+
+      {/* Revenue by Month stacked */}
+      {d.revMonthlyData && d.revMonthlyData.length > 0 && <Sec title="📈 Revenue Streams über Zeit" sub="Monatliche Einnahmen nach Quelle gestackt">
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={d.revMonthlyData}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
+            <YAxis tick={{ fill: C.sec, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <Tooltip content={<TT />} />
+            {(d.revNames || []).map((name, i) => {
+              const col = (d.revBreakdown.find(r=>r.name===name)||{}).color || CL[i%CL.length];
+              return <Bar key={name} dataKey={name} name={name} fill={col} stackId="rev" radius={i === d.revNames.length-1 ? [4,4,0,0] : [0,0,0,0]} />;
+            })}
+          </BarChart>
+        </ResponsiveContainer>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8, justifyContent: 'center' }}>
+          {(d.revNames || []).map((name, i) => {
+            const col = (d.revBreakdown.find(r=>r.name===name)||{}).color || CL[i%CL.length];
+            return <span key={i} style={{ fontSize: 10, color: C.sec, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: col, flexShrink: 0 }} />{name}
+            </span>;
+          })}
+        </div>
+      </Sec>}
+
+      {/* ABS/EFS Factoring Zahlungen mit Kundennamen */}
+      {d.absPayments && d.absPayments.length > 0 && <Sec title="🏦 ABS/EFS Factoring-Zahlungen" sub={`${d.absPayments.length} Sammelüberweisungen mit Kundennamen aus Verwendungszweck`}>
+        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+          {d.absPayments.map((p, i) => (
+            <div key={i} style={{ background: i%2===0 ? `${C.gold}06` : 'transparent', borderRadius: 8, padding: '10px 14px', marginBottom: 4, border: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: C.sec, fontFamily: "'JetBrains Mono', monospace" }}>{p.datum}</span>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, color: C.dim }}>{p.kundenAnz} Kunden · Ø {eur(p.avgPerKunde)}/Kunde</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: C.gold, fontFamily: "'JetBrains Mono', monospace" }}>{eur(p.betrag)}</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {p.kunden.map((k, j) => (
+                  <span key={j} style={{ background: `${C.blue}15`, border: `1px solid ${C.blue}25`, borderRadius: 6, padding: '2px 8px', fontSize: 10, color: C.text, fontWeight: 500 }}>{k}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Sec>}
     </div>
   );
 };
@@ -1754,27 +1967,65 @@ const TabTeam = ({ data }) => {
 const TabPipeline = ({ data }) => {
   if (!data) return null;
   const d = data;
+  const js = d.journeyStats || {};
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
-        <KPI label="Offene Leads" value={fmt(d.openLeads)} color={C.blue} />
-        <KPI label="Stalled (>30 Tage)" value={fmt(d.stalledLeads)} sub={`${d.openLeads > 0 ? (d.stalledLeads / d.openLeads * 100).toFixed(0) : 0}% aller offenen`} color={C.red} />
-        <KPI label="Ø Bearbeitungszeit" value={`${d.avgSpeed.toFixed(1)} Tage`} sub={`Median: ${d.medianSpeed.toFixed(1)} Tage`} color={C.gold} />
+      {/* KPIs */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <MiniStat label="Workflow geparsed" value={d.wfParsed || 0} sub="Aufträge mit History" color={C.blue} />
+        <MiniStat label="Completed" value={js.completed || 0} sub={js.medianCompleted ? `Median ${js.medianCompleted.toFixed(0)} Tage` : ''} color={C.green} />
+        <MiniStat label="In Bearbeitung" value={js.inProgress || 0} color={C.gold} />
+        <MiniStat label="Storniert" value={js.storniert || 0} sub={js.medianStorniert ? `Median ${js.medianStorniert.toFixed(0)} Tage` : ''} color={C.red} />
+        <MiniStat label="Offene Leads" value={fmt(d.openLeads)} sub={`${d.stalledLeads} stalled (>30d)`} color={C.orange} />
+        <MiniStat label="Ø Lead-Speed" value={`${d.medianSpeed.toFixed(1)}d`} sub={`Ø ${d.avgSpeed.toFixed(1)} Tage`} color={C.cyan} />
       </div>
-      <Sec title="Lead-Alter Verteilung" sub="Wie alt sind die Leads nach Erstelldatum?">
-        <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={d.ageGroups}>
+
+      {/* Milestone Waterfall */}
+      {d.milestones && d.milestones.length > 0 && <Sec title="🏁 Milestone-Waterfall" sub="Median Tage vom Auftrag bis zum Meilenstein">
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={d.milestones} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-            <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 11 }} />
-            <YAxis tick={{ fill: C.sec, fontSize: 11 }} />
+            <XAxis type="number" tick={{ fill: C.sec, fontSize: 11 }} label={{ value: 'Tage', position: 'bottom', fill: C.sec, fontSize: 10 }} />
+            <YAxis type="category" dataKey="name" tick={{ fill: C.text, fontSize: 11 }} width={120} />
             <Tooltip content={<TT />} />
-            <Bar dataKey="cnt" name="Leads" fill={C.blue} radius={[4,4,0,0]} />
-            <Bar dataKey="term" name="Davon terminiert" fill={C.green} radius={[4,4,0,0]} />
+            <Bar dataKey="days" name="Median Tage" radius={[0,4,4,0]}>
+              {d.milestones.map((m, i) => <Cell key={i} fill={m.color} />)}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
-      </Sec>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+          {d.milestones.map((m, i) => (
+            <div key={i} style={{ background: `${m.color}15`, border: `1px solid ${m.color}30`, borderRadius: 8, padding: '6px 12px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: m.color }} />
+              <span style={{ color: C.text, fontWeight: 600 }}>{m.name}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", color: m.color, fontWeight: 700 }}>{m.days.toFixed(1)}d</span>
+              <span style={{ color: C.dim, fontSize: 10 }}>({m.count}×)</span>
+            </div>
+          ))}
+        </div>
+      </Sec>}
+
+      {/* Bottleneck Analysis */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="grid-1">
-        <Sec title="Conversion-Funnel">
+        <Sec title="🚧 Bottleneck-Analyse" sub="Phasen mit längster Verweildauer">
+          {(d.bottlenecks || []).map((p, i) => (
+            <div key={i} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                <span style={{ color: C.text, maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: i < 3 ? 700 : 400 }}>{i < 3 ? '🔴' : '🟡'} {p.phase}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
+                  <span style={{ color: p.median > 14 ? C.red : p.median > 5 ? C.orange : C.green }}>{p.median.toFixed(1)}d</span>
+                  <span style={{ color: C.dim, fontWeight: 400, fontSize: 10, marginLeft: 4 }}>Ø{p.avg.toFixed(1)}d · P90:{p.p90.toFixed(0)}d · {p.count}×</span>
+                </span>
+              </div>
+              <div style={{ height: 8, borderRadius: 4, background: `${C.dim}20` }}>
+                <div style={{ width: `${Math.min(100, p.median / 30 * 100)}%`, height: '100%', borderRadius: 4, background: p.median > 14 ? C.red : p.median > 5 ? C.orange : C.green, transition: 'width 0.6s' }} />
+              </div>
+            </div>
+          ))}
+          {(d.bottlenecks || []).length === 0 && <div style={{ color: C.sec, fontSize: 12, padding: 20, textAlign: 'center' }}>Keine Workflow-Daten</div>}
+        </Sec>
+
+        <Sec title="🔻 Conversion-Funnel" sub="Lead → Termin → Sale">
           {d.funnel.map((f, i) => (
             <div key={i} style={{ marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
@@ -1794,28 +2045,74 @@ const TabPipeline = ({ data }) => {
             </div>
           ))}
         </Sec>
-        <Sec title="Phasen-Dauer (Aufträge)" sub="Median Tage pro Workflow-Phase">
-          {d.phases.length > 0 ? d.phases.map((p, i) => (
-            <div key={i} style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
-                <span style={{ color: C.text, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.phase}</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: p.median > 14 ? C.red : p.median > 7 ? C.orange : C.green, fontWeight: 700 }}>
-                  {p.median.toFixed(1)}d <span style={{ color: C.sec, fontWeight: 400 }}>({p.count}x)</span>
-                </span>
-              </div>
-              <div style={{ height: 6, borderRadius: 3, background: `${C.dim}30` }}>
-                <div style={{ width: `${Math.min(100, p.median / 30 * 100)}%`, height: '100%', borderRadius: 3, background: p.median > 14 ? C.red : p.median > 7 ? C.orange : C.green }} />
-              </div>
+      </div>
+
+      {/* Rework + Lead Age */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="grid-1">
+        {d.reworkCount && (d.reworkCount.ac + d.reworkCount.dc + d.reworkCount.vertrieb > 0) && <Sec title="🔄 Rework-Schleifen" sub="Aufträge die zurück an Vertrieb gingen">
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+            <div style={{ background: `${C.red}10`, border: `1px solid ${C.red}25`, borderRadius: 10, padding: '12px 16px', flex: 1, minWidth: 100 }}>
+              <div style={{ fontSize: 10, color: C.sec, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Zurück DC</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: C.red, fontFamily: "'JetBrains Mono', monospace" }}>{d.reworkCount.dc}</div>
             </div>
-          )) : <div style={{ color: C.sec, fontSize: 12, padding: 20, textAlign: 'center' }}>Keine Workflow-History-Daten verfügbar</div>}
+            <div style={{ background: `${C.orange}10`, border: `1px solid ${C.orange}25`, borderRadius: 10, padding: '12px 16px', flex: 1, minWidth: 100 }}>
+              <div style={{ fontSize: 10, color: C.sec, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Zurück AC</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: C.orange, fontFamily: "'JetBrains Mono', monospace" }}>{d.reworkCount.ac}</div>
+            </div>
+            <div style={{ background: `${C.purple}10`, border: `1px solid ${C.purple}25`, borderRadius: 10, padding: '12px 16px', flex: 1, minWidth: 100 }}>
+              <div style={{ fontSize: 10, color: C.sec, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Zurück allg.</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: C.purple, fontFamily: "'JetBrains Mono', monospace" }}>{d.reworkCount.vertrieb}</div>
+            </div>
+          </div>
+        </Sec>}
+
+        <Sec title="📊 Lead-Alter Verteilung">
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={d.ageGroups}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+              <XAxis dataKey="label" tick={{ fill: C.sec, fontSize: 10 }} />
+              <YAxis tick={{ fill: C.sec, fontSize: 10 }} />
+              <Tooltip content={<TT />} />
+              <Bar dataKey="cnt" name="Leads" fill={C.blue} radius={[4,4,0,0]} />
+              <Bar dataKey="term" name="Terminiert" fill={C.green} radius={[4,4,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </Sec>
       </div>
-      {d.stalledList.length > 0 && <Sec title={`⚠️ Stalled Leads (${d.stalledList.length} > 30 Tage)`} sub="Älteste offene Leads ohne Fortschritt">
+
+      {/* All Phases Detail */}
+      <Sec title="⏱️ Alle Phasen-Dauern" sub="Median Verweildauer pro Workflow-Phase (aus Leveto-History)">
+        <div style={{ maxHeight: 450, overflowY: 'auto' }}>
+          <RankTable data={d.phases.slice(0, 20)} columns={[
+            { label: 'Phase', key: 'phase', bold: true },
+            { label: 'Median', render: r => <span style={{ color: r.median > 14 ? C.red : r.median > 5 ? C.orange : C.green }}>{r.median.toFixed(1)}d</span>, align: 'center', mono: true },
+            { label: 'Ø', render: r => `${r.avg.toFixed(1)}d`, align: 'center', mono: true, color: C.sec },
+            { label: 'P90', render: r => `${r.p90.toFixed(0)}d`, align: 'center', mono: true, color: r => r.p90 > 30 ? C.red : C.dim },
+            { label: 'Messungen', key: 'count', align: 'center', mono: true },
+          ]} />
+        </div>
+      </Sec>
+
+      {/* Active long-running orders */}
+      {(d.activeJourneys || []).length > 0 && <Sec title={`⚠️ Längste aktive Aufträge (${d.activeJourneys.length})`} sub="Ohne Montage-Abschluss, sortiert nach Alter">
         <div style={{ maxHeight: 350, overflowY: 'auto' }}>
+          <RankTable data={d.activeJourneys.slice(0, 15)} columns={[
+            { label: 'AN', key: 'nr', mono: true, bold: true },
+            { label: 'Kunde', key: 'kunde' },
+            { label: 'Alter', render: r => `${r.totalDays.toFixed(0)}d`, align: 'center', mono: true, color: r => r.totalDays > 60 ? C.red : r.totalDays > 30 ? C.orange : C.text, bold: true },
+            { label: 'Steps', key: 'steps', align: 'center', mono: true },
+            { label: 'Aktuell', key: 'finalStatus', color: C.sec },
+          ]} />
+        </div>
+      </Sec>}
+
+      {/* Stalled Leads */}
+      {d.stalledList.length > 0 && <Sec title={`📋 Stalled Leads (${d.stalledList.length} > 30 Tage)`} sub="Älteste offene Leads ohne Fortschritt">
+        <div style={{ maxHeight: 300, overflowY: 'auto' }}>
           <RankTable data={d.stalledList.slice(0, 20)} columns={[
             { label: 'Name', key: 'name', bold: true },
             { label: 'Status', key: 'status', color: C.sec },
-            { label: 'Alter', render: r => `${r.age} Tage`, align: 'center', mono: true, color: r => r.age > 60 ? C.red : C.orange },
+            { label: 'Alter', render: r => `${r.age}d`, align: 'center', mono: true, color: r => r.age > 60 ? C.red : C.orange },
             { label: 'Ort', key: 'ort' },
             { label: 'Berater', key: 'berater', color: C.sec },
           ]} />
