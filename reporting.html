@@ -78,14 +78,20 @@ async function sbCount(table, params = '') {
 }
 
 // Paginated fetch for large tables
-async function sbFetchAll(table, params = '', pageSize = 1000) {
+async function sbFetchAll(table, params = '', pageSize = 500) {
   let all = [], offset = 0, hasMore = true;
   while (hasMore) {
     const sep = params ? '&' : '';
-    const data = await sbFetch(table, `${params}${sep}limit=${pageSize}&offset=${offset}`);
+    const url = `${SB_URL}/rest/v1/${table}?${params}${sep}limit=${pageSize}&offset=${offset}`;
+    const res = await fetch(url, {
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Prefer': 'count=exact' }
+    });
+    if (!res.ok) throw new Error(`Supabase ${table}: ${res.status}`);
+    const data = await res.json();
     all = all.concat(data);
     hasMore = data.length === pageSize;
     offset += pageSize;
+    if (offset > 20000) break; // Safety limit
   }
   return all;
 }
@@ -133,7 +139,7 @@ function processAuftraege(auftraege, mitarbeiterMap) {
   const storno = auftraege.filter(a => a.storniert);
 
   const nettoAktiv = aktiv.reduce((s, a) => s + (a.an_wert_netto || 0) / 100, 0);
-  const nettoBrutto = auftraege.reduce((s, a) => s + (a.an_wert_netto || 0) / 100, 0);
+  const nettoGesamt = auftraege.reduce((s, a) => s + (a.an_wert_netto || 0) / 100, 0);
   const nettoStorno = storno.reduce((s, a) => s + (a.an_wert_netto || 0) / 100, 0);
   const avgNetto = aktiv.length > 0 ? nettoAktiv / aktiv.length : 0;
 
@@ -179,7 +185,11 @@ function processAuftraege(auftraege, mitarbeiterMap) {
       if (a.hat_speicher) beraterMap[name].speicher++;
     }
   });
-  const berater = Object.values(beraterMap).sort((a, b) => b.s - a.s || b.net - a.net);
+  const berater = Object.values(beraterMap).sort((a, b) => {
+    if (a.n === 'Nicht zugewiesen') return 1;
+    if (b.n === 'Nicht zugewiesen') return -1;
+    return b.s - a.s || b.net - a.net;
+  });
 
   // Quellen breakdown
   const quellenMap = {};
@@ -201,7 +211,7 @@ function processAuftraege(auftraege, mitarbeiterMap) {
 
   return {
     total, aktiv: aktiv.length, storno: storno.length,
-    nettoBrutto, nettoAktiv, nettoStorno, avgNetto,
+    nettoGesamt, nettoAktiv, nettoStorno, avgNetto,
     speicher, avgKwp: +avgKwp.toFixed(1), avgModule: +avgModule.toFixed(0),
     daily, weekday, berater, quellen, kwpDist,
   };
@@ -438,7 +448,7 @@ const TabSales = ({ data }) => {
       {/* KPIs */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
         <KPI label="Aufträge gesamt" value={fmt(d.total)} sub={`${d.aktiv} aktiv · ${d.storno} storniert (${pct(d.storno, d.total)}%)`} color={C.gold} />
-        <KPI label="Netto aktiv" value={eur(d.nettoAktiv)} sub={`Ø ${eur(d.avgNetto)} · Brutto: ${eur(d.nettoBrutto)}`} color={C.green} />
+        <KPI label="Netto aktiv" value={eur(d.nettoAktiv)} sub={`Ø ${eur(d.avgNetto)} · Gesamt: ${eur(d.nettoGesamt)}`} color={C.green} />
         <KPI label="Stornoquote" value={`${pct(d.storno, d.total)}%`} sub={`${d.storno} Stornos · ${eur(d.nettoStorno)} Verlust`} color={C.red} />
         <KPI label="Ø Anlage" value={`${d.avgKwp} kWp`} sub={`Ø ${d.avgModule} Module · ${d.speicher} mit Speicher`} color={C.blue} />
       </div>
@@ -513,7 +523,7 @@ const TabSales = ({ data }) => {
           </ResponsiveContainer>
           <RankTable data={d.quellen} columns={[
             { label: 'Quelle', key: 'n', bold: true },
-            { label: 'Brutto', key: 'b', align: 'center', mono: true },
+            { label: 'Gesamt', key: 'b', align: 'center', mono: true },
             { label: 'Aktiv', key: 's', align: 'center', mono: true, bold: true, color: () => C.green },
             { label: 'Storno', key: 'st', align: 'center', mono: true, color: () => C.red },
             { label: 'Netto €', render: r => eur(r.net), align: 'right', mono: true },
@@ -711,9 +721,9 @@ const App = () => {
 
       const [auftraegeData, leadsData, termineData, efsData, maData, vertrData] = await Promise.all([
         sbFetchAll('auftraege', `auftrags_datum=gte.${start}&auftrags_datum=lt.${nextMonth}&order=auftrags_datum.asc`),
-        sbFetchAll('leveto_leads', `erster_status_datum=gte.${start}&erster_status_datum=lt.${nextMonth}&order=erster_status_datum.asc`, 2000),
+        sbFetchAll('leveto_leads', `erster_status_datum=gte.${start}&erster_status_datum=lt.${nextMonth}&order=erster_status_datum.asc`),
         sbFetchAll('termine', `datum=gte.${start}&datum=lt.${nextMonth}&order=datum.asc`),
-        sbFetchAll('efs_projekte', 'order=erstellt_am.desc', 2000),
+        sbFetchAll('efs_projekte', 'order=erstellt_am.desc'),
         sbFetch('mitarbeiter', 'select=id,vorname,nachname,kuerzel,typ&limit=500'),
         sbFetch('vertriebler', 'select=id,name&limit=100'),
       ]);
