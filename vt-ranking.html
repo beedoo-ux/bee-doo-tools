@@ -85,7 +85,7 @@ function App(){
         (async()=>{
             const all=[];
             for(let off=0;off<5000;off+=1000){
-                const r=await fetch(`${SB}/rest/v1/auftraege?select=auftrag_nr,kundenberater_name,storniert,datum_angenommen,anlagen_kwp,an_wert_netto&storniert=eq.false&datum_angenommen=not.is.null&limit=1000&offset=${off}`,{headers:hd()});
+                const r=await fetch(`${SB}/rest/v1/auftraege?select=auftrag_nr,kundenberater_name,storniert,datum_angenommen,anlagen_kwp,an_wert_netto&datum_angenommen=not.is.null&limit=1000&offset=${off}`,{headers:hd()});
                 const d=await r.json();if(!d.length)break;all.push(...d);if(d.length<1000)break
             }
             setOrders(all);
@@ -99,19 +99,21 @@ function App(){
         const byVt={};
         filtered.forEach(o=>{
             const n=(o.kundenberater_name||'Unbekannt').trim();
-            if(!byVt[n])byVt[n]={sales:0,kwp:0,netto:0};
+            if(!byVt[n])byVt[n]={sales:0,kwp:0,netto:0,storno:0};
             byVt[n].sales++;
             byVt[n].kwp+=(parseFloat(o.anlagen_kwp)||0);
             byVt[n].netto+=(parseFloat(o.an_wert_netto)||0);
+            if(o.storniert)byVt[n].storno++;
         });
         const ranking=Object.entries(byVt).sort((a,b)=>b[1].sales-a[1].sales||b[1].netto-a[1].netto);
         const totalSales=filtered.length;
+        const stornoCount=filtered.filter(o=>o.storniert).length;
         const totalKwp=filtered.reduce((s,o)=>s+(parseFloat(o.anlagen_kwp)||0),0);
         const totalNetto=filtered.reduce((s,o)=>s+(parseFloat(o.an_wert_netto)||0),0);
         // Available months
         const months=new Set();
         orders.forEach(o=>{if(o.datum_angenommen)months.add(o.datum_angenommen.substring(0,7))});
-        return{ranking,totalSales,totalKwp,totalNetto,months:Array.from(months).sort().reverse()}
+        return{ranking,totalSales,stornoCount,totalKwp,totalNetto,months:Array.from(months).sort().reverse()}
     },[orders,month]);
 
     const downloadPNG=useCallback(async()=>{
@@ -164,7 +166,8 @@ function App(){
                 <div className="p-title">🏆 Sales Ranking</div>
                 <div className="p-sub">{monatName}</div>
                 <div className="p-kpis">
-                    <div><div className="p-kpi-v">{data.totalSales}</div><div className="p-kpi-l">Aufträge</div></div>
+                    <div><div className="p-kpi-v">{data.totalSales}</div><div className="p-kpi-l">Aufträge (brutto)</div></div>
+                    <div><div className="p-kpi-v" style={{color:'var(--r)',fontSize:16}}>{data.stornoCount}</div><div className="p-kpi-l">davon Storno</div></div>
                     <div><div className="p-kpi-v">{Math.round(data.totalKwp).toLocaleString('de-DE')}</div><div className="p-kpi-l">kWp gesamt</div></div>
                     <div><div className="p-kpi-v">{Math.round(data.totalNetto/1000).toLocaleString('de-DE')}k€</div><div className="p-kpi-l">Volumen</div></div>
                     <div><div className="p-kpi-v">{data.ranking.length}</div><div className="p-kpi-l">Vertriebler</div></div>
@@ -181,6 +184,7 @@ function App(){
                         <div className="rank-name">{name}</div>
                         <div className="rank-bar-wrap"><div className="rank-bar" style={{width:`${d.sales/maxSales*100}%`,background:barColor}}/></div>
                         <div className="rank-sales" style={{color:salesColor}}>{d.sales}</div>
+                        {d.storno>0&&<div style={{fontSize:10,color:'var(--r)',minWidth:28,textAlign:'right'}}>({d.storno}✕)</div>}
                     </div>
                 })}
                 {data.ranking.length===0&&<div style={{textAlign:'center',padding:30,color:'var(--td)'}}>Keine Aufträge in {monatName}</div>}
