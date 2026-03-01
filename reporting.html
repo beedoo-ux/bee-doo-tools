@@ -262,10 +262,17 @@ function processLeads(leads) {
 
 function processTermine(termine, vertrMap) {
   const total = termine.length;
+  const isAbschluss = s => s === 'auftrag' || s === 'abschluss';
+  const isAbgeschlossen = s => s === 'abgeschlossen';
+  const isStorno = s => s === 'storniert';
+  const isOffen = s => s === 'bestaetigt' || s === 'offen';
+
   const byStatus = {};
   termine.forEach(t => {
     const s = t.status || 'unbekannt';
-    byStatus[s] = (byStatus[s] || 0) + 1;
+    // Normalize for display
+    const label = isAbschluss(s) ? 'Abschluss' : isAbgeschlossen(s) ? 'Abgeschlossen' : isStorno(s) ? 'Storniert' : isOffen(s) ? 'Offen' : s;
+    byStatus[label] = (byStatus[label] || 0) + 1;
   });
 
   // Daily
@@ -275,24 +282,24 @@ function processTermine(termine, vertrMap) {
     if (!d) return;
     if (!dailyMap[d]) dailyMap[d] = { d: fmtDate(d), raw: d, total: 0, auftrag: 0, storno: 0, offen: 0, bestaetigt: 0 };
     dailyMap[d].total++;
-    if (t.status === 'auftrag') dailyMap[d].auftrag++;
-    else if (t.status === 'storniert') dailyMap[d].storno++;
-    else if (t.status === 'bestaetigt') dailyMap[d].bestaetigt++;
+    if (isAbschluss(t.status)) dailyMap[d].auftrag++;
+    else if (isStorno(t.status)) dailyMap[d].storno++;
+    else if (isOffen(t.status)) dailyMap[d].bestaetigt++;
     else dailyMap[d].offen++;
   });
   const daily = Object.values(dailyMap).sort((a, b) => a.raw.localeCompare(b.raw));
 
-  // By Vertriebler
+  // By Vertriebler – use berater_name (Leveto) or fallback to vertrieb_id mapping
   const beraterTermMap = {};
   termine.forEach(t => {
-    const vid = t.vertrieb_id || '?';
-    const name = vertrMap[vid] || vid;
+    const name = t.berater_name || vertrMap[t.vertrieb_id] || t.vertrieb_id || 'Nicht zugewiesen';
     if (!beraterTermMap[name]) beraterTermMap[name] = { n: name, total: 0, auftrag: 0, storno: 0 };
     beraterTermMap[name].total++;
-    if (t.status === 'auftrag') beraterTermMap[name].auftrag++;
-    if (t.status === 'storniert') beraterTermMap[name].storno++;
+    if (isAbschluss(t.status)) beraterTermMap[name].auftrag++;
+    if (isStorno(t.status)) beraterTermMap[name].storno++;
   });
-  const berater = Object.values(beraterTermMap).sort((a, b) => b.total - a.total);
+  const berater = Object.values(beraterTermMap)
+    .sort((a, b) => a.n === 'Nicht zugewiesen' ? 1 : b.n === 'Nicht zugewiesen' ? -1 : b.total - a.total);
 
   return { total, byStatus, daily, berater };
 }
@@ -600,9 +607,9 @@ const TabTermine = ({ data }) => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
         <KPI label="Termine gesamt" value={fmt(d.total)} color={C.gold} />
-        <KPI label="Auftrag" value={fmt(d.byStatus.auftrag || 0)} sub={`${pct(d.byStatus.auftrag || 0, d.total)}% Close-Rate`} color={C.green} />
+        <KPI label="Abschluss" value={fmt(d.byStatus['Abschluss'] || 0)} sub={`${pct(d.byStatus['Abschluss'] || 0, d.total)}% Close-Rate`} color={C.green} />
         <KPI label="Bestätigt" value={fmt(d.byStatus.bestaetigt || 0)} color={C.blue} />
-        <KPI label="Storniert" value={fmt(d.byStatus.storniert || 0)} sub={`${pct(d.byStatus.storniert || 0, d.total)}% Ausfallquote`} color={C.red} />
+        <KPI label="Storniert" value={fmt(d.byStatus['Storniert'] || 0)} sub={`${pct(d.byStatus['Storniert'] || 0, d.total)}% Ausfallquote`} color={C.red} />
         <KPI label="Offen" value={fmt(d.byStatus.offen || 0)} color={C.amber} />
       </div>
 
@@ -613,7 +620,7 @@ const TabTermine = ({ data }) => {
             <XAxis dataKey="d" tick={{ fill: C.sec, fontSize: 10 }} interval={Math.max(0, Math.floor(d.daily.length / 12))} />
             <YAxis tick={{ fill: C.sec, fontSize: 10 }} />
             <Tooltip content={<TT />} />
-            <Bar dataKey="auftrag" stackId="a" fill={C.green} name="Auftrag" />
+            <Bar dataKey="auftrag" stackId="a" fill={C.green} name="Abschluss" />
             <Bar dataKey="bestaetigt" stackId="a" fill={C.blue} name="Bestätigt" />
             <Bar dataKey="offen" stackId="a" fill={C.amber} name="Offen" />
             <Bar dataKey="storno" stackId="a" fill={C.red} name="Storniert" radius={[4,4,0,0]} />
@@ -626,7 +633,7 @@ const TabTermine = ({ data }) => {
           { label: '#', render: (_, i) => i + 1, align: 'center' },
           { label: 'Berater', key: 'n', bold: true },
           { label: 'Gesamt', key: 'total', align: 'center', mono: true, bold: true },
-          { label: 'Auftrag', key: 'auftrag', align: 'center', mono: true, color: () => C.green },
+          { label: 'Abschluss', key: 'auftrag', align: 'center', mono: true, color: () => C.green },
           { label: 'Storno', key: 'storno', align: 'center', mono: true, color: () => C.red },
           { label: 'Close %', render: r => `${pct(r.auftrag, r.total)}%`, align: 'center', mono: true },
         ]} />
