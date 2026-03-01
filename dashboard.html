@@ -76,11 +76,11 @@ function RT({items,cols,mc='var(--a)'}){const mx=items.length?items[0].v:1;retur
 function App(){
     const[sec,setSec]=useState('sales');const[data,setData]=useState({});const[loading,setLoading]=useState({});const loaded=useRef({});
     const load=useCallback(async(section)=>{if(loaded.current[section])return;setLoading(p=>({...p,[section]:true}));try{let d={};
-        if(section==='sales'){const[orders,vts,efs]=await Promise.all([sGet('auftraege','select=auftrag_nr,kunde_name,kunde_plz,beedoo_fortschritt,datum_angenommen,storniert,anlagen_kwp,hat_speicher,vertriebler_id,workflow_history,lead_quelle,status'),sGet('vertriebler','select=id,name,aktiv'),sGet('efs_projekte','select=simplified_status,gesamtpreis_eur')]);d={orders,vts,efs}}
+        if(section==='sales'){const[orders,efs]=await Promise.all([sGet('auftraege','select=auftrag_nr,kunde_name,kunde_plz,beedoo_fortschritt,datum_angenommen,storniert,anlagen_kwp,hat_speicher,kundenberater_name,workflow_history,lead_quelle,status,an_wert_netto'),sGet('efs_projekte','select=simplified_status,gesamtpreis_eur')]);d={orders,efs}}
         else if(section==='montage'){const[orders,appts]=await Promise.all([sGet('auftraege','select=auftrag_nr,kunde_name,kunde_plz,beedoo_fortschritt,datum_angenommen,storniert,workflow_history,anlagen_kwp'),sGet('leveto_appointments','select=leveto_id,appointment_type,start_date,status,user_received,kunde_plz&appointment_type=in.(AC Montage,DC Montage,AC Nacharbeit,DC Nacharbeit)')]);d={orders:orders.filter(o=>!o.storniert),appts}}
         else if(section==='termine'){d={appts:await sGet('leveto_appointments','select=leveto_id,appointment_type,start_date,status,user_created,user_received,kunde_nachname,kunde_plz,storno_reason,feedback_status,feedback_detail')}}
         else if(section==='leads'){d={leads:await sGet('leveto_leads','select=status_name,quelle,berater_name,plz,leveto_erstellt_am,stromverbrauch_kwh,eigentuemer,e_auto_geplant')}}
-        else if(section==='scouts'){const[leads,orders,appts,scouter]=await Promise.all([sGet('leveto_leads','select=leveto_id,status_name,quelle,berater_name,plz,leveto_erstellt_am,mvpp_name,mvpp_id'),sGet('auftraege','select=auftrag_nr,lead_quelle,storniert,datum_angenommen,vertriebler_id,anlagen_kwp'),sGet('leveto_appointments','select=leveto_id,appointment_type,status,start_date,user_created,user_received,storno_reason,kunde_plz,feedback_status'),sGet('scouter','select=id,vorname,nachname,active,fix_gehalt,phone,email,mvpp_id,mvpp_name,lead_count')]);d={leads,orders,appts,scouter}}
+        else if(section==='scouts'){const[leads,orders,appts,scouter]=await Promise.all([sGet('leveto_leads','select=leveto_id,status_name,quelle,berater_name,plz,leveto_erstellt_am,mvpp_name,mvpp_id'),sGet('auftraege','select=auftrag_nr,lead_quelle,storniert,datum_angenommen,kundenberater_name,anlagen_kwp'),sGet('leveto_appointments','select=leveto_id,appointment_type,status,start_date,user_created,user_received,storno_reason,kunde_plz,feedback_status'),sGet('scouter','select=id,vorname,nachname,active,fix_gehalt,phone,email,mvpp_id,mvpp_name,lead_count')]);d={leads,orders,appts,scouter}}
         else if(section==='callcenter'){const[appts,leads,orders]=await Promise.all([sGet('leveto_appointments','select=leveto_id,appointment_type,status,start_date,user_created,user_received,storno_reason,kunde_plz,feedback_status'),sGet('leveto_leads','select=leveto_id,status_name,quelle,leveto_erstellt_am'),sGet('auftraege','select=auftrag_nr,lead_quelle,storniert,datum_angenommen')]);d={appts,leads,orders}}
         setData(p=>({...p,[section]:d}));loaded.current[section]=true}catch(e){console.error(e)}setLoading(p=>({...p,[section]:false}))
     },[]);
@@ -101,23 +101,23 @@ function App(){
 }
 
 function Sales({d}){
-    const[sub,setSub]=useState('overview');const{orders,vts,efs}=d;
+    const[sub,setSub]=useState('overview');const{orders,efs}=d;
     const aktiv=orders.filter(o=>!o.storniert);const storno=orders.filter(o=>o.storniert);const kwp=aktiv.reduce((s,o)=>s+(parseFloat(o.anlagen_kwp)||0),0);
-    const byVt={};aktiv.forEach(o=>{const vid=o.vertriebler_id;byVt[vid]=(byVt[vid]||0)+1});
-    const vtMap={};vts.forEach(v=>{vtMap[v.id]=v.name});
+    const byVt={};aktiv.forEach(o=>{const n=(o.kundenberater_name||'?').trim();byVt[n]=(byVt[n]||0)+1});
     const moD={};aktiv.forEach(o=>{if(o.datum_angenommen){const ym=o.datum_angenommen.substring(0,7);moD[ym]=(moD[ym]||0)+1}});
+    const totalNetto=aktiv.reduce((s,o)=>s+(parseFloat(o.an_wert_netto)||0),0);
     const efsA=efs.filter(e=>e.simplified_status&&!['REVOKED','REJECTED'].includes(e.simplified_status));const efsVol=efsA.reduce((s,e)=>s+(parseFloat(e.gesamtpreis_eur)||0),0);
     return<React.Fragment>
         <div className="kpis fi">
             <div className="kpi"><div className="kpi-l">Aufträge aktiv</div><div className="kpi-v" style={{color:'var(--g)'}}>{fm(aktiv.length)}</div></div>
             <div className="kpi"><div className="kpi-l">Storniert</div><div className="kpi-v" style={{color:'var(--r)'}}>{fm(storno.length)}</div><div className="kpi-s" style={{color:'var(--r)'}}>{pct(storno.length,orders.length)}%</div></div>
-            <div className="kpi"><div className="kpi-l">Gesamt kWp</div><div className="kpi-v" style={{color:'var(--a)'}}>{fm(Math.round(kwp))}</div></div>
-            <div className="kpi"><div className="kpi-l">Ø kWp/Anlage</div><div className="kpi-v" style={{color:'var(--cy)'}}>{(kwp/Math.max(aktiv.length,1)).toFixed(1)}</div></div>
+            <div className="kpi"><div className="kpi-l">Gesamt kWp</div><div className="kpi-v" style={{color:'var(--a)'}}>{fm(Math.round(kwp))}</div><div className="kpi-s" style={{color:'var(--td)'}}>Ø {(kwp/Math.max(aktiv.length,1)).toFixed(1)}</div></div>
+            <div className="kpi"><div className="kpi-l">Auftragsvolumen</div><div className="kpi-v" style={{color:'var(--cy)'}}>{fm(Math.round(totalNetto/1000))}k€</div><div className="kpi-s" style={{color:'var(--td)'}}>Ø {fm(Math.round(totalNetto/Math.max(aktiv.length,1)))}€</div></div>
             <div className="kpi"><div className="kpi-l">EFS Volumen</div><div className="kpi-v" style={{color:'var(--bl)'}}>{fm(Math.round(efsVol/1000))}k€</div></div>
         </div>
         <div className="sub-tabs">{['Übersicht','VT-Ranking','Monatlich','EFS'].map((t,i)=>{const k=['overview','vt','monthly','efs'][i];return<div key={k} className={`sub-tab ${sub===k?'on':''}`} onClick={()=>setSub(k)}>{t}</div>})}</div>
         {sub==='overview'&&<div className="g2 fi"><div className="cd"><div className="cd-t">📊 Status-Verteilung</div><RT items={Object.entries(orders.reduce((a,o)=>{const s=o.storniert?'Storniert':(o.beedoo_fortschritt||o.status||'Offen');a[s]=(a[s]||0)+1;return a},{})).sort((a,b)=>b[1]-a[1]).map(([n,v])=>({n,v}))} cols={['#','Status','Anz.']} mc="var(--bl)"/></div><div className="cd"><div className="cd-t">🗺️ Top Regionen</div><RT items={Object.entries(aktiv.reduce((a,o)=>{const p=(o.kunde_plz||'').substring(0,2);if(p)a[p+'xxx']=(a[p+'xxx']||0)+1;return a},{})).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([n,v])=>({n,v}))} cols={['#','PLZ','Aufträge']} mc="var(--a)"/></div></div>}
-        {sub==='vt'&&<div className="cd fi"><div className="cd-t">👥 VT-Ranking</div><RT items={Object.entries(byVt).sort((a,b)=>b[1]-a[1]).map(([id,v])=>({n:vtMap[id]||id,v,x:pct(v,aktiv.length)+'%'}))} cols={['#','Vertriebler','Sales','%']} mc="var(--g)"/></div>}
+        {sub==='vt'&&<div className="cd fi"><div className="cd-t">👥 VT-Ranking</div><RT items={Object.entries(byVt).sort((a,b)=>b[1]-a[1]).filter(([n])=>n!=='?').map(([n,v])=>({n,v,x:pct(v,aktiv.length)+'%'}))} cols={['#','Vertriebler','Sales','%']} mc="var(--g)"/></div>}
         {sub==='monthly'&&<div className="cd fi"><div className="cd-t">📈 Sales/Monat</div><BarC data={Object.entries(moD).sort().slice(-12).map(([m,c])=>({v:c,l:m.split('-')[1]+'/'+m.split('-')[0].slice(2)}))} color="var(--g)" height={180}/></div>}
         {sub==='efs'&&<div className="cd fi"><div className="cd-t">💰 EFS-Status</div><RT items={Object.entries(efs.reduce((a,e)=>{a[e.simplified_status||'?']=(a[e.simplified_status||'?']||0)+1;return a},{})).sort((a,b)=>b[1]-a[1]).map(([n,v])=>({n,v}))} cols={['#','Status','Projekte']} mc="var(--bl)"/></div>}
     </React.Fragment>
