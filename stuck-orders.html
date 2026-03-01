@@ -93,15 +93,15 @@ function App(){
             // Load all active orders
             const allOrders=[];
             for(let off=0;off<5000;off+=1000){
-                const r=await fetch(ap('auftraege')+`?storniert=eq.false&select=id,auftrag_nr,kunde_name,kunde_plz,kunde_ort,kunde_strasse,beedoo_fortschritt,datum_angenommen,auftrags_datum,workflow_history,status,auftragsstatus,notiz,leveto_lead_id,efs_projekt_id,anlagen_kwp,hat_speicher,speicher_kwh,lead_quelle,montage_datum,vertriebler_id,produkt_typ&limit=1000&offset=${off}`,{headers:hd()});
+                const r=await fetch(ap('auftraege')+`?storniert=eq.false&select=id,auftrag_nr,kunde_name,kunde_plz,kunde_ort,kunde_strasse,beedoo_fortschritt,datum_angenommen,auftrags_datum,workflow_history,status,auftragsstatus,notiz,leveto_lead_id,efs_projekt_id,anlagen_kwp,hat_speicher,speicher_kwh,lead_quelle,montage_datum,vertriebler_id,produkt_typ,kundenberater_name&limit=1000&offset=${off}`,{headers:hd()});
                 const d=await r.json();if(!d.length)break;allOrders.push(...d);
             }
             // Load vertriebler names
-            const vtR=await(await fetch(ap('vertriebler')+'?select=id,vorname,nachname&limit=500',{headers:hd()})).json();
-            const vtMap={};vtR.forEach(v=>{vtMap[v.id]=`${v.vorname||''} ${v.nachname||''}`.trim()});
+            const vtR=await(await fetch(ap('vertriebler')+'?select=id,name&limit=500',{headers:hd()})).json();
+            const vtMap={};if(Array.isArray(vtR))vtR.forEach(v=>{vtMap[v.id]=(v.name||'').trim()});
             
             // Enrich orders with VT name
-            allOrders.forEach(o=>{o._vt_name=vtMap[o.vertriebler_id]||'—';o._days=daysSince(o.datum_angenommen||o.auftrags_datum)});
+            allOrders.forEach(o=>{o._vt_name=vtMap[o.vertriebler_id]||o.kundenberater_name||'—';o._days=daysSince(o.datum_angenommen||o.auftrags_datum)});
             setOrders(allOrders);
 
             // Load montage appointments
