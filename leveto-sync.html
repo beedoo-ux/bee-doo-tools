@@ -201,124 +201,84 @@ function LT({log,rc}){
 const APPT_TYPES=['AC Montage','DC Montage','AC Nacharbeit','DC Nacharbeit'];
 const isRelevant=t=>{const tl=(t||'').toLowerCase();return tl.includes('montage')||tl.includes('nacharbeit')};
 const validDate=d=>d&&d!=='0000-00-00 00:00:00'&&!d.startsWith('0000')?d:null;
-function aMap(a){return{leveto_id:a.id,lead_id:a.leadID&&a.leadID!=='None'?parseInt(a.leadID)||null:null,project_id:a.projectID&&a.projectID!=='None'&&a.projectID!==1?parseInt(a.projectID)||null:null,appointment_type:(a.appointment_type||'').trim()||null,start_date:validDate(a.start_date),end_date:validDate(a.end_date),status:(a.status||'').trim()||null,feedback_status:(a.feedback_status||'').trim()||null,feedback_detail:(a.feedback_detail||'').trim()||null,user_created:(a.user_created||'').trim()||null,user_received:(a.user_received||'').trim()||null,creation_date:validDate(a.creation_date),closed_date:validDate(a.closed_date),storno_date:validDate(a.storno_date),storno_reason:(a.storno_reason||'').trim()||null,storno_reason_detail:(a.storno_reason_detail||'').trim()||null,kunde_vorname:(a.vorname||'').trim()||null,kunde_nachname:(a.nachname||'').trim()||null,kunde_plz:(a.plz||'').trim()||null,kunde_stadt:(a.stadt||'').trim()||null,kunde_strasse:(a.strasse||'').trim()||null,kunde_hausnr:(a.hausnr||'').trim()||null,quelle:(a.quelle||'').trim()||null,termin_text:(a.text||'').substring(0,2000)||null,id_extern:a.id_extern||null,sync_aktualisiert_am:new Date().toISOString()}}
+function aMap(a){return{leveto_id:a.id,lead_id:a.leadID&&a.leadID!=='None'&&a.leadID!==null?parseInt(a.leadID)||null:null,project_id:a.projectID&&a.projectID!=='None'&&a.projectID!==1&&a.projectID!==null?parseInt(a.projectID)||null:null,appointment_type:(a.appointment_type||'').trim()||null,start_date:validDate(a.start_date),end_date:validDate(a.end_date),status:(a.status||'').trim()||null,feedback_status:(a.feedback_status||'').trim()||null,feedback_detail:(a.feedback_detail||'').trim()||null,user_created:(a.user_created||'').trim()||null,user_received:(a.user_received||'').trim()||null,creation_date:validDate(a.creation_date),closed_date:validDate(a.closed_date),storno_date:validDate(a.storno_date),storno_reason:(a.storno_reason||'').trim()||null,storno_reason_detail:(a.storno_reason_detail||'').trim()||null,kunde_vorname:(a.vorname||'').trim()||null,kunde_nachname:(a.nachname||'').trim()||null,kunde_plz:(a.plz||'').trim()||null,kunde_stadt:(a.stadt||'').trim()||null,kunde_strasse:(a.strasse||'').trim()||null,kunde_hausnr:(a.hausnummer||'').trim()||null,quelle:(a.quelle||'').trim()||null,termin_text:(a.text||'').substring(0,2000)||null,id_extern:a.id_extern||null,sync_aktualisiert_am:new Date().toISOString()}}
 
 function APPT({log,rc}){
-    const[run,setRun]=useState(false);const[prog,setProg]=useState(null);const[stats,setStats]=useState(null);const ab=useRef(false);const[dbStats,setDbStats]=useState(null);
+    const[run,setRun]=useState(false);const[stats,setStats]=useState(null);const[dbStats,setDbStats]=useState(null);const[phase,setPhase]=useState('');
+    
     // Load DB stats on mount
-    useEffect(()=>{(async()=>{try{
+    const loadDbStats=useCallback(async()=>{try{
         const types=['AC Montage','DC Montage','AC Nacharbeit','DC Nacharbeit'];
         const counts={};let total=0;
         for(const t of types){const r=await fetch(ap('leveto_appointments')+`?appointment_type=eq.${encodeURIComponent(t)}&select=id&limit=0`,{headers:{...hd(),'Prefer':'count=exact'}});const rng=r.headers.get('content-range');const c=rng?parseInt(rng.split('/')[1])||0:0;counts[t]=c;total+=c}
-        // Date range
         const oldest=await(await fetch(ap('leveto_appointments')+'?select=start_date&order=start_date.asc&limit=1&start_date=not.is.null',{headers:hd()})).json();
         const newest=await(await fetch(ap('leveto_appointments')+'?select=start_date&order=start_date.desc&limit=1&start_date=not.is.null',{headers:hd()})).json();
-        setDbStats({counts,total,oldest:oldest[0]?.start_date,newest:newest[0]?.start_date})
-    }catch(e){console.error(e)}})()},[]);
+        // Status breakdown
+        const statusR=await(await fetch(ap('leveto_appointments')+'?select=status&limit=10000',{headers:hd()})).json();
+        const statusCounts={};statusR.forEach(r=>{const s=r.status||'Unbekannt';statusCounts[s]=(statusCounts[s]||0)+1});
+        setDbStats({counts,total,oldest:oldest[0]?.start_date,newest:newest[0]?.start_date,statusCounts})
+    }catch(e){console.error(e)}},[]);
+    useEffect(()=>{loadDbStats()},[loadDbStats]);
     
-    const sync=async(mode)=>{if(run)return;setRun(true);ab.current=false;
-        const RL=14;const RLPAUSE=22000;const PER_PAGE=500;
-        const modeLabel=mode==='quick'?'Quick (letzte 200 Seiten)':'Voll';
-        log(`🏗️ Montage-Termine ${modeLabel}-Sync gestartet`,'warn');
-        const typeCounts={'AC Montage':0,'DC Montage':0,'AC Nacharbeit':0,'DC Nacharbeit':0,'Sonstige':0};
-        let saved=0,scanned=0,skipped=0,reqCount=0;
+    const sync=async()=>{if(run)return;setRun(true);setStats(null);
+        const typeCounts={'AC Montage':0,'DC Montage':0,'AC Nacharbeit':0,'DC Nacharbeit':0,'Sonstige Montage':0};
         try{
-            // Step 1: Get total count
-            log('📊 Lade Gesamtanzahl...');
-            const first=await lGetAppts({limit:1});
-            const totalRecords=first.totalrecords||0;
-            const totalPages=Math.ceil(totalRecords/PER_PAGE);
-            log(`📊 ${totalRecords.toLocaleString()} Termine gesamt, ${totalPages} Seiten à ${PER_PAGE}`);
-            reqCount++;
+            // Step 1: Fetch ALL appointments (single call, ~18 MB, ~5s)
+            setPhase('📡 Lade alle Termine aus Leveto API (~18 MB)...');
+            log('📡 Lade alle Termine aus Leveto API (1 Call, ~18 MB)...','warn');
+            const d=await lGetAppts({});
+            const allAppts=d.data||d.appointments||[];
+            log(`📊 ${allAppts.length.toLocaleString()} Termine geladen`);
             
-            // Determine page range
-            const maxPages=mode==='quick'?200:totalPages;
-            const startPage=mode==='quick'?Math.max(1,totalPages-199):1;
-            const endPage=totalPages;
-            const direction=mode==='quick'?'rückwärts (neueste zuerst)':'vorwärts';
-            log(`🔍 Scanne Seite ${startPage}→${endPage} (${maxPages} Seiten, ${direction})`);
+            // Step 2: Filter for relevant types
+            setPhase(`🔍 Filtere Montage & Nacharbeit aus ${allAppts.length.toLocaleString()} Terminen...`);
+            const relevant=allAppts.filter(a=>isRelevant(a.appointment_type));
+            relevant.forEach(a=>{const t=(a.appointment_type||'').trim();if(typeCounts[t]!==undefined)typeCounts[t]++;else typeCounts['Sonstige Montage']++});
+            log(`🏗️ ${relevant.length.toLocaleString()} Montage/Nacharbeit-Termine gefunden (von ${allAppts.length.toLocaleString()})`,'success');
             
-            let currentPage=mode==='quick'?endPage:startPage;
-            let pagesProcessed=0;
-            
-            while(!ab.current&&pagesProcessed<maxPages){
-                if(mode==='quick'&&currentPage<startPage)break;
-                if(mode!=='quick'&&currentPage>endPage)break;
-                
-                let d;
-                try{d=await lGetAppts({limit:PER_PAGE,page:currentPage});reqCount++}
-                catch(fe){
-                    log(`⚠️ Seite ${currentPage}: ${fe.message}, warte 22s...`,'warn');
-                    await new Promise(r=>setTimeout(r,RLPAUSE));lTk=null;lEx=0;
-                    try{d=await lGetAppts({limit:PER_PAGE,page:currentPage});reqCount++}catch(fe2){throw fe2}
-                }
-                
-                if(d.msg==='maximum_requests_exceeded'||d.allowed===false){
-                    log(`⏳ Rate-Limit — 22s Pause (${saved} gespeichert)...`,'warn');
-                    await new Promise(r=>setTimeout(r,RLPAUSE));lTk=null;lEx=0;continue
-                }
-                
-                const appts=d.appointments||[];
-                if(!appts.length){
-                    if(mode==='quick'){currentPage--;pagesProcessed++;continue}
-                    else break
-                }
-                
-                // Filter for relevant types
-                const relevant=appts.filter(a=>isRelevant(a.appointment_type));
-                skipped+=appts.length-relevant.length;
-                
-                if(relevant.length>0){
-                    const rows=relevant.map(aMap);
-                    // Count types
-                    relevant.forEach(a=>{const t=(a.appointment_type||'').trim();if(typeCounts[t]!==undefined)typeCounts[t]++;else typeCounts['Sonstige']++});
-                    
-                    // Upsert to Supabase
+            // Step 3: Map and upsert in batches
+            setPhase(`💾 Speichere ${relevant.length.toLocaleString()} Termine in Supabase...`);
+            log(`💾 Upsert: ${relevant.length.toLocaleString()} Termine in Batches à 200...`,'warn');
+            const rows=relevant.map(aMap);
+            let saved=0,errors=0;
+            const BATCH=200;
+            for(let i=0;i<rows.length;i+=BATCH){
+                const batch=rows.slice(i,i+BATCH);
+                try{
                     const r=await fetch(ap('leveto_appointments')+'?on_conflict=leveto_id',{
                         method:'POST',
                         headers:{apikey:SRK,Authorization:`Bearer ${SRK}`,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
-                        body:JSON.stringify(rows)
+                        body:JSON.stringify(batch)
                     });
-                    if(!r.ok){const err=await r.text();log(`⚠️ Supabase Fehler Seite ${currentPage}: ${err.substring(0,200)}`,'error')}
-                    else saved+=rows.length;
-                }
-                
-                scanned+=appts.length;
-                pagesProcessed++;
-                setProg({page:currentPage,pages:maxPages,pagesProcessed,saved,scanned,skipped,typeCounts:{...typeCounts}});
-                
-                if(pagesProcessed%10===0||relevant.length>0){
-                    log(`📦 Seite ${currentPage}: ${relevant.length}/${appts.length} relevant → ${saved.toLocaleString()} gespeichert (${scanned.toLocaleString()} gescannt)`);
-                }
-                
-                // Rate limiting
-                if(reqCount>=RL){
-                    log(`⏳ Rate-Limit Pause (${reqCount} Requests)...`,'warn');
-                    await new Promise(r=>setTimeout(r,RLPAUSE));reqCount=0
-                }else{await new Promise(r=>setTimeout(r,250))}
-                
-                if(mode==='quick')currentPage--;else currentPage++
+                    if(!r.ok){errors+=batch.length;log(`⚠️ Batch ${Math.floor(i/BATCH)+1}: ${(await r.text()).substring(0,200)}`,'error')}
+                    else saved+=batch.length
+                }catch(e){errors+=batch.length;log(`⚠️ Batch Fehler: ${e.message}`,'error')}
+                setPhase(`💾 Speichere... ${saved}/${rows.length}`);
             }
             
-            setStats({saved,scanned,skipped,typeCounts,aborted:ab.current});
-            log(ab.current?`⏹ Abgebrochen bei ${saved.toLocaleString()} gespeichert`:`✅ Fertig: ${saved.toLocaleString()} Montage/Nacharbeit-Termine gespeichert (${scanned.toLocaleString()} gescannt)`,ab.current?'warn':'success');
+            // Step 4: All type counts
+            const allTypeCounts={};
+            allAppts.forEach(a=>{const t=(a.appointment_type||'(leer)').trim();allTypeCounts[t]=(allTypeCounts[t]||0)+1});
             
-        }catch(e){log(`❌ Appointments-Sync: ${e.message}`,'error')}
+            setStats({saved,errors,total:allAppts.length,relevant:relevant.length,skipped:allAppts.length-relevant.length,typeCounts,allTypeCounts});
+            setPhase('');
+            log(`✅ Fertig: ${saved.toLocaleString()} Termine gespeichert${errors>0?`, ${errors} Fehler`:''}`,errors>0?'warn':'success');
+            loadDbStats();
+        }catch(e){log(`❌ Sync: ${e.message}`,'error');setPhase('')}
         setRun(false);rc()
     };
     
     const fm=v=>typeof v==='number'?v.toLocaleString('de-DE'):v;
-    const pct=prog?Math.round(prog.pagesProcessed/prog.pages*100):0;
     
     return(<React.Fragment>
         <div className="cd fi"><div className="cd-t">🏗️ Leveto Montage-Termine → Supabase</div>
             <p style={{fontSize:13,color:'var(--td)',marginBottom:16,lineHeight:1.6}}>
-                Synchronisiert <strong style={{color:'var(--a)'}}>AC/DC Montage</strong> und <strong style={{color:'var(--a)'}}>AC/DC Nacharbeit</strong> Termine aus der Leveto API. 
-                Filtert client-seitig aus ~1,37 Mio. Gesamt-Terminen.
+                Synchronisiert <strong style={{color:'var(--a)'}}>AC/DC Montage</strong> und <strong style={{color:'var(--a)'}}>AC/DC Nacharbeit</strong> Termine aus der Leveto API.
+                Alle {fm(dbStats?.total||0)} Termine in einem Abruf (~18 MB), client-seitig gefiltert.
             </p>
             
             {/* DB Stats */}
-            {dbStats&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:18}}>
+            {dbStats&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:10,marginBottom:18}}>
                 {Object.entries(dbStats.counts).map(([t,c])=><div key={t} style={{background:t.includes('Nacharbeit')?'var(--od)':'var(--bld)',borderRadius:10,padding:14,textAlign:'center'}}>
                     <div style={{fontSize:22,fontWeight:700,color:t.includes('Nacharbeit')?'var(--o)':'var(--bl)'}}>{fm(c)}</div>
                     <div style={{fontSize:11,color:'var(--td)',marginTop:2}}>{t}</div>
@@ -330,60 +290,59 @@ function APPT({log,rc}){
             </div>}
             {dbStats&&dbStats.oldest&&<div style={{fontSize:11,color:'var(--td)',marginBottom:14}}>
                 Zeitraum: <strong style={{color:'var(--tb)'}}>{new Date(dbStats.oldest).toLocaleDateString('de-DE')}</strong> bis <strong style={{color:'var(--tb)'}}>{new Date(dbStats.newest).toLocaleDateString('de-DE')}</strong>
+                {dbStats.statusCounts&&<span> · {Object.entries(dbStats.statusCounts).map(([s,c])=>`${s}: ${fm(c)}`).join(' · ')}</span>}
             </div>}
             
-            {/* Sync Buttons */}
-            <div className="brow" style={{marginBottom:14}}>
-                <button className="btn by" disabled={run} onClick={()=>sync('quick')}>{run?<React.Fragment><span className="spinner"/> Sync läuft...</React.Fragment>:'⚡ Quick-Sync (neueste ~200 Seiten)'}</button>
-                <button className="btn bo" disabled={run} onClick={()=>sync('full')}>🔄 Voll-Sync (alle Seiten)</button>
-                {run&&<button className="btn br" onClick={()=>{ab.current=true}}>⏹ Stop</button>}
-            </div>
-            
-            {/* Progress */}
-            {prog&&<React.Fragment>
-                <div className="pb"><div className="pf" style={{width:`${pct}%`}}/></div>
-                <div className="pt"><span>Seite {prog.pagesProcessed} / {prog.pages}</span><span>{pct}%</span></div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginTop:10}}>
-                    <div style={{background:'var(--gd)',borderRadius:8,padding:10,textAlign:'center'}}>
-                        <div style={{fontSize:18,fontWeight:700,color:'var(--g)'}}>{fm(prog.saved)}</div>
-                        <div style={{fontSize:10,color:'var(--td)'}}>Gespeichert</div>
-                    </div>
-                    <div style={{background:'var(--bld)',borderRadius:8,padding:10,textAlign:'center'}}>
-                        <div style={{fontSize:18,fontWeight:700,color:'var(--bl)'}}>{fm(prog.scanned)}</div>
-                        <div style={{fontSize:10,color:'var(--td)'}}>Gescannt</div>
-                    </div>
-                    <div style={{background:'rgba(255,255,255,.03)',borderRadius:8,padding:10,textAlign:'center'}}>
-                        <div style={{fontSize:18,fontWeight:700,color:'var(--td)'}}>{fm(prog.skipped)}</div>
-                        <div style={{fontSize:10,color:'var(--td)'}}>Übersprungen</div>
-                    </div>
-                </div>
-                {prog.typeCounts&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
-                    {Object.entries(prog.typeCounts).filter(([,c])=>c>0).map(([t,c])=><span key={t} style={{fontSize:10,padding:'3px 8px',borderRadius:12,background:t.includes('Nacharbeit')?'var(--od)':'var(--bld)',color:t.includes('Nacharbeit')?'var(--o)':'var(--bl)'}}>{t}: {fm(c)}</span>)}
-                </div>}
-            </React.Fragment>}
+            {/* Sync Button */}
+            <button className="btn by" disabled={run} onClick={sync} style={{width:'100%',justifyContent:'center'}}>
+                {run?<React.Fragment><span className="spinner"/> {phase||'Sync läuft...'}</React.Fragment>:'🔄 Montage-Termine synchronisieren'}
+            </button>
+            {run&&phase&&<div style={{marginTop:8,fontSize:12,color:'var(--a)',textAlign:'center'}}>{phase}</div>}
         </div>
         
         {/* Results */}
-        {stats&&<div className="cd fi"><div className="cd-t">{stats.aborted?'⏹ Sync abgebrochen':'✅ Sync-Ergebnis'}</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10}}>
-                {Object.entries(stats.typeCounts).filter(([,c])=>c>0).map(([t,c])=><div key={t} style={{background:t.includes('Nacharbeit')?'var(--od)':t==='Sonstige'?'rgba(255,255,255,.03)':'var(--bld)',borderRadius:10,padding:14,textAlign:'center'}}>
-                    <div style={{fontSize:22,fontWeight:700,color:t.includes('Nacharbeit')?'var(--o)':t==='Sonstige'?'var(--td)':'var(--bl)'}}>{fm(c)}</div>
-                    <div style={{fontSize:11,color:'var(--td)',marginTop:2}}>{t}</div>
-                </div>)}
+        {stats&&<div className="cd fi"><div className="cd-t">✅ Sync-Ergebnis</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:14}}>
+                <div style={{background:'var(--gd)',borderRadius:10,padding:14,textAlign:'center'}}>
+                    <div style={{fontSize:24,fontWeight:700,color:'var(--g)'}}>{fm(stats.saved)}</div>
+                    <div style={{fontSize:11,color:'var(--td)',marginTop:2}}>Gespeichert</div>
+                </div>
+                <div style={{background:'var(--bld)',borderRadius:10,padding:14,textAlign:'center'}}>
+                    <div style={{fontSize:24,fontWeight:700,color:'var(--bl)'}}>{fm(stats.total)}</div>
+                    <div style={{fontSize:11,color:'var(--td)',marginTop:2}}>Gesamt geladen</div>
+                </div>
+                <div style={{background:'rgba(255,255,255,.03)',borderRadius:10,padding:14,textAlign:'center'}}>
+                    <div style={{fontSize:24,fontWeight:700,color:'var(--td)'}}>{fm(stats.skipped)}</div>
+                    <div style={{fontSize:11,color:'var(--td)',marginTop:2}}>Irrelevant</div>
+                </div>
             </div>
-            <div style={{marginTop:12,fontSize:12,color:'var(--td)'}}>
-                {fm(stats.saved)} gespeichert · {fm(stats.scanned)} gescannt · {fm(stats.skipped)} irrelevant
+            {/* Type breakdown */}
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14}}>
+                {Object.entries(stats.typeCounts).filter(([,c])=>c>0).map(([t,c])=><span key={t} style={{fontSize:11,padding:'4px 10px',borderRadius:12,background:t.includes('Nacharbeit')?'var(--od)':'var(--bld)',color:t.includes('Nacharbeit')?'var(--o)':'var(--bl)',fontWeight:600}}>{t}: {fm(c)}</span>)}
             </div>
+            {stats.errors>0&&<div style={{fontSize:12,color:'var(--r)',marginTop:8}}>⚠️ {stats.errors} Fehler beim Speichern</div>}
+            
+            {/* All types overview */}
+            {stats.allTypeCounts&&<details style={{marginTop:14}}>
+                <summary style={{fontSize:12,color:'var(--a)',cursor:'pointer',fontWeight:600}}>📊 Alle Termintypen ({Object.keys(stats.allTypeCounts).length})</summary>
+                <div style={{maxHeight:250,overflowY:'auto',marginTop:8}}>
+                    <table className="mt"><thead><tr><th>Typ</th><th>Anzahl</th><th>Relevant?</th></tr></thead><tbody>
+                        {Object.entries(stats.allTypeCounts).sort((a,b)=>b[1]-a[1]).map(([t,c])=><tr key={t}>
+                            <td style={{color:isRelevant(t)?'var(--a)':'var(--td)'}}>{t||'(leer)'}</td>
+                            <td style={{fontWeight:600}}>{fm(c)}</td>
+                            <td>{isRelevant(t)?<span className="tg tg-ok">✅ Sync</span>:<span className="tg" style={{background:'rgba(255,255,255,.05)',color:'var(--td)'}}>—</span>}</td>
+                        </tr>)}
+                    </tbody></table>
+                </div>
+            </details>}
         </div>}
         
         <div className="cd fi"><div className="cd-t">ℹ️ Sync-Logik</div>
-            <table className="mt"><thead><tr><th>Typ</th><th>Beschreibung</th><th>Erwartet</th></tr></thead><tbody>
-                {[['AC Montage','AC-Installationstermine','~40.000'],['DC Montage','DC-Installationstermine','~39.000'],['AC Nacharbeit','Nachbesserung AC','~10.000'],['DC Nacharbeit','Nachbesserung DC','~5.700']].map((r,i)=><tr key={i}><td style={{color:'var(--tb)',fontWeight:600}}>{r[0]}</td><td>{r[1]}</td><td style={{color:'var(--a)'}}>{r[2]}</td></tr>)}
-            </tbody></table>
-            <div style={{marginTop:12,fontSize:12,color:'var(--td)',lineHeight:1.6}}>
-                <strong style={{color:'var(--tb)'}}>Quick-Sync:</strong> Letzte ~200 Seiten (neueste Daten), ca. 15 Min<br/>
-                <strong style={{color:'var(--tb)'}}>Voll-Sync:</strong> Alle ~2.740 Seiten, ca. 1,5 Std (Rate-Limit: 14 Req / 22s Pause)<br/>
-                <strong style={{color:'var(--tb)'}}>Filter:</strong> Nur Typen mit "Montage" oder "Nacharbeit" werden gespeichert
+            <div style={{fontSize:12,color:'var(--td)',lineHeight:1.8}}>
+                <strong style={{color:'var(--tb)'}}>1 API-Call</strong> → Alle Termine werden in einem Abruf geladen (~18 MB, ~5 Sek)<br/>
+                <strong style={{color:'var(--tb)'}}>Client-Filter</strong> → Nur Typen mit "Montage" oder "Nacharbeit" werden gespeichert<br/>
+                <strong style={{color:'var(--tb)'}}>Upsert</strong> → Neue Termine werden angelegt, bestehende aktualisiert (on_conflict: leveto_id)<br/>
+                <strong style={{color:'var(--tb)'}}>Felder:</strong> Termintyp, Start/Ende, Status, Feedback, Kunde, Storno-Grund, Team, Quelle
             </div>
         </div>
     </React.Fragment>);
