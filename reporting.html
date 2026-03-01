@@ -91,7 +91,7 @@ async function sbFetchAll(table, params = '', pageSize = 500) {
     all = all.concat(data);
     hasMore = data.length === pageSize;
     offset += pageSize;
-    if (offset > 20000) break; // Safety limit
+    if (offset > 50000) break; // Safety limit
   }
   return all;
 }
@@ -221,43 +221,154 @@ function processAuftraege(auftraege, mitarbeiterMap) {
 function processLeads(leads) {
   const total = leads.length;
 
-  // Status breakdown
+  // ── Status categorization ──
+  const isTerm = s => /terminiert|termin gelegt|termin vor ort|angebot/i.test(s);
+  const isAuftrag = s => /auftrag|vertrag|sale/i.test(s);
+  const isStorno = s => /storn/i.test(s);
+  const isNE = s => /nicht erreicht/i.test(s);
+  const isKeinInt = s => /kein interesse/i.test(s);
+  const isRekl = s => /reklamation/i.test(s);
+  const isNeu = s => /neuer lead|neu$/i.test(s);
+  const isWVL = s => /wvl|wiedervorlage/i.test(s);
+  const isNoPLZ = s => /nicht im plz/i.test(s);
+
+  // ── Funnel KPIs ──
+  let terminiert=0, auftrag=0, storno=0, ne=0, keinInt=0, rekl=0, neu=0, wvl=0, noPLZ=0, optIn=0, hasEFS=0;
+  leads.forEach(l => {
+    const sn = (l.status_name||'').trim();
+    if(isTerm(sn)) terminiert++;
+    if(isAuftrag(sn)) auftrag++;
+    if(isStorno(sn)) storno++;
+    if(isNE(sn)) ne++;
+    if(isKeinInt(sn)) keinInt++;
+    if(isRekl(sn)) rekl++;
+    if(isNeu(sn)) neu++;
+    if(isWVL(sn)) wvl++;
+    if(isNoPLZ(sn)) noPLZ++;
+    if(l.opt_in_bestaetigt) optIn++;
+    if(l.efs_id) hasEFS++;
+  });
+
+  // ── Status breakdown ──
   const statusMap = {};
   leads.forEach(l => {
     const s = (l.status_name || 'Unbekannt').trim();
     if (!statusMap[s]) statusMap[s] = 0;
     statusMap[s]++;
   });
-  const statusColors = { 'Terminiert': C.green, 'REKLAMATION': C.red, 'Nicht erreicht': C.orange, 'Nicht im PLZ-Gebiet': C.purple, 'WVL': C.blue, '5x NICHT ERREICHT': '#D29922', 'Neuer Lead': C.cyan, 'Kein Interesse': C.dim };
+  const statusColors = { 'Terminiert': C.green, 'Termin gelegt': '#3FB950', 'REKLAMATION': C.red, 'Nicht erreicht': C.orange, 'Nicht im PLZ-Gebiet': C.purple, 'WVL': C.blue, '5x NICHT ERREICHT': '#D29922', 'Neuer Lead': C.cyan, 'Kein Interesse': C.dim, 'Auftrag': C.gold, 'Storniert': C.red };
   const status = Object.entries(statusMap)
     .map(([name, v]) => ({ name, v, fill: statusColors[name] || C.muted }))
     .sort((a, b) => b.v - a.v);
 
-  // Quellen breakdown
+  // ── Timeline (daily) ──
+  const dailyMap = {};
+  leads.forEach(l => {
+    const d = (l.erster_status_datum || l.leveto_erstellt_am || '').substring(0,10);
+    if(!d || d < '2025-01-01') return;
+    if(!dailyMap[d]) dailyMap[d] = { d, total: 0, term: 0, ne: 0 };
+    dailyMap[d].total++;
+    const sn = (l.status_name||'').trim();
+    if(isTerm(sn)||isAuftrag(sn)) dailyMap[d].term++;
+    if(isNE(sn)) dailyMap[d].ne++;
+  });
+  const timeline = Object.values(dailyMap).sort((a,b)=>a.d.localeCompare(b.d));
+  // Aggregate to weekly for cleaner charts
+  const weeklyMap = {};
+  timeline.forEach(d => {
+    const dt = new Date(d.d);
+    const wk = new Date(dt.setDate(dt.getDate()-dt.getDay()+1));
+    const key = wk.toISOString().substring(0,10);
+    if(!weeklyMap[key]) weeklyMap[key] = { d: `KW ${Math.ceil((new Date(key).getTime()-new Date(key.substring(0,4)+'-01-01').getTime())/604800000)}`, raw: key, total: 0, term: 0 };
+    weeklyMap[key].total += d.total;
+    weeklyMap[key].term += d.term;
+  });
+  const weekly = Object.values(weeklyMap).sort((a,b)=>a.raw.localeCompare(b.raw)).slice(-16);
+
+  // ── Geographic (Stadt/PLZ) ──
+  const ortMap = {};
+  leads.forEach(l => {
+    const o = (l.ort||'').trim();
+    if(!o) return;
+    if(!ortMap[o]) ortMap[o] = { n: o, total: 0, term: 0, plz: l.plz||'' };
+    ortMap[o].total++;
+    const sn = (l.status_name||'').trim();
+    if(isTerm(sn)||isAuftrag(sn)) ortMap[o].term++;
+  });
+  const topOrte = Object.values(ortMap).sort((a,b)=>b.total-a.total).slice(0,20);
+  const plzMap = {};
+  leads.forEach(l => {
+    const p = (l.plz||'').substring(0,2);
+    if(!p) return;
+    if(!plzMap[p]) plzMap[p] = { n: p+'xxx', total: 0, term: 0 };
+    plzMap[p].total++;
+    const sn = (l.status_name||'').trim();
+    if(isTerm(sn)||isAuftrag(sn)) plzMap[p].term++;
+  });
+  const plzRegionen = Object.values(plzMap).sort((a,b)=>b.total-a.total).slice(0,15);
+
+  // ── Quellen with conversion ──
   const quellenMap = {};
   leads.forEach(l => {
     const q = l.quelle || 'Unbekannt';
-    if (!quellenMap[q]) quellenMap[q] = { n: q, total: 0, term: 0, rekl: 0, ne: 0 };
+    if (!quellenMap[q]) quellenMap[q] = { n: q, total: 0, term: 0, rekl: 0, ne: 0, auftrag: 0, storno: 0 };
     quellenMap[q].total++;
-    const sn = (l.status_name || '').trim().toLowerCase();
-    if (sn.includes('terminiert') || sn.includes('angebot')) quellenMap[q].term++;
-    if (sn.includes('reklamation')) quellenMap[q].rekl++;
-    if (sn.includes('nicht erreicht')) quellenMap[q].ne++;
+    const sn = (l.status_name || '').trim();
+    if (isTerm(sn)) quellenMap[q].term++;
+    if (isRekl(sn)) quellenMap[q].rekl++;
+    if (isNE(sn)) quellenMap[q].ne++;
+    if (isAuftrag(sn)) quellenMap[q].auftrag++;
+    if (isStorno(sn)) quellenMap[q].storno++;
   });
   const quellen = Object.values(quellenMap).sort((a, b) => b.total - a.total);
 
-  // Berater breakdown
+  // ── Berater performance ──
   const beraterLeadMap = {};
   leads.forEach(l => {
     const b = l.berater_name || 'Nicht zugewiesen';
-    if (!beraterLeadMap[b]) beraterLeadMap[b] = { n: b, total: 0, term: 0 };
+    if (!beraterLeadMap[b]) beraterLeadMap[b] = { n: b, total: 0, term: 0, auftrag: 0, ne: 0, storno: 0 };
     beraterLeadMap[b].total++;
-    const sn = (l.status_name || '').trim().toLowerCase();
-    if (sn.includes('terminiert') || sn.includes('angebot') || sn.includes('auftrag')) beraterLeadMap[b].term++;
+    const sn = (l.status_name || '').trim();
+    if (isTerm(sn) || isAuftrag(sn)) beraterLeadMap[b].term++;
+    if (isAuftrag(sn)) beraterLeadMap[b].auftrag++;
+    if (isNE(sn)) beraterLeadMap[b].ne++;
+    if (isStorno(sn)) beraterLeadMap[b].storno++;
   });
   const beraterLeads = Object.values(beraterLeadMap).sort((a, b) => b.term - a.term);
 
-  return { total, status, quellen, beraterLeads };
+  // ── Processing speed (Erstellt → Status) ──
+  let processingTimes = [];
+  leads.forEach(l => {
+    if(l.leveto_erstellt_am && l.status_datum && l.status_datum !== l.leveto_erstellt_am) {
+      const diff = (new Date(l.status_datum) - new Date(l.leveto_erstellt_am)) / 3600000;
+      if(diff > 0 && diff < 720) processingTimes.push(diff);
+    }
+  });
+  processingTimes.sort((a,b)=>a-b);
+  const medianProcessing = processingTimes.length > 0 ? processingTimes[Math.floor(processingTimes.length/2)] : 0;
+  const avgProcessing = processingTimes.length > 0 ? processingTimes.reduce((s,v)=>s+v,0)/processingTimes.length : 0;
+
+  // ── Anrede/Geschlecht ──
+  const anredeMap = {};
+  leads.forEach(l => {
+    const a = l.anrede || 'Unbekannt';
+    if(!anredeMap[a]) anredeMap[a] = 0;
+    anredeMap[a]++;
+  });
+
+  // ── Status indicator breakdown ──
+  const indicatorMap = {};
+  leads.forEach(l => {
+    const i = l.status_indicator || 'Unbekannt';
+    if(!indicatorMap[i]) indicatorMap[i] = 0;
+    indicatorMap[i]++;
+  });
+
+  return {
+    total, status, quellen, beraterLeads, weekly, topOrte, plzRegionen, anredeMap, indicatorMap,
+    funnel: { terminiert, auftrag, storno, ne, keinInt, rekl, neu, wvl, noPLZ, optIn, hasEFS },
+    processing: { median: medianProcessing, avg: avgProcessing, count: processingTimes.length },
+  };
 }
 
 function processTermine(termine) {
@@ -572,57 +683,172 @@ const TabSales = ({ data }) => {
 };
 
 // ═══ TAB: LEADS ═══
+const FunnelBar = ({ label, value, total, color, icon }) => {
+  const pctVal = total > 0 ? (value/total*100) : 0;
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0' }}>
+      <span style={{ fontSize:16, width:24, textAlign:'center' }}>{icon}</span>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+          <span style={{ fontSize:12, color:C.sec, fontWeight:500 }}>{label}</span>
+          <span style={{ fontSize:13, fontWeight:700, color, fontFamily:'JetBrains Mono, monospace' }}>{fmt(value)} <span style={{ fontSize:10, color:C.dim, fontWeight:400 }}>({pctVal.toFixed(1)}%)</span></span>
+        </div>
+        <div style={{ height:6, borderRadius:3, background:`${C.dim}30` }}>
+          <div style={{ width:`${Math.max(pctVal,0.5)}%`, height:'100%', borderRadius:3, background:color, transition:'width .6s ease', boxShadow:`0 0 8px ${color}40` }} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MiniStat = ({ label, value, sub, color }) => (
+  <div style={{ background:C.card2, borderRadius:10, padding:'12px 14px', border:`1px solid ${C.border}`, flex:'1 1 120px', minWidth:100 }}>
+    <div style={{ fontSize:10, color:C.sec, fontWeight:600, textTransform:'uppercase', letterSpacing:.5, marginBottom:4 }}>{label}</div>
+    <div style={{ fontSize:20, fontWeight:800, color:color||C.text, fontFamily:'JetBrains Mono, monospace' }}>{value}</div>
+    {sub && <div style={{ fontSize:10, color:C.dim, marginTop:2 }}>{sub}</div>}
+  </div>
+);
+
 const TabLeads = ({ data, hasWarning }) => {
   if (!data) return null;
   const d = data;
+  const f = d.funnel;
+  const convRate = d.total > 0 ? (f.terminiert/d.total*100).toFixed(1) : '0';
+  const auftrRate = d.total > 0 ? (f.auftrag/d.total*100).toFixed(1) : '0';
+  const neRate = d.total > 0 ? (f.ne/d.total*100).toFixed(1) : '0';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {hasWarning && <DataWarning msg="Die Leveto-Leads sind möglicherweise nicht vollständig synchronisiert. Angezeigte Daten basieren auf dem letzten Sync-Stand." />}
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} className="grid-cards">
-        <KPI label="Leads gesamt" value={fmt(d.total)} color={C.blue} />
-        <KPI label="Status-Gruppen" value={d.status.length} sub="Verschiedene Status" color={C.purple} />
+      {/* ── KPI Row ── */}
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+        <MiniStat label="Leads gesamt" value={fmt(d.total)} color={C.blue} />
+        <MiniStat label="Terminiert" value={fmt(f.terminiert)} sub={`${convRate}% Quote`} color={C.green} />
+        <MiniStat label="Auftrag" value={fmt(f.auftrag)} sub={`${auftrRate}% der Leads`} color={C.gold} />
+        <MiniStat label="Storno" value={fmt(f.storno)} color={C.red} />
+        <MiniStat label="Nicht erreicht" value={fmt(f.ne)} sub={`${neRate}%`} color={C.orange} />
+        <MiniStat label="Ø Bearbeitung" value={d.processing.median > 0 ? (d.processing.median < 24 ? `${d.processing.median.toFixed(0)}h` : `${(d.processing.median/24).toFixed(1)}d`) : '–'} sub={d.processing.count > 0 ? `${fmt(d.processing.count)} gemessen` : ''} color={C.cyan} />
       </div>
 
-      {d.total > 0 && (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="grid-1">
-            <Sec title="📊 Lead-Status Verteilung">
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie data={d.status.slice(0, 8)} cx="50%" cy="50%" outerRadius={90} dataKey="v" label={({ name, v }) => `${name}: ${v}`} labelLine={false}>
-                    {d.status.slice(0, 8).map((s, i) => <Cell key={i} fill={s.fill || CL[i]} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </Sec>
+      {/* ── Funnel + Status ── */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:18 }} className="grid-1">
+        <Sec title="🔻 Lead-Funnel" sub="Vom Eingang zum Abschluss">
+          <FunnelBar label="Gesamt eingegangen" value={d.total} total={d.total} color={C.blue} icon="📥" />
+          <FunnelBar label="Terminiert" value={f.terminiert} total={d.total} color={C.green} icon="📅" />
+          <FunnelBar label="Auftrag / Sale" value={f.auftrag} total={d.total} color={C.gold} icon="🎉" />
+          <FunnelBar label="Kein Interesse" value={f.keinInt} total={d.total} color={C.dim} icon="🚫" />
+          <FunnelBar label="Nicht erreicht" value={f.ne} total={d.total} color={C.orange} icon="📵" />
+          <FunnelBar label="WVL / Wiedervorlage" value={f.wvl} total={d.total} color={C.blue} icon="🔄" />
+          <FunnelBar label="Nicht im PLZ-Gebiet" value={f.noPLZ} total={d.total} color={C.purple} icon="📍" />
+          <FunnelBar label="Storniert" value={f.storno} total={d.total} color={C.red} icon="❌" />
+          <FunnelBar label="REKLAMATION" value={f.rekl} total={d.total} color="#F85149" icon="⚠️" />
+          {f.hasEFS > 0 && <FunnelBar label="EFS verknüpft" value={f.hasEFS} total={d.total} color={C.cyan} icon="🔗" />}
+        </Sec>
 
-            <Sec title="📡 Leads nach Quelle">
-              <RankTable data={d.quellen} columns={[
-                { label: 'Quelle', key: 'n', bold: true },
-                { label: 'Gesamt', key: 'total', align: 'center', mono: true, bold: true },
-                { label: 'Terminiert', key: 'term', align: 'center', mono: true, color: () => C.green },
-                { label: 'REKL', key: 'rekl', align: 'center', mono: true, color: () => C.red },
-                { label: 'NE', key: 'ne', align: 'center', mono: true, color: () => C.orange },
-              ]} />
-            </Sec>
+        <Sec title="📊 Status-Verteilung">
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie data={d.status.slice(0, 10)} cx="50%" cy="50%" outerRadius={85} innerRadius={40} dataKey="v" paddingAngle={2}
+                label={({ name, v }) => v > d.total*0.03 ? `${name}: ${v}` : ''} labelLine={false} style={{ fontSize: 10 }}>
+                {d.status.slice(0, 10).map((s, i) => <Cell key={i} fill={s.fill || CL[i % CL.length]} />)}
+              </Pie>
+              <Tooltip contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:12 }} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:8, justifyContent:'center' }}>
+            {d.status.slice(0,10).map((s,i) => (
+              <span key={i} style={{ fontSize:10, color:C.sec, display:'flex', alignItems:'center', gap:4 }}>
+                <span style={{ width:8, height:8, borderRadius:2, background:s.fill||CL[i%CL.length], flexShrink:0 }} />
+                {s.name} ({fmt(s.v)})
+              </span>
+            ))}
           </div>
+        </Sec>
+      </div>
 
-          {d.beraterLeads.filter(b => b.term > 0).length > 0 && (
-            <Sec title="🏆 Berater Leads & Termine" sub="Terminierungsleistung">
-              <RankTable data={d.beraterLeads.filter(b => b.total > 2).slice(0, 20)} columns={[
-                { label: '#', render: (_, i) => i + 1, align: 'center' },
-                { label: 'Berater', key: 'n', bold: true },
-                { label: 'Leads', key: 'total', align: 'center', mono: true },
-                { label: 'Terminiert', key: 'term', align: 'center', mono: true, bold: true, color: () => C.green },
-                { label: 'Rate', render: r => `${pct(r.term, r.total)}%`, align: 'center', mono: true },
-              ]} />
-            </Sec>
-          )}
-        </>
+      {/* ── Timeline ── */}
+      {d.weekly.length > 2 && (
+        <Sec title="📈 Lead-Verlauf (Wochen)" sub="Eingegangene Leads vs. Terminierte">
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={d.weekly} margin={{ top:5, right:10, left:0, bottom:5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+              <XAxis dataKey="d" stroke={C.dim} tick={{ fontSize:10, fill:C.sec }} />
+              <YAxis stroke={C.dim} tick={{ fontSize:10, fill:C.sec }} />
+              <Tooltip contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:12 }} />
+              <Area type="monotone" dataKey="total" name="Leads" fill={`${C.blue}20`} stroke={C.blue} strokeWidth={2} />
+              <Line type="monotone" dataKey="term" name="Terminiert" stroke={C.green} strokeWidth={2} dot={{ r:3, fill:C.green }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </Sec>
       )}
+
+      {/* ── Quellen + Berater ── */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:18 }} className="grid-1">
+        <Sec title="📡 Leads nach Quelle" sub="Mit Terminierungs- & Auftragsquote">
+          <RankTable data={d.quellen.filter(q=>q.total>1)} columns={[
+            { label: 'Quelle', key: 'n', bold: true },
+            { label: 'Leads', key: 'total', align: 'center', mono: true, bold: true },
+            { label: 'Term.', key: 'term', align: 'center', mono: true, color: () => C.green },
+            { label: 'Auftr.', key: 'auftrag', align: 'center', mono: true, color: () => C.gold },
+            { label: 'NE', key: 'ne', align: 'center', mono: true, color: () => C.orange },
+            { label: 'T-Rate', render: r => `${r.total > 0 ? (r.term/r.total*100).toFixed(0) : 0}%`, align: 'center', mono: true, color: r => r.total > 3 && r.term/r.total > 0.15 ? C.green : C.sec },
+          ]} />
+        </Sec>
+
+        <Sec title="🏆 Berater-Ranking" sub="Nach Terminierungsleistung">
+          <RankTable data={d.beraterLeads.filter(b => b.total > 5).slice(0, 20)} columns={[
+            { label: '#', render: (_, i) => i + 1, align: 'center' },
+            { label: 'Berater', key: 'n', bold: true },
+            { label: 'Leads', key: 'total', align: 'center', mono: true },
+            { label: 'Term.', key: 'term', align: 'center', mono: true, bold: true, color: () => C.green },
+            { label: 'Auftr.', key: 'auftrag', align: 'center', mono: true, color: () => C.gold },
+            { label: 'NE', key: 'ne', align: 'center', mono: true, color: () => C.orange },
+            { label: 'Quote', render: r => `${r.total > 0 ? (r.term/r.total*100).toFixed(0) : 0}%`, align: 'center', mono: true, color: r => r.total > 5 && r.term/r.total > 0.2 ? C.green : C.sec },
+          ]} />
+        </Sec>
+      </div>
+
+      {/* ── Geo-Analyse ── */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:18 }} className="grid-1">
+        <Sec title="🗺️ Top Städte" sub="Nach Lead-Aufkommen">
+          <div style={{ maxHeight:380, overflowY:'auto' }}>
+            <RankTable data={d.topOrte.slice(0,15)} columns={[
+              { label: '#', render: (_, i) => i + 1, align: 'center' },
+              { label: 'Stadt', key: 'n', bold: true },
+              { label: 'PLZ', key: 'plz', align: 'center', mono: true, color: () => C.dim },
+              { label: 'Leads', key: 'total', align: 'center', mono: true, bold: true },
+              { label: 'Term.', key: 'term', align: 'center', mono: true, color: () => C.green },
+              { label: 'Rate', render: r => `${r.total > 0 ? (r.term/r.total*100).toFixed(0) : 0}%`, align: 'center', mono: true },
+            ]} />
+          </div>
+        </Sec>
+
+        <Sec title="📮 PLZ-Regionen" sub="Erste 2 Stellen der PLZ">
+          <ResponsiveContainer width="100%" height={Math.min(d.plzRegionen.length * 28 + 30, 380)}>
+            <BarChart data={d.plzRegionen} layout="vertical" margin={{ top:5, right:10, left:40, bottom:5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+              <XAxis type="number" stroke={C.dim} tick={{ fontSize:10, fill:C.sec }} />
+              <YAxis type="category" dataKey="n" stroke={C.dim} tick={{ fontSize:10, fill:C.sec }} width={50} />
+              <Tooltip contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:12 }} />
+              <Bar dataKey="total" name="Leads" fill={C.blue} radius={[0,4,4,0]} barSize={16} />
+              <Bar dataKey="term" name="Terminiert" fill={C.green} radius={[0,4,4,0]} barSize={16} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Sec>
+      </div>
+
+      {/* ── Full Status Table ── */}
+      <Sec title="📋 Alle Status" sub={`${d.status.length} verschiedene Status`}>
+        <div style={{ maxHeight:350, overflowY:'auto' }}>
+          <RankTable data={d.status} columns={[
+            { label: '#', render: (_, i) => i + 1, align: 'center' },
+            { label: 'Status', key: 'name', bold: true, render: r => <span style={{ display:'flex', alignItems:'center', gap:6 }}><span style={{ width:8, height:8, borderRadius:2, background:r.fill, flexShrink:0 }} />{r.name}</span> },
+            { label: 'Anzahl', key: 'v', align: 'center', mono: true, bold: true },
+            { label: 'Anteil', render: r => `${(r.v/d.total*100).toFixed(1)}%`, align: 'center', mono: true, color: () => C.sec },
+          ]} />
+        </div>
+      </Sec>
     </div>
   );
 };
@@ -858,7 +1084,7 @@ const App = () => {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }} className="grid-cards">
             <KPI label="Aufträge aktiv" value={fmt(salesData?.aktiv || 0)} sub={`${monthLabel}`} color={C.gold} />
             <KPI label="Umsatz Netto" value={eur(salesData?.nettoAktiv || 0)} color={C.green} />
-            <KPI label="Leads" value={fmt(leadsData?.total || leads.length)} sub={leads.length < 100 ? "⚠️ Sync unvollst." : ""} color={C.blue} />
+            <KPI label="Leads" value={fmt(leadsData?.total || leads.length)} sub={leadsData?.funnel ? `${fmt(leadsData.funnel.terminiert)} terminiert` : (leads.length < 100 ? "⚠️ Sync unvollst." : "")} color={C.blue} />
             <KPI label="Termine" value={fmt(termineData?.total || 0)} color={C.purple} />
             <KPI label="EFS Pipeline" value={fmt(efsData?.activeCount || 0)} sub={eur(efsData?.totalRevenue || 0)} color={C.cyan} />
           </div>
@@ -873,7 +1099,7 @@ const App = () => {
 
           {/* Tab Content */}
           {tab === 'sales' && <TabSales data={salesData} />}
-          {tab === 'leads' && <TabLeads data={leadsData || { total: 0, status: [], quellen: [], beraterLeads: [] }} hasWarning={leads.length < 100} />}
+          {tab === 'leads' && <TabLeads data={leadsData || { total: 0, status: [], quellen: [], beraterLeads: [], weekly: [], topOrte: [], plzRegionen: [], anredeMap: {}, indicatorMap: {}, funnel: { terminiert:0, auftrag:0, storno:0, ne:0, keinInt:0, rekl:0, neu:0, wvl:0, noPLZ:0, optIn:0, hasEFS:0 }, processing: { median:0, avg:0, count:0 } }} hasWarning={leads.length < 100} />}
           {tab === 'termine' && <TabTermine data={termineData} />}
           {tab === 'efs' && <TabEFS data={efsData} />}
 
