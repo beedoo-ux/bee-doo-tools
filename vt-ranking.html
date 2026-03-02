@@ -131,17 +131,16 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
     var hd={apikey:AK,Authorization:'Bearer '+AK};
     var MN=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
     var NOW=new Date();
-    var CUR=NOW.getFullYear()+'-'+String(NOW.getMonth()+1).padStart(2,'0');
-    var MIN_MONTH='2025-02';
+    var MONTHS=['2026-03','2026-02'];
     var sort='sales';
-    var month=CUR;
+    var month='2026-02';
     var allOrders=[];
     var zeroIds={};
-    var availMonths=[];
+    var availMonths=MONTHS;
 
     var p=new URLSearchParams(window.location.search);
     var qm=p.get('m');
-    if(qm&&qm>=MIN_MONTH&&qm<=CUR)month=qm;
+    if(qm&&(qm==='2026-02'||qm==='2026-03'))month=qm;
 
     function shortName(full){
         var parts=(full||'Unbekannt').trim().split(/\s+/);
@@ -314,23 +313,13 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
         try{
             var all=[];
             for(var o=0;o<60000;o+=1000){
-                var r=await fetch(SB+'/rest/v1/auftraege?select=kundenberater_name,datum_angenommen,anlagen_kwp,an_wert_netto,storniert,ist_eigenlead,ist_empfehlung,hat_speicher,efs_projekt_id,auftrag_nr,leveto_lead_id,angebot_module&limit=1000&offset='+o,{headers:hd});
+                var r=await fetch(SB+'/rest/v1/auftraege?select=kundenberater_name,datum_angenommen,anlagen_kwp,an_wert_netto,storniert,ist_eigenlead,ist_empfehlung,hat_speicher,efs_projekt_id,auftrag_nr,leveto_lead_id,angebot_module&datum_angenommen=gte.2026-02-01&datum_angenommen=lt.2026-04-01&limit=1000&offset='+o,{headers:hd});
                 var d=await r.json();
                 if(!d.length)break;
                 all=all.concat(d);
                 if(d.length<1000)break;
             }
             allOrders=all;
-
-            // Collect available months
-            var ms={};
-            all.forEach(function(o){
-                if(o.datum_angenommen){
-                    var ym=o.datum_angenommen.substring(0,7);
-                    if(ym>=MIN_MONTH)ms[ym]=true;
-                }
-            });
-            availMonths=Object.keys(ms).sort().reverse();
 
             // Load zero IDs
             try{
