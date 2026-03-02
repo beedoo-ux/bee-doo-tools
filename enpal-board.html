@@ -340,11 +340,40 @@ function App(){
     const[authed,setAuthed]=useState(false);
     const[pw,setPw]=useState('');const[err,setErr]=useState('');const[shake,setShake]=useState(false);
     const[leads,setLeads]=useState(null);const[tab,setTab]=useState('overview');const[search,setSearch]=useState('');const[qF,setQF]=useState('Alle');
+    const[tF,setTF]=useState('all');const[customFrom,setCustomFrom]=useState('');const[customTo,setCustomTo]=useState('');
 
     useEffect(()=>{if(!authed)return;(async()=>{const all=[];for(let o=0;o<10000;o+=1000){const r=await fetch(`${SB}/rest/v1/enpal_leads?select=*&limit=1000&offset=${o}&order=leveto_erstellt_am.desc.nullslast`,{headers:hd()});const d=await r.json();if(!d.length)break;all.push(...d);if(d.length<1000)break}setLeads(all)})()},[authed]);
 
     const quellen=useMemo(()=>{if(!leads)return[];return['Alle',...[...new Set(leads.map(l=>l.quelle).filter(Boolean))].sort()]},[leads]);
-    const fL=useMemo(()=>!leads?[]:qF==='Alle'?leads:leads.filter(l=>l.quelle===qF),[leads,qF]);
+
+    const dateRange=useMemo(()=>{
+        const now=new Date();const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+        if(tF==='today')return{from:today,to:null};
+        if(tF==='7d')return{from:new Date(today-7*864e5),to:null};
+        if(tF==='30d')return{from:new Date(today-30*864e5),to:null};
+        if(tF==='month')return{from:new Date(now.getFullYear(),now.getMonth(),1),to:null};
+        if(tF==='lastmonth'){const f=new Date(now.getFullYear(),now.getMonth()-1,1);const t=new Date(now.getFullYear(),now.getMonth(),0,23,59,59);return{from:f,to:t}}
+        if(tF==='quarter'){const qm=Math.floor(now.getMonth()/3)*3;return{from:new Date(now.getFullYear(),qm,1),to:null}}
+        if(tF==='year')return{from:new Date(now.getFullYear(),0,1),to:null};
+        if(tF==='custom'&&customFrom)return{from:new Date(customFrom),to:customTo?new Date(customTo+'T23:59:59'):null};
+        return{from:null,to:null};
+    },[tF,customFrom,customTo]);
+
+    const tFiltered=useMemo(()=>{
+        if(!leads)return[];
+        let src=qF==='Alle'?leads:leads.filter(l=>l.quelle===qF);
+        if(!dateRange.from)return src;
+        return src.filter(l=>{
+            const d=l.leveto_erstellt_am||l.erstellt_am;
+            if(!d)return false;
+            const dt=new Date(d);
+            if(dt<dateRange.from)return false;
+            if(dateRange.to&&dt>dateRange.to)return false;
+            return true;
+        });
+    },[leads,qF,dateRange]);
+
+    const fL=tFiltered;
 
     const an=useMemo(()=>{
         if(!leads)return null;const src=fL;const t=src.length;
@@ -404,6 +433,18 @@ function App(){
                 <div className="kpi"><div className="kpi-l">🎯 → Auftrag</div><div className="kpi-v" style={{color:'var(--cy)'}}>{fm(an.mitAuftrag)}</div><div className="kpi-s" style={{color:'var(--td)'}}>{pct(an.mitAuftrag,an.t)}% CR</div></div>
             </div>
 
+            <div className="pills"><span style={{fontSize:11,color:'var(--td)',fontWeight:600,marginRight:4}}>ZEITRAUM:</span>
+                {[{k:'all',l:'Gesamt'},{k:'today',l:'Heute'},{k:'7d',l:'7 Tage'},{k:'30d',l:'30 Tage'},{k:'month',l:'Dieser Monat'},{k:'lastmonth',l:'Letzter Monat'},{k:'quarter',l:'Quartal'},{k:'year',l:'Jahr'},{k:'custom',l:'📅 Benutzerdefiniert'}].map(p=>
+                    <div key={p.k} className={`pill ${tF===p.k?'on':''}`} onClick={()=>setTF(p.k)}>{p.l}</div>
+                )}
+            </div>
+            {tF==='custom'&&<div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
+                <span style={{fontSize:11,color:'var(--td)',fontWeight:600}}>VON:</span>
+                <input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)} style={{background:'#1a2236',border:'1px solid #263354',borderRadius:6,padding:'5px 10px',color:'#e8ecf4',fontFamily:'inherit',fontSize:12,outline:'none'}}/>
+                <span style={{fontSize:11,color:'var(--td)',fontWeight:600}}>BIS:</span>
+                <input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)} style={{background:'#1a2236',border:'1px solid #263354',borderRadius:6,padding:'5px 10px',color:'#e8ecf4',fontFamily:'inherit',fontSize:12,outline:'none'}}/>
+            </div>}
+            {tF!=='all'&&<div style={{fontSize:11,color:'var(--o)',marginBottom:8,fontWeight:600}}>🕐 Zeitfilter aktiv: {fL.length} von {leads.length} Leads</div>}
             <div className="pills"><span style={{fontSize:11,color:'var(--td)',fontWeight:600,marginRight:4}}>QUELLE:</span>{quellen.map(q=><div key={q} className={`pill ${qF===q?'on':''}`} onClick={()=>setQF(q)}>{q}{q!=='Alle'?` (${leads.filter(l=>l.quelle===q).length})`:` (${leads.length})`}</div>)}</div>
             <div className="tabs">{TABS.map(t=><div key={t.k} className={`tab ${tab===t.k?'on':''}`} onClick={()=>setTab(t.k)}>{t.l}</div>)}</div>
 
