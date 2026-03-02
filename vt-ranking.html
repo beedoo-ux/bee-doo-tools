@@ -131,7 +131,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
     var hd={apikey:AK,Authorization:'Bearer '+AK};
     var MN=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
     var NOW=new Date();
-    var MONTHS=['2026-03','2026-02'];
+    var MONTHS=['2026-03','2026-02','2026'];
     var sort='sales';
     var month='2026-02';
     var allOrders=[];
@@ -140,7 +140,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 
     var p=new URLSearchParams(window.location.search);
     var qm=p.get('m');
-    if(qm&&(qm==='2026-02'||qm==='2026-03'))month=qm;
+    if(qm&&(qm==='2026-02'||qm==='2026-03'||qm==='2026'))month=qm;
 
     function shortName(full){
         var parts=(full||'Unbekannt').trim().split(/\s+/);
@@ -188,7 +188,8 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
     }
 
     function isHP(o){
-        if(month<'2026-02')return false;
+        var od=o.datum_angenommen||'';
+        if(od<'2026-02')return false;
         var m=o.angebot_module;
         return m===null||m===undefined||m===0||m===''||String(m)==='0'||String(m)==='None';
     }
@@ -196,7 +197,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
     function render(){
         var d=compute();
         var sp=month.split('-');
-        var monat=MN[+sp[1]-1]+' '+sp[0];
+        var monat=month.length===4?'Gesamt '+month:MN[+sp[1]-1]+' '+sp[0];
         var maxVal=d.ranking.length?d.ranking[0][1][sort==='volume'?'netto':sort==='kwp'?'kwp':'sales']:1;
 
         var confettiHTML='';
@@ -208,8 +209,8 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 
         var monthOpts='';
         availMonths.forEach(function(mv){
-            var mp=mv.split('-');
-            monthOpts+='<option value="'+mv+'"'+(mv===month?' selected':'')+'>'+MN[+mp[1]-1]+' '+mp[0]+'</option>';
+            var label=mv.length===4?'Gesamt '+mv:(function(){var mp=mv.split('-');return MN[+mp[1]-1]+' '+mp[0]})();
+            monthOpts+='<option value="'+mv+'"'+(mv===month?' selected':'')+'>'+label+'</option>';
         });
 
         var kpiHP=d.tHP>0?'<div class="kpi"><div class="kpi-val" style="color:var(--cyan)">🌡️ '+d.tHP+'</div><div class="kpi-label">Wärmepumpe</div></div>':'';
@@ -260,7 +261,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
                 +'<div class="confetti-wrap">'+confettiHTML+'</div>'
                 +'<div class="hero-label">bee-doo Sales Ranking</div>'
                 +'<div class="hero-number">'+d.total+'</div>'
-                +'<div class="hero-label">Deals im '+monat+'</div>'
+                +'<div class="hero-label">Deals '+(month.length===4?'in':'im')+' '+monat+'</div>'
                 +'<div class="hero-sub">🐝 powered by bee-doo</div>'
             +'</div>'
             +'<div class="kpis fade-in fade-d1">'
@@ -313,7 +314,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
         try{
             var all=[];
             for(var o=0;o<60000;o+=1000){
-                var r=await fetch(SB+'/rest/v1/auftraege?select=kundenberater_name,datum_angenommen,anlagen_kwp,an_wert_netto,storniert,ist_eigenlead,ist_empfehlung,hat_speicher,efs_projekt_id,auftrag_nr,leveto_lead_id,angebot_module&datum_angenommen=gte.2026-02-01&datum_angenommen=lt.2026-04-01&limit=1000&offset='+o,{headers:hd});
+                var r=await fetch(SB+'/rest/v1/auftraege?select=kundenberater_name,datum_angenommen,anlagen_kwp,an_wert_netto,storniert,ist_eigenlead,ist_empfehlung,hat_speicher,efs_projekt_id,auftrag_nr,leveto_lead_id,angebot_module&datum_angenommen=gte.2026-01-01&datum_angenommen=lt.2027-01-01&limit=1000&offset='+o,{headers:hd});
                 var d=await r.json();
                 if(!d.length)break;
                 all=all.concat(d);
