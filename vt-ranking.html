@@ -141,13 +141,25 @@ function render(){
     var kH=tHP>0?'<div class="kpi"><div class="kpi-val" style="color:var(--cyan)">🌡️ '+tHP+'</div><div class="kpi-label">Wärmepumpe</div></div>':'';
     var kS=tSp>0?'<div class="kpi"><div class="kpi-val" style="color:var(--purple)">'+tSp+'</div><div class="kpi-label">Speicher</div></div>':'';
     var cards='';
+    // Tied ranking: gleiche Werte = gleicher Platz
+    var ranks=[];var curRank=1;
     rk.forEach(function(d,i){
-        var cls=i<3?['gold','silver','bronze'][i]:'',pc=i<3?'p'+(i+1):'pn';
-        var ic=i<3?['🥇','🥈','🥉'][i]:'<span style="opacity:.5">'+(i+1)+'</span>';
+        var sv=sort==='volume'?d.netto:sort==='kwp'?d.kwp:d.sales;
+        if(i===0){ranks.push(1)}
+        else{
+            var prev=sort==='volume'?rk[i-1].netto:sort==='kwp'?rk[i-1].kwp:rk[i-1].sales;
+            if(sv===prev)ranks.push(ranks[i-1]);else ranks.push(i+1);
+        }
+    });
+    rk.forEach(function(d,i){
+        var r=ranks[i];
+        var cls=r===1?'gold':r===2?'silver':r===3?'bronze':'';
+        var pc=r<=3?'p'+r:'pn';
+        var ic=r===1?'🥇':r===2?'🥈':r===3?'🥉':'<span style="opacity:.5">'+r+'</span>';
         var v=sort==='volume'?Math.round(d.netto/1000)+'k':sort==='kwp'?d.kwp.toFixed(0):d.sales;
         var sb=sort==='sales'?fmt(Math.round(d.netto/1000))+'k€':d.sales+' Deals';
         var bp=Math.max(5,(sort==='volume'?d.netto:sort==='kwp'?d.kwp:d.sales)/maxV*100);
-        var bg=i===0?'linear-gradient(90deg,var(--gold),var(--gold2))':i===1?'linear-gradient(90deg,#94a3b8,#cbd5e1)':i===2?'linear-gradient(90deg,#d97706,#fbbf24)':'linear-gradient(90deg,var(--blue),#60a5fa)';
+        var bg=r===1?'linear-gradient(90deg,var(--gold),var(--gold2))':r===2?'linear-gradient(90deg,#94a3b8,#cbd5e1)':r===3?'linear-gradient(90deg,#d97706,#fbbf24)':'linear-gradient(90deg,var(--blue),#60a5fa)';
         var tg='';
         if(d.pv>0)tg+='<span class="rank-tag tag-pv">☀️'+d.pv+'</span>';
         if(d.hp>0)tg+='<span class="rank-tag tag-hp">🌡️'+d.hp+'</span>';
@@ -155,7 +167,7 @@ function render(){
         if(d.emp>0)tg+='<span class="rank-tag tag-emp">🤝'+d.emp+'</span>';
         if(d.sp>0)tg+='<span class="rank-tag tag-sp">🔋'+d.sp+'</span>';
         if(d.zero>0)tg+='<span class="rank-tag tag-zero">⚡'+d.zero+'</span>';
-        cards+='<div class="rank-card '+cls+' fade-in" style="animation-delay:'+(Math.min(i,15)*0.03)+'s"><div class="rank-pos '+pc+(i===0?' crown-pos':'')+'">'+ic+'</div><div class="rank-info"><div class="rank-name">'+sn(d.n)+'</div><div class="rank-meta">'+tg+'</div><div class="rank-bar"><div class="rank-bar-fill" style="width:'+bp+'%;background:'+bg+'"></div></div></div><div class="rank-right"><div class="rank-sales">'+v+'</div><div class="rank-vol">'+sb+'</div></div></div>';
+        cards+='<div class="rank-card '+cls+' fade-in" style="animation-delay:'+(Math.min(i,15)*0.03)+'s"><div class="rank-pos '+pc+(r===1?' crown-pos':'')+'">'+ic+'</div><div class="rank-info"><div class="rank-name">'+sn(d.n)+'</div><div class="rank-meta">'+tg+'</div><div class="rank-bar"><div class="rank-bar-fill" style="width:'+bp+'%;background:'+bg+'"></div></div></div><div class="rank-right"><div class="rank-sales">'+v+'</div><div class="rank-vol">'+sb+'</div></div></div>';
     });
     if(!rk.length)cards='<div style="text-align:center;padding:40px;color:var(--dim)">Keine Aufträge in '+monat+'</div>';
     var ts=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
