@@ -134,24 +134,27 @@ let lTk=null,lEx=0;
 async function lAuth(retry=0){if(lTk&&Date.now()<lEx-30000)return lTk;try{const r=await fetch(LU+'?path=auth',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:`username=${encodeURIComponent(LN)}&password=${encodeURIComponent(LP)}`});if(!r.ok)throw new Error(`HTTP ${r.status}: ${await r.text().catch(()=>'')}`);const d=await r.json();if(!d.login)throw new Error('Leveto Auth: '+d.message);lTk=d.token;lEx=Date.now()+4.5*60*1000;return lTk}catch(e){if(retry<2){await new Promise(r=>setTimeout(r,1000*(retry+1)));return lAuth(retry+1)}throw new Error(`Auth fehlgeschlagen (${retry+1} Versuche): ${e.message}`)}}
 async function lGet(p={},retry=0){const tk=await lAuth();const qs=new URLSearchParams({path:'leads',...p}).toString();try{const r=await fetch(`${LU}?${qs}`,{headers:{Authorization:`Bearer ${tk}`}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return await r.json()}catch(e){if(retry<2){await new Promise(r=>setTimeout(r,1000*(retry+1)));lTk=null;return lGet(p,retry+1)}throw new Error(`Leads-Abruf fehlgeschlagen (${retry+1} Versuche): ${e.message}`)}}
 async function lGetAppts(p={},retry=0){const tk=await lAuth();const qs=new URLSearchParams({path:'appointments',...p}).toString();try{const r=await fetch(`${LU}?${qs}`,{headers:{Authorization:`Bearer ${tk}`}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return await r.json()}catch(e){if(retry<2){await new Promise(r=>setTimeout(r,1000*(retry+1)));lTk=null;return lGetAppts(p,retry+1)}throw new Error(`Appointments-Abruf fehlgeschlagen (${retry+1} Versuche): ${e.message}`)}}
+async function lGetContracts(p={},retry=0){const tk=await lAuth();const qs=new URLSearchParams({path:'contracts',...p}).toString();try{const r=await fetch(`${LU}?${qs}`,{headers:{Authorization:`Bearer ${tk}`}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return await r.json()}catch(e){if(retry<2){await new Promise(r=>setTimeout(r,1000*(retry+1)));lTk=null;return lGetContracts(p,retry+1)}throw new Error(`Contracts-Abruf fehlgeschlagen (${retry+1} Versuche): ${e.message}`)}}
+function cMap(c){const vd=d=>d&&d!=='0000-00-00'&&d!=='0000-00-00 00:00:00'?d:null;return{leveto_id:c.id,dyn_offernum:c.dyn_offernum||null,lead_id:c.leadID||null,id_extern:c.id_extern||null,vorname:(c.vorname||'').trim()||null,nachname:(c.nachname||'').trim()||null,ersteller:(c.ersteller||'').trim()||null,quelle:(c.quelle||'').trim()||null,status_kunde:c.status_kunde||null,currentstatus:c.currentstatus||null,calculated_realprice_netto:c.calculated_realprice_netto?parseFloat(c.calculated_realprice_netto):null,calculated_realprice_brutto:c.calculated_realprice_brutto?parseFloat(c.calculated_realprice_brutto):null,creation_date:vd(c.creation_date),accepted_date:vd(c.accepted_date),storno_date:vd(c.storno_date),revocation_end_date:vd(c.revocation_end_date),archived:c.archived===1,release_declinereason:c.release_declinereason||null,pdf_url:c.pdf_url||null,project_id:c.projectID||null,typeicons:JSON.stringify(c.typeicons||[]),sync_aktualisiert_am:new Date().toISOString()}}
 function lMap(l){const a=l.homeAddress||{},s=l.status||{},sf=l.statusFirst||{},sv=l.survey||{};let sd=null;if(sv.data&&Array.isArray(sv.data)){sd={};sv.data.forEach(x=>{if(x.answer)sd[(x.question||'').replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_').toLowerCase()]=x.answer})}return{leveto_id:l.id,id_extern:l.idExtern||null,anrede:l.salutation||null,vorname:(l.firstName||'').trim(),nachname:(l.lastName||'').trim(),firma:l.companyName||null,email:l.email||null,telefon:l.telephone||null,telefon2:l.telephone2||null,mobil:l.mobile||null,erreichbarkeit:l.reachability||null,strasse:a.fullstreet||a.street||null,hausnr:a.housenr||null,plz:a.postalCode||null,ort:a.city||null,lat:a.lat||null,lng:a.lng||null,quelle:l.source||null,tags:l.tags||null,berater_name:l.berater||null,berater_ma_nummer:l.ma_nummer||null,notizen:l.notes||null,nachricht:l.message||null,status_id:s.id??null,status_name:s.name||null,status_indicator:s.indicator||null,status_datum:s.date&&s.date!=='0000-00-00 00:00:00'?s.date:null,erster_status_id:sf.id??null,erster_status_name:sf.name||null,erster_status_datum:sf.date&&sf.date!=='0000-00-00 00:00:00'?sf.date:null,letzter_status_wechsel:l.last_status_change&&l.last_status_change!=='0000-00-00 00:00:00'?l.last_status_change:null,zuweisungsstatus:l.zuweisungsstatus||null,assignments_count:l.assignmentsCount||0,accepted_count:l.acceptedCount||0,declined_count:l.declinedCount||0,objekt_typ:l.objectType||null,personen_haushalt:l.personsInHousehold||null,dach_groesse:l.roofSize||null,dach_form:l.roofShape||null,stromverbrauch:l.powerConsumption||null,monatl_abschlag:l.partPayment||null,finanzierung:l.financingModel||null,survey_data:sd?JSON.stringify(sd):null,opt_in_bestaetigt:l.optIn?.confirmed||false,leveto_erstellt_am:l.createdOn&&l.createdOn!=='0000-00-00 00:00:00'?l.createdOn:null,leveto_importiert_am:l.importedOn&&l.importedOn!=='0000-00-00 00:00:00'?l.importedOn:null,leveto_abgeschlossen_am:l.finishedOn&&l.finishedOn!=='0000-00-00 00:00:00'?l.finishedOn:null,leveto_letzte_bearbeitung:l.lastEditOn&&l.lastEditOn!=='0000-00-00 00:00:00'?l.lastEditOn:null,sync_aktualisiert_am:new Date().toISOString()}}
 
 // ═══ MAIN APP ═══
 function App(){
     const[tab,setTab]=useState('leveto');
-    const[ct,setCt]=useState({leveto:'-',efs:'-',leads:'-',termine:'-',auftraege:'-',bank:'-',lohnjournal:'-',lohnsheet:'-',appts:'-'});
+    const[ct,setCt]=useState({leveto:'-',efs:'-',leads:'-',termine:'-',auftraege:'-',bank:'-',lohnjournal:'-',lohnsheet:'-',appts:'-',contracts:'-'});
     const[logs,setLogs]=useState([]);
     const log=useCallback((m,l='info')=>setLogs(p=>[{t:new Date().toLocaleTimeString('de-DE'),m,l,id:Date.now()+Math.random()},...p].slice(0,100)),[]);
-    const rc=useCallback(async()=>{try{const[a,b,c,d,e,f,g,h,j]=await Promise.allSettled([sCnt('leveto_leads'),sCnt('efs_projekte'),sCnt('import_leads'),sCnt('import_appointments'),sCnt('import_provisions'),sCnt('bank_transactions'),sCnt('lohnjournal_imports'),sCnt('lohn_sheet_data'),sCnt('leveto_appointments')]);setCt({leveto:a.status==='fulfilled'?a.value:'-',efs:b.status==='fulfilled'?b.value:'-',leads:c.status==='fulfilled'?c.value:'-',termine:d.status==='fulfilled'?d.value:'-',auftraege:e.status==='fulfilled'?e.value:'-',bank:f.status==='fulfilled'?f.value:'-',lohnjournal:g.status==='fulfilled'?g.value:'-',lohnsheet:h.status==='fulfilled'?h.value:'-',appts:j.status==='fulfilled'?j.value:'-'})}catch(e){log('Count-Fehler: '+e.message,'error')}},[log]);
+    const rc=useCallback(async()=>{try{const[a,b,c,d,e,f,g,h,j,k]=await Promise.allSettled([sCnt('leveto_leads'),sCnt('efs_projekte'),sCnt('import_leads'),sCnt('import_appointments'),sCnt('import_provisions'),sCnt('bank_transactions'),sCnt('lohnjournal_imports'),sCnt('lohn_sheet_data'),sCnt('leveto_appointments'),sCnt('leveto_contracts')]);setCt({leveto:a.status==='fulfilled'?a.value:'-',efs:b.status==='fulfilled'?b.value:'-',leads:c.status==='fulfilled'?c.value:'-',termine:d.status==='fulfilled'?d.value:'-',auftraege:e.status==='fulfilled'?e.value:'-',bank:f.status==='fulfilled'?f.value:'-',lohnjournal:g.status==='fulfilled'?g.value:'-',lohnsheet:h.status==='fulfilled'?h.value:'-',appts:j.status==='fulfilled'?j.value:'-',contracts:k.status==='fulfilled'?k.value:'-'})}catch(e){log('Count-Fehler: '+e.message,'error')}},[log]);
     useEffect(()=>{rc()},[rc]);
     const fm=v=>typeof v==='number'?v.toLocaleString('de-DE'):v;
-    const TS=[{k:'leveto',l:'Leveto Sync',i:'🔄'},{k:'appts',l:'Termine API',i:'🏗️'},{k:'efs',l:'EFS Sync',i:'📊'},{k:'csv',l:'CSV Import',i:'📋'},{k:'bank',l:'Bank / EBICS',i:'🏦'},{k:'lohnjournal',l:'Lohnjournal',i:'💼'},{k:'lohnsheet',l:'Lohn Sheet',i:'📊'},{k:'merge',l:'Auto-Merge',i:'🔗'}];
+    const TS=[{k:'leveto',l:'Leveto Sync',i:'🔄'},{k:'contracts',l:'Aufträge API',i:'📑'},{k:'appts',l:'Termine API',i:'🏗️'},{k:'efs',l:'EFS Sync',i:'📊'},{k:'csv',l:'CSV Import',i:'📋'},{k:'bank',l:'Bank / EBICS',i:'🏦'},{k:'lohnjournal',l:'Lohnjournal',i:'💼'},{k:'lohnsheet',l:'Lohn Sheet',i:'📊'},{k:'merge',l:'Auto-Merge',i:'🔗'}];
     return(<React.Fragment>
         <div className="hdr"><div className="hdr-l"><div className="logo"><img src="https://bee-doo-tools.vercel.app/bee-doo-Logo-white.svg" style={{height:28}} alt="bee-doo" /> <span>Import Cockpit</span></div></div><a href="https://bee-doo-tools.vercel.app/" className="hdr-lk">← Toolbox</a></div>
         <div className="tabs">{TS.map(t=><div key={t.k} className={`tab ${tab===t.k?'on':''}`} onClick={()=>setTab(t.k)}>{t.i} {t.l}</div>)}</div>
         <div className="mn">
-            <div className="sts fi">{[{l:'Leveto Leads',v:ct.leveto,s:'leveto_leads'},{l:'Montage-Termine',v:ct.appts,s:'leveto_appointments'},{l:'EFS Projekte',v:ct.efs,s:'efs_projekte'},{l:'CSV Leads',v:ct.leads,s:'import_leads'},{l:'CSV Termine',v:ct.termine,s:'import_appointments'},{l:'CSV Aufträge',v:ct.auftraege,s:'import_provisions'},{l:'Bank Trans.',v:ct.bank,s:'bank_transactions'},{l:'Lohnjournal',v:ct.lohnjournal,s:'lohnjournal_imports'},{l:'Lohn Sheet',v:ct.lohnsheet,s:'lohn_sheet_data'}].map(s=><div key={s.l} className="st"><div className="st-l">{s.l}</div><div className="st-v">{fm(s.v)}</div><div className="st-s">{s.s}</div></div>)}</div>
+            <div className="sts fi">{[{l:'Leveto Leads',v:ct.leveto,s:'leveto_leads'},{l:'Leveto Aufträge',v:ct.contracts,s:'leveto_contracts'},{l:'Montage-Termine',v:ct.appts,s:'leveto_appointments'},{l:'EFS Projekte',v:ct.efs,s:'efs_projekte'},{l:'CSV Leads',v:ct.leads,s:'import_leads'},{l:'CSV Termine',v:ct.termine,s:'import_appointments'},{l:'CSV Aufträge',v:ct.auftraege,s:'import_provisions'},{l:'Bank Trans.',v:ct.bank,s:'bank_transactions'},{l:'Lohnjournal',v:ct.lohnjournal,s:'lohnjournal_imports'},{l:'Lohn Sheet',v:ct.lohnsheet,s:'lohn_sheet_data'}].map(s=><div key={s.l} className="st"><div className="st-l">{s.l}</div><div className="st-v">{fm(s.v)}</div><div className="st-s">{s.s}</div></div>)}</div>
             {tab==='leveto'&&<LT log={log} rc={rc}/>}
+            {tab==='contracts'&&<CLT log={log} rc={rc}/>}
             {tab==='appts'&&<APPT log={log} rc={rc}/>}
             {tab==='efs'&&<ET log={log} rc={rc}/>}
             {tab==='csv'&&<CT log={log} rc={rc}/>}
@@ -344,6 +347,83 @@ function APPT({log,rc}){
                 <strong style={{color:'var(--tb)'}}>Upsert</strong> → Neue Termine werden angelegt, bestehende aktualisiert (on_conflict: leveto_id)<br/>
                 <strong style={{color:'var(--tb)'}}>Felder:</strong> Termintyp, Start/Ende, Status, Feedback, Kunde, Storno-Grund, Team, Quelle
             </div>
+        </div>
+    </React.Fragment>);
+}
+
+// ═══ CONTRACTS API TAB ═══
+function CLT({log,rc}){
+    const[run,setRun]=useState(false);const[stats,setStats]=useState(null);const[prog,setProg]=useState(null);
+    const[dbStats,setDbStats]=useState(null);const ab=useRef(false);
+    const loadDbStats=useCallback(async()=>{try{
+        const hdr={apikey:SK,Authorization:`Bearer ${SK}`};
+        const[total,accepted,storno]=await Promise.all([
+            fetch(`${SU}/rest/v1/leveto_contracts?select=id&limit=0`,{headers:{...hdr,'Prefer':'count=exact'}}).then(r=>parseInt((r.headers.get('content-range')||'*/0').split('/')[1])||0),
+            fetch(`${SU}/rest/v1/leveto_contracts?status_kunde=eq.Angenommen&select=id&limit=0`,{headers:{...hdr,'Prefer':'count=exact'}}).then(r=>parseInt((r.headers.get('content-range')||'*/0').split('/')[1])||0),
+            fetch(`${SU}/rest/v1/leveto_contracts?status_kunde=eq.Storniert&select=id&limit=0`,{headers:{...hdr,'Prefer':'count=exact'}}).then(r=>parseInt((r.headers.get('content-range')||'*/0').split('/')[1])||0)
+        ]);setDbStats({total,accepted,storno,offen:total-accepted-storno})}catch(e){log('DB-Stats Fehler: '+e.message,'error')}},[log]);
+    useEffect(()=>{loadDbStats()},[loadDbStats]);
+    const sync=async(mode)=>{if(run)return;setRun(true);ab.current=false;
+        log(`🚀 Contracts ${mode==='full'?'Voll':'Delta'}-Sync gestartet...`,'warn');
+        try{
+            const params={};
+            if(mode==='delta'){
+                const d=new Date();d.setDate(d.getDate()-7);
+                params.accepteddate_start=d.toISOString().split('T')[0];
+            }
+            const d=await lGetContracts(params);
+            if(!d.data||!d.data.length){log('Keine Contracts gefunden','warn');setRun(false);return}
+            const total=d.data.length;log(`📦 ${total.toLocaleString('de-DE')} Contracts von API geladen`);
+            const rows=d.data.map(cMap);
+            let synced=0,errors=0;const B2=200;
+            for(let i=0;i<rows.length;i+=B2){
+                if(ab.current){log('⏹ Abgebrochen','warn');break}
+                const batch=rows.slice(i,i+B2);
+                try{const r=await fetch(`${SU}/rest/v1/leveto_contracts?on_conflict=leveto_id`,{method:'POST',
+                    headers:{apikey:SRK,Authorization:`Bearer ${SRK}`,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+                    body:JSON.stringify(batch)});
+                    if(!r.ok){errors+=batch.length;log(`⚠️ Batch ${Math.floor(i/B2)+1}: ${(await r.text()).substring(0,200)}`,'error')}
+                    else synced+=batch.length}
+                catch(e){errors+=batch.length;log(`⚠️ Batch Fehler: ${e.message}`,'error')}
+                setProg({c:Math.min(i+B2,total),t:total,p:Math.round(Math.min(i+B2,total)/total*100)});
+            }
+            const st={total,synced,errors,mode};setStats(st);
+            log(`✅ Contracts Sync: ${synced.toLocaleString('de-DE')} gesynct${errors?`, ${errors} Fehler`:''}`,errors?'warn':'success');
+        }catch(e){log(`❌ Contracts Sync: ${e.message}`,'error')}
+        setRun(false);setProg(null);rc();loadDbStats()};
+    return(<React.Fragment>
+        <div className="cd fi"><div className="cd-t">📑 Leveto Contracts → Supabase</div>
+            <p style={{fontSize:13,color:'var(--td)',marginBottom:14,lineHeight:1.6}}>
+                Holt Aufträge direkt via <strong style={{color:'var(--a)'}}>GET /contracts</strong> API. Filter: <code style={{background:'var(--el)',padding:'2px 6px',borderRadius:4}}>accepteddate_start</code>, <code style={{background:'var(--el)',padding:'2px 6px',borderRadius:4}}>status</code>. Cron: alle 4h.
+            </p>
+            {dbStats&&<div style={{display:'flex',gap:12,marginBottom:14,flexWrap:'wrap'}}>
+                {[{l:'Gesamt',v:dbStats.total,c:'#888'},{l:'Angenommen',v:dbStats.accepted,c:'#4CAF50'},{l:'Storniert',v:dbStats.storno,c:'#f44336'},{l:'Offen',v:dbStats.offen,c:'var(--a)'}].map(s=>
+                    <div key={s.l} style={{background:'var(--el)',borderRadius:8,padding:'8px 14px',minWidth:90,textAlign:'center'}}>
+                        <div style={{fontSize:20,fontWeight:700,color:s.c}}>{(s.v||0).toLocaleString('de-DE')}</div>
+                        <div style={{fontSize:11,color:'var(--td)'}}>{s.l}</div>
+                    </div>
+                )}
+            </div>}
+            <div className="brow" style={{marginBottom:14}}>
+                <button className="btn" onClick={()=>sync('full')} disabled={run}>
+                    {run?'Läuft...':'🔄 Voll-Sync (alle Contracts)'}
+                </button>
+                <button className="btn" onClick={()=>sync('delta')} disabled={run} style={{background:'transparent',border:'1px solid var(--a)',color:'var(--a)'}}>
+                    ⚡ Delta (letzte 7 Tage accepted)
+                </button>
+                {run&&<button className="btn" onClick={()=>{ab.current=true}} style={{background:'#f44336'}}>⏹ Stop</button>}
+            </div>
+            {prog&&<div style={{marginBottom:14}}>
+                <div style={{background:'var(--el)',borderRadius:8,height:24,overflow:'hidden',position:'relative'}}>
+                    <div style={{background:'var(--a)',height:'100%',width:`${prog.p}%`,transition:'width 0.3s',borderRadius:8}}/>
+                    <div style={{position:'absolute',top:0,left:0,right:0,textAlign:'center',lineHeight:'24px',fontSize:12,fontWeight:600}}>{prog.c.toLocaleString('de-DE')} / {prog.t.toLocaleString('de-DE')} ({prog.p}%)</div>
+                </div>
+            </div>}
+            {stats&&<div style={{background:'var(--el)',borderRadius:8,padding:12,fontSize:13}}>
+                <div>Modus: <strong>{stats.mode==='full'?'Voll-Sync':'Delta'}</strong></div>
+                <div>API: <strong style={{color:'var(--a)'}}>{stats.total.toLocaleString('de-DE')}</strong> | Gesynct: <strong style={{color:'#4CAF50'}}>{stats.synced.toLocaleString('de-DE')}</strong>{stats.errors>0&&<span> | Fehler: <strong style={{color:'#f44336'}}>{stats.errors}</strong></span>}</div>
+            </div>}
+            <AutoSync syncKey="leveto_contracts" log={log}/>
         </div>
     </React.Fragment>);
 }
