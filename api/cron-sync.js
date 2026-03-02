@@ -105,16 +105,26 @@ function cMap(c) {
 
 async function runContractsSync(config) {
     const token = await levetoAuth();
-    const hours = config?.hours || 48;
-    const from = new Date(Date.now() - hours * 3600000).toISOString().split('T')[0];
+    const hours = config?.hours || 1;
+    const now = new Date();
+    const isNightlyFull = now.getUTCHours() === 2; // 3 AM CET = 2 UTC → full sync
     
-    // Use accepteddate_start for delta sync — gets recently accepted contracts
-    const params = new URLSearchParams({ accepteddate_start: from });
-    const r = await fetch(`${LU}/contracts?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+    let url = `${LU}/contracts`;
+    let mode = 'delta';
+    
+    if (!isNightlyFull) {
+        // Delta: nur kürzlich angenommene (letzte X Stunden)
+        const from = new Date(Date.now() - hours * 3600000).toISOString().split('T')[0];
+        url += `?accepteddate_start=${from}`;
+    } else {
+        mode = 'full'; // Nachts: alles holen (fängt Stornos, Status-Änderungen)
+    }
+    
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) throw new Error(`Contracts API: HTTP ${r.status}`);
     const d = await r.json();
     
-    if (!d.data || !d.data.length) return { synced: 0, total: 0, mode: 'delta' };
+    if (!d.data || !d.data.length) return { synced: 0, total: 0, mode };
     
     const rows = d.data.map(cMap);
     const bs = 200;
@@ -129,7 +139,7 @@ async function runContractsSync(config) {
         if (res.ok) synced += batch.length;
     }
     
-    return { synced, total: rows.length, mode: 'delta', from };
+    return { synced, total: rows.length, mode };
 }
 
 async function runLohnSheetSync(config) {
