@@ -84,7 +84,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .kpi-val{font-family:'Outfit',sans-serif;font-size:22px;font-weight:800;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi-label{font-size:9px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.3px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-.controls{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;justify-content:center}
+.controls{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;justify-content:center;align-items:center}
 .ctrl-btn{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--dim);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:5px}
 .ctrl-btn:hover{border-color:var(--gold);color:var(--text)}
 .ctrl-btn.active{background:var(--gold);color:var(--bg);border-color:var(--gold)}
@@ -165,8 +165,10 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 @keyframes slideIn{to{opacity:1;transform:translateX(0)}}
 
 .footer{text-align:center;margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}
-.footer-line{font-size:11px;color:var(--dim)}
-.footer-ts{font-size:10px;color:#4a5578;margin-top:6px}
+.footer-line{font-size:12px;color:var(--dim)}
+.footer-ts{font-size:11px;color:#4a5578;margin-top:6px}
+.footer a{color:#5a6a8a;text-decoration:none;border-bottom:1px solid #2a3050;transition:color .2s}
+.footer a:hover{color:var(--gold)}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 .fade-in{animation:fadeUp .4s ease both}
@@ -465,6 +467,10 @@ function render(){
     var cf='',cc=['#F5C500','#FFE066','#22c55e','#3b82f6','#a855f7','#ec4899','#06b6d4','#ef4444'];
     for(var i=0;i<35;i++){var sz=4+Math.random()*6;cf+='<div class="confetti-p" style="left:'+Math.random()*100+'%;background:'+cc[i%8]+';width:'+sz+'px;height:'+sz+'px;border-radius:'+(Math.random()>.5?'50%':'2px')+';animation-delay:'+Math.random()*2+'s;animation-duration:'+(2.5+Math.random()*2)+'s"></div>';}
 
+    var hasKwp=tKwp>0;
+    // Auto-switch away from kWp sort if no data
+    if(sort==='kwp'&&!hasKwp){sort='sales';rk.sort(function(a,b){return(b.sales-a.sales)||(b.netto-a.netto)});maxV=rk.length?rk[0].sales:1;}
+
     // Dropdown
     var mo='';[['2026-03','März 2026'],['2026-02','Februar 2026'],['2026-01','Januar 2026'],['2026','Gesamt 2026']].forEach(function(v){mo+='<option value="'+v[0]+'"'+(v[0]===month?' selected':'')+'>'+v[1]+'</option>'});
 
@@ -678,7 +684,7 @@ function render(){
         +'<div class="kpi"><div class="kpi-val" style="color:#fb923c">☀️ '+tPV+'</div><div class="kpi-label">PV</div></div>'
         +kH
         +'<div class="kpi"><div class="kpi-val">'+fmt(Math.round(tNetto/1000))+'k</div><div class="kpi-label">Auftragswert €</div></div>'
-        +'<div class="kpi"><div class="kpi-val">'+fmt(tKwp)+'</div><div class="kpi-label">kWp</div></div>'
+        +(hasKwp?'<div class="kpi"><div class="kpi-val">'+fmt(tKwp)+'</div><div class="kpi-label">kWp</div></div>':'')
         +'<div class="kpi"><div class="kpi-val" style="color:var(--green)">'+tEl+'</div><div class="kpi-label">Eigenleads</div></div>'
         +kEmp+kS+kZ
         +'<div class="kpi"><div class="kpi-val">'+vtCount+'</div><div class="kpi-label">Vertriebler</div></div>'
@@ -689,8 +695,7 @@ function render(){
         +'<div class="controls fade-in fade-d2">'
         +'<button class="ctrl-btn'+(sort==='sales'?' active':'')+'" data-sort="sales">🏆 Deals</button>'
         +'<button class="ctrl-btn'+(sort==='volume'?' active':'')+'" data-sort="volume">💰 Volumen</button>'
-        +'<button class="ctrl-btn'+(sort==='kwp'?' active':'')+'" data-sort="kwp">⚡ kWp</button>'
-        +'<div style="flex:1 0 4px"></div>'
+        +(hasKwp?'<button class="ctrl-btn'+(sort==='kwp'?' active':'')+'" data-sort="kwp">⚡ kWp</button>':'<button class="ctrl-btn" style="opacity:.3;cursor:default" title="kWp-Daten nicht verfügbar für diesen Monat">⚡ kWp</button>')
         +'<select class="'+selectPulseClass+'" id="ms">'+mo+'</select></div>'
         +'<div class="legend fade-in fade-d3">'
         +'<span style="color:#fb923c">☀️ PV</span><span style="color:#22d3ee">🌡️ HP</span>'
@@ -701,15 +706,15 @@ function render(){
         +'<div class="footer fade-in"><div class="footer-line">bee-doo GmbH · Am Stadtholz 39 · 33609 Bielefeld</div>'
         +'<div class="footer-ts">Stand: '+ts+' · Stornos inkl. · Dedup per Lead+Produkt'+lh+'</div>'
         +'<div style="margin-top:16px;padding-top:12px;border-top:1px solid #1a1d2a">'
-        +'<div style="font-size:9px;color:#3d4566;line-height:1.6;max-width:520px;margin:0 auto;text-align:center">'
+        +'<div style="font-size:10px;color:#4a5578;line-height:1.7;max-width:520px;margin:0 auto;text-align:center">'
         +'© '+new Date().getFullYear()+' bee-doo GmbH · Alle Rechte vorbehalten · HRB 46243 AG Bielefeld<br>'
         +'Geschäftsführer: O. Schader, P. Grabowski · USt-ID: DE323940446<br>'
         +'Die dargestellten Daten sind vertraulich und ausschließlich für den internen Gebrauch bestimmt. '
         +'Jegliche Weitergabe, Vervielfältigung oder Veröffentlichung – auch auszugsweise – ist ohne '
         +'ausdrückliche schriftliche Genehmigung der bee-doo GmbH untersagt. '
         +'Datenverarbeitung gemäß DSGVO Art. 6 Abs. 1 lit. f.'
-        +'<br><a href="https://bee-doo.de/impressum/" target="_blank" style="color:#4a5578;text-decoration:none;border-bottom:1px solid #2a3050">Impressum</a>'
-        +' · <a href="https://bee-doo.de/datenschutzerklaerung/" target="_blank" style="color:#4a5578;text-decoration:none;border-bottom:1px solid #2a3050">Datenschutzerklärung</a>'
+        +'<br><a href="https://bee-doo.de/impressum/" target="_blank">Impressum</a>'
+        +' · <a href="https://bee-doo.de/datenschutzerklaerung/" target="_blank">Datenschutzerklärung</a>'
         +'</div></div></div></div>';
 
     document.querySelectorAll('[data-sort]').forEach(function(b){b.addEventListener('click',function(){sort=this.getAttribute('data-sort');render()})});
