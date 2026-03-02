@@ -595,20 +595,23 @@ function render(){
     });
 }
 
-function isHP(o){var m=o.angebot_module;return m===null||m===undefined||m===0||m===''||String(m)==='0'||String(m)==='None';}
+function isHP(o){var ti=o.typeicons;if(!ti)return false;if(typeof ti==='string'){try{ti=JSON.parse(ti)}catch(e){return false}}if(Array.isArray(ti))return ti.some(function(t){return typeof t==='object'?String(t.icon||'').indexOf('fa-fire')>=0:String(t).indexOf('fa-fire')>=0});return false;}
+function hasSpeicher(o){var ti=o.typeicons;if(!ti)return false;if(typeof ti==='string'){try{ti=JSON.parse(ti)}catch(e){return false}}if(Array.isArray(ti))return ti.some(function(t){return typeof t==='object'?String(t.icon||'').indexOf('fa-battery')>=0:String(t).indexOf('fa-battery')>=0});return false;}
 
 function computeMarch(orders,zeros){
     var zi={};if(zeros)zeros.forEach(function(e){if(e.efs_id)zi[e.efs_id]=true});
-    var a6=orders.filter(function(o){return(parseFloat(o.an_wert_netto)||0)>=6000});
+    var a6=orders.filter(function(o){return(parseFloat(o.calculated_realprice_netto)||0)>=6000});
     var bk={};
-    a6.forEach(function(o){var l=o.leveto_lead_id;if(!l)return;var k=l+'_'+(isHP(o)?'HP':'PV');var an=parseInt(o.auftrag_nr)||0;if(!bk[k]||an>(parseInt(bk[k].auftrag_nr)||0))bk[k]=o});
+    a6.forEach(function(o){var l=o.lead_id;if(!l)return;var k=l+'_'+(isHP(o)?'HP':'PV');var an=o.leveto_id||0;if(!bk[k]||an>(bk[k].leveto_id||0))bk[k]=o});
     var u=Object.values(bk),bv={};
     u.forEach(function(o){
-        var n=(o.kundenberater_name||'?').trim();
+        var n=(o.ersteller||'?').trim();
         if(!bv[n])bv[n]={sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,zero:0,hp:0,pv:0};
-        var d=bv[n];d.sales++;d.kwp+=parseFloat(o.anlagen_kwp)||0;d.netto+=parseFloat(o.an_wert_netto)||0;
-        if(o.storniert)d.storno++;if(o.ist_eigenlead)d.el++;if(o.ist_empfehlung)d.emp++;
-        if(o.hat_speicher)d.sp++;if(o.efs_projekt_id&&zi[o.efs_projekt_id])d.zero++;
+        var d=bv[n];d.sales++;d.kwp+=0;d.netto+=parseFloat(o.calculated_realprice_netto)||0;
+        if(o.status_kunde==='Storniert')d.storno++;
+        var q=(o.quelle||'').toLowerCase();
+        if(q==='eigenlead')d.el++;if(q==='empfehlung')d.emp++;
+        if(hasSpeicher(o))d.sp++;
         if(isHP(o))d.hp++;else d.pv++;
     });
     return Object.entries(bv).map(function(e){var v=e[1];v.n=e[0];return v});
@@ -619,7 +622,7 @@ async function loadMarch(){
     try{
         var all=[];
         for(var o=0;o<60000;o+=1000){
-            var r=await fetch(SB+'/rest/v1/auftraege?select=kundenberater_name,datum_angenommen,anlagen_kwp,an_wert_netto,storniert,ist_eigenlead,ist_empfehlung,hat_speicher,efs_projekt_id,auftrag_nr,leveto_lead_id,angebot_module&datum_angenommen=gte.2026-03-01&datum_angenommen=lt.2026-04-01&limit=1000&offset='+o,{headers:hd});
+            var r=await fetch(SB+'/rest/v1/leveto_contracts?select=ersteller,accepted_date,calculated_realprice_netto,calculated_realprice_brutto,status_kunde,quelle,leveto_id,lead_id,typeicons&accepted_date=gte.2026-03-01T00:00:00&accepted_date=lt.2026-04-01T00:00:00&limit=1000&offset='+o,{headers:hd});
             var d=await r.json();if(!d.length)break;all=all.concat(d);if(d.length<1000)break;
         }
         var z=[];try{var eR=await fetch(SB+'/rest/v1/efs_projekte?select=efs_id,preismodell&preismodell=eq.Zero',{headers:hd});if(eR.ok)z=await eR.json()}catch(e){}
