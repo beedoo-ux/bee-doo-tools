@@ -83,6 +83,7 @@ const PS_IMGS=[PS_IMG1,PS_IMG2];
 
 /* ══════ MOORHUHN GAME ══════ */
 function MoorhuhnGame({onWin}){
+  const[phase,setPhase]=useState('intro'); // intro → playing
   const canvasRef=React.useRef(null);
   const stateRef=React.useRef({score:0,targets:[],particles:[],msgs:[],t:0,done:false,combo:0,lastHit:0});
   const GOAL=15;
@@ -101,6 +102,7 @@ function MoorhuhnGame({onWin}){
   const MSGS_PS=['Philipp ist raus!','CEO down!','Schröder erwischt!','PS eliminiert!','Der Chef ist weg!'];
 
   React.useEffect(()=>{
+    if(phase!=='playing')return;
     const c=canvasRef.current;if(!c)return;
     const ctx=c.getContext('2d');
     let W=c.parentElement.clientWidth,H=c.parentElement.clientHeight;
@@ -280,7 +282,27 @@ function MoorhuhnGame({onWin}){
     const onResize=()=>{W=c.parentElement.clientWidth;H=c.parentElement.clientHeight;c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr)};
     window.addEventListener('resize',onResize);
     return()=>{cancelAnimationFrame(raf);c.removeEventListener('click',handleClick);window.removeEventListener('resize',onResize)}
-  },[]);
+  },[phase]);
+
+  if(phase==='intro')return<div style={{position:'fixed',inset:0,zIndex:9999,background:'#0a0e1a',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div style={{maxWidth:440,width:'90%',textAlign:'center',padding:20}}>
+      <div style={{fontSize:48,marginBottom:8}}>🎯</div>
+      <div style={{fontSize:26,fontWeight:900,color:'#F5C500',marginBottom:4}}>bee-doo Moorhuhn</div>
+      <div style={{fontSize:13,color:'#8896b0',marginBottom:24}}>Bevor du die Zahlen siehst, musst du dir den Zugang erspielen!</div>
+      <div style={{background:'#111827',borderRadius:14,padding:'18px 20px',textAlign:'left',marginBottom:20,border:'1px solid #1e2a42'}}>
+        <div style={{fontSize:14,fontWeight:700,color:'#e8ecf4',marginBottom:12}}>Spielregeln</div>
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          <div style={{display:'flex',gap:10,alignItems:'flex-start'}}><span style={{fontSize:20,lineHeight:'24px'}}>🔴</span><div><div style={{fontSize:13,fontWeight:600,color:'#e8ecf4'}}>Abschießen — 1KOMMA5°-Targets</div><div style={{fontSize:11,color:'#8896b0'}}>1K5°, 1KOMMA5°, Schröder-Boxen und Reklamationen</div></div></div>
+          <div style={{display:'flex',gap:10,alignItems:'flex-start'}}><div style={{width:36,height:36,borderRadius:'50%',overflow:'hidden',flexShrink:0,border:'2px solid #dc2626',display:'flex',alignItems:'center',justifyContent:'center'}}><img src={PS_IMG1.src} style={{width:'100%',height:'100%',objectFit:'cover'}}/></div><div><div style={{fontSize:13,fontWeight:600,color:'#ef4444'}}>Boss-Target — Philipp Schröder</div><div style={{fontSize:11,color:'#8896b0'}}>1KOMMA5°-CEO — schwer zu treffen, aber <b style={{color:'#F5C500'}}>5 Punkte</b> wert!</div></div></div>
+          <div style={{display:'flex',gap:10,alignItems:'flex-start'}}><span style={{fontSize:20,lineHeight:'24px'}}>🐝</span><div><div style={{fontSize:13,fontWeight:600,color:'#F5C500'}}>NICHT schießen — bee-doo Bienen!</div><div style={{fontSize:11,color:'#8896b0'}}>Treffer auf Bienen kosten <b style={{color:'#ef4444'}}>-5 Punkte</b></div></div></div>
+          <div style={{display:'flex',gap:10,alignItems:'flex-start'}}><span style={{fontSize:20,lineHeight:'24px'}}>⚡</span><div><div style={{fontSize:13,fontWeight:600,color:'#e8ecf4'}}>Combos</div><div style={{fontSize:11,color:'#8896b0'}}>Schnelle Treffer hintereinander geben Bonus-Punkte</div></div></div>
+        </div>
+        <div style={{marginTop:14,padding:'10px 12px',background:'#1a2236',borderRadius:8,textAlign:'center'}}><span style={{fontSize:12,color:'#8896b0'}}>Ziel: </span><span style={{fontSize:14,fontWeight:800,color:'#F5C500'}}>15 Punkte</span><span style={{fontSize:12,color:'#8896b0'}}> → Board wird freigeschaltet</span></div>
+      </div>
+      <button onClick={()=>setPhase('playing')} style={{background:'#F5C500',color:'#0a0e1a',border:'none',borderRadius:10,padding:'14px 40px',fontSize:16,fontWeight:800,cursor:'pointer',fontFamily:'inherit',width:'100%'}}>🎮 Spiel starten</button>
+      <div style={{marginTop:12}}><button onClick={()=>onWin()} style={{background:'none',border:'none',color:'#3a4a6a',fontSize:11,cursor:'pointer',fontFamily:'inherit'}}>Überspringen →</button></div>
+    </div>
+  </div>;
 
   return<div style={{position:'fixed',inset:0,zIndex:9999,background:'#0a0e1a',display:'flex',flexDirection:'column',alignItems:'center'}}>
     <div style={{padding:'14px 20px',textAlign:'center'}}>
@@ -336,7 +358,9 @@ function App(){
         });
         const mitAuftrag=src.filter(l=>l.hat_auftrag).length;
         const storno=src.filter(l=>l.storniert).length;
-        return{t,cats,byStatus,byQuelle,byPlz,monthly,byBerater,mitAuftrag,storno}
+        const terminOffen=src.filter(l=>l.status_name==='Terminiert').length;
+        const terminDone=src.filter(l=>['Angebot erstellt','Angebot angenommen','AB erstellt','Kontakt/Angebot per Mail'].includes(l.status_name)).length;
+        return{t,cats,byStatus,byQuelle,byPlz,monthly,byBerater,mitAuftrag,storno,terminOffen,terminDone}
     },[fL,leads]);
 
     const filtered=useMemo(()=>{if(!fL.length)return[];if(!search.trim())return fL;const q=search.toLowerCase();return fL.filter(l=>(l.kunde_nachname||'').toLowerCase().includes(q)||(l.kunde_vorname||'').toLowerCase().includes(q)||(l.plz||'').includes(q)||(l.ort||'').toLowerCase().includes(q)||(l.status_name||'').toLowerCase().includes(q)||(l.berater_name||'').toLowerCase().includes(q)||String(l.leveto_id).includes(q))},[fL,search]);
@@ -353,7 +377,8 @@ function App(){
                 <div className="kpi"><div className="kpi-l">Gesamt Leads</div><div className="kpi-v" style={{color:'var(--a)'}}>{fm(an.t)}</div></div>
                 <div className="kpi"><div className="kpi-l">⚠️ Reklamation</div><div className="kpi-v" style={{color:'var(--pk)'}}>{fm(an.cats.rekl)}</div><div className="kpi-s" style={{color:'var(--pk)'}}>{pct(an.cats.rekl,an.t)}%</div></div>
                 <div className="kpi"><div className="kpi-l">❌ Nicht erreicht</div><div className="kpi-v" style={{color:'var(--r)'}}>{fm(an.cats.nerr)}</div><div className="kpi-s" style={{color:'var(--r)'}}>{pct(an.cats.nerr,an.t)}%</div></div>
-                <div className="kpi"><div className="kpi-l">✅ In Pipeline</div><div className="kpi-v" style={{color:'var(--g)'}}>{fm(an.cats.pipe)}</div><div className="kpi-s" style={{color:'var(--g)'}}>{pct(an.cats.pipe,an.t)}%</div></div>
+                <div className="kpi"><div className="kpi-l">📅 Termin offen</div><div className="kpi-v" style={{color:'var(--bl)'}}>{fm(an.terminOffen)}</div><div className="kpi-s" style={{color:'var(--bl)'}}>{pct(an.terminOffen,an.t)}%</div></div>
+                <div className="kpi"><div className="kpi-l">✅ Termin stattgefunden</div><div className="kpi-v" style={{color:'var(--g)'}}>{fm(an.terminDone)}</div><div className="kpi-s" style={{color:'var(--g)'}}>{pct(an.terminDone,an.t)}%</div></div>
                 <div className="kpi"><div className="kpi-l">🚫 Disqualifiziert</div><div className="kpi-v" style={{color:'var(--p)'}}>{fm(an.cats.disq)}</div><div className="kpi-s" style={{color:'var(--p)'}}>{pct(an.cats.disq,an.t)}%</div></div>
                 <div className="kpi"><div className="kpi-l">⏳ Offen / WVL</div><div className="kpi-v" style={{color:'var(--o)'}}>{fm(an.cats.wvl)}</div><div className="kpi-s" style={{color:'var(--o)'}}>{pct(an.cats.wvl,an.t)}%</div></div>
                 <div className="kpi"><div className="kpi-l">🎯 → Auftrag</div><div className="kpi-v" style={{color:'var(--cy)'}}>{fm(an.mitAuftrag)}</div><div className="kpi-s" style={{color:'var(--td)'}}>{pct(an.mitAuftrag,an.t)}% CR</div></div>
@@ -380,13 +405,15 @@ function App(){
             {tab==='funnel'&&<div className="cd"><div className="cd-t">🎯 Lead-Funnel</div><div style={{maxWidth:650,margin:'0 auto'}}>{[
                 {l:'Leads generiert',v:an.t,c:'var(--a)'},
                 {l:'Erreicht (Berater)',v:an.t-an.cats.nerr,c:'var(--bl)'},
-                {l:'In Pipeline',v:an.cats.pipe,c:'var(--g)'},
+                {l:'📅 Termin offen',v:an.terminOffen,c:'var(--bl)'},
+                {l:'✅ Termin stattgefunden',v:an.terminDone,c:'var(--g)'},
                 {l:'→ Auftrag',v:an.mitAuftrag,c:'var(--cy)'},
-            ].map((s,i)=>{const mx=an.t||1;return<div key={i} className="frow" style={{marginBottom:14}}><span className="flab" style={{width:160,fontSize:13}}>{s.l}</span><div className="fbar" style={{width:Math.max(s.v/mx*100,5)+'%',background:s.c,height:36,fontSize:14}}>{fm(s.v)}</div><span className="fpct" style={{fontSize:13,fontWeight:700}}>{i>0?pct(s.v,an.t)+'%':''}</span></div>})}</div>
+            ].map((s,i)=>{const mx=an.t||1;return<div key={i} className="frow" style={{marginBottom:14}}><span className="flab" style={{width:180,fontSize:13}}>{s.l}</span><div className="fbar" style={{width:Math.max(s.v/mx*100,5)+'%',background:s.c,height:36,fontSize:14}}>{fm(s.v)}</div><span className="fpct" style={{fontSize:13,fontWeight:700}}>{i>0?pct(s.v,an.t)+'%':''}</span></div>})}</div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginTop:20}}>
                     <div className="sb"><div className="sb-v" style={{color:'var(--pk)'}}>{pct(an.cats.rekl,an.t)}%</div><div className="sb-l">Reklamationsquote</div></div>
                     <div className="sb"><div className="sb-v" style={{color:'var(--r)'}}>{pct(an.cats.nerr,an.t)}%</div><div className="sb-l">Nicht-Erreichbar</div></div>
-                    <div className="sb"><div className="sb-v" style={{color:'var(--g)'}}>{pct(an.cats.pipe,an.t)}%</div><div className="sb-l">Pipeline-Rate</div></div>
+                    <div className="sb"><div className="sb-v" style={{color:'var(--bl)'}}>{pct(an.terminOffen,an.t)}%</div><div className="sb-l">Termin offen</div></div>
+                    <div className="sb"><div className="sb-v" style={{color:'var(--g)'}}>{pct(an.terminDone,an.t)}%</div><div className="sb-l">Termin stattgef.</div></div>
                     <div className="sb"><div className="sb-v" style={{color:'var(--cy)'}}>{pct(an.mitAuftrag,an.t)}%</div><div className="sb-l">Conversion Rate</div></div>
                     <div className="sb"><div className="sb-v" style={{color:'var(--p)'}}>{pct(an.cats.disq,an.t)}%</div><div className="sb-l">Disqualifiziert</div></div>
                     <div className="sb"><div className="sb-v" style={{color:'var(--o)'}}>{pct(an.cats.wvl,an.t)}%</div><div className="sb-l">Offen / WVL</div></div>
