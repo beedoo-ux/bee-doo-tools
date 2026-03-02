@@ -60,25 +60,76 @@ function lMap(l) {
 async function runLevetoSync(config) {
     const token = await levetoAuth();
     const hours = config?.hours || 24;
-    const from = new Date(Date.now() - hours * 3600000).toISOString().split('T')[0];
+    const from = new Date(Date.now() - hours * 3600000).toISOString().split('T')[0] + ' 00:00:00';
     
     let synced = 0, page = 1;
     const bs = 100;
-    const first = await (await fetch(`${LU}/leads?limit=1&lastEditFrom=${from}`, { headers: { Authorization: `Bearer ${token}` } })).json();
-    const total = first.totalrecords;
+    const first = await (await fetch(`${LU}/leads?limit=1&page=1&lastEditFrom=${encodeURIComponent(from)}`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    const total = first.totalrecords || 0;
+    if (!total) return { synced: 0, total: 0 };
 
     while (true) {
-        const off = (page - 1) * bs;
-        if (off >= total) break;
-        const d = await (await fetch(`${LU}/leads?limit=${bs}&offset=${off}&lastEditFrom=${from}`, { headers: { Authorization: `Bearer ${token}` } })).json();
+        if ((page - 1) * bs >= total) break;
+        const d = await (await fetch(`${LU}/leads?limit=${bs}&page=${page}&lastEditFrom=${encodeURIComponent(from)}`, { headers: { Authorization: `Bearer ${token}` } })).json();
         if (!d.leads || !d.leads.length) break;
         const rows = d.leads.map(lMap);
         await fetch(ap('leveto_leads'), { method: 'POST', headers: { ...hd(), Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(rows) });
         synced += rows.length;
         page++;
         if (page > 600) break; // Safety limit
+        // Rate limit: max 14 requests per burst
+        if (page % 14 === 0) await new Promise(r => setTimeout(r, 22000));
     }
     return { synced, total };
+}
+
+// Contracts mapper
+function cMap(c) {
+    const vd = d => d && d !== '0000-00-00' && d !== '0000-00-00 00:00:00' ? d : null;
+    return {
+        leveto_id: c.id, dyn_offernum: c.dyn_offernum || null,
+        lead_id: c.leadID || null, id_extern: c.id_extern || null,
+        vorname: (c.vorname || '').trim() || null, nachname: (c.nachname || '').trim() || null,
+        ersteller: (c.ersteller || '').trim() || null, quelle: (c.quelle || '').trim() || null,
+        status_kunde: c.status_kunde || null, currentstatus: c.currentstatus || null,
+        calculated_realprice_netto: c.calculated_realprice_netto ? parseFloat(c.calculated_realprice_netto) : null,
+        calculated_realprice_brutto: c.calculated_realprice_brutto ? parseFloat(c.calculated_realprice_brutto) : null,
+        creation_date: vd(c.creation_date), accepted_date: vd(c.accepted_date),
+        storno_date: vd(c.storno_date), revocation_end_date: vd(c.revocation_end_date),
+        archived: c.archived === 1, release_declinereason: c.release_declinereason || null,
+        pdf_url: c.pdf_url || null, project_id: c.projectID || null,
+        typeicons: JSON.stringify(c.typeicons || []),
+        sync_aktualisiert_am: new Date().toISOString()
+    };
+}
+
+async function runContractsSync(config) {
+    const token = await levetoAuth();
+    const hours = config?.hours || 48;
+    const from = new Date(Date.now() - hours * 3600000).toISOString().split('T')[0];
+    
+    // Use accepteddate_start for delta sync — gets recently accepted contracts
+    const params = new URLSearchParams({ accepteddate_start: from });
+    const r = await fetch(`${LU}/contracts?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) throw new Error(`Contracts API: HTTP ${r.status}`);
+    const d = await r.json();
+    
+    if (!d.data || !d.data.length) return { synced: 0, total: 0, mode: 'delta' };
+    
+    const rows = d.data.map(cMap);
+    const bs = 200;
+    let synced = 0;
+    
+    for (let i = 0; i < rows.length; i += bs) {
+        const batch = rows.slice(i, i + bs);
+        const res = await fetch(ap('leveto_contracts') + '?on_conflict=leveto_id', {
+            method: 'POST', headers: { ...hd(), Prefer: 'resolution=merge-duplicates' },
+            body: JSON.stringify(batch)
+        });
+        if (res.ok) synced += batch.length;
+    }
+    
+    return { synced, total: rows.length, mode: 'delta', from };
 }
 
 async function runLohnSheetSync(config) {
@@ -204,6 +255,9 @@ export default async function handler(req, res) {
                 switch (cfg.sync_key) {
                     case 'leveto_sync':
                         result = await runLevetoSync(cfg.config);
+                        break;
+                    case 'leveto_contracts':
+                        result = await runContractsSync(cfg.config);
                         break;
                     case 'lohn_sheet':
                         result = await runLohnSheetSync(cfg.config);
