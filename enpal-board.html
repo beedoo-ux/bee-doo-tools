@@ -66,12 +66,210 @@ tr:hover td{background:#ffffff04}
 </head>
 <body>
 <div id="root"></div>
+<script>
+// roundRect polyfill
+if(!CanvasRenderingContext2D.prototype.roundRect){CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){r=typeof r==='number'?r:0;this.moveTo(x+r,y);this.lineTo(x+w-r,y);this.quadraticCurveTo(x+w,y,x+w,y+r);this.lineTo(x+w,y+h-r);this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);this.lineTo(x+r,y+h);this.quadraticCurveTo(x,y+h,x,y+h-r);this.lineTo(x,y+r);this.quadraticCurveTo(x,y,x+r,y);return this}}
+</script>
 <script type="text/babel">
 const{useState,useEffect,useMemo}=React;
 const SB='https://hqzpemfaljxcysyqssng.supabase.co';
 const AK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
 const hd=()=>({apikey:AK,Authorization:`Bearer ${AK}`});
 const EXT_TOKEN=null;
+const SKIP_GAME=new URLSearchParams(window.location.search).has('skip');
+
+/* ══════ MOORHUHN GAME ══════ */
+function MoorhuhnGame({onWin}){
+  const canvasRef=React.useRef(null);
+  const stateRef=React.useRef({score:0,targets:[],particles:[],msgs:[],t:0,done:false,combo:0,lastHit:0});
+  const GOAL=15;
+  const TARGETS=[
+    {text:'🔥 1,5°',w:70,h:34,pts:1,spd:1,col:'#f97316'},
+    {text:'ENPAL',w:66,h:30,pts:2,spd:1.3,col:'#3b82f6'},
+    {text:'PS',w:42,h:42,pts:3,spd:1.8,col:'#ef4444',round:true},
+    {text:'☀️ Lead',w:64,h:30,pts:1,spd:0.9,col:'#f59e0b'},
+    {text:'REKL',w:56,h:28,pts:2,spd:1.5,col:'#ec4899'},
+  ];
+  const DONT_SHOOT={text:'🐝',w:40,h:40,pts:-5,spd:2.2,col:'#F5C500',round:true,bad:true};
+  const MSGS_HIT=['Pew!','Erwischt!','Tschüss!','Weg damit!','Adios!','Ciao!','Bumm!','💥','Treffer!','RIP'];
+  const MSGS_BAD=['NEIN! 🐝','Das war unsere Biene!','Eigentor!','Autsch!','bee-doo Friendly Fire!'];
+  const MSGS_COMBO=['🔥 COMBO x','⚡ STREAK x','💀 KILLER x'];
+
+  React.useEffect(()=>{
+    const c=canvasRef.current;if(!c)return;
+    const ctx=c.getContext('2d');
+    let W=c.parentElement.clientWidth,H=c.parentElement.clientHeight;
+    c.width=W;c.height=H;
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    c.width=W*dpr;c.height=H*dpr;
+    c.style.width=W+'px';c.style.height=H+'px';
+    ctx.scale(dpr,dpr);
+
+    const S=stateRef.current;
+    let raf;
+
+    function spawn(){
+      if(S.done)return;
+      const isBee=Math.random()<0.15;
+      const tmpl=isBee?DONT_SHOOT:TARGETS[Math.floor(Math.random()*TARGETS.length)];
+      const fromLeft=Math.random()<0.5;
+      const y=40+Math.random()*(H-120);
+      const speed=(1+Math.random()*1.5)*tmpl.spd*(0.8+S.score*0.02);
+      S.targets.push({...tmpl,x:fromLeft?-80:W+80,y,vx:fromLeft?speed:-speed,vy:(Math.random()-0.5)*0.8,wobble:Math.random()*Math.PI*2,alive:true,opacity:1});
+    }
+
+    function addParticles(x,y,col,n){
+      for(let i=0;i<n;i++){
+        const a=Math.random()*Math.PI*2,sp=2+Math.random()*4;
+        S.particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:2+Math.random()*3,col,life:1});
+      }
+    }
+
+    function addMsg(x,y,text,col){
+      S.msgs.push({x,y,text,col,life:1,vy:-2});
+    }
+
+    let spawnTimer=0;
+    function update(){
+      S.t++;
+      spawnTimer++;
+      const interval=Math.max(15,40-S.score);
+      if(spawnTimer>=interval){spawn();spawnTimer=0}
+      S.targets.forEach(t=>{
+        t.x+=t.vx;t.y+=t.vy+Math.sin(S.t*0.03+t.wobble)*0.5;
+        if(t.x<-120||t.x>W+120)t.alive=false;
+      });
+      S.targets=S.targets.filter(t=>t.alive);
+      S.particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.1;p.life-=0.025;p.vx*=0.98});
+      S.particles=S.particles.filter(p=>p.life>0);
+      S.msgs.forEach(m=>{m.y+=m.vy;m.life-=0.02});
+      S.msgs=S.msgs.filter(m=>m.life>0);
+      if(S.score>=GOAL&&!S.done){S.done=true;setTimeout(()=>onWin(),1200)}
+    }
+
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      // Stars background
+      ctx.fillStyle='#0a0e1a';ctx.fillRect(0,0,W,H);
+      for(let i=0;i<60;i++){ctx.fillStyle=`rgba(255,255,255,${0.1+Math.random()*0.3})`;ctx.fillRect(Math.sin(i*47)*W/2+W/2,Math.cos(i*31)*H/2+H/2,1,1)}
+      // Ground
+      const grd=ctx.createLinearGradient(0,H-60,0,H);grd.addColorStop(0,'#0a0e1a');grd.addColorStop(1,'#1a2236');
+      ctx.fillStyle=grd;ctx.fillRect(0,H-60,W,60);
+      // Solar panels on ground
+      for(let i=0;i<5;i++){const px=80+i*(W-100)/4;ctx.fillStyle='#263354';ctx.save();ctx.translate(px,H-45);ctx.rotate(-0.2);ctx.fillRect(-18,-12,36,24);ctx.strokeStyle='#3b82f6';ctx.lineWidth=0.5;for(let g=0;g<3;g++){ctx.beginPath();ctx.moveTo(-18+g*12,-12);ctx.lineTo(-18+g*12,12);ctx.stroke()}for(let g=0;g<2;g++){ctx.beginPath();ctx.moveTo(-18,-12+g*12);ctx.lineTo(18,-12+g*12);ctx.stroke()}ctx.restore()}
+      // Targets
+      S.targets.forEach(t=>{
+        ctx.save();ctx.globalAlpha=t.opacity;
+        const cx=t.x,cy=t.y;
+        if(t.round){
+          ctx.beginPath();ctx.arc(cx,cy,t.w/2,0,Math.PI*2);
+          ctx.fillStyle=t.bad?'#F5C50020':t.col+'30';ctx.fill();
+          ctx.strokeStyle=t.bad?'#F5C500':t.col;ctx.lineWidth=2;ctx.stroke();
+          ctx.font=`${t.bad?'26px':'bold 16px'} 'DM Sans',sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillStyle=t.bad?'#F5C500':'#fff';ctx.fillText(t.text,cx,cy);
+        }else{
+          const rx=cx-t.w/2,ry=cy-t.h/2;
+          ctx.fillStyle=t.col+'25';ctx.strokeStyle=t.col;ctx.lineWidth=1.5;
+          ctx.beginPath();ctx.roundRect(rx,ry,t.w,t.h,6);ctx.fill();ctx.stroke();
+          ctx.font="bold 13px 'DM Sans',sans-serif";ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillStyle='#fff';ctx.fillText(t.text,cx,cy);
+        }
+        ctx.restore();
+      });
+      // Particles
+      S.particles.forEach(p=>{
+        ctx.globalAlpha=p.life;ctx.fillStyle=p.col;
+        ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);ctx.fill();
+      });
+      ctx.globalAlpha=1;
+      // Messages
+      S.msgs.forEach(m=>{
+        ctx.globalAlpha=m.life;ctx.font="bold 16px 'DM Sans',sans-serif";ctx.textAlign='center';
+        ctx.fillStyle=m.col;ctx.fillText(m.text,m.x,m.y);
+      });
+      ctx.globalAlpha=1;
+      // HUD
+      ctx.fillStyle='#111827cc';ctx.beginPath();ctx.roundRect(10,10,170,54,10);ctx.fill();
+      ctx.font="bold 11px 'DM Sans',sans-serif";ctx.fillStyle='#8896b0';ctx.textAlign='left';ctx.fillText('PUNKTE',22,30);
+      ctx.font="bold 22px 'DM Sans',sans-serif";ctx.fillStyle='#F5C500';ctx.fillText(`${S.score} / ${GOAL}`,22,52);
+      // Progress bar
+      const pW=140,pH=4,pX=20,pY=58;
+      ctx.fillStyle='#263354';ctx.beginPath();ctx.roundRect(pX,pY,pW,pH,2);ctx.fill();
+      ctx.fillStyle='#F5C500';ctx.beginPath();ctx.roundRect(pX,pY,Math.min(S.score/GOAL,1)*pW,pH,2);ctx.fill();
+      // Combo
+      if(S.combo>=3){
+        ctx.fillStyle='#111827cc';ctx.beginPath();ctx.roundRect(W-130,10,120,34,8);ctx.fill();
+        ctx.font="bold 14px 'DM Sans',sans-serif";ctx.textAlign='center';
+        ctx.fillStyle=S.combo>=5?'#ef4444':S.combo>=3?'#f97316':'#F5C500';
+        ctx.fillText(`🔥 COMBO x${S.combo}`,W-70,32);
+      }
+      // Bee-doo warning
+      ctx.font="10px 'DM Sans',sans-serif";ctx.textAlign='center';ctx.fillStyle='#3a4a6a';
+      ctx.fillText('⚠️ Nicht auf die Bienen schießen!',W/2,H-12);
+      // WIN
+      if(S.done){
+        ctx.fillStyle='#0a0e1acc';ctx.fillRect(0,0,W,H);
+        ctx.textAlign='center';
+        ctx.font="bold 32px 'DM Sans',sans-serif";ctx.fillStyle='#F5C500';
+        ctx.fillText('🎯 Board freigeschaltet!',W/2,H/2-10);
+        ctx.font="14px 'DM Sans',sans-serif";ctx.fillStyle='#8896b0';
+        ctx.fillText(`Score: ${S.score} Punkte`,W/2,H/2+24);
+      }
+    }
+
+    function loop(){update();draw();raf=requestAnimationFrame(loop)}
+    loop();
+
+    function handleClick(e){
+      if(S.done)return;
+      const rect=c.getBoundingClientRect();
+      const mx=e.clientX?e.clientX-rect.left:(e.touches?.[0]?.clientX||0)-rect.left;
+      const my=e.clientY?e.clientY-rect.top:(e.touches?.[0]?.clientY||0)-rect.top;
+      let hit=false;
+      for(let i=S.targets.length-1;i>=0;i--){
+        const t=S.targets[i];
+        const dx=mx-t.x,dy=my-t.y;
+        const hitR=t.round?t.w/2+8:Math.max(t.w,t.h)/2+8;
+        if(Math.abs(dx)<hitR&&Math.abs(dy)<hitR){
+          t.alive=false;
+          addParticles(t.x,t.y,t.bad?'#F5C500':t.col,t.bad?20:12);
+          if(t.bad){
+            S.score=Math.max(0,S.score+t.pts);S.combo=0;
+            addMsg(t.x,t.y-20,MSGS_BAD[Math.floor(Math.random()*MSGS_BAD.length)],'#F5C500');
+          }else{
+            const now=Date.now();
+            if(now-S.lastHit<800)S.combo++;else S.combo=1;
+            S.lastHit=now;
+            const bonus=S.combo>=5?3:S.combo>=3?2:0;
+            S.score+=t.pts+bonus;
+            const msg=S.combo>=3?MSGS_COMBO[Math.floor(Math.random()*MSGS_COMBO.length)]+S.combo:MSGS_HIT[Math.floor(Math.random()*MSGS_HIT.length)];
+            addMsg(t.x,t.y-20,bonus>0?`+${t.pts+bonus} ${msg}`:`+${t.pts} ${msg}`,t.col);
+          }
+          hit=true;break;
+        }
+      }
+      if(!hit){addMsg(mx,my-10,'Daneben!','#3a4a6a');S.combo=0}
+    }
+
+    c.addEventListener('click',handleClick);
+    c.addEventListener('touchstart',e=>{e.preventDefault();handleClick(e)},{passive:false});
+
+    const onResize=()=>{W=c.parentElement.clientWidth;H=c.parentElement.clientHeight;c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr)};
+    window.addEventListener('resize',onResize);
+    return()=>{cancelAnimationFrame(raf);c.removeEventListener('click',handleClick);window.removeEventListener('resize',onResize)}
+  },[]);
+
+  return<div style={{position:'fixed',inset:0,zIndex:9999,background:'#0a0e1a',display:'flex',flexDirection:'column',alignItems:'center'}}>
+    <div style={{padding:'14px 20px',textAlign:'center'}}>
+      <div style={{fontSize:20,fontWeight:800,color:'#F5C500',marginBottom:2}}>🎯 bee-doo Moorhuhn</div>
+      <div style={{fontSize:12,color:'#8896b0'}}>Schieß die Enpal-Leads ab! Nicht die 🐝 treffen!</div>
+    </div>
+    <div style={{flex:1,width:'100%',position:'relative',cursor:'crosshair'}}>
+      <canvas ref={canvasRef} style={{display:'block',width:'100%',height:'100%'}}/>
+    </div>
+    <div style={{padding:8,textAlign:'center'}}><button onClick={()=>onWin()} style={{background:'none',border:'none',color:'#263354',fontSize:10,cursor:'pointer',fontFamily:'inherit'}}>skip →</button></div>
+  </div>
+}
 
 /* Status categories - REKLAMATION is separate (reached but issue) */
 const ST_PIPE=['Terminiert','Angebot erstellt','Angebot angenommen','AB erstellt','Kontakt/Angebot per Mail'];
@@ -89,11 +287,11 @@ function App(){
     const params=new URLSearchParams(window.location.search);
     const urlToken=params.get('token');
     const isInt=!urlToken;
-    const[authed,setAuthed]=useState(true);
+    const[authed,setAuthed]=useState(SKIP_GAME);
     const[pw,setPw]=useState('');const[err,setErr]=useState('');
     const[leads,setLeads]=useState(null);const[tab,setTab]=useState('overview');const[search,setSearch]=useState('');const[qF,setQF]=useState('Alle');
 
-    useEffect(()=>{if(!authed)return;(async()=>{const all=[];for(let o=0;o<10000;o+=1000){const r=await fetch(`${SB}/rest/v1/enpal_leads?select=*&limit=1000&offset=${o}&order=leveto_erstellt_am.desc.nullslast`,{headers:hd()});const d=await r.json();if(!d.length)break;all.push(...d);if(d.length<1000)break}setLeads(all)})()},[authed]);
+    useEffect(()=>{(async()=>{const all=[];for(let o=0;o<10000;o+=1000){const r=await fetch(`${SB}/rest/v1/enpal_leads?select=*&limit=1000&offset=${o}&order=leveto_erstellt_am.desc.nullslast`,{headers:hd()});const d=await r.json();if(!d.length)break;all.push(...d);if(d.length<1000)break}setLeads(all)})()},[]);
 
     const quellen=useMemo(()=>{if(!leads)return[];return['Alle',...[...new Set(leads.map(l=>l.quelle).filter(Boolean))].sort()]},[leads]);
     const fL=useMemo(()=>!leads?[]:qF==='Alle'?leads:leads.filter(l=>l.quelle===qF),[leads,qF]);
@@ -120,7 +318,8 @@ function App(){
 
     const filtered=useMemo(()=>{if(!fL.length)return[];if(!search.trim())return fL;const q=search.toLowerCase();return fL.filter(l=>(l.kunde_nachname||'').toLowerCase().includes(q)||(l.kunde_vorname||'').toLowerCase().includes(q)||(l.plz||'').includes(q)||(l.ort||'').toLowerCase().includes(q)||(l.status_name||'').toLowerCase().includes(q)||(l.berater_name||'').toLowerCase().includes(q)||String(l.leveto_id).includes(q))},[fL,search]);
 
-    if(!leads||!an)return<div><div className="spinner"/></div>;
+    if(!authed)return<MoorhuhnGame onWin={()=>setAuthed(true)}/>;
+    if(!leads||!an)return<div style={{background:'#0a0e1a',minHeight:'100vh'}}><div className="spinner"/></div>;
 
     const TABS=[{k:'overview',l:'📊 Übersicht'},{k:'funnel',l:'🎯 Funnel'},{k:'berater',l:'👤 Berater'},{k:'reklamation',l:'⚠️ Reklamation'},{k:'status',l:'📋 Status'},{k:'leads',l:'🔍 Leads'},{k:'geo',l:'📍 Regionen'}];
 
