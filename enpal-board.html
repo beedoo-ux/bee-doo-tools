@@ -60,6 +60,7 @@ tr:hover td{background:#ffffff04}
 .btn{background:var(--a);color:#0a0e1a;border:none;border-radius:8px;padding:10px 24px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer}
 .spinner{width:24px;height:24px;border:3px solid #263354;border-top-color:var(--a);border-radius:50%;animation:sp .6s linear infinite;margin:40px auto}
 @keyframes sp{to{transform:rotate(360deg)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 @media(max-width:768px){.kpis{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:1fr}.g3{grid-template-columns:repeat(2,1fr)}.flab{width:100px;font-size:11px}table{display:block;overflow-x:auto}}
 @media(max-width:480px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi{padding:10px}.kpi-v{font-size:18px}}
 </style>
@@ -328,12 +329,16 @@ const catLbl=c=>({rekl:'Reklamation',pipe:'In Pipeline',wvl:'Offen/WVL',nerr:'Ni
 const fm=v=>typeof v==='number'?v.toLocaleString('de-DE'):v;
 const pct=(a,b)=>b>0?(a/b*100).toFixed(1):'0';
 
+const BD_HASH='f70f3b0c';// hash of password
+function hashPw(s){let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0}return(h>>>0).toString(16).slice(0,8)}
+
 function App(){
     const params=new URLSearchParams(window.location.search);
     const urlToken=params.get('token');
     const isInt=!urlToken;
+    const[gameWon,setGameWon]=useState(SKIP_GAME);
     const[authed,setAuthed]=useState(SKIP_GAME);
-    const[pw,setPw]=useState('');const[err,setErr]=useState('');
+    const[pw,setPw]=useState('');const[err,setErr]=useState('');const[shake,setShake]=useState(false);
     const[leads,setLeads]=useState(null);const[tab,setTab]=useState('overview');const[search,setSearch]=useState('');const[qF,setQF]=useState('Alle');
 
     useEffect(()=>{(async()=>{const all=[];for(let o=0;o<10000;o+=1000){const r=await fetch(`${SB}/rest/v1/enpal_leads?select=*&limit=1000&offset=${o}&order=leveto_erstellt_am.desc.nullslast`,{headers:hd()});const d=await r.json();if(!d.length)break;all.push(...d);if(d.length<1000)break}setLeads(all)})()},[]);
@@ -365,7 +370,22 @@ function App(){
 
     const filtered=useMemo(()=>{if(!fL.length)return[];if(!search.trim())return fL;const q=search.toLowerCase();return fL.filter(l=>(l.kunde_nachname||'').toLowerCase().includes(q)||(l.kunde_vorname||'').toLowerCase().includes(q)||(l.plz||'').includes(q)||(l.ort||'').toLowerCase().includes(q)||(l.status_name||'').toLowerCase().includes(q)||(l.berater_name||'').toLowerCase().includes(q)||String(l.leveto_id).includes(q))},[fL,search]);
 
-    if(!authed)return<MoorhuhnGame onWin={()=>setAuthed(true)}/>;
+    if(!gameWon)return<MoorhuhnGame onWin={()=>setGameWon(true)}/>;
+    if(!authed)return<div style={{position:'fixed',inset:0,zIndex:9999,background:'#0a0e1a',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{maxWidth:380,width:'90%',textAlign:'center'}}>
+        <div style={{fontSize:40,marginBottom:8}}>🎉</div>
+        <div style={{fontSize:22,fontWeight:800,color:'#F5C500',marginBottom:4}}>Spiel geschafft!</div>
+        <div style={{fontSize:13,color:'#8896b0',marginBottom:24}}>Jetzt noch das Passwort eingeben, um das Board zu sehen.</div>
+        <div style={{position:'relative'}}>
+          <input type="password" placeholder="Passwort eingeben…" value={pw} onChange={e=>{setPw(e.target.value);setErr('')}}
+            onKeyDown={e=>{if(e.key==='Enter'){if(hashPw(pw)===BD_HASH){setAuthed(true)}else{setErr('Falsches Passwort');setShake(true);setTimeout(()=>setShake(false),500);setPw('')}}}}
+            style={{width:'100%',background:'#1a2236',border:`2px solid ${err?'#ef4444':'#263354'}`,borderRadius:10,padding:'14px 18px',color:'#e8ecf4',fontFamily:'inherit',fontSize:16,textAlign:'center',outline:'none',animation:shake?'shake 0.5s ease':'none'}}/>
+        </div>
+        {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,fontWeight:600}}>{err}</div>}
+        <button onClick={()=>{if(hashPw(pw)===BD_HASH){setAuthed(true)}else{setErr('Falsches Passwort');setShake(true);setTimeout(()=>setShake(false),500);setPw('')}}}
+          style={{marginTop:16,background:'#F5C500',color:'#0a0e1a',border:'none',borderRadius:10,padding:'12px 32px',fontSize:14,fontWeight:800,cursor:'pointer',fontFamily:'inherit',width:'100%'}}>🔓 Board öffnen</button>
+      </div>
+    </div>;
     if(!leads||!an)return<div style={{background:'#0a0e1a',minHeight:'100vh'}}><div className="spinner"/></div>;
 
     const TABS=[{k:'overview',l:'📊 Übersicht'},{k:'funnel',l:'🎯 Funnel'},{k:'reklamation',l:'⚠️ Reklamation'},{k:'status',l:'📋 Status'},{k:'geo',l:'📍 Regionen'}];
