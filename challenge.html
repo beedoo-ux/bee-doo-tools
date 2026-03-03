@@ -168,64 +168,16 @@ function getDaysLeft(year,m){
 
 async function loadMonth(monthKey){
     if(cache[monthKey])return cache[monthKey];
-    var sp=monthKey.split('-');
-    var yr=+sp[0],mo=+sp[1];
-    var startDate=yr+'-'+String(mo).padStart(2,'0')+'-01T00:00:00';
-    var endMo=mo+1>12?1:mo+1;
-    var endYr=mo+1>12?yr+1:yr;
-    var endDate=endYr+'-'+String(endMo).padStart(2,'0')+'-01T00:00:00';
-
-    // Fetch LEADS (not contracts!) with quelle=Eigenlead or Empfehlung
-    var all=[];var page=0;var more=true;
-    while(more){
-        var url=SB+'/rest/v1/leveto_leads?select=berater_name,quelle,leveto_id'
-            +'&leveto_erstellt_am=gte.'+startDate+'&leveto_erstellt_am=lt.'+endDate
-            +'&or=(quelle.eq.Eigenlead,quelle.eq.Empfehlung)'
-            +'&order=leveto_id.desc&limit=500&offset='+(page*500);
-        var resp=await fetch(url,{headers:hd});
-        var data=await resp.json();
-        if(!Array.isArray(data)){more=false;break;}
-        all=all.concat(data);
-        more=data.length===500;page++;
-    }
-
-    // Group by berater
-    var byPerson={};
-    all.forEach(function(o){
-        var n=(o.berater_name||'?').trim();
-        if(!byPerson[n])byPerson[n]={el:0,emp:0,total:0};
-        var q=(o.quelle||'').trim().toLowerCase();
-        if(q==='eigenlead')byPerson[n].el++;
-        else byPerson[n].emp++;
-        byPerson[n].total++;
-    });
-
-    // Also count total leads per berater for context (all sources)
-    var allLeads=[];var page2=0;var more2=true;
-    while(more2){
-        var url2=SB+'/rest/v1/leveto_leads?select=berater_name'
-            +'&leveto_erstellt_am=gte.'+startDate+'&leveto_erstellt_am=lt.'+endDate
-            +'&order=leveto_id.desc&limit=500&offset='+(page2*500);
-        var resp2=await fetch(url2,{headers:hd});
-        var data2=await resp2.json();
-        if(!Array.isArray(data2)){more2=false;break;}
-        allLeads=allLeads.concat(data2);
-        more2=data2.length===500;page2++;
-    }
-    var allByPerson={};
-    allLeads.forEach(function(o){
-        var n=(o.berater_name||'?').trim();
-        allByPerson[n]=(allByPerson[n]||0)+1;
-    });
-
+    // Fetch directly from Leveto via serverless function
+    var resp=await fetch('/api/challenge-leads?month='+monthKey);
+    var data=await resp.json();
+    if(data.error)throw new Error(data.error+': '+(data.details||''));
     var result={
-        total:all.length,
-        byPerson:Object.entries(byPerson).map(function(e){
-            return{n:e[0],el:e[1].el,emp:e[1].emp,total:e[1].total,allLeads:allByPerson[e[0]]||0};
-        }).sort(function(a,b){return b.total-a.total}),
-        allLeads:allLeads.length
+        total:data.total,
+        byPerson:data.byPerson||[],
+        allLeads:data.allLeadsCount||0,
+        fetchedAt:data.fetchedAt
     };
-
     cache[monthKey]=result;
     return result;
 }
