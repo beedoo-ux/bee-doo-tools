@@ -24,7 +24,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .tab.active{color:var(--gold);border-bottom-color:var(--gold)}
 .cnt{padding:16px 20px;max-width:1400px;margin:0 auto}
 .kgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
-@media(min-width:600px){.kgrid{grid-template-columns:repeat(4,1fr)}}
+@media(min-width:600px){.kgrid{grid-template-columns:repeat(3,1fr)}}@media(min-width:900px){.kgrid{grid-template-columns:repeat(5,1fr)}}
 .kcard{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden}
 .kcard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold);opacity:.6}
 .kcard.g::before{background:var(--green)}
@@ -102,7 +102,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <body>
 <div class="hdr">
   <div class="hl"><div class="logo">&#x1F41D; bee-doo</div><div class="htitle">Scout Dashboard</div></div>
-  <div class="hr"><div class="livebadge"><div class="ldot"></div>LIVE</div><div class="lupd" id="lu">Laedt...</div></div>
+  <div class="hr"><div class="livebadge"><div class="ldot"></div>LIVE</div><div id="syncbadge" style="padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;display:none;align-items:center;gap:4px"></div><div class="lupd" id="lu">Laedt...</div></div>
 </div>
 <div class="tabs">
   <button class="tab active" onclick="sw('overview',this)">&#x1F4CA; Uebersicht</button>
@@ -116,6 +116,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     <div class="kcard g"><div class="kico">&#x26A1;</div><div class="klbl">Leads Gesamt</div><div class="kval" id="kL">-</div><div class="ksub">kumuliert</div></div>
     <div class="kcard b"><div class="kico">&#x1F4C5;</div><div class="klbl">Leads heute</div><div class="kval" id="kT">-</div><div class="ksub" id="kD">-</div></div>
     <div class="kcard o"><div class="kico">&#x1F3AF;</div><div class="klbl">Terminiert Woche</div><div class="kval" id="kTm">-</div><div class="ksub">diese Woche</div></div>
+    <div class="kcard" style="border-top:2px solid #a78bfa"><div class="kico">&#x1F4F2;</div><div class="klbl">Scans heute</div><div class="kval" id="kSc">-</div><div class="ksub">scouting app</div></div>
   </div>
   <div class="tp active" id="tp-overview">
     <div class="sec"><div class="sech"><div class="sect">&#x1F3C6; Top 5 Scouts <span>Gesamt</span></div></div><div id="top5"><div class="loading"><div class="spin"></div></div></div></div>
@@ -169,9 +170,25 @@ function loadAll(){
     document.getElementById('kD').textContent=new Date().toLocaleDateString('de',{day:'2-digit',month:'2-digit'});
     renderTop5(scouts);renderRank(scouts);
   });
-  api('leveto_leads?leveto_erstellt_am=gte.'+TODAY+'T00:00:00&select=id').then(function(d){document.getElementById('kT').textContent=Array.isArray(d)?d.length:0;});
+  Promise.all([
+    api('leveto_leads?leveto_erstellt_am=gte.'+TODAY+'T00:00:00&select=id'),
+    api('scout_leads?created_at=gte.'+TODAY+'T00:00:00&select=id').catch(function(){return [];})
+  ]).then(function(res){
+    var lev=Array.isArray(res[0])?res[0].length:0;
+    var sc=Array.isArray(res[1])?res[1].length:0;
+    document.getElementById('kT').textContent=lev;
+    document.getElementById('kSc').textContent=sc;
+    if(lev===0){
+      var sb=document.getElementById('syncbadge');
+      sb.style.display='flex';
+      sb.style.background='#ef444420';
+      sb.style.color='#ef4444';
+      sb.style.border='1px solid #ef444440';
+      sb.innerHTML='&#x26A0;&#xFE0F; Leveto nicht sync'd';
+    }
+  });
   api('leveto_leads?leveto_erstellt_am=gte.'+WS()+'T00:00:00&status_name=ilike.*erminiert*&select=id').then(function(d){document.getElementById('kTm').textContent=Array.isArray(d)?d.length:0;});
-  document.getElementById('lu').textContent=new Date().toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'})+' Uhr';
+  document.getElementById('lu').textContent=new Date().toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'})+' Uhr';api('leveto_leads?select=sync_erstellt_am&sync_erstellt_am=not.is.null&order=sync_erstellt_am.desc&limit=1').then(function(d){if(d&&d[0]){var dt=new Date(d[0].sync_erstellt_am);var sb=document.getElementById('syncbadge');sb.style.display='flex';var isToday=dt.toDateString()===new Date().toDateString();if(isToday){sb.style.background='#22c55e20';sb.style.color='#22c55e';sb.style.border='1px solid #22c55e40';sb.innerHTML='&#x2705; Sync '+dt.toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'});}else{sb.style.background='#ef444420';sb.style.color='#ef4444';sb.style.border='1px solid #ef444440';sb.innerHTML='&#x26A0;&#xFE0F; Sync '+dt.toLocaleDateString('de',{day:'2-digit',month:'2-digit'})+' '+dt.toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'});}}});
   api('leveto_leads?leveto_erstellt_am=gte.'+WS()+'T00:00:00&select=id,vorname,nachname,ort,plz,berater_name,status_name,leveto_erstellt_am&order=leveto_erstellt_am.desc&limit=200').then(function(wl){
     renderSG(wl);renderRL(wl.slice(0,8));
   });
