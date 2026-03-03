@@ -311,8 +311,20 @@
             <input type="text" id="salesName" placeholder="Thomas Müller" oninput="updatePreview()" />
           </div>
 
+          <div class="card" style="background:var(--bg3);border:1px solid var(--gold-border);margin-bottom:14px;padding:14px">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gold);margin-bottom:10px">⚡ WhatsApp Template (ContentSid)</div>
+            <div class="field" style="margin-bottom:8px">
+              <label>Content SID <span style="color:var(--text-muted);font-weight:400;text-transform:none">(leer = freier Text)</span></label>
+              <input type="text" id="contentSid" placeholder="HXb5b62575e6e4ff6129ad7c8efe1f983e" oninput="updatePreview()" />
+            </div>
+            <div class="info-box" style="font-size:12px;padding:10px 12px">
+              💡 Twilio Content Templates umgehen das 24h-Fenster für Business-initiated Messages. <strong>ContentSid</strong> aus der Twilio Console → Content Editor.
+              Aktuell aktives Template: <code style="color:var(--gold)">Your appointment is coming up on {1} at {2}</code>
+            </div>
+          </div>
+
           <div class="field">
-            <label>Nachrichtentext (anpassbar)</label>
+            <label>Nachrichtentext (wenn kein ContentSid)</label>
             <textarea id="msgTemplate" oninput="updatePreview()">Hallo {name} 👋
 
 Ihr Beratungstermin mit bee-doo Solar ist bestätigt:
@@ -740,19 +752,64 @@ Wir freuen uns auf Sie!</div>
   async function sendWA() {
     const phone = document.getElementById('custPhone').value.trim();
     if (!phone) { addLog('sendLog', 'Fehler: Handynummer fehlt', 'err'); return; }
-    if (!creds.sid) { addLog('sendLog', 'Fehler: Twilio-Zugangsdaten fehlen', 'err'); return; }
-    const msg = buildMessage();
+    if (!creds.sid) { addLog('sendLog', 'Fehler: Twilio-Zugangsdaten fehlen – bitte oben speichern', 'err'); return; }
+
+    const contentSid = document.getElementById('contentSid').value.trim();
+    const toNum = 'whatsapp:' + phone.replace(/\s/g,'');
+
     addLog('sendLog', `Sende WhatsApp an ${phone}...`, 'info');
+
     try {
-      const result = await sendViaEdgeFunction('whatsapp:' + phone.replace(/\s/g,''), msg, 'whatsapp');
-      if (result.sid) {
-        addLog('sendLog', `✓ Gesendet! SID: ${result.sid}`, 'ok');
+      let payload;
+      if (contentSid) {
+        // Template mode
+        const date = document.getElementById('apptDate').value;
+        const time = document.getElementById('apptTime').value;
+        const d = new Date(date);
+        const dateStr = d.toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
+        payload = {
+          to: toNum, channel: 'whatsapp',
+          contentSid,
+          contentVariables: {"1": dateStr, "2": time},
+          sid: creds.sid, token: creds.token,
+          waSender: creds.waSender || 'whatsapp:+14155238886',
+          smsSender: creds.smsSender
+        };
+        addLog('sendLog', `Template-Modus: ContentSid ${contentSid.substring(0,12)}...`, 'gold');
       } else {
-        addLog('sendLog', `Fehler: ${result.message || JSON.stringify(result)}`, 'err');
+        // Free text mode
+        const msg = buildMessage();
+        payload = {
+          to: toNum, message: msg, channel: 'whatsapp',
+          sid: creds.sid, token: creds.token,
+          waSender: creds.waSender || 'whatsapp:+14155238886',
+          smsSender: creds.smsSender
+        };
+      }
+
+      const result = await sendViaEdgeFunction2(payload);
+      if (result.sid) {
+        addLog('sendLog', `✓ Gesendet! Twilio-SID: ${result.sid}`, 'ok');
+        addLog('sendLog', `Status: ${result.status} | An: ${result.to}`, 'ok');
+      } else {
+        addLog('sendLog', `Fehler: ${result.message || result.error || JSON.stringify(result)}`, 'err');
       }
     } catch(e) {
       addLog('sendLog', `Netzwerkfehler: ${e.message}`, 'err');
     }
+  }
+
+  async function sendViaEdgeFunction2(payload) {
+    const url = 'https://hqzpemfaljxcysyqssng.supabase.co/functions/v1/send-twilio';
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik'
+      },
+      body: JSON.stringify(payload)
+    });
+    return await resp.json();
   }
 
   async function sendTestWA() {
@@ -918,4 +975,5 @@ serve(async (req) => {
 </script>
 </body>
 </html>
+
 
