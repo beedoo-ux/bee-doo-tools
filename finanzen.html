@@ -169,12 +169,24 @@ const SEVDESK_TOKEN = '038aa548ad6b053b4d6679676fb859a2';
 const SEVDESK_BASE = 'https://my.sevdesk.de/api/v1';
 
 async function sevdeskGet(endpoint, params = '') {
-  // Use proxy to avoid CORS/Safari issues
-  const proxyParams = params ? 'endpoint=' + endpoint + '&' + params : 'endpoint=' + endpoint;
-  const url = '/api/sevdesk-proxy?' + proxyParams;
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error('SevDesk ' + resp.status);
-  return resp.json();
+  const directUrl = SEVDESK_BASE + '/' + endpoint + (params ? '?' + params : '');
+  const proxyUrl = '/api/sevdesk-proxy?endpoint=' + endpoint + (params ? '&' + params : '');
+  
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      // Try direct first (CORS enabled), then proxy fallback
+      const url = attempt < 2 ? directUrl : proxyUrl;
+      const headers = attempt < 2 
+        ? { 'Accept': 'application/json', 'Authorization': SEVDESK_TOKEN }
+        : {};
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) throw new Error('SevDesk ' + resp.status);
+      return resp.json();
+    } catch (err) {
+      if (attempt === 2) throw err;
+      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+    }
+  }
 }
 
 async function fetchAllInvoices(status) {
