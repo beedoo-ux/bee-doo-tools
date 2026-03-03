@@ -435,6 +435,26 @@ Wir freuen uns auf Sie!</div>
 
   <!-- ======== TAB 2: SMS-KAMPAGNE ======== -->
   <div class="panel" id="panel-sms">
+
+    <!-- TEST BLOCK -->
+    <div class="card" style="margin-bottom:20px;border-color:var(--gold-border)">
+      <div class="card-title"><span class="card-title-icon">🧪</span> Test-SMS senden</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div class="field" style="margin:0;flex:1;min-width:160px">
+          <label>Testnummer</label>
+          <input type="tel" id="testSmsPhone" placeholder="+4915121224410" value="+4915121224410" />
+        </div>
+        <div class="field" style="margin:0;flex:3;min-width:200px">
+          <label>Testnachricht</label>
+          <input type="text" id="testSmsText" value="Hallo Patrick! Das ist eine Test-SMS von bee-doo. Alles funktioniert! 🌞 bee-doo GmbH" />
+        </div>
+        <button class="btn btn-gold" style="flex-shrink:0" onclick="sendTestSms()">
+          <span id="testSmsBtnIcon">📱</span> <span id="testSmsBtnTxt">Test senden</span>
+        </button>
+      </div>
+      <div id="testSmsLog" style="margin-top:10px;font-size:13px;display:none"></div>
+    </div>
+
     <div class="grid-2">
       <div>
         <div class="card">
@@ -833,6 +853,46 @@ Wir freuen uns auf Sie!</div>
   }
 
   // ---- SMS CAMPAIGN ----
+  async function sendTestSms() {
+    const phone = document.getElementById('testSmsPhone').value.trim();
+    const text = document.getElementById('testSmsText').value.trim();
+    const log = document.getElementById('testSmsLog');
+    const btn = document.getElementById('testSmsBtnTxt');
+    const icon = document.getElementById('testSmsBtnIcon');
+
+    if (!phone || !text) { log.style.display='block'; log.innerHTML='<div class="warn-box">Nummer und Text eingeben</div>'; return; }
+    if (!creds.sid) { log.style.display='block'; log.innerHTML='<div class="warn-box">Twilio-Zugangsdaten im oberen Bereich eingeben & speichern</div>'; return; }
+
+    btn.textContent = 'Sende...';
+    icon.innerHTML = '<div class="spinner" style="border-top-color:#000"></div>';
+
+    try {
+      const result = await sendViaEdgeFunction2({
+        to: phone, message: text, channel: 'sms',
+        sid: creds.sid, token: creds.token,
+        smsSender: creds.smsSender || '+4915888651131',
+        waSender: creds.waSender
+      });
+
+      log.style.display = 'block';
+      if (result.sid) {
+        log.innerHTML = `<div class="info-box" style="background:var(--green-dim);border-color:rgba(34,197,94,.3);color:#86efac">
+          ✅ SMS gesendet an <strong>${phone}</strong><br>
+          Twilio SID: <code style="color:var(--gold)">${result.sid}</code> · Status: ${result.status}
+        </div>`;
+        addLog('campaignLog', `✓ Test-SMS an ${phone} gesendet (SID: ${result.sid})`, 'ok');
+      } else {
+        log.innerHTML = `<div class="warn-box">❌ Fehler: ${result.message || result.error || JSON.stringify(result)}</div>`;
+      }
+    } catch(e) {
+      log.style.display = 'block';
+      log.innerHTML = `<div class="warn-box">❌ Netzwerkfehler: ${e.message}</div>`;
+    }
+
+    btn.textContent = 'Test senden';
+    icon.textContent = '📱';
+  }
+
   async function loadLeads() {
     addLog('campaignLog', 'Lade Leads aus Supabase...', 'info');
     const minAttempts = parseInt(document.getElementById('minAttempts').value) || 10;
@@ -975,5 +1035,6 @@ serve(async (req) => {
 </script>
 </body>
 </html>
+
 
 
