@@ -96,6 +96,34 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;margin-bottom:16px;padding:10px 20px;background:var(--card);border:1px solid var(--border);border-radius:12px}
 .legend span{font-size:13px;font-weight:600;white-space:nowrap}
 
+/* Monthly comparison chart */
+.chart-section{margin-bottom:20px;padding:16px;background:var(--card);border:1px solid var(--border);border-radius:14px}
+.chart-title{font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:1px;text-align:center;margin-bottom:12px}
+.chart-bars{display:flex;align-items:flex-end;justify-content:center;gap:16px;height:120px;padding:0 8px}
+.chart-month{display:flex;flex-direction:column;align-items:center;flex:1;max-width:120px;gap:4px}
+.chart-bar-group{display:flex;align-items:flex-end;gap:3px;height:100px;width:100%}
+.chart-bar{flex:1;border-radius:4px 4px 0 0;min-height:2px;position:relative;transition:height .6s ease}
+.chart-bar-val{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:10px;font-weight:700;white-space:nowrap}
+.chart-bar-pv{background:linear-gradient(180deg,#fb923c,#f97316)}
+.chart-bar-hp{background:linear-gradient(180deg,#22d3ee,#06b6d4)}
+.chart-month-label{font-size:11px;font-weight:600;color:var(--dim)}
+.chart-month-total{font-size:14px;font-weight:800;color:var(--text)}
+.chart-legend-mini{display:flex;gap:12px;justify-content:center;margin-top:8px}
+.chart-legend-mini span{font-size:10px;color:var(--dim);display:flex;align-items:center;gap:4px}
+.chart-legend-mini .dot{width:8px;height:8px;border-radius:2px;display:inline-block}
+
+/* Notification bell */
+.notif-wrap{position:fixed;bottom:20px;right:20px;z-index:100}
+.notif-btn{width:48px;height:48px;border-radius:50%;background:var(--card);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;transition:all .2s;box-shadow:0 4px 16px rgba(0,0,0,.4);position:relative}
+.notif-btn:hover{border-color:var(--gold);transform:scale(1.1)}
+.notif-btn.active{border-color:var(--gold);background:#F5C50020}
+.notif-badge{position:absolute;top:-4px;right:-4px;background:var(--red);color:white;font-size:9px;font-weight:800;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.notif-toast{position:fixed;bottom:80px;right:20px;background:var(--card);border:1px solid var(--gold);border-radius:12px;padding:12px 16px;max-width:280px;z-index:101;animation:toastIn .4s ease;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+@keyframes toastIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.notif-toast-title{font-size:12px;font-weight:700;color:var(--gold);margin-bottom:4px}
+.notif-toast-body{font-size:11px;color:var(--text)}
+.notif-toast-close{position:absolute;top:6px;right:8px;background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px}
+
 /* Rank cards */
 .rank-list{display:flex;flex-direction:column;gap:6px}
 .rank-card{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;transition:all .25s ease;position:relative;overflow:hidden}
@@ -199,6 +227,11 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .hero-split-val{font-size:32px!important}
 .hero-rates{gap:8px}
 .hero-rate{font-size:9px;padding:2px 8px}
+.chart-bars{gap:8px;height:100px}
+.chart-bar-group{height:80px}
+.chart-bar-val{font-size:9px;top:-14px}
+.notif-wrap{bottom:12px;right:12px}
+.notif-btn{width:42px;height:42px;font-size:18px}
 }
 @media(max-width:480px){
 .main{padding:12px 10px 40px}
@@ -226,6 +259,14 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .rank-achievement,.rank-streak,.rank-pb{font-size:9px;padding:2px 6px}
 .rank-trend{font-size:10px}
 .rank-tag{font-size:10px;padding:2px 6px}
+.chart-section{padding:12px 10px}
+.chart-title{font-size:10px}
+.chart-bars{gap:6px;height:80px}
+.chart-bar-group{height:60px}
+.chart-bar-val{font-size:8px;top:-12px}
+.chart-month-label{font-size:9px}
+.chart-month-total{font-size:11px}
+.notif-toast{bottom:70px;right:12px;max-width:240px;padding:10px 12px}
 }
 </style>
 </head>
@@ -447,6 +488,124 @@ function countdownHTML(){
     return '<div class="countdown fade-in"><div class="countdown-inner"><div class="countdown-seg"><div class="countdown-val">'+days+'</div><div class="countdown-unit">Tage</div></div><div class="countdown-sep">:</div><div class="countdown-seg"><div class="countdown-val">'+hrs+'</div><div class="countdown-unit">Std</div></div><div class="countdown-sep">:</div><div class="countdown-seg"><div class="countdown-val">'+mins+'</div><div class="countdown-unit">Min</div></div><div style="width:12px"></div><div class="countdown-label">bis Monatsende · Arbeitstag '+wd.elapsed+'/'+wd.total+'</div></div></div>';
 }
 
+// Monthly comparison chart builder
+function buildMonthChart(){
+    var months=[
+        {key:'2026-01',label:'Jan',data:JAN},
+        {key:'2026-02',label:'Feb',data:FEB},
+        {key:'2026-03',label:'Mär',data:marchData||[]}
+    ];
+    var sums=months.map(function(m){
+        var pv=0,hp=0;
+        m.data.forEach(function(d){pv+=d.pv||0;hp+=d.hp||0;});
+        return{label:m.label,key:m.key,pv:pv,hp:hp,total:pv+hp};
+    });
+    var maxVal=Math.max.apply(null,sums.map(function(s){return Math.max(s.pv,s.hp,1)}));
+    var bars='';
+    sums.forEach(function(s){
+        var pvH=Math.max(2,Math.round(s.pv/maxVal*90));
+        var hpH=Math.max(s.hp>0?4:0,Math.round(s.hp/maxVal*90));
+        var isCur=s.key===month;
+        var hl=isCur?' style="color:var(--gold)"':'';
+        bars+='<div class="chart-month">'
+            +'<div class="chart-bar-group">'
+            +'<div class="chart-bar chart-bar-pv" style="height:'+pvH+'px"><div class="chart-bar-val" style="color:#fb923c">'+s.pv+'</div></div>'
+            +(s.hp>0?'<div class="chart-bar chart-bar-hp" style="height:'+hpH+'px"><div class="chart-bar-val" style="color:#22d3ee">'+s.hp+'</div></div>':'')
+            +'</div>'
+            +'<div class="chart-month-total"'+hl+'>'+s.total+'</div>'
+            +'<div class="chart-month-label"'+hl+'>'+s.label+'</div>'
+        +'</div>';
+    });
+    return '<div class="chart-section fade-in">'
+        +'<div class="chart-title">Monatsvergleich PV vs HP</div>'
+        +'<div class="chart-bars">'+bars+'</div>'
+        +'<div class="chart-legend-mini"><span><span class="dot" style="background:#fb923c"></span> PV</span><span><span class="dot" style="background:#22d3ee"></span> HP</span></div>'
+        +'</div>';
+}
+
+// Push Notification System
+var notifEnabled=getCookie('beedoo_notif')==='1';
+var lastKnownTotal=null;
+var notifCheckInterval=null;
+
+function requestNotifPermission(){
+    if(!('Notification' in window))return false;
+    if(Notification.permission==='granted'){notifEnabled=true;setCookie('beedoo_notif','1',90);return true;}
+    if(Notification.permission!=='denied'){
+        Notification.requestPermission().then(function(p){
+            if(p==='granted'){notifEnabled=true;setCookie('beedoo_notif','1',90);updateBellUI();startNotifPolling();}
+        });
+    }
+    return false;
+}
+
+function showToast(title,msg){
+    var old=document.querySelector('.notif-toast');if(old)old.remove();
+    var t=document.createElement('div');t.className='notif-toast';
+    t.innerHTML='<button class="notif-toast-close" onclick="this.parentElement.remove()">✕</button><div class="notif-toast-title">'+title+'</div><div class="notif-toast-body">'+msg+'</div>';
+    document.body.appendChild(t);
+    setTimeout(function(){if(t.parentElement)t.remove()},6000);
+}
+
+function sendNotification(title,body){
+    if(Notification.permission==='granted'){
+        try{new Notification(title,{body:body,icon:'https://bee-doo-tools.vercel.app/icons/bee-doo-logo.png',badge:'🐝'});}catch(e){}
+    }
+    showToast(title,body);
+}
+
+function checkForNewDeals(){
+    if(!notifEnabled||!isCurrentMonth(month))return;
+    var SB2='https://hqzpemfaljxcysyqssng.supabase.co';
+    var AK2='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+    fetch(SB2+'/rest/v1/leveto_contracts?select=id&accepted_date=gte.2026-03-01T00:00:00&accepted_date=lt.2026-04-01T00:00:00&calculated_realprice_netto=gte.6000',{
+        headers:{apikey:AK2,Authorization:'Bearer '+AK2}
+    }).then(function(r){return r.json()}).then(function(data){
+        var newTotal=data.length;
+        if(lastKnownTotal!==null&&newTotal>lastKnownTotal){
+            var diff=newTotal-lastKnownTotal;
+            sendNotification('🐝 Neuer Deal!',diff===1?'Ein neuer Deal ist reingekommen! Jetzt '+newTotal+' Deals im März.':diff+' neue Deals! Jetzt '+newTotal+' Deals im März.');
+            // Reload data
+            loadMarch();
+        }
+        lastKnownTotal=newTotal;
+    }).catch(function(){});
+}
+
+function startNotifPolling(){
+    if(notifCheckInterval)clearInterval(notifCheckInterval);
+    checkForNewDeals();
+    notifCheckInterval=setInterval(checkForNewDeals,60000); // Check every 60s
+}
+
+function updateBellUI(){
+    var btn=document.getElementById('notifBell');
+    if(!btn)return;
+    if(notifEnabled&&Notification.permission==='granted'){
+        btn.classList.add('active');
+        btn.innerHTML='🔔';
+    } else {
+        btn.classList.remove('active');
+        btn.innerHTML='🔕';
+    }
+}
+
+function toggleNotif(){
+    if(notifEnabled){
+        notifEnabled=false;setCookie('beedoo_notif','0',90);
+        if(notifCheckInterval)clearInterval(notifCheckInterval);
+        updateBellUI();
+        showToast('Benachrichtigungen aus','Du wirst nicht mehr über neue Deals informiert.');
+    } else {
+        if(requestNotifPermission()){
+            startNotifPolling();
+            showToast('Benachrichtigungen an','Du wirst bei neuen Deals benachrichtigt! 🐝');
+        }
+    }
+    updateBellUI();
+}
+window.toggleNotif=toggleNotif;
+
 function render(){
     var rk=getRanking().slice().sort(function(a,b){
         if(sort==='volume')return(b.netto-a.netto)||(b.sales-a.sales);
@@ -468,6 +627,10 @@ function render(){
     for(var i=0;i<35;i++){var sz=4+Math.random()*6;cf+='<div class="confetti-p" style="left:'+Math.random()*100+'%;background:'+cc[i%8]+';width:'+sz+'px;height:'+sz+'px;border-radius:'+(Math.random()>.5?'50%':'2px')+';animation-delay:'+Math.random()*2+'s;animation-duration:'+(2.5+Math.random()*2)+'s"></div>';}
 
     var hasKwp=tKwp>0;
+    var isCurMonth=isCurrentMonth(month);
+    var kwpEstimated=isCurMonth&&hasKwp;
+    var kwpPrefix=kwpEstimated?'~':'';
+    var kwpLabel=kwpEstimated?'kWp (gesch.)':'kWp';
     // Auto-switch away from kWp sort if no data
     if(sort==='kwp'&&!hasKwp){sort='sales';rk.sort(function(a,b){return(b.sales-a.sales)||(b.netto-a.netto)});maxV=rk.length?rk[0].sales:1;}
 
@@ -481,7 +644,6 @@ function render(){
 
     // Projection KPI for current month
     var projKPI='';
-    var isCurMonth=isCurrentMonth(month);
     if(isCurMonth&&total>0){
         var sp3=month.split('-');
         var wp=getProjection(total,+sp3[0],+sp3[1]);
@@ -684,7 +846,7 @@ function render(){
         +'<div class="kpi"><div class="kpi-val" style="color:#fb923c">☀️ '+tPV+'</div><div class="kpi-label">PV</div></div>'
         +kH
         +'<div class="kpi"><div class="kpi-val">'+fmt(Math.round(tNetto/1000))+'k</div><div class="kpi-label">Auftragswert €</div></div>'
-        +(hasKwp?'<div class="kpi"><div class="kpi-val">'+fmt(tKwp)+'</div><div class="kpi-label">kWp</div></div>':'')
+        +(hasKwp?'<div class="kpi"><div class="kpi-val">'+kwpPrefix+fmt(tKwp)+'</div><div class="kpi-label">'+kwpLabel+'</div></div>':'')
         +'<div class="kpi"><div class="kpi-val" style="color:var(--green)">'+tEl+'</div><div class="kpi-label">Eigenleads</div></div>'
         +kEmp+kS+kZ
         +'<div class="kpi"><div class="kpi-val">'+vtCount+'</div><div class="kpi-label">Vertriebler</div></div>'
@@ -701,6 +863,7 @@ function render(){
         +'<span style="color:#fb923c">☀️ PV</span><span style="color:#22d3ee">🌡️ HP</span>'
         +'<span style="color:#4ade80">🎯 Eigenlead</span><span style="color:#60a5fa">🤝 Empfehlung</span>'
         +'<span style="color:#c084fc">🔋 Speicher</span><span style="color:#fbbf24">⚡ Zero</span></div>'
+        +buildMonthChart()
         +'<div class="rank-list">'+cards+'</div>'
         +'<div class="quote-box fade-in"><div class="quote-text">„'+q+'"</div><div class="quote-author">— bee-doo Daily Motivation</div></div>'
         +'<div class="footer fade-in"><div class="footer-line">bee-doo GmbH · Am Stadtholz 39 · 33609 Bielefeld</div>'
@@ -717,6 +880,14 @@ function render(){
         +' · <a href="https://bee-doo.de/datenschutzerklaerung/" target="_blank">Datenschutzerklärung</a>'
         +'</div></div></div></div>';
 
+    // Add notification bell if not already in DOM
+    if(!document.getElementById('notifBell')){
+        var nw=document.createElement('div');nw.className='notif-wrap';
+        nw.innerHTML='<div class="notif-btn" id="notifBell" onclick="toggleNotif()" title="Deal-Benachrichtigungen">🔕</div>';
+        document.body.appendChild(nw);
+    }
+    updateBellUI();
+
     document.querySelectorAll('[data-sort]').forEach(function(b){b.addEventListener('click',function(){sort=this.getAttribute('data-sort');render()})});
     document.getElementById('ms').addEventListener('change',function(){
         hintDismissed=true;setCookie('beedoo_hint_seen','1',90);
@@ -725,6 +896,15 @@ function render(){
         month=this.value;window.history.replaceState(null,'','?m='+month);
         if((month==='2026-03'||month==='2026')&&!marchLoaded){loadMarch();return}render()
     });
+
+    // Notification bell
+    if(!document.getElementById('notifBell')){
+        var nw=document.createElement('div');nw.className='notif-wrap';
+        nw.innerHTML='<button class="notif-btn" id="notifBell" onclick="toggleNotif()" title="Benachrichtigungen">🔔</button>';
+        document.body.appendChild(nw);
+        updateBellUI();
+    }
+    checkForNewDeals();
 }
 
 function isHP(o){var ti=o.typeicons;if(!ti)return false;if(typeof ti==='string'){try{ti=JSON.parse(ti)}catch(e){return false}}if(Array.isArray(ti))return ti.some(function(t){return typeof t==='object'?String(t.icon||'').indexOf('fa-fire')>=0:String(t).indexOf('fa-fire')>=0});return false;}
@@ -739,7 +919,7 @@ function computeMarch(orders,zeros){
     u.forEach(function(o){
         var n=(o.ersteller||'?').trim();
         if(!bv[n])bv[n]={sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,zero:0,hp:0,pv:0};
-        var d=bv[n];d.sales++;d.kwp+=0;d.netto+=parseFloat(o.calculated_realprice_netto)||0;
+        var d=bv[n];d.sales++;d.kwp+=Math.round((parseFloat(o.calculated_realprice_netto)||0)/2550*10)/10;d.netto+=parseFloat(o.calculated_realprice_netto)||0;
         if(o.status_kunde==='Storniert')d.storno++;
         var q=(o.quelle||'').toLowerCase();
         if(q==='eigenlead')d.el++;if(q==='empfehlung')d.emp++;
@@ -819,6 +999,16 @@ if(bootSeen){
     setCookie('beedoo_boot_seen','1',7);
 }
 if(month==='2026-01'||month==='2026-02')render();else loadMarch();
+
+// Start notification polling if previously enabled
+if(notifEnabled&&Notification.permission==='granted')startNotifPolling();
+
+// Auto-refresh every 5 minutes for live deal updates
+setInterval(function(){
+    if(!document.hidden&&(month==='2026-03'||month==='2026')&&marchLoaded){
+        loadMarch();
+    }
+},300000);
 
 })();
 </script>
