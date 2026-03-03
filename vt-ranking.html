@@ -1254,17 +1254,65 @@ function computeMarch(orders,zeros){
     return Object.entries(bv).map(function(e){var v=e[1];v.n=e[0];return v});
 }
 
+async function getLevToken(){
+    var r=await fetch('https://beedoo.leveto.net/API/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'api@bee-doo.de',password:'Patrick123456789!'})});
+    if(!r.ok)throw new Error('Leveto Auth fehlgeschlagen');
+    var d=await r.json();
+    return d.token||d.access_token||d.jwt||Object.values(d).find(function(v){return typeof v==='string'&&v.length>20});
+}
+
 async function loadMarch(){
-    document.getElementById('app').innerHTML='<div class="loading"><div class="loader"></div><div class="load-text">Lade März-Daten...</div></div>';
+    document.getElementById('app').innerHTML='<div class="loading"><div class="loader"></div><div class="load-text">Lade Live-Daten von Leveto...</div></div>';
+    var z=[];
+    try{var eR=await fetch(SB+'/rest/v1/efs_projekte?select=efs_id,preismodell&preismodell=eq.Zero',{headers:hd});if(eR.ok)z=await eR.json()}catch(e){}
+
+    // 1. Try Leveto API directly (live data)
     try{
-        var all=[];
-        for(var o=0;o<60000;o+=1000){
-            var r=await fetch(SB+'/rest/v1/leveto_contracts?select=ersteller,accepted_date,calculated_realprice_netto,calculated_realprice_brutto,status_kunde,quelle,leveto_id,lead_id,typeicons&accepted_date=gte.2026-03-01T00:00:00&accepted_date=lt.2026-04-01T00:00:00&limit=1000&offset='+o,{headers:hd});
-            var d=await r.json();if(!d.length)break;all=all.concat(d);if(d.length<1000)break;
+        var tok=await getLevToken();
+        var all=[],page=1,done=false;
+        while(!done){
+            var r=await fetch('https://beedoo.leveto.net/API/contracts?accepteddate_start=2026-03-01&accepteddate_end=2026-03-31&status=Angenommen&limit=100&page='+page,{headers:{'Authorization':'Bearer '+tok}});
+            if(!r.ok)throw new Error('Leveto '+r.status);
+            var d=await r.json();
+            if(!Array.isArray(d)||d.length===0)break;
+            all=all.concat(d);
+            if(d.length<100)done=true;else page++;
+            if(page>20)break;
         }
-        var z=[];try{var eR=await fetch(SB+'/rest/v1/efs_projekte?select=efs_id,preismodell&preismodell=eq.Zero',{headers:hd});if(eR.ok)z=await eR.json()}catch(e){}
-        marchData=computeMarch(all,z);marchLoaded=true;render();
-    }catch(err){document.getElementById('app').innerHTML='<div class="loading"><div class="load-text" style="color:var(--red)">Fehler: '+err.message+'</div></div>'}
+        if(all.length===0)throw new Error('Keine Leveto-Daten');
+        // Map Leveto fields to our schema
+        var mapped=all.map(function(o){return{
+            ersteller:(o.ersteller||o.creator||o.salesperson||'?'),
+            accepted_date:(o.accepteddate||o.accepteddate_start||o.created||''),
+            calculated_realprice_netto:(parseFloat(o.calculated_realprice_netto||o.price_netto||o.realprice_netto||0)),
+            calculated_realprice_brutto:(parseFloat(o.calculated_realprice_brutto||o.price_brutto||0)),
+            status_kunde:(o.status||o.status_kunde||'Angenommen'),
+            quelle:(o.quelle||o.source||''),
+            leveto_id:(o.id||o.leveto_id||0),
+            lead_id:(o.lead_id||o.leadId||null),
+            typeicons:(o.typeicons||o.type_icons||o.icons||'')
+        };});
+        marchData=computeMarch(mapped,z);marchLoaded=true;
+        document.getElementById('app').innerHTML='';
+        render();
+        return;
+    }catch(levErr){
+        console.warn('Leveto Live-Abruf fehlgeschlagen, nutze Supabase-Cache:',levErr.message);
+    }
+
+    // 2. Fallback: Supabase cache
+    try{
+        var all2=[];
+        for(var o2=0;o2<60000;o2+=1000){
+            var r2=await fetch(SB+'/rest/v1/leveto_contracts?select=ersteller,accepted_date,calculated_realprice_netto,calculated_realprice_brutto,status_kunde,quelle,leveto_id,lead_id,typeicons&accepted_date=gte.2026-03-01T00:00:00&accepted_date=lt.2026-04-01T00:00:00&limit=1000&offset='+o2,{headers:hd});
+            var d2=await r2.json();if(!Array.isArray(d2)||!d2.length)break;all2=all2.concat(d2);if(d2.length<1000)break;
+        }
+        marchData=computeMarch(all2,z);marchLoaded=true;
+        // Show warning that data may be outdated
+        var lastId=all2.length?Math.max.apply(null,all2.map(function(x){return x.leveto_id||0})):0;
+        console.warn('Supabase-Fallback: '+all2.length+' Einträge, letzter leveto_id='+lastId);
+        render();
+    }catch(err){document.getElementById('app').innerHTML='<div class="loading"><div class="load-text" style="color:var(--red)">Fehler: '+err.message+'</div></div>';}
 }
 
 // ══════════════════════════════════════
