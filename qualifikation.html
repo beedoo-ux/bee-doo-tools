@@ -8,143 +8,172 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   :root {
-    --gold:#F5C500; --bg:#0a0a0a; --bg2:#111; --bg3:#1a1a1a; --bg4:#222;
-    --border:rgba(255,255,255,.08); --border-gold:rgba(245,197,0,.3);
-    --text:#f0f0f0; --text2:#aaa; --text3:#666;
-    --radius:12px; --radius-sm:8px;
-    --green:#22c55e; --blue:#3b82f6; --red:#ef4444; --orange:#f97316; --purple:#a855f7;
+    --gold: #F5C500; --bg: #0a0a0a; --bg2: #111111; --bg3: #1a1a1a; --bg4: #222222;
+    --border: rgba(255,255,255,0.08); --border-gold: rgba(245,197,0,0.3);
+    --text: #f0f0f0; --text2: #aaaaaa; --text3: #666666;
+    --radius: 12px; --radius-sm: 8px;
+    --green: #22c55e; --red: #ef4444; --blue: #3b82f6; --orange: #f97316; --purple: #a855f7;
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
-  header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-  .logo{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700}
-  .logo-dot{width:32px;height:32px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#000}
-  .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .sync-pill{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);background:var(--bg3);border:1px solid var(--border);padding:6px 12px;border-radius:20px}
-  .sync-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
-  .sync-dot.syncing{background:var(--gold)}
-  .sync-dot.error{background:var(--red);animation:none}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-  .tab-bar{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;overflow-x:auto;scrollbar-width:none}
-  .tab-bar::-webkit-scrollbar{display:none}
-  .tab{padding:14px 20px;font-size:14px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .2s;user-select:none}
-  .tab:hover{color:var(--text)}
-  .tab.active{color:var(--gold);border-bottom-color:var(--gold)}
-  .btn{padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;transition:all .2s}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .btn-gold{background:var(--gold);color:#000}
-  .btn-gold:hover:not(:disabled){background:#ffd700}
-  .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2)}
-  .btn-outline:hover:not(:disabled){border-color:var(--gold);color:var(--gold)}
-  main{padding:24px;max-width:1400px;margin:0 auto}
-  .filter-bar{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:24px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-  .filter-label{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
-  select,input[type=date]{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer;transition:border-color .2s}
-  select:focus,input[type=date]:focus{border-color:var(--gold)}
-  select option{background:var(--bg3)}
-  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:24px}
-  .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden;transition:border-color .2s}
-  .kpi-card:hover{border-color:var(--border-gold)}
-  .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--c,var(--gold))}
-  .kpi-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-  .kpi-value{font-size:30px;font-weight:700;line-height:1}
-  .kpi-sub{font-size:12px;color:var(--text3);margin-top:4px}
-  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
-  @media(max-width:900px){.grid-2{grid-template-columns:1fr}}
-  .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-  .card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
-  .card-title{font-size:14px;font-weight:600}
-  .card-body{padding:20px}
-  .chart-wrap{position:relative;height:240px}
-  .lb-row{display:flex;align-items:center;padding:12px 20px;border-bottom:1px solid var(--border);gap:14px;transition:background .15s;cursor:pointer}
-  .lb-row:last-child{border-bottom:none}
-  .lb-row:hover{background:var(--bg3)}
-  .lb-rank{width:28px;text-align:center;font-size:14px;font-weight:700;color:var(--text3);flex-shrink:0}
-  .lb-rank.r1{color:#FFD700;font-size:18px}.lb-rank.r2{color:#C0C0C0;font-size:16px}.lb-rank.r3{color:#CD7F32;font-size:16px}
-  .lb-avatar{width:36px;height:36px;border-radius:50%;background:var(--bg4);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--gold);flex-shrink:0}
-  .lb-info{flex:1;min-width:0}
-  .lb-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .lb-sub{font-size:12px;color:var(--text2)}
-  .lb-stats{display:flex;gap:16px;flex-shrink:0;text-align:right}
-  .lb-sv{font-size:16px;font-weight:700}.lb-sl{font-size:10px;color:var(--text3);text-transform:uppercase}
-  .lb-bar-wrap{width:80px;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;flex-shrink:0}
-  .lb-bar{height:100%;background:var(--gold);border-radius:2px;transition:width .5s}
-  .badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
-  .profile-header{padding:24px 20px;display:flex;align-items:center;gap:20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
-  .p-avatar{width:64px;height:64px;border-radius:50%;background:var(--bg4);border:3px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--gold);flex-shrink:0}
-  .p-name{font-size:22px;font-weight:700}.p-id{font-size:13px;color:var(--text2)}
-  .p-kpis{display:flex;gap:20px;margin-top:10px;flex-wrap:wrap}
-  .p-kv{font-size:20px;font-weight:700;color:var(--gold)}.p-kl{font-size:11px;color:var(--text3);text-transform:uppercase}
-  .sb-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-  .sb-lbl{width:140px;font-size:12px;color:var(--text2);flex-shrink:0}
-  .sb-bw{flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
-  .sb-b{height:100%;border-radius:3px;transition:width .6s}
-  .sb-n{width:40px;text-align:right;font-size:13px;font-weight:600}
-  .sb-p{width:36px;text-align:right;font-size:11px;color:var(--text3)}
-  .table-wrap{overflow-x:auto}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
-  th:hover{color:var(--text)}
-  td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text2);white-space:nowrap}
-  tr:hover td{background:var(--bg3)}
-  tr:last-child td{border-bottom:none}
-  .pagination{display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;flex-wrap:wrap}
-  .page-btn{width:32px;height:32px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg3);color:var(--text2);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
-  .page-btn:hover{border-color:var(--gold);color:var(--gold)}
-  .page-btn.active{background:var(--gold);color:#000;border-color:var(--gold);font-weight:700}
-  .page-info{font-size:13px;color:var(--text3)}
-  .import-box{background:var(--bg3);border:2px dashed var(--border-gold);border-radius:var(--radius);padding:32px;text-align:center;margin-bottom:20px}
-  .import-box h3{font-size:20px;font-weight:700;margin-bottom:8px}
-  .import-box p{font-size:13px;color:var(--text2);margin-bottom:24px;line-height:1.7}
-  .import-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-  .progress-wrap{background:var(--bg4);border-radius:6px;height:10px;overflow:hidden;margin:12px 0}
-  .progress-bar{height:100%;background:var(--gold);border-radius:6px;transition:width .3s}
-  .progress-lbl{font-size:12px;color:var(--text2);text-align:center;margin-top:4px}
-  .log-box{background:var(--bg3);border-radius:var(--radius-sm);padding:14px;font-size:12px;max-height:280px;overflow-y:auto;color:var(--text2);font-family:monospace}
-  .log-row{display:flex;gap:10px;padding:2px 0}
-  .lt{color:var(--text3);flex-shrink:0}.lok{color:var(--green)}.lerr{color:var(--red)}.linf{color:var(--gold)}
-  .tab-section{display:none}.tab-section.active{display:block}
-  .empty{text-align:center;padding:48px 24px;color:var(--text3)}
-  .empty-icon{font-size:48px;margin-bottom:16px}
-  .empty-title{font-size:18px;font-weight:600;margin-bottom:8px;color:var(--text2)}
-  .empty-sub{font-size:14px}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
-  #toast{position:fixed;bottom:24px;right:24px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 18px;font-size:13px;box-shadow:0 8px 32px rgba(0,0,0,.5);transform:translateY(80px);opacity:0;transition:all .3s;z-index:9999;max-width:340px}
-  #toast.show{transform:translateY(0);opacity:1}
-  #toast.success{border-color:var(--green)}#toast.error{border-color:var(--red)}#toast.warning{border-color:var(--gold)}
-  @media(max-width:640px){
-    header{padding:0 14px}main{padding:12px}
-    .kpi-grid{grid-template-columns:repeat(2,1fr)}
-    .lb-stats,.lb-bar-wrap{display:none}
-  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; }
+  .logo-dot { width: 32px; height: 32px; background: var(--gold); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: #000; }
+  .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .sync-badge { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text2); background: var(--bg3); border: 1px solid var(--border); padding: 6px 12px; border-radius: 20px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .dot.busy { background: var(--gold); animation: blink .8s infinite; }
+  .dot.err { background: var(--red); animation: none; }
+  @keyframes blink { 0%,100%{opacity:1}50%{opacity:.3} }
+
+  .btn { padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; transition: all .2s; }
+  .btn-gold { background: var(--gold); color: #000; }
+  .btn-gold:hover { background: #ffd700; }
+  .btn-gold:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text2); }
+  .btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+  .btn-outline:disabled { opacity: .5; cursor: not-allowed; }
+
+  .tabs { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 14px 20px; font-size: 14px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all .2s; user-select: none; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  .filter-bar { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 20px; margin-bottom: 24px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .filter-label { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; }
+  select, input[type=date] { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-sm); padding: 7px 11px; font-size: 13px; font-family: 'DM Sans', sans-serif; outline: none; cursor: pointer; transition: border-color .2s; }
+  select:focus, input[type=date]:focus { border-color: var(--gold); }
+  select option { background: var(--bg3); }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .kpi { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; position: relative; overflow: hidden; }
+  .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--c, var(--gold)); }
+  .kpi-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+  .kpi-val { font-size: 28px; font-weight: 700; line-height: 1; color: var(--text); }
+  .kpi-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .card-head { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .card-body { padding: 20px; }
+  .chart-wrap { position: relative; height: 240px; }
+
+  .lb-list {}
+  .lb-row { display: flex; align-items: center; padding: 11px 20px; border-bottom: 1px solid var(--border); gap: 12px; cursor: pointer; transition: background .15s; }
+  .lb-row:last-child { border-bottom: none; }
+  .lb-row:hover { background: var(--bg3); }
+  .lb-rank { width: 26px; text-align: center; font-size: 13px; font-weight: 700; color: var(--text3); flex-shrink: 0; }
+  .lb-rank.r1 { color: #FFD700; font-size: 17px; } .lb-rank.r2 { color: #C0C0C0; font-size: 15px; } .lb-rank.r3 { color: #CD7F32; font-size: 15px; }
+  .lb-av { width: 34px; height: 34px; border-radius: 50%; background: var(--bg4); border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--gold); flex-shrink: 0; }
+  .lb-info { flex: 1; min-width: 0; }
+  .lb-name { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lb-sub { font-size: 12px; color: var(--text2); }
+  .lb-nums { display: flex; gap: 14px; flex-shrink: 0; }
+  .lb-n { text-align: right; }
+  .lb-nv { font-size: 15px; font-weight: 700; color: var(--text); }
+  .lb-nl { font-size: 10px; color: var(--text3); text-transform: uppercase; }
+  .lb-bar-wrap { width: 80px; height: 4px; background: var(--bg4); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+  .lb-bar { height: 100%; background: var(--gold); border-radius: 2px; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+
+  .prof-head { padding: 22px 20px; display: flex; align-items: center; gap: 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .prof-av { width: 60px; height: 60px; border-radius: 50%; background: var(--bg4); border: 3px solid var(--gold); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: var(--gold); flex-shrink: 0; }
+  .prof-name { font-size: 20px; font-weight: 700; color: var(--text); }
+  .prof-id { font-size: 13px; color: var(--text2); }
+  .prof-kpis { display: flex; gap: 18px; margin-top: 8px; flex-wrap: wrap; }
+  .pk-v { font-size: 18px; font-weight: 700; } .pk-l { font-size: 10px; color: var(--text3); text-transform: uppercase; }
+  .sb-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+  .sb-lbl { width: 140px; font-size: 12px; color: var(--text2); flex-shrink: 0; }
+  .sb-bw { flex: 1; height: 5px; background: var(--bg4); border-radius: 3px; overflow: hidden; }
+  .sb-b { height: 100%; border-radius: 3px; }
+  .sb-n { width: 36px; text-align: right; font-size: 13px; font-weight: 600; color: var(--text); flex-shrink: 0; }
+  .sb-p { width: 36px; text-align: right; font-size: 11px; color: var(--text3); flex-shrink: 0; }
+
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 9px 14px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+  th:hover { color: var(--text); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); color: var(--text2); white-space: nowrap; }
+  tr:hover td { background: var(--bg3); }
+  tr:last-child td { border-bottom: none; }
+  .pager { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 14px; flex-wrap: wrap; }
+  .pg-btn { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg3); color: var(--text2); font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .pg-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .pg-btn.on { background: var(--gold); color: #000; border-color: var(--gold); font-weight: 700; }
+  .pg-info { font-size: 12px; color: var(--text3); }
+
+  .tsec { display: none; } .tsec.active { display: block; }
+
+  /* Download overlay */
+  #dlOverlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px; }
+  #dlOverlay.show { display: flex; }
+  #dlBox { background: var(--bg2); border: 1px solid var(--border-gold); border-radius: 16px; padding: 32px; max-width: 540px; width: 100%; }
+  .dl-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+  .dl-sub { font-size: 13px; color: var(--text2); margin-bottom: 24px; line-height: 1.6; }
+  .dl-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .dl-lbl { font-size: 12px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .4px; }
+  .prog-wrap { background: var(--bg4); border-radius: 6px; height: 8px; overflow: hidden; margin-top: 16px; }
+  .prog-bar { height: 100%; background: var(--gold); border-radius: 6px; width: 0%; transition: width .3s; }
+  .prog-text { font-size: 12px; color: var(--text2); margin-top: 8px; text-align: center; min-height: 18px; }
+  .log-box { background: var(--bg3); border-radius: 8px; padding: 12px; font-size: 11px; max-height: 160px; overflow-y: auto; color: var(--text2); margin-top: 12px; font-family: monospace; display: none; }
+  .log-ok { color: var(--green); } .log-err { color: var(--red); } .log-inf { color: var(--gold); }
+  .dl-btns { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+
+  .sett-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .sett-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .sett-row:last-child { border-bottom: none; }
+  .sett-lbl { color: var(--text2); } .sett-val { font-weight: 600; color: var(--text); }
+
+  .empty { text-align: center; padding: 48px 24px; color: var(--text3); }
+  .empty-icon { font-size: 44px; margin-bottom: 14px; }
+  .empty-t { font-size: 17px; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: sp .6s linear infinite; vertical-align: middle; margin-right: 5px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+
+  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 11px 16px; font-size: 13px; color: var(--text); box-shadow: 0 8px 32px rgba(0,0,0,.5); transform: translateY(60px); opacity: 0; transition: all .3s; z-index: 9999; max-width: 300px; }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { border-color: var(--green); } #toast.error { border-color: var(--red); } #toast.warn { border-color: var(--gold); }
+
+  @media (max-width: 900px) { .grid-2, .sett-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { header { padding: 0 14px; } main { padding: 14px; } .kpi-grid { grid-template-columns: repeat(2,1fr); } .lb-nums,.lb-bar-wrap { display: none; } }
 </style>
 </head>
 <body>
+
 <header>
-  <div class="logo"><div class="logo-dot">b</div><span>Scouter <span style="color:var(--gold)">Qualifikationen</span></span></div>
+  <div class="logo">
+    <div class="logo-dot">b</div>
+    <span>Scouter <span style="color:var(--gold)">Qualifikationen</span></span>
+  </div>
   <div class="header-right">
-    <div class="sync-pill"><div class="sync-dot" id="syncDot"></div><span id="syncText">Lädt...</span></div>
-    <button class="btn btn-outline" onclick="syncToday()" id="syncBtn">↻ Sync</button>
+    <div class="sync-badge"><div class="dot" id="dot"></div><span id="dotTxt">Lädt...</span></div>
+    <button class="btn btn-outline" onclick="openDownload()">⬇ Herunterladen</button>
+    <button class="btn btn-gold" onclick="loadData()" id="refreshBtn">↻ Aktualisieren</button>
   </div>
 </header>
 
-<div class="tab-bar">
+<div class="tabs">
   <div class="tab active" onclick="switchTab('dashboard',this)">📊 Dashboard</div>
   <div class="tab" onclick="switchTab('leaderboard',this)">🏆 Leaderboard</div>
-  <div class="tab" onclick="switchTab('profile',this)">👤 Profil</div>
+  <div class="tab" onclick="switchTab('profile',this)">👤 Scouter-Profil</div>
   <div class="tab" onclick="switchTab('data',this)">📋 Rohdaten</div>
-  <div class="tab" onclick="switchTab('import',this)">⬇️ Import</div>
+  <div class="tab" onclick="switchTab('settings',this)">⚙️ Einstellungen</div>
 </div>
 
 <main>
   <div class="filter-bar">
-    <span class="filter-label">Filter:</span>
-    <select id="fScouter" onchange="applyFilters()"><option value="">Alle Scouter</option></select>
-    <input type="date" id="fFrom" onchange="applyFilters()">
-    <span style="color:var(--text3);font-size:12px">bis</span>
-    <input type="date" id="fTo" onchange="applyFilters()">
-    <select id="fStatus" onchange="applyFilters()">
+    <span class="filter-label">Filter</span>
+    <select id="fScouter" onchange="loadData()"><option value="">Alle Scouter</option></select>
+    <input type="date" id="fFrom" onchange="loadData()">
+    <span style="font-size:12px;color:var(--text3)">bis</span>
+    <input type="date" id="fTo" onchange="loadData()">
+    <select id="fStatus" onchange="loadData()">
       <option value="">Alle Status</option>
       <option value="APPOINTMENT">Termin</option>
       <option value="ORDER_REGISTERED">Auftrag</option>
@@ -161,626 +190,680 @@
   </div>
 
   <!-- DASHBOARD -->
-  <div class="tab-section active" id="tab-dashboard">
+  <div class="tsec active" id="tab-dashboard">
     <div class="kpi-grid">
-      <div class="kpi-card" style="--c:var(--green)"><div class="kpi-label">Termine</div><div class="kpi-value" id="kA">–</div><div class="kpi-sub" id="kAc"></div></div>
-      <div class="kpi-card" style="--c:var(--gold)"><div class="kpi-label">Aufträge</div><div class="kpi-value" id="kO">–</div><div class="kpi-sub" id="kOr"></div></div>
-      <div class="kpi-card" style="--c:var(--blue)"><div class="kpi-label">Wiedervorlage</div><div class="kpi-value" id="kF">–</div></div>
-      <div class="kpi-card" style="--c:var(--red)"><div class="kpi-label">Kein Interesse</div><div class="kpi-value" id="kN">–</div></div>
-      <div class="kpi-card" style="--c:var(--orange)"><div class="kpi-label">Nicht erreicht</div><div class="kpi-value" id="kH">–</div></div>
-      <div class="kpi-card" style="--c:var(--purple)"><div class="kpi-label">Bestandskunde</div><div class="kpi-value" id="kE">–</div></div>
-      <div class="kpi-card" style="--c:#64748b"><div class="kpi-label">Nicht vermarktbar</div><div class="kpi-value" id="kM">–</div></div>
-      <div class="kpi-card" style="--c:#475569"><div class="kpi-label">Kein Eintritt</div><div class="kpi-value" id="kI">–</div></div>
-      <div class="kpi-card" style="--c:#6b7280"><div class="kpi-label">Blacklist</div><div class="kpi-value" id="kB">–</div></div>
-      <div class="kpi-card" style="--c:var(--gold)"><div class="kpi-label">Gesamt</div><div class="kpi-value" id="kT">–</div><div class="kpi-sub" id="kTs"></div></div>
+      <div class="kpi" style="--c:var(--green)"><div class="kpi-label">Termine</div><div class="kpi-val" id="k-APPOINTMENT">–</div><div class="kpi-sub" id="k-APPOINTMENT-sub"></div></div>
+      <div class="kpi" style="--c:var(--gold)"><div class="kpi-label">Aufträge</div><div class="kpi-val" id="k-ORDER_REGISTERED">–</div><div class="kpi-sub" id="k-ORDER_REGISTERED-sub"></div></div>
+      <div class="kpi" style="--c:var(--blue)"><div class="kpi-label">Wiedervorlage</div><div class="kpi-val" id="k-FOLLOW_UP">–</div></div>
+      <div class="kpi" style="--c:var(--red)"><div class="kpi-label">Kein Interesse</div><div class="kpi-val" id="k-NO_INTEREST">–</div></div>
+      <div class="kpi" style="--c:var(--orange)"><div class="kpi-label">Nicht erreicht</div><div class="kpi-val" id="k-CUSTOMER_NOT_HOME">–</div></div>
+      <div class="kpi" style="--c:var(--purple)"><div class="kpi-label">Bestandskunde</div><div class="kpi-val" id="k-EXISTING_CUSTOMER">–</div></div>
+      <div class="kpi" style="--c:#64748b"><div class="kpi-label">Nicht vermarktbar</div><div class="kpi-val" id="k-NOT_MARKETABLE">–</div></div>
+      <div class="kpi" style="--c:#475569"><div class="kpi-label">Kein Eintritt</div><div class="kpi-val" id="k-NO_ENTRY">–</div></div>
+      <div class="kpi" style="--c:#6b7280"><div class="kpi-label">Blacklist</div><div class="kpi-val" id="k-BLACKLISTED">–</div></div>
+      <div class="kpi" style="--c:var(--gold)"><div class="kpi-label">Gesamt</div><div class="kpi-val" id="k-total">–</div><div class="kpi-sub" id="k-total-sub"></div></div>
     </div>
     <div class="grid-2">
-      <div class="card"><div class="card-header"><span class="card-title">Status-Verteilung</span></div><div class="card-body"><div class="chart-wrap"><canvas id="cDonut"></canvas></div></div></div>
-      <div class="card"><div class="card-header"><span class="card-title">Tagesverlauf (14 Tage)</span></div><div class="card-body"><div class="chart-wrap"><canvas id="cLine"></canvas></div></div></div>
+      <div class="card">
+        <div class="card-head"><span class="card-title">Status-Verteilung</span></div>
+        <div class="card-body"><div class="chart-wrap"><canvas id="cDonut"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-title">Tagesverlauf (14 Tage)</span></div>
+        <div class="card-body"><div class="chart-wrap"><canvas id="cLine"></canvas></div></div>
+      </div>
     </div>
-    <div class="card"><div class="card-header"><span class="card-title">Top 5 Scouter</span></div><div id="topList"></div></div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">Top 5 Scouter</span></div>
+      <div id="topList" class="lb-list"></div>
+    </div>
   </div>
 
   <!-- LEADERBOARD -->
-  <div class="tab-section" id="tab-leaderboard">
+  <div class="tsec" id="tab-leaderboard">
     <div class="card">
-      <div class="card-header">
+      <div class="card-head">
         <span class="card-title">🏆 Rangliste</span>
-        <select id="lbSort" onchange="renderLB()" style="font-size:12px;padding:5px 10px">
-          <option value="appointments">Nach Terminen</option>
-          <option value="orders">Nach Aufträgen</option>
-          <option value="total">Nach Gesamt</option>
-          <option value="conversion">Nach Conversion</option>
+        <select id="lbSort" onchange="renderLB()" style="font-size:12px;padding:4px 8px">
+          <option value="appointments">Termine</option>
+          <option value="orders">Aufträge</option>
+          <option value="total">Gesamt</option>
+          <option value="conversion">Conversion</option>
         </select>
       </div>
-      <div id="lbList"></div>
+      <div id="lbList" class="lb-list"></div>
     </div>
   </div>
 
   <!-- PROFIL -->
-  <div class="tab-section" id="tab-profile">
+  <div class="tsec" id="tab-profile">
     <div style="margin-bottom:16px">
-      <select id="pSelect" onchange="renderProfile()" style="font-size:14px;padding:10px 14px;width:100%;max-width:320px">
+      <select id="profSel" onchange="renderProfile()" style="font-size:14px;padding:10px 14px;width:100%;max-width:320px">
         <option value="">Scouter auswählen...</option>
       </select>
     </div>
-    <div id="pContent"><div class="empty"><div class="empty-icon">👤</div><div class="empty-title">Scouter auswählen</div></div></div>
+    <div id="profContent">
+      <div class="empty"><div class="empty-icon">👤</div><div class="empty-t">Scouter auswählen</div></div>
+    </div>
   </div>
 
   <!-- ROHDATEN -->
-  <div class="tab-section" id="tab-data">
+  <div class="tsec" id="tab-data">
     <div class="card">
-      <div class="card-header"><span class="card-title">Rohdaten</span><span style="font-size:12px;color:var(--text3)" id="dCount"></span></div>
-      <div class="table-wrap">
+      <div class="card-head"><span class="card-title">Rohdaten</span><span style="font-size:12px;color:var(--text3)" id="dataCount"></span></div>
+      <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th onclick="sortTbl('created')">Datum ↕</th>
-            <th onclick="sortTbl('mitarbeiter_name')">Scouter ↕</th>
-            <th onclick="sortTbl('qualifikation')">Status ↕</th>
+            <th onclick="sortD('created')">Datum ↕</th>
+            <th onclick="sortD('mitarbeiter_name')">Scouter ↕</th>
+            <th onclick="sortD('qualifikation')">Status ↕</th>
             <th>Adresse</th><th>PLZ</th><th>Ort</th>
           </tr></thead>
-          <tbody id="dBody"></tbody>
+          <tbody id="tBody"></tbody>
         </table>
       </div>
-      <div class="pagination" id="dPag"></div>
+      <div class="pager" id="tPager"></div>
     </div>
   </div>
 
-  <!-- IMPORT -->
-  <div class="tab-section" id="tab-import">
-    <div class="import-box" id="importBox">
-      <div style="font-size:40px;margin-bottom:14px">⬇️</div>
-      <h3>Daten von API laden &amp; in Supabase speichern</h3>
-      <p>Daten werden von <strong>api.bee-doo.de</strong> abgerufen und in die Tabelle<br>
-        <code style="color:var(--gold);background:var(--bg4);padding:2px 6px;border-radius:4px;font-size:12px">scout_qualifikationen</code> gespeichert.<br>
-        Bestehende Einträge werden aktualisiert (kein Datenverlust).
-      </p>
-      <div class="import-btns">
-        <button class="btn btn-outline" onclick="doImport('today')">📅 Heute</button>
-        <button class="btn btn-outline" onclick="doImport('week')">📆 Diese Woche</button>
-        <button class="btn btn-outline" onclick="doImport('month')">🗓️ Dieser Monat</button>
-        <button class="btn btn-outline" onclick="doImport('3m')">📊 Letzte 3 Monate</button>
-        <button class="btn btn-gold" onclick="doImport('all')">🚀 Alles laden</button>
-      </div>
-    </div>
-
-    <div id="importProg" style="display:none" class="card" style="margin-bottom:20px">
-      <div class="card-header">
-        <span class="card-title" id="progTitle">Import...</span>
-        <button class="btn btn-outline" onclick="cancelImport()">✕ Abbrechen</button>
-      </div>
-      <div class="card-body">
-        <div class="progress-wrap"><div class="progress-bar" id="progBar" style="width:0%"></div></div>
-        <div class="progress-lbl" id="progLbl">Starte...</div>
-        <div class="log-box" id="iLog" style="margin-top:16px"></div>
-      </div>
-    </div>
-
-    <div class="grid-2" style="margin-top:20px">
+  <!-- EINSTELLUNGEN -->
+  <div class="tsec" id="tab-settings">
+    <div class="sett-grid">
       <div class="card">
-        <div class="card-header"><span class="card-title">📊 Datenbank-Status</span></div>
+        <div class="card-head"><span class="card-title">📦 Datenbank-Status</span></div>
         <div class="card-body">
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            <tr><td style="padding:8px 0;color:var(--text2)">Gespeicherte Einträge</td><td style="text-align:right;font-weight:700" id="sTotal">–</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text2)">Zeitraum</td><td style="text-align:right" id="sRange">–</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text2)">Bekannte Scouter</td><td style="text-align:right" id="sScouter">–</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text2)">Letzter Sync</td><td style="text-align:right;color:var(--gold)" id="sSync">–</td></tr>
-          </table>
-          <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-outline" onclick="syncToday()">↻ Heute sync</button>
-            <button class="btn btn-outline" onclick="loadDbStats()">🔄 Aktualisieren</button>
+          <div class="sett-row"><span class="sett-lbl">Datensätze gesamt (DB)</span><span class="sett-val" id="sTotal">–</span></div>
+          <div class="sett-row"><span class="sett-lbl">Aktuell geladen (gefiltert)</span><span class="sett-val" id="sLoaded">–</span></div>
+          <div class="sett-row"><span class="sett-lbl">Bekannte Scouter</span><span class="sett-val" id="sScouter">–</span></div>
+          <div class="sett-row"><span class="sett-lbl">Ältester Eintrag</span><span class="sett-val" id="sOldest">–</span></div>
+          <div class="sett-row"><span class="sett-lbl">Neuester Eintrag</span><span class="sett-val" id="sNewest">–</span></div>
+          <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-gold" onclick="openDownload()">⬇ Daten herunterladen</button>
+            <button class="btn btn-outline" onclick="loadData()">↻ Ansicht aktualisieren</button>
           </div>
         </div>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">📋 Sync-Protokoll</span></div>
-        <div class="card-body"><div class="log-box" id="syncLog"><div class="log-row"><span class="lt">–</span><span class="linf">Bereit.</span></div></div></div>
+        <div class="card-head"><span class="card-title">ℹ️ Info</span></div>
+        <div class="card-body" style="font-size:13px;color:var(--text2);line-height:1.8">
+          <p>Daten liegen in <strong style="color:var(--text)">Supabase</strong> (Tabelle <code style="color:var(--gold);background:var(--bg3);padding:2px 6px;border-radius:4px">scout_qualifikationen</code>).</p>
+          <br>
+          <p>Über <strong style="color:var(--text)">⬇ Herunterladen</strong> kannst du Daten direkt von der Scout-API in die Datenbank importieren.</p>
+          <br>
+          <p>Die Tabelle ist <strong style="color:var(--text)">vollständig getrennt</strong> von allen anderen bee-doo Tabellen.</p>
+        </div>
       </div>
     </div>
   </div>
 </main>
+
+<!-- Download Overlay -->
+<div id="dlOverlay">
+  <div id="dlBox">
+    <div class="dl-title">⬇ Daten herunterladen</div>
+    <div class="dl-sub">Lädt Qualifikationen von der Scout-API und speichert sie in Supabase. Bereits vorhandene Einträge werden automatisch übersprungen (kein Überschreiben).</div>
+    <div class="dl-row">
+      <label class="dl-lbl">Ab Datum *</label>
+      <input type="date" id="dlFrom" style="width:100%">
+    </div>
+    <div class="dl-row">
+      <label class="dl-lbl">Bis Datum (optional)</label>
+      <input type="date" id="dlTo" style="width:100%">
+    </div>
+    <div class="prog-wrap"><div class="prog-bar" id="progBar"></div></div>
+    <div class="prog-text" id="progText"></div>
+    <div class="log-box" id="dlLog"></div>
+    <div class="dl-btns">
+      <button class="btn btn-gold" id="dlStartBtn" onclick="startDownload()">▶ Starten</button>
+      <button class="btn btn-outline" id="dlCloseBtn" onclick="closeDownload()">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
-// ────────────────────────────────────────────────
-// CONFIG
-// ────────────────────────────────────────────────
+// ══════════════════════════════════════════════════
+// KONFIGURATION
+// ══════════════════════════════════════════════════
 const SB_URL   = 'https://hqzpemfaljxcysyqssng.supabase.co';
-const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const SB_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const SB_SVC   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
+const TABLE    = 'scout_qualifikationen';
 const API_BASE = 'https://api.bee-doo.de/api';
 const API_TOK  = 'tcp_2a71c5e2cff94d04b03eb447ea645a3719f3705c63ffcb44f22e3585fd9f6496';
-const TABLE    = 'scout_qualifikationen';
-const DELAY    = 1100; // ms between API pages
-const BATCH    = 200;  // Supabase upsert batch size
-const PG_SIZE  = 50;   // table display page size
+const DELAY_MS = 1150; // > 1 sec between API requests
 
-const ST = {
-  APPOINTMENT:       {l:'Termin',          c:'#22c55e'},
-  ORDER_REGISTERED:  {l:'Auftrag',         c:'#F5C500'},
-  FOLLOW_UP:         {l:'Wiedervorlage',   c:'#3b82f6'},
-  NO_INTEREST:       {l:'Kein Interesse',  c:'#ef4444'},
-  CUSTOMER_NOT_HOME: {l:'Nicht erreicht',  c:'#f97316'},
-  EXISTING_CUSTOMER: {l:'Bestandskunde',   c:'#a855f7'},
-  NOT_MARKETABLE:    {l:'Nicht vermarktbar',c:'#64748b'},
-  NO_ENTRY:          {l:'Kein Eintritt',   c:'#475569'},
-  BLACKLISTED:       {l:'Blacklist',       c:'#6b7280'},
+const STATUS = {
+  APPOINTMENT:       { label: 'Termin',           color: '#22c55e' },
+  ORDER_REGISTERED:  { label: 'Auftrag',           color: '#F5C500' },
+  FOLLOW_UP:         { label: 'Wiedervorlage',     color: '#3b82f6' },
+  NO_INTEREST:       { label: 'Kein Interesse',    color: '#ef4444' },
+  CUSTOMER_NOT_HOME: { label: 'Nicht erreicht',    color: '#f97316' },
+  EXISTING_CUSTOMER: { label: 'Bestandskunde',     color: '#a855f7' },
+  NOT_MARKETABLE:    { label: 'Nicht vermarktbar', color: '#64748b' },
+  NO_ENTRY:          { label: 'Kein Eintritt',     color: '#475569' },
+  BLACKLISTED:       { label: 'Blacklist',         color: '#6b7280' },
 };
 
-// ────────────────────────────────────────────────
+// ══════════════════════════════════════════════════
 // STATE
-// ────────────────────────────────────────────────
-let all = [], filtered = [], charts = {};
-let pg = 1, sField = 'created', sDir = -1;
-let syncing = false, cancelled = false;
+// ══════════════════════════════════════════════════
+let allData = [];
+let charts = {};
+let dPage = 1, dSortF = 'created', dSortDir = -1;
+let isDownloading = false;
+let allScouterNames = [];
 
-// ────────────────────────────────────────────────
+// ══════════════════════════════════════════════════
 // SUPABASE
-// ────────────────────────────────────────────────
-const SBH = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
-
-async function sbGet(path, extra = {}) {
-  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {headers:{...SBH,...extra}});
-  if (!r.ok) throw new Error('SB '+r.status+': '+await r.text());
-  return r.status===204 ? [] : r.json();
-}
-
-async function sbUpsert(records) {
-  const r = await fetch(`${SB_URL}/rest/v1/${TABLE}`, {
-    method:'POST',
-    headers:{...SBH,'Prefer':'resolution=merge-duplicates,return=minimal'},
-    body:JSON.stringify(records)
+// ══════════════════════════════════════════════════
+async function sbFetch(params) {
+  const url = `${SB_URL}/rest/v1/${TABLE}?${params}&limit=100000`;
+  const r = await fetch(url, {
+    headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`, Accept: 'application/json' }
   });
-  if (!r.ok) throw new Error('SB upsert '+r.status+': '+await r.text());
-}
-
-async function loadAll() {
-  sLog('Lade aus Supabase...','info');
-  let result=[], offset=0, chunk=1000;
-  while(true){
-    const rows = await sbGet(`${TABLE}?select=*&order=created.desc&limit=${chunk}&offset=${offset}`);
-    if(!Array.isArray(rows)||!rows.length) break;
-    result=result.concat(rows);
-    if(rows.length<chunk) break;
-    offset+=chunk;
-  }
-  sLog('✓ '+result.length.toLocaleString('de-DE')+' Einträge','ok');
-  return result;
-}
-
-// ────────────────────────────────────────────────
-// API
-// ────────────────────────────────────────────────
-const sleep = ms => new Promise(r=>setTimeout(r,ms));
-
-function parseItem(item) {
-  const m=item.mitarbeiter||{}, w=item.wohneinheit||{}, a=w.adresse||{};
-  return {
-    api_id: item['@id']||'',
-    mitarbeiter_id: m.id||'',
-    mitarbeiter_name: m.name||((m.vorname||'')+' '+(m.nachname||'')).trim()||m.id||'Unbekannt',
-    qualifikation: item.qualifikation||'',
-    created: item.created||'',
-    plz: a.plz||'', ort: a.ort||'',
-    strasse: a.strasse||'', hausnummer: a.hausnummer||'', hausnummer_zusatz: a.hausnummerZusatz||'',
-    synced_at: new Date().toISOString()
-  };
-}
-
-async function fetchApiPage(dateFrom, page) {
-  const url = `${API_BASE}/adress_qualifikations?created%5Bafter%5D=${dateFrom}&page=${page}`;
-  const r = await fetch(url, {headers:{'X-AUTH-TOKEN':API_TOK,'Accept':'application/ld+json'}});
-  if (!r.ok) throw new Error('API '+r.status);
+  if (!r.ok) throw new Error(`Supabase Fehler ${r.status}: ${await r.text()}`);
   return r.json();
 }
 
-// ────────────────────────────────────────────────
-// IMPORT
-// ────────────────────────────────────────────────
-async function doImport(range) {
-  if (syncing) { toast('Import läuft bereits','warning'); return; }
-  const now = new Date();
-  let from, label;
-  if(range==='today')  { from=dateStr(now); label='Heute'; }
-  else if(range==='week')  { const m=new Date(now); m.setDate(now.getDate()-now.getDay()+(now.getDay()===0?-6:1)); from=dateStr(m); label='Diese Woche'; }
-  else if(range==='month') { from=dateStr(new Date(now.getFullYear(),now.getMonth(),1)); label='Dieser Monat'; }
-  else if(range==='3m')    { from=dateStr(new Date(now.getFullYear(),now.getMonth()-2,1)); label='Letzte 3 Monate'; }
-  else                     { from='2024-01-01'; label='Komplett (ab 2024)'; }
+async function sbUpsert(rows) {
+  const r = await fetch(`${SB_URL}/rest/v1/${TABLE}`, {
+    method: 'POST',
+    headers: {
+      apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=ignore-duplicates,return=minimal'
+    },
+    body: JSON.stringify(rows)
+  });
+  if (!r.ok) throw new Error(`Supabase Upsert ${r.status}: ${await r.text()}`);
+}
 
-  cancelled=false; syncing=true; setSyncing(true);
-  document.getElementById('importBox').style.display='none';
-  document.getElementById('importProg').style.display='block';
-  document.getElementById('progTitle').textContent='Import: '+label;
-  document.getElementById('iLog').innerHTML='';
-  prog(0,'Starte...');
+async function sbCountAll() {
+  const r = await fetch(`${SB_URL}/rest/v1/${TABLE}?select=id`, {
+    headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`, Prefer: 'count=exact', Range: '0-0' }
+  });
+  return parseInt(r.headers.get('Content-Range')?.split('/')[1] || '0');
+}
+
+async function sbGetScouters() {
+  const r = await fetch(`${SB_URL}/rest/v1/${TABLE}?select=mitarbeiter_name,mitarbeiter_id&limit=100000`, {
+    headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`, Accept: 'application/json' }
+  });
+  const data = await r.json();
+  return [...new Set(data.map(d => d.mitarbeiter_name))].sort();
+}
+
+// ══════════════════════════════════════════════════
+// LOAD DATA
+// ══════════════════════════════════════════════════
+async function loadData() {
+  setStatus('busy', 'Lade...');
+  document.getElementById('refreshBtn').disabled = true;
 
   try {
-    await runImport(from, label);
-    toast('Import abgeschlossen! ✓','success');
+    const scouter = document.getElementById('fScouter').value;
+    const from    = document.getElementById('fFrom').value;
+    const to      = document.getElementById('fTo').value;
+    const status  = document.getElementById('fStatus').value;
+
+    let params = 'order=created.desc';
+    if (status)  params += `&qualifikation=eq.${encodeURIComponent(status)}`;
+    if (scouter) params += `&mitarbeiter_name=eq.${encodeURIComponent(scouter)}`;
+    if (from)    params += `&created=gte.${from}T00:00:00`;
+    if (to)      params += `&created=lte.${to}T23:59:59`;
+
+    allData = await sbFetch(params);
+
+    // Load scouter names for dropdowns (once or when needed)
+    if (allScouterNames.length === 0) {
+      allScouterNames = await sbGetScouters();
+    }
+    populateScouterDropdowns();
+
+    dPage = 1;
+    renderAll();
+    document.getElementById('fCount').textContent = `${allData.length.toLocaleString('de-DE')} Datensätze`;
+    setStatus('ok', `${allData.length.toLocaleString('de-DE')} Einträge`);
   } catch(e) {
-    if(!cancelled) toast('Fehler: '+e.message,'error');
+    setStatus('err', 'Fehler');
+    showToast('Ladefehler: ' + e.message, 'error');
+    console.error(e);
   } finally {
-    syncing=false; setSyncing(false);
-    document.getElementById('importBox').style.display='';
-    document.getElementById('importProg').style.display='none';
-    all = await loadAll();
-    populateFilters(); applyFilters(); loadDbStats();
+    document.getElementById('refreshBtn').disabled = false;
   }
 }
 
-async function runImport(from, label) {
-  iLog('Lade Seite 1 für '+label+' (ab '+from+')...','info');
-  const first = await fetchApiPage(from, 1);
-  const total = first['hydra:totalItems']||0;
-  const lastUrl = (first['hydra:view']||{})['hydra:last']||'';
-  const m = lastUrl.match(/page=(\d+)/);
-  const lastPage = m ? parseInt(m[1]) : 1;
-  iLog(total.toLocaleString('de-DE')+' Einträge auf '+lastPage+' Seite(n)','info');
+function populateScouterDropdowns() {
+  const names = allScouterNames;
+  const curF = document.getElementById('fScouter').value;
+  const curP = document.getElementById('profSel').value;
 
-  let recs = (first['hydra:member']||[]).map(parseItem);
-  prog(Math.round(1/lastPage*100),'Seite 1/'+lastPage+' ('+recs.length+' Einträge)');
+  document.getElementById('fScouter').innerHTML =
+    '<option value="">Alle Scouter</option>' +
+    names.map(n => `<option value="${n}"${n===curF?' selected':''}>${n}</option>`).join('');
 
-  for(let p=2; p<=lastPage; p++) {
-    if(cancelled){iLog('Abgebrochen','err');return;}
-    await sleep(DELAY);
-    const d = await fetchApiPage(from, p);
-    recs = recs.concat((d['hydra:member']||[]).map(parseItem));
-    prog(Math.round(p/lastPage*70),'Seite '+p+'/'+lastPage+' ('+recs.length.toLocaleString('de-DE')+' gesamt)');
-  }
-
-  iLog('API fertig: '+recs.length.toLocaleString('de-DE')+' Einträge. Speichere...','info');
-  let saved=0;
-  for(let i=0; i<recs.length; i+=BATCH){
-    if(cancelled){iLog('Abgebrochen','err');return;}
-    await sbUpsert(recs.slice(i,i+BATCH));
-    saved+=Math.min(BATCH,recs.length-i);
-    prog(70+Math.round(saved/recs.length*30),'Gespeichert: '+saved.toLocaleString('de-DE')+'/'+recs.length.toLocaleString('de-DE'));
-  }
-  prog(100,'✓ '+recs.length.toLocaleString('de-DE')+' Einträge importiert');
-  iLog('✓ Fertig: '+recs.length.toLocaleString('de-DE')+' Einträge in Supabase','ok');
+  document.getElementById('profSel').innerHTML =
+    '<option value="">Scouter auswählen...</option>' +
+    names.map(n => `<option value="${n}"${n===curP?' selected':''}>${n}</option>`).join('');
 }
 
-function cancelImport() { cancelled=true; iLog('Abbruch...','err'); }
-
-async function syncToday() {
-  if(syncing) return;
-  syncing=true; setSyncing(true);
-  sLog('Sync heute...','info');
-  try {
-    const from = dateStr(new Date());
-    const first = await fetchApiPage(from,1);
-    const lastUrl=(first['hydra:view']||{})['hydra:last']||'';
-    const m=lastUrl.match(/page=(\d+)/); const lastPage=m?parseInt(m[1]):1;
-    let recs=(first['hydra:member']||[]).map(parseItem);
-    for(let p=2;p<=lastPage;p++){await sleep(DELAY);const d=await fetchApiPage(from,p);recs=recs.concat((d['hydra:member']||[]).map(parseItem));}
-    for(let i=0;i<recs.length;i+=BATCH) await sbUpsert(recs.slice(i,i+BATCH));
-    all=await loadAll(); populateFilters(); applyFilters();
-    sLog('✓ Sync: '+recs.length+' Einträge','ok');
-    toast('Sync: '+recs.length+' Einträge aktualisiert','success');
-  } catch(e){sLog('✗ '+e.message,'err');toast('Sync Fehler: '+e.message,'error');}
-  finally{syncing=false;setSyncing(false);}
+function resetFilters() {
+  document.getElementById('fScouter').value = '';
+  document.getElementById('fFrom').value = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-01`;
+  document.getElementById('fTo').value = '';
+  document.getElementById('fStatus').value = '';
+  loadData();
 }
 
-// ────────────────────────────────────────────────
-// DATA + FILTERS
-// ────────────────────────────────────────────────
-function populateFilters() {
-  const scs=[...new Set(all.map(r=>r.mitarbeiter_name))].sort();
-  const fS=document.getElementById('fScouter'), pS=document.getElementById('pSelect');
-  const cS=fS.value, cP=pS.value;
-  fS.innerHTML='<option value="">Alle Scouter</option>'+scs.map(s=>`<option value="${s}"${s===cS?' selected':''}>${s}</option>`).join('');
-  pS.innerHTML='<option value="">Scouter auswählen...</option>'+scs.map(s=>`<option value="${s}"${s===cP?' selected':''}>${s}</option>`).join('');
+// ══════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════
+function renderAll() {
+  renderDashboard();
+  renderLB();
+  renderTable();
+  const p = document.getElementById('profSel').value;
+  if (p) renderProfile();
 }
 
-function applyFilters() {
-  const sc=document.getElementById('fScouter').value;
-  const fr=document.getElementById('fFrom').value;
-  const to=document.getElementById('fTo').value;
-  const st=document.getElementById('fStatus').value;
-  filtered=all.filter(r=>{
-    if(sc&&r.mitarbeiter_name!==sc)return false;
-    if(st&&r.qualifikation!==st)return false;
-    const d=(r.created||'').split('T')[0];
-    if(fr&&d<fr)return false;
-    if(to&&d>to)return false;
-    return true;
+function countStatus(data) {
+  const c = {}; Object.keys(STATUS).forEach(k => c[k] = 0);
+  data.forEach(r => { if (c[r.qualifikation] !== undefined) c[r.qualifikation]++; });
+  return c;
+}
+
+function renderDashboard() {
+  const c = countStatus(allData);
+  const total = allData.length;
+  Object.keys(STATUS).forEach(k => {
+    const el = document.getElementById('k-' + k); if (el) el.textContent = c[k].toLocaleString('de-DE');
   });
-  document.getElementById('fCount').textContent=filtered.length.toLocaleString('de-DE')+' von '+all.length.toLocaleString('de-DE')+' Datensätzen';
-  pg=1;
-  renderDash(); renderLB(); renderTable();
-  if(document.getElementById('pSelect').value) renderProfile();
-}
-
-function resetFilters(){document.getElementById('fScouter').value='';document.getElementById('fFrom').value='';document.getElementById('fTo').value='';document.getElementById('fStatus').value='';applyFilters();}
-
-// ────────────────────────────────────────────────
-// DASHBOARD
-// ────────────────────────────────────────────────
-function counts(data){const c={};Object.keys(ST).forEach(k=>c[k]=0);data.forEach(r=>{if(c[r.qualifikation]!==undefined)c[r.qualifikation]++;});return c;}
-const $=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-
-function renderDash(){
-  const c=counts(filtered), n=filtered.length;
-  $('kA',c.APPOINTMENT);$('kO',c.ORDER_REGISTERED);$('kF',c.FOLLOW_UP);$('kN',c.NO_INTEREST);
-  $('kH',c.CUSTOMER_NOT_HOME);$('kE',c.EXISTING_CUSTOMER);$('kM',c.NOT_MARKETABLE);$('kI',c.NO_ENTRY);$('kB',c.BLACKLISTED);
-  $('kT',n.toLocaleString('de-DE'));
-  if(n>0){
-    $('kAc',((c.APPOINTMENT/n)*100).toFixed(1)+'% Conversion');
-    $('kOr',((c.ORDER_REGISTERED/n)*100).toFixed(1)+'% Abschluss');
-    $('kTs',[...new Set(filtered.map(r=>r.mitarbeiter_id))].length+' Scouter');
+  const kt = document.getElementById('k-total'); if (kt) kt.textContent = total.toLocaleString('de-DE');
+  if (total > 0) {
+    const as = document.getElementById('k-APPOINTMENT-sub'); if(as) as.textContent = ((c.APPOINTMENT/total)*100).toFixed(1) + '% Conv.';
+    const os = document.getElementById('k-ORDER_REGISTERED-sub'); if(os) os.textContent = ((c.ORDER_REGISTERED/total)*100).toFixed(1) + '% Abschluss';
+    const ts = document.getElementById('k-total-sub'); if(ts) ts.textContent = [...new Set(allData.map(r=>r.mitarbeiter_id))].length + ' Scouter';
   }
-  renderDonut(c); renderLine(); renderTop5();
+  renderDonut(c);
+  renderLine();
+  renderTop5();
 }
 
-function renderDonut(c){
-  const cv=document.getElementById('cDonut'); if(!cv)return;
-  if(charts.d)charts.d.destroy();
-  charts.d=new Chart(cv,{type:'doughnut',data:{
-    labels:Object.keys(ST).map(k=>ST[k].l),
-    datasets:[{data:Object.keys(ST).map(k=>c[k]||0),backgroundColor:Object.keys(ST).map(k=>ST[k].c),borderWidth:0,hoverOffset:6}]
-  },options:{responsive:true,maintainAspectRatio:false,plugins:{
-    legend:{position:'right',labels:{color:'#aaa',font:{family:'DM Sans',size:11},boxWidth:12,padding:8,filter:(item,data)=>data.datasets[0].data[item.index]>0}},
-    tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${ctx.parsed} (${((ctx.parsed/ctx.dataset.data.reduce((a,b)=>a+b,0))*100).toFixed(1)}%)`}}
-  }}});
-}
-
-function renderLine(){
-  const cv=document.getElementById('cLine'); if(!cv)return;
-  if(charts.l)charts.l.destroy();
-  const now=new Date();
-  const days=Array.from({length:14},(_,i)=>{const d=new Date(now);d.setDate(d.getDate()-13+i);return dateStr(d);});
-  const bd={};days.forEach(d=>bd[d]={t:0,a:0,o:0});
-  filtered.forEach(r=>{const d=(r.created||'').split('T')[0];if(bd[d]){bd[d].t++;if(r.qualifikation==='APPOINTMENT')bd[d].a++;if(r.qualifikation==='ORDER_REGISTERED')bd[d].o++;}});
-  charts.l=new Chart(cv,{type:'line',data:{
-    labels:days.map(d=>d.slice(5)),
-    datasets:[
-      {label:'Gesamt',data:days.map(d=>bd[d].t),borderColor:'#555',backgroundColor:'rgba(85,85,85,.1)',tension:.4,fill:true,pointRadius:3},
-      {label:'Termine',data:days.map(d=>bd[d].a),borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,.1)',tension:.4,fill:true,pointRadius:3},
-      {label:'Aufträge',data:days.map(d=>bd[d].o),borderColor:'#F5C500',backgroundColor:'rgba(245,197,0,.1)',tension:.4,fill:true,pointRadius:3},
-    ]
-  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#aaa',font:{family:'DM Sans',size:11},boxWidth:12}}},
-    scales:{x:{ticks:{color:'#666',font:{family:'DM Sans',size:11}},grid:{color:'rgba(255,255,255,.04)'}},y:{ticks:{color:'#666',font:{family:'DM Sans',size:11}},grid:{color:'rgba(255,255,255,.04)'},beginAtZero:true}}}});
-}
-
-function renderTop5(){
-  const stats=getStats(filtered).sort((a,b)=>b.appointments-a.appointments).slice(0,5);
-  const max=stats[0]?.appointments||1;
-  const el=document.getElementById('topList'); if(!el)return;
-  el.innerHTML=stats.length?stats.map((s,i)=>lbRow(s,i,max,'appointments')).join(''):`<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Keine Daten</div></div>`;
-}
-
-// ────────────────────────────────────────────────
-// LEADERBOARD
-// ────────────────────────────────────────────────
-function getStats(data){
-  const map={};
-  data.forEach(r=>{
-    if(!map[r.mitarbeiter_id])map[r.mitarbeiter_id]={id:r.mitarbeiter_id,name:r.mitarbeiter_name,total:0,appointments:0,orders:0};
-    map[r.mitarbeiter_id].total++;
-    if(r.qualifikation==='APPOINTMENT')map[r.mitarbeiter_id].appointments++;
-    if(r.qualifikation==='ORDER_REGISTERED')map[r.mitarbeiter_id].orders++;
+function renderDonut(c) {
+  const cv = document.getElementById('cDonut'); if (!cv) return;
+  if (charts.donut) charts.donut.destroy();
+  charts.donut = new Chart(cv, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(STATUS).map(k => STATUS[k].label),
+      datasets: [{ data: Object.keys(STATUS).map(k => c[k]||0), backgroundColor: Object.keys(STATUS).map(k => STATUS[k].color), borderWidth: 0, hoverOffset: 5 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#aaa', font: {family:'DM Sans',size:11}, boxWidth: 12, padding: 7, filter: (item, d) => d.datasets[0].data[item.index] > 0 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} (${((ctx.parsed/ctx.dataset.data.reduce((a,b)=>a+b,0))*100).toFixed(1)}%)` } }
+      }
+    }
   });
-  return Object.values(map).map(s=>({...s,conversion:s.total>0?((s.appointments/s.total)*100).toFixed(1):'0.0'}));
 }
 
-function lbRow(s,i,max,sortKey){
-  const v=sortKey==='orders'?s.orders:sortKey==='total'?s.total:sortKey==='conversion'?parseFloat(s.conversion):s.appointments;
-  const pct=Math.round(v/max*100);
-  const med=['🥇','🥈','🥉'];
-  return `<div class="lb-row" onclick="jumpProfile('${s.name}')">
-    <div class="lb-rank ${i<3?'r'+(i+1):''}">${i<3?med[i]:i+1}</div>
-    <div class="lb-avatar">${ini(s.name)}</div>
-    <div class="lb-info"><div class="lb-name">${s.name}</div><div class="lb-sub">${s.id} · ${s.total.toLocaleString('de-DE')} gesamt</div></div>
-    <div class="lb-stats">
-      <div><div class="lb-sv" style="color:#22c55e">${s.appointments}</div><div class="lb-sl">Termine</div></div>
-      <div><div class="lb-sv" style="color:#F5C500">${s.orders}</div><div class="lb-sl">Aufträge</div></div>
-      <div><div class="lb-sv">${s.conversion}%</div><div class="lb-sl">Conv.</div></div>
+function renderLine() {
+  const cv = document.getElementById('cLine'); if (!cv) return;
+  if (charts.line) charts.line.destroy();
+  const now = new Date();
+  const days = [];
+  for (let i = 13; i >= 0; i--) { const d = new Date(now); d.setDate(d.getDate()-i); days.push(d.toISOString().split('T')[0]); }
+  const by = {}; days.forEach(d => by[d] = {t:0,a:0,o:0});
+  allData.forEach(r => {
+    const day = (r.created||'').split('T')[0];
+    if (by[day]) { by[day].t++; if(r.qualifikation==='APPOINTMENT')by[day].a++; if(r.qualifikation==='ORDER_REGISTERED')by[day].o++; }
+  });
+  charts.line = new Chart(cv, {
+    type: 'line',
+    data: { labels: days.map(d=>d.slice(5)), datasets: [
+      {label:'Gesamt',  data:days.map(d=>by[d].t), borderColor:'#555', backgroundColor:'rgba(85,85,85,.1)',  tension:.4, fill:true, pointRadius:3},
+      {label:'Termine', data:days.map(d=>by[d].a), borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.1)', tension:.4, fill:true, pointRadius:3},
+      {label:'Aufträge',data:days.map(d=>by[d].o), borderColor:'#F5C500', backgroundColor:'rgba(245,197,0,.1)', tension:.4, fill:true, pointRadius:3},
+    ]},
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins: { legend: { labels: { color:'#aaa', font:{family:'DM Sans',size:11}, boxWidth:12 } } },
+      scales: {
+        x: { ticks:{color:'#666',font:{family:'DM Sans',size:11}}, grid:{color:'rgba(255,255,255,.04)'} },
+        y: { ticks:{color:'#666',font:{family:'DM Sans',size:11}}, grid:{color:'rgba(255,255,255,.04)'}, beginAtZero:true }
+      }
+    }
+  });
+}
+
+function calcStats(data) {
+  const m = {};
+  data.forEach(r => {
+    if (!m[r.mitarbeiter_id]) m[r.mitarbeiter_id] = { id:r.mitarbeiter_id, name:r.mitarbeiter_name, total:0, appointments:0, orders:0, sc:{} };
+    const s = m[r.mitarbeiter_id];
+    s.total++;
+    if (r.qualifikation==='APPOINTMENT') s.appointments++;
+    if (r.qualifikation==='ORDER_REGISTERED') s.orders++;
+    s.sc[r.qualifikation] = (s.sc[r.qualifikation]||0)+1;
+  });
+  return Object.values(m).map(s => ({ ...s, conversion: s.total>0 ? ((s.appointments/s.total)*100).toFixed(1) : '0.0' }));
+}
+
+function lbRow(s, i, max, metricKey) {
+  const bv = metricKey==='orders'?s.orders : metricKey==='total'?s.total : metricKey==='conversion'?parseFloat(s.conversion) : s.appointments;
+  return `<div class="lb-row" onclick="jumpProfile('${s.name.replace(/'/g,"\\'")}')">
+    <div class="lb-rank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div>
+    <div class="lb-av">${ini(s.name)}</div>
+    <div class="lb-info"><div class="lb-name">${s.name}</div><div class="lb-sub">${s.id} · ${s.total} Quali.</div></div>
+    <div class="lb-nums">
+      <div class="lb-n"><div class="lb-nv" style="color:var(--green)">${s.appointments}</div><div class="lb-nl">Termine</div></div>
+      <div class="lb-n"><div class="lb-nv" style="color:var(--gold)">${s.orders}</div><div class="lb-nl">Aufträge</div></div>
+      <div class="lb-n"><div class="lb-nv">${s.conversion}%</div><div class="lb-nl">Conv.</div></div>
+      <div class="lb-n"><div class="lb-nv">${s.total}</div><div class="lb-nl">Gesamt</div></div>
     </div>
-    <div class="lb-bar-wrap"><div class="lb-bar" style="width:${pct}%"></div></div>
+    <div class="lb-bar-wrap"><div class="lb-bar" style="width:${max?Math.round(bv/max*100):0}%"></div></div>
   </div>`;
 }
 
-function renderLB(){
-  const by=document.getElementById('lbSort')?.value||'appointments';
-  let stats=getStats(filtered);
-  if(by==='appointments')stats.sort((a,b)=>b.appointments-a.appointments);
-  else if(by==='orders')stats.sort((a,b)=>b.orders-a.orders);
-  else if(by==='total')stats.sort((a,b)=>b.total-a.total);
-  else stats.sort((a,b)=>parseFloat(b.conversion)-parseFloat(a.conversion));
-  const max=parseFloat(stats[0]?.[by==='appointments'?'appointments':by==='orders'?'orders':by==='conversion'?'conversion':'total']||1);
-  const el=document.getElementById('lbList');
-  el.innerHTML=stats.length?stats.map((s,i)=>lbRow(s,i,max,by)).join(''):`<div class="empty"><div class="empty-icon">🏆</div><div class="empty-title">Keine Daten</div></div>`;
+function renderTop5() {
+  const stats = calcStats(allData).sort((a,b)=>b.appointments-a.appointments).slice(0,5);
+  const max = stats[0]?.appointments||1;
+  const el = document.getElementById('topList'); if(!el) return;
+  el.innerHTML = stats.length ? stats.map((s,i)=>lbRow(s,i,max,'appointments')).join('') :
+    '<div class="empty"><div class="empty-icon">📭</div><div class="empty-t">Keine Daten</div></div>';
 }
 
-// ────────────────────────────────────────────────
-// PROFIL
-// ────────────────────────────────────────────────
-function jumpProfile(name){document.getElementById('pSelect').value=name;switchTab('profile',document.querySelectorAll('.tab')[2]);renderProfile();}
+function renderLB() {
+  const by = document.getElementById('lbSort')?.value||'appointments';
+  let stats = calcStats(allData);
+  const sortFn = by==='orders'?(a,b)=>b.orders-a.orders : by==='total'?(a,b)=>b.total-a.total : by==='conversion'?(a,b)=>parseFloat(b.conversion)-parseFloat(a.conversion) : (a,b)=>b.appointments-a.appointments;
+  stats.sort(sortFn);
+  const maxV = by==='orders'?stats[0]?.orders : by==='total'?stats[0]?.total : by==='conversion'?parseFloat(stats[0]?.conversion||0) : stats[0]?.appointments;
+  const el = document.getElementById('lbList'); if(!el) return;
+  el.innerHTML = stats.length ? stats.map((s,i)=>lbRow(s,i,maxV||1,by)).join('') :
+    '<div class="empty"><div class="empty-icon">🏆</div><div class="empty-t">Keine Daten</div></div>';
+}
 
-function renderProfile(){
-  const name=document.getElementById('pSelect').value, el=document.getElementById('pContent');
-  if(!name){el.innerHTML='<div class="empty"><div class="empty-icon">👤</div><div class="empty-title">Scouter auswählen</div></div>';return;}
-  const data=filtered.filter(r=>r.mitarbeiter_name===name);
-  if(!data.length){el.innerHTML=`<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Keine Daten für ${name}</div><div class="empty-sub">Filter anpassen oder Daten importieren</div></div>`;return;}
-  const c=counts(data), n=data.length, conv=n>0?((c.APPOINTMENT/n)*100).toFixed(1):'0.0';
-  const days=[...new Set(data.map(r=>(r.created||'').split('T')[0]))].length;
-  el.innerHTML=`
+function jumpProfile(name) {
+  document.getElementById('profSel').value = name;
+  switchTab('profile', document.querySelectorAll('.tab')[2]);
+  renderProfile();
+}
+
+function renderProfile() {
+  const name = document.getElementById('profSel').value;
+  const el = document.getElementById('profContent');
+  if (!name) { el.innerHTML='<div class="empty"><div class="empty-icon">👤</div><div class="empty-t">Scouter auswählen</div></div>'; return; }
+  const data = allData.filter(r => r.mitarbeiter_name === name);
+  if (!data.length) { el.innerHTML='<div class="empty"><div class="empty-icon">📭</div><div class="empty-t">Keine Daten für '+name+'</div></div>'; return; }
+  const id = data[0].mitarbeiter_id;
+  const c = countStatus(data); const tot = data.length;
+  const apt = c.APPOINTMENT; const ord = c.ORDER_REGISTERED;
+  const conv = tot>0?((apt/tot)*100).toFixed(1):'0.0';
+  const activeDays = [...new Set(data.map(r=>r.created.split('T')[0]))].length;
+
+  el.innerHTML = `
     <div class="card" style="margin-bottom:20px">
-      <div class="profile-header">
-        <div class="p-avatar">${ini(name)}</div>
+      <div class="prof-head">
+        <div class="prof-av">${ini(name)}</div>
         <div>
-          <div class="p-name">${name}</div>
-          <div class="p-id">ID: ${data[0].mitarbeiter_id}</div>
-          <div class="p-kpis">
-            <div><div class="p-kv" style="color:#22c55e">${c.APPOINTMENT}</div><div class="p-kl">Termine</div></div>
-            <div><div class="p-kv" style="color:#F5C500">${c.ORDER_REGISTERED}</div><div class="p-kl">Aufträge</div></div>
-            <div><div class="p-kv">${conv}%</div><div class="p-kl">Conversion</div></div>
-            <div><div class="p-kv">${n.toLocaleString('de-DE')}</div><div class="p-kl">Gesamt</div></div>
-            <div><div class="p-kv">${days}</div><div class="p-kl">Aktive Tage</div></div>
+          <div class="prof-name">${name}</div>
+          <div class="prof-id">ID: ${id}</div>
+          <div class="prof-kpis">
+            <div><div class="pk-v" style="color:var(--green)">${apt}</div><div class="pk-l">Termine</div></div>
+            <div><div class="pk-v" style="color:var(--gold)">${ord}</div><div class="pk-l">Aufträge</div></div>
+            <div><div class="pk-v">${conv}%</div><div class="pk-l">Conversion</div></div>
+            <div><div class="pk-v">${tot}</div><div class="pk-l">Gesamt</div></div>
+            <div><div class="pk-v">${activeDays}</div><div class="pk-l">Aktive Tage</div></div>
           </div>
         </div>
       </div>
       <div style="padding:20px">
-        <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Status-Verteilung</div>
-        ${Object.keys(ST).map(k=>{const cnt=c[k]||0,pct=n>0?((cnt/n)*100).toFixed(0):0;return`<div class="sb-row"><div class="sb-lbl">${ST[k].l}</div><div class="sb-bw"><div class="sb-b" style="width:${pct}%;background:${ST[k].c}"></div></div><div class="sb-n">${cnt}</div><div class="sb-p">${pct}%</div></div>`;}).join('')}
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Status-Verteilung</div>
+        ${Object.keys(STATUS).map(k => {
+          const n=c[k]||0; const p=tot>0?Math.round((n/tot)*100):0;
+          return `<div class="sb-row">
+            <div class="sb-lbl">${STATUS[k].label}</div>
+            <div class="sb-bw"><div class="sb-b" style="width:${p}%;background:${STATUS[k].color}"></div></div>
+            <div class="sb-n">${n}</div><div class="sb-p">${p}%</div>
+          </div>`;
+        }).join('')}
       </div>
     </div>
     <div class="card">
-      <div class="card-header"><span class="card-title">Letzte Aktivitäten</span><span style="font-size:12px;color:var(--text3)">${n} Einträge</span></div>
-      <div class="table-wrap"><table><thead><tr><th>Datum</th><th>Zeit</th><th>Status</th><th>Adresse</th><th>Ort</th></tr></thead>
-        <tbody>${data.sort((a,b)=>(b.created||'').localeCompare(a.created||'')).slice(0,50).map(r=>`
-          <tr>
-            <td>${(r.created||'').split('T')[0]}</td>
-            <td>${((r.created||'').split('T')[1]||'').slice(0,5)}</td>
-            <td><span class="badge" style="background:${ST[r.qualifikation]?.c||'#666'}22;color:${ST[r.qualifikation]?.c||'#aaa'}">${ST[r.qualifikation]?.l||r.qualifikation}</span></td>
-            <td>${r.strasse||''} ${r.hausnummer||''}${r.hausnummer_zusatz||''}</td>
-            <td>${r.plz||''} ${r.ort||''}</td>
-          </tr>`).join('')}
-        </tbody></table>
-      </div>
+      <div class="card-head"><span class="card-title">Letzte Einträge</span><span style="font-size:12px;color:var(--text3)">${data.length}</span></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Datum</th><th>Zeit</th><th>Status</th><th>Adresse</th><th>Ort</th></tr></thead>
+        <tbody>${data.slice(0,50).map(r=>`<tr>
+          <td>${r.created.split('T')[0]}</td>
+          <td style="color:var(--text3)">${(r.created.split('T')[1]||'').slice(0,5)}</td>
+          <td><span class="badge" style="background:${STATUS[r.qualifikation]?.color||'#666'}22;color:${STATUS[r.qualifikation]?.color||'#aaa'}">${STATUS[r.qualifikation]?.label||r.qualifikation}</span></td>
+          <td>${r.strasse||''} ${r.hausnummer||''}${r.hausnummer_zusatz||''}</td>
+          <td>${r.plz||''} ${r.ort||''}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
     </div>`;
 }
 
-// ────────────────────────────────────────────────
-// DATA TABLE
-// ────────────────────────────────────────────────
-function sortTbl(f){if(sField===f)sDir*=-1;else{sField=f;sDir=-1;}pg=1;renderTable();}
-function renderTable(){
-  const sorted=[...filtered].sort((a,b)=>(a[sField]||'').localeCompare(b[sField]||'')*sDir);
-  const total=sorted.length, pages=Math.ceil(total/PG_SIZE);
-  const slice=sorted.slice((pg-1)*PG_SIZE,pg*PG_SIZE);
-  $('dCount',total.toLocaleString('de-DE')+' Einträge');
-  document.getElementById('dBody').innerHTML=slice.map(r=>`
-    <tr>
-      <td>${(r.created||'').split('T')[0]}</td>
-      <td>${r.mitarbeiter_name||''}</td>
-      <td><span class="badge" style="background:${ST[r.qualifikation]?.c||'#666'}22;color:${ST[r.qualifikation]?.c||'#aaa'}">${ST[r.qualifikation]?.l||r.qualifikation}</span></td>
-      <td>${r.strasse||''} ${r.hausnummer||''}${r.hausnummer_zusatz||''}</td>
-      <td>${r.plz||''}</td><td>${r.ort||''}</td>
-    </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">Keine Einträge</td></tr>';
-  // Pagination
-  const el=document.getElementById('dPag');
-  if(pages<=1){el.innerHTML='';return;}
-  let h=`<button class="page-btn" onclick="goPg(${Math.max(1,pg-1)})">‹</button>`;
-  for(let p=1;p<=pages;p++){if(p===1||p===pages||(p>=pg-2&&p<=pg+2))h+=`<button class="page-btn${p===pg?' active':''}" onclick="goPg(${p})">${p}</button>`;else if(p===pg-3||p===pg+3)h+='<span style="color:var(--text3)">…</span>';}
-  h+=`<button class="page-btn" onclick="goPg(${Math.min(pages,pg+1)})">›</button><span class="page-info">Seite ${pg}/${pages}</span>`;
-  el.innerHTML=h;
-}
-function goPg(p){pg=p;renderTable();}
+function sortD(f) { if(dSortF===f) dSortDir*=-1; else { dSortF=f; dSortDir=-1; } dPage=1; renderTable(); }
 
-// ────────────────────────────────────────────────
-// DB STATS
-// ────────────────────────────────────────────────
-async function loadDbStats(){
-  try {
-    const r=await fetch(`${SB_URL}/rest/v1/${TABLE}?select=*&limit=0`,{headers:{...SBH,'Prefer':'count=exact'}});
-    const total=r.headers.get('content-range')?.split('/')[1]||all.length;
-    $('sTotal',parseInt(total).toLocaleString('de-DE')+' Einträge');
-    if(all.length){
-      const sorted=[...all].sort((a,b)=>(a.created||'').localeCompare(b.created||''));
-      $('sRange',(sorted[0]?.created||'').split('T')[0]+' → '+(sorted[sorted.length-1]?.created||'').split('T')[0]);
-      $('sScouter',[...new Set(all.map(r=>r.mitarbeiter_id))].length+' Scouter');
-      const ls=all.find(r=>r.synced_at)?.synced_at;
-      if(ls)$('sSync',new Date(ls).toLocaleString('de-DE'));
-    }
-  } catch(e){}
+function renderTable() {
+  const sorted = [...allData].sort((a,b) => String(a[dSortF]||'').localeCompare(String(b[dSortF]||''))*dSortDir);
+  const tot = sorted.length; const pages = Math.ceil(tot/50);
+  const sl = sorted.slice((dPage-1)*50, dPage*50);
+  const dc = document.getElementById('dataCount'); if(dc) dc.textContent = `${tot.toLocaleString('de-DE')} Einträge`;
+  const tb = document.getElementById('tBody'); if(!tb) return;
+  tb.innerHTML = sl.map(r=>`<tr>
+    <td>${r.created.split('T')[0]}</td>
+    <td style="color:var(--text)">${r.mitarbeiter_name}</td>
+    <td><span class="badge" style="background:${STATUS[r.qualifikation]?.color||'#666'}22;color:${STATUS[r.qualifikation]?.color||'#aaa'}">${STATUS[r.qualifikation]?.label||r.qualifikation}</span></td>
+    <td>${r.strasse||''} ${r.hausnummer||''}${r.hausnummer_zusatz||''}</td>
+    <td>${r.plz||''}</td><td>${r.ort||''}</td>
+  </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">Keine Daten</td></tr>';
+  renderPager(pages);
 }
 
-// ────────────────────────────────────────────────
-// SCHEDULER
-// ────────────────────────────────────────────────
-function setupScheduler(){
-  // 5 min sync between 07-23h
-  setInterval(async()=>{const h=new Date().getHours();if(h>=7&&h<23&&!syncing)syncToday();},5*60*1000);
-  // Minute checker
-  setInterval(async()=>{
-    if(syncing)return;
-    const n=new Date(),hh=n.getHours(),mm=n.getMinutes(),dow=n.getDay();
-    const tom=new Date(n);tom.setDate(tom.getDate()+1);
-    if(hh===23&&mm===59)syncToday();
-    if(dow===0&&hh===0&&mm===5){const mo=new Date(n);mo.setDate(n.getDate()-7);doImport('week');}
-    if(tom.getDate()===1&&hh===0&&mm===10)doImport('3m');
-  },60*1000);
-}
-
-// ────────────────────────────────────────────────
-// UI HELPERS
-// ────────────────────────────────────────────────
-function switchTab(name,el){
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.tab-section').forEach(s=>s.classList.remove('active'));
-  if(el)el.classList.add('active');
-  document.getElementById('tab-'+name)?.classList.add('active');
-  if(name==='leaderboard')renderLB();
-  if(name==='data')renderTable();
-  if(name==='import')loadDbStats();
-}
-
-function setSyncing(s){
-  const dot=document.getElementById('syncDot'),txt=document.getElementById('syncText'),btn=document.getElementById('syncBtn');
-  if(s){dot.className='sync-dot syncing';txt.textContent='Synchronisiert...';btn.disabled=true;}
-  else{dot.className='sync-dot';txt.textContent='Bereit · '+all.length.toLocaleString('de-DE')+' Einträge';btn.disabled=false;}
-}
-
-function ini(n){if(!n)return'?';const p=n.trim().split(' ');return p.length>=2?(p[0][0]+p[p.length-1][0]).toUpperCase():n.slice(0,2).toUpperCase();}
-function dateStr(d){return d.toISOString().split('T')[0];}
-
-function prog(pct,lbl){
-  const b=document.getElementById('progBar'),l=document.getElementById('progLbl');
-  if(b)b.style.width=pct+'%';if(l)l.textContent=lbl;
-}
-
-function sLog(msg,type='info'){
-  const el=document.getElementById('syncLog'); if(!el)return;
-  const cls=type==='ok'?'lok':type==='err'?'lerr':'linf';
-  const e=document.createElement('div');e.className='log-row';
-  e.innerHTML=`<span class="lt">${new Date().toLocaleTimeString('de-DE')}</span><span class="${cls}">${msg}</span>`;
-  el.insertBefore(e,el.firstChild);
-  while(el.children.length>60)el.removeChild(el.lastChild);
-}
-
-function iLog(msg,type='info'){
-  const el=document.getElementById('iLog'); if(!el)return;
-  const cls=type==='ok'?'lok':type==='err'?'lerr':'linf';
-  const e=document.createElement('div');e.className='log-row';
-  e.innerHTML=`<span class="lt">${new Date().toLocaleTimeString('de-DE')}</span><span class="${cls}">${msg}</span>`;
-  el.appendChild(e);el.scrollTop=el.scrollHeight;
-}
-
-let tTimer;
-function toast(msg,type='info'){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.className='show '+type;
-  clearTimeout(tTimer);tTimer=setTimeout(()=>el.className='',3500);
-}
-
-// ────────────────────────────────────────────────
-// INIT
-// ────────────────────────────────────────────────
-async function init(){
-  const now=new Date();
-  document.getElementById('fFrom').value=dateStr(new Date(now.getFullYear(),now.getMonth(),1));
-  setSyncing(true);
-  document.getElementById('syncText').textContent='Lade Daten...';
-  try {
-    all=await loadAll();
-    populateFilters(); applyFilters();
-    setSyncing(false);
-    if(all.length===0){
-      toast('Noch keine Daten – bitte im Tab "Import" laden!','warning');
-      switchTab('import',document.querySelectorAll('.tab')[4]);
-    } else {
-      toast(all.length.toLocaleString('de-DE')+' Einträge geladen','success');
-    }
-  } catch(e){
-    setSyncing(false);
-    document.getElementById('syncDot').className='sync-dot error';
-    document.getElementById('syncText').textContent='Verbindungsfehler';
-    toast('Supabase-Fehler: '+e.message,'error');
-    sLog('✗ '+e.message,'err');
+function renderPager(pages) {
+  const el = document.getElementById('tPager'); if(!el||pages<=1){if(el)el.innerHTML='';return;}
+  let h = `<button class="pg-btn" onclick="setP(${Math.max(1,dPage-1)})">‹</button>`;
+  for(let p=1;p<=pages;p++) {
+    if(p===1||p===pages||(p>=dPage-2&&p<=dPage+2)) h+=`<button class="pg-btn${p===dPage?' on':''}" onclick="setP(${p})">${p}</button>`;
+    else if(p===dPage-3||p===dPage+3) h+=`<span style="color:var(--text3);padding:0 4px">…</span>`;
   }
-  setupScheduler();
+  h += `<button class="pg-btn" onclick="setP(${Math.min(pages,dPage+1)})">›</button><span class="pg-info">Seite ${dPage}/${pages}</span>`;
+  el.innerHTML = h;
 }
-document.addEventListener('DOMContentLoaded',init);
+function setP(p){dPage=p;renderTable();}
+
+// ══════════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════════
+async function updateSettings() {
+  try {
+    const total = await sbCountAll();
+    const st = document.getElementById('sTotal'); if(st) st.textContent = total.toLocaleString('de-DE');
+    const sl = document.getElementById('sLoaded'); if(sl) sl.textContent = allData.length.toLocaleString('de-DE');
+    const ss = document.getElementById('sScouter'); if(ss) ss.textContent = [...new Set(allData.map(r=>r.mitarbeiter_id))].length;
+    if (allData.length) {
+      const dates = allData.map(r=>r.created).sort();
+      const so = document.getElementById('sOldest'); if(so) so.textContent = dates[0].split('T')[0];
+      const sn = document.getElementById('sNewest'); if(sn) sn.textContent = dates[dates.length-1].split('T')[0];
+    }
+  } catch(e) { console.error(e); }
+}
+
+// ══════════════════════════════════════════════════
+// DOWNLOAD
+// ══════════════════════════════════════════════════
+function openDownload() {
+  const now = new Date();
+  const dfrom = document.getElementById('dlFrom');
+  if (!dfrom.value) dfrom.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  document.getElementById('dlLog').innerHTML = '';
+  document.getElementById('dlLog').style.display = 'none';
+  document.getElementById('progBar').style.width = '0%';
+  document.getElementById('progText').textContent = '';
+  document.getElementById('dlStartBtn').disabled = false;
+  document.getElementById('dlStartBtn').textContent = '▶ Starten';
+  document.getElementById('dlCloseBtn').disabled = false;
+  document.getElementById('dlOverlay').classList.add('show');
+}
+
+function closeDownload() {
+  if (isDownloading) return;
+  document.getElementById('dlOverlay').classList.remove('show');
+}
+
+function dlLog(msg, type='inf') {
+  const el = document.getElementById('dlLog');
+  el.style.display = 'block';
+  const cls = type==='ok'?'log-ok':type==='err'?'log-err':'log-inf';
+  el.innerHTML += `<div><span class="${cls}">${escHtml(msg)}</span></div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+function parseApiRows(members) {
+  return members.map(item => {
+    const w = item.wohneinheit||{}, a = w.adresse||{}, mi = item.mitarbeiter||{};
+    const rawId = (item['@id']||'').split('/').pop();
+    return {
+      api_id: item['@id'] || rawId,
+      id: rawId + '_' + (item.created||''),
+      mitarbeiter_id: mi.id || '',
+      mitarbeiter_name: mi.name || ((mi.vorname||'')+' '+(mi.nachname||'')).trim() || mi.id || 'Unbekannt',
+      qualifikation: item.qualifikation || '',
+      created: item.created || new Date().toISOString(),
+      plz: a.plz||'', ort: a.ort||'', strasse: a.strasse||'',
+      hausnummer: a.hausnummer||'', hausnummer_zusatz: a.hausnummerZusatz||'',
+    };
+  });
+}
+
+async function startDownload() {
+  const from = document.getElementById('dlFrom').value;
+  const to   = document.getElementById('dlTo').value;
+  if (!from) { showToast('Bitte "Ab Datum" eingeben', 'warn'); return; }
+
+  isDownloading = true;
+  document.getElementById('dlStartBtn').disabled = true;
+  document.getElementById('dlStartBtn').textContent = '⏳ Läuft...';
+  document.getElementById('dlCloseBtn').disabled = true;
+
+  const setProg = (pct, txt) => {
+    document.getElementById('progBar').style.width = pct + '%';
+    document.getElementById('progText').textContent = txt;
+  };
+
+  let totalSaved = 0;
+  try {
+    dlLog(`Download ab ${from}${to?' bis '+to:''}`, 'inf');
+    setProg(2, 'Verbinde mit API...');
+
+    // Page 1
+    let url = `${API_BASE}/adress_qualifikations?created%5Bafter%5D=${from}&page=1`;
+    if (to) url += `&created%5Bbefore%5D=${to}T23:59:59`;
+
+    const r1 = await fetch(url, { headers: { 'X-AUTH-TOKEN': API_TOK, Accept: 'application/ld+json' } });
+    if (!r1.ok) throw new Error(`API ${r1.status}`);
+    const d1 = await r1.json();
+
+    const totalItems = d1['hydra:totalItems'] || 0;
+    const lastUrl = d1['hydra:view']?.['hydra:last'] || '';
+    const mP = lastUrl.match(/page=(\d+)/);
+    const lastPage = mP ? parseInt(mP[1]) : 1;
+
+    dlLog(`${totalItems.toLocaleString('de-DE')} Datensätze auf ${lastPage} Seiten`, 'inf');
+
+    // Save page 1
+    const rows1 = parseApiRows(d1['hydra:member']||[]);
+    if (rows1.length) { await sbUpsert(rows1); totalSaved += rows1.length; }
+    setProg(Math.round(1/lastPage*85)+2, `Seite 1/${lastPage} gespeichert`);
+
+    // Pages 2+
+    for (let p = 2; p <= lastPage; p++) {
+      await sleep(DELAY_MS);
+      let pu = `${API_BASE}/adress_qualifikations?created%5Bafter%5D=${from}&page=${p}`;
+      if (to) pu += `&created%5Bbefore%5D=${to}T23:59:59`;
+      const rp = await fetch(pu, { headers: { 'X-AUTH-TOKEN': API_TOK, Accept: 'application/ld+json' } });
+      if (!rp.ok) throw new Error(`API Seite ${p}: ${rp.status}`);
+      const dp = await rp.json();
+      const rowsP = parseApiRows(dp['hydra:member']||[]);
+      if (rowsP.length) { await sbUpsert(rowsP); totalSaved += rowsP.length; }
+      const pct = Math.round(p/lastPage*85)+2;
+      setProg(pct, `Seite ${p}/${lastPage} — ${totalSaved.toLocaleString('de-DE')} gespeichert`);
+      if (p % 10 === 0) dlLog(`Seite ${p}/${lastPage}: ${totalSaved.toLocaleString('de-DE')} Datensätze`, 'inf');
+    }
+
+    setProg(95, 'Aktualisiere Ansicht...');
+    dlLog(`✓ Fertig! ${totalSaved.toLocaleString('de-DE')} verarbeitet (Duplikate ignoriert)`, 'ok');
+
+    // Refresh scouter list
+    allScouterNames = await sbGetScouters();
+    await loadData();
+    setProg(100, '✓ Abgeschlossen!');
+    showToast(`Import abgeschlossen (${totalSaved.toLocaleString('de-DE')} Datensätze)`, 'success');
+
+  } catch(e) {
+    dlLog('✗ Fehler: ' + e.message, 'err');
+    showToast('Fehler: ' + e.message, 'error');
+    setProg(0, '');
+  } finally {
+    isDownloading = false;
+    document.getElementById('dlStartBtn').disabled = false;
+    document.getElementById('dlStartBtn').textContent = '▶ Nochmal starten';
+    document.getElementById('dlCloseBtn').disabled = false;
+  }
+}
+
+// ══════════════════════════════════════════════════
+// UI HELPERS
+// ══════════════════════════════════════════════════
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tsec').forEach(s=>s.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const sec = document.getElementById('tab-'+name); if(sec) sec.classList.add('active');
+  if (name==='leaderboard') renderLB();
+  if (name==='data') renderTable();
+  if (name==='settings') updateSettings();
+}
+
+function setStatus(type, txt) {
+  const dot = document.getElementById('dot');
+  const t = document.getElementById('dotTxt');
+  dot.className = 'dot' + (type==='busy'?' busy':type==='err'?' err':'');
+  if (t) t.textContent = txt;
+}
+
+function ini(n) {
+  if (!n) return '?';
+  const p = n.trim().split(' ');
+  return (p.length>=2 ? p[0][0]+p[p.length-1][0] : n.slice(0,2)).toUpperCase();
+}
+
+let toastT;
+function showToast(msg, type='info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + (type==='success'?'success':type==='error'?'error':type==='warn'?'warn':'');
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>el.className='', 4000);
+}
+
+// ══════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════
+async function init() {
+  const now = new Date();
+  document.getElementById('fFrom').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  await loadData();
+}
+
+document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>
