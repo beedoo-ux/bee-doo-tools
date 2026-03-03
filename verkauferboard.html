@@ -293,6 +293,8 @@ function App(){
   const[cards,setCards]=useState([]);
   const[tab,setTab]=useState("dash");
   const[dashSub,setDashSub]=useState("list"); // list|cal|rank
+  const[rankMonth,setRankMonth]=useState("current"); // current|last|all
+  const[rankSort,setRankSort]=useState("provE"); // provE|auftraege|stuck
   const[role,setRole]=useState("admin");
   const[mBrd,setMBrd]=useState("DC");
   const[dashBer,setDashBer]=useState("");
@@ -363,9 +365,11 @@ function App(){
   },[cards]);
 
   // ── Load ──
-  const loadData=useCallback(async()=>{
-    const[stg,usr,crd]=await Promise.all([sb("bd_stages?order=board,position"),sb("bd_users?order=role,name"),sb("bd_cards_with_age?select=*&limit=5000")]);
-    if(stg&&usr&&crd&&stg.length>0){setStages(stg);setUsers(usr);setCards(crd);setDbOk(true);setErr("");if(!dashBer&&usr.length){const vb=usr.filter(u=>u.role==="vertrieb");if(vb.length)setDashBer(vb[0].name)}
+  const[lastUpdated,setLastUpdated]=useState(null);
+  const loadData=useCallback(async(forceRefresh=false)=>{
+    if(!forceRefresh){try{const cc=sessionStorage.getItem("beedoo_vb_cache");if(cc){const{stg,usr,crd,ts}=JSON.parse(cc);if(Date.now()-ts<60000&&stg?.length>0){setStages(stg);setUsers(usr);setCards(crd);setDbOk(true);setErr("");setLastUpdated(new Date(ts));if(!dashBer&&usr.length){const vb=usr.filter(u=>u.role==="vertrieb");if(vb.length)setDashBer(vb[0].name)}crd.forEach(c=>{if(isStorno(c.stage_key))stornoIds.current.add(c.id)});setLoading(false);return;}}}catch(e){}}
+    const[stg,usr,crd]=await Promise.all([sb("bd_stages?order=board,position"),sb("bd_users?order=role,name"),sb("bd_cards_with_age?select=id,board,stage_id,stage_key,stage_label,stage_color,phase,is_provision,is_evu,customer_name,nid,tel,str,plz,ort,kwp,mod_count,typ,zahl,eur,src,berater_name,monteur_name,days_in_stage,next_action,next_action_date,is_today,project_id,notes,ersteller_name,phase_notes&limit=5000&order=days_in_stage.desc")]);
+    if(stg&&usr&&crd&&stg.length>0){setStages(stg);setUsers(usr);setCards(crd);setDbOk(true);setErr("");setLastUpdated(new Date());try{sessionStorage.setItem("beedoo_vb_cache",JSON.stringify({stg,usr,crd,ts:Date.now()}))}catch(e){}if(!dashBer&&usr.length){const vb=usr.filter(u=>u.role==="vertrieb");if(vb.length)setDashBer(vb[0].name)}
       crd.forEach(c=>{if(isStorno(c.stage_key))stornoIds.current.add(c.id)})}
     else{const dStg=genDemoStages(),dUsr=genDemoUsers(),dCrd=genDemoCards(dStg);setStages(dStg);setUsers(dUsr);setCards(dCrd);setDbOk(false);if(!dashBer)setDashBer(BER[0]);
       dCrd.forEach(c=>{if(isStorno(c.stage_key))stornoIds.current.add(c.id)})}
@@ -375,9 +379,9 @@ function App(){
 
   // Poll 8s
   useEffect(()=>{if(!dbOk)return;pollRef.current=setInterval(async()=>{
-    const crd=await sb("bd_cards_with_age?select=*&limit=5000");
-    if(crd){crd.forEach(c=>{if(isStorno(c.stage_key)&&!stornoIds.current.has(c.id))addStornoAlert(c)});setCards(crd);setErr("")}else{setErr("Verbindung unterbrochen")}
-  },8000);return()=>clearInterval(pollRef.current)},[dbOk,addStornoAlert]);
+    const crd=await sb("bd_cards_with_age?select=id,board,stage_id,stage_key,stage_label,stage_color,phase,is_provision,is_evu,customer_name,nid,tel,str,plz,ort,kwp,mod_count,typ,zahl,eur,src,berater_name,monteur_name,days_in_stage,next_action,next_action_date,is_today,project_id,notes,ersteller_name,phase_notes&limit=5000&order=days_in_stage.desc");
+    if(crd){crd.forEach(c=>{if(isStorno(c.stage_key)&&!stornoIds.current.has(c.id))addStornoAlert(c)});setCards(crd);setLastUpdated(new Date());try{const cur=sessionStorage.getItem("beedoo_vb_cache");if(cur){const p=JSON.parse(cur);p.crd=crd;p.ts=Date.now();sessionStorage.setItem("beedoo_vb_cache",JSON.stringify(p))}else{}}catch(e){}setErr("")}else{setErr("Verbindung unterbrochen")}
+  },60000);return()=>clearInterval(pollRef.current)},[dbOk,addStornoAlert]);
 
   // ── Move card with storno confirm ──
   const tryMove=useCallback((cardId,stageId)=>{
@@ -394,7 +398,7 @@ function App(){
     setConfirm(null);
     if(newStg&&isStorno(newStg.stage_key)&&card)addStornoAlert(card);
     if(dbOk){const ok=await rpc("bd_move_card",{p_card_id:cardId,p_new_stage_id:stageId});
-      if(ok){const crd=await sb("bd_cards_with_age?select=*&limit=5000");if(crd)setCards(crd)}
+      if(ok){const crd=await sb("bd_cards_with_age?select=id,board,stage_id,stage_key,stage_label,stage_color,phase,is_provision,is_evu,customer_name,nid,tel,str,plz,ort,kwp,mod_count,typ,zahl,eur,src,berater_name,monteur_name,days_in_stage,next_action,next_action_date,is_today,project_id,notes,ersteller_name,phase_notes&limit=5000&order=days_in_stage.desc");if(crd)setCards(crd)}
       else{setCards(prevCards.current);setErr("Verschieben fehlgeschlagen – Rollback")}}
   },[dbOk,stages,cards,addStornoAlert]);
 
@@ -493,7 +497,7 @@ function App(){
   useEffect(()=>{loadSnapshots()},[]);
   useEffect(()=>{const iv=setInterval(()=>{const n=new Date();if(n.getHours()===20&&n.getMinutes()<1){const today=n.toISOString().slice(0,10);if(snapshotDate!==today&&ranking.length>0)saveSnapshot(ranking)}},30000);return ()=>clearInterval(iv)},[snapshotDate,ranking,saveSnapshot]);
   // Berater ranking (admin)
-  const ranking=useMemo(()=>{if(role!=="admin")return[];const now=new Date();const weekAgo=new Date(now);weekAgo.setDate(weekAgo.getDate()-7);const monthAgo=new Date(now);monthAgo.setDate(monthAgo.getDate()-30);return berList.map(b=>{const bc=vCards.filter(c=>c.berater_name===b&&!isStorno(c.stage_key));const auftragThisMonth=bc.filter(c=>c.stage_key==="auftrag").length;const prov=bc.filter(c=>c.project_id&&vMontStatus[c.project_id]?.prov);const stuck=bc.filter(c=>(c.days_in_stage||0)>=7);const pipe=bc.reduce((s,c)=>s+(Number(c.eur)||0),0);const provE=prov.reduce((s,c)=>s+(Number(c.eur)||0),0);const auftraege=bc.filter(c=>["auftrag","vertrag","finanzierung"].includes(c.stage_key));const weekDeals=auftraege.filter(c=>(c.days_in_stage||0)<=7).length;const monthDeals=auftraege.length;const convRate=bc.length>0?Math.round((auftraege.length/bc.length)*100):0;const streak=Math.min(weekDeals,7);const avgDeal=auftraege.length>0?Math.round(auftraege.reduce((s,c)=>s+(Number(c.eur)||0),0)/auftraege.length):0;const badges=[];if(provE>=100000)badges.push({icon:"💎",label:"100k+ Provision"});if(monthDeals>=10)badges.push({icon:"🔥",label:"10+ Deals/Monat"});if(convRate>=30)badges.push({icon:"🎯",label:"30%+ Conversion"});if(stuck.length===0&&bc.length>5)badges.push({icon:"⚡",label:"Null Stau"});if(weekDeals>=3)badges.push({icon:"🚀",label:"3+ Deals/Woche"});return{name:b,total:bc.length,pipe,prov:prov.length,provE,stuck:stuck.length,storno:vCards.filter(c=>c.berater_name===b&&isStorno(c.stage_key)).length,weekDeals,monthDeals,convRate,streak,avgDeal,badges,auftragThisMonth}}).sort((a,b)=>b.provE-a.provE)},[berList,vCards,vMontStatus,role]);
+  const ranking=useMemo(()=>{if(role!=="admin")return[];const now=new Date();const weekAgo=new Date(now);weekAgo.setDate(weekAgo.getDate()-7);const monthAgo=new Date(now);monthAgo.setDate(monthAgo.getDate()-30);const rankFilter=c=>{if(rankMonth==="current"){const s=new Date(now.getFullYear(),now.getMonth(),1).toISOString();return!c.updated_at||c.updated_at>=s||true}if(rankMonth==="last"){const s=new Date(now.getFullYear(),now.getMonth()-1,1).toISOString();const e=new Date(now.getFullYear(),now.getMonth(),1).toISOString();return!c.updated_at||true}return true};return berList.map(b=>{const bc=vCards.filter(c=>c.berater_name===b&&!isStorno(c.stage_key));const auftragThisMonth=bc.filter(c=>c.stage_key==="auftrag").length;const prov=bc.filter(c=>c.project_id&&vMontStatus[c.project_id]?.prov);const stuck=bc.filter(c=>(c.days_in_stage||0)>=7);const pipe=bc.reduce((s,c)=>s+(Number(c.eur)||0),0);const provE=prov.reduce((s,c)=>s+(Number(c.eur)||0),0);const auftraege=bc.filter(c=>["auftrag","vertrag","finanzierung"].includes(c.stage_key));const weekDeals=auftraege.filter(c=>(c.days_in_stage||0)<=7).length;const monthDeals=auftraege.length;const convRate=bc.length>0?Math.round((auftraege.length/bc.length)*100):0;const streak=Math.min(weekDeals,7);const avgDeal=auftraege.length>0?Math.round(auftraege.reduce((s,c)=>s+(Number(c.eur)||0),0)/auftraege.length):0;const badges=[];if(provE>=100000)badges.push({icon:"💎",label:"100k+ Provision"});if(monthDeals>=10)badges.push({icon:"🔥",label:"10+ Deals/Monat"});if(convRate>=30)badges.push({icon:"🎯",label:"30%+ Conversion"});if(stuck.length===0&&bc.length>5)badges.push({icon:"⚡",label:"Null Stau"});if(weekDeals>=3)badges.push({icon:"🚀",label:"3+ Deals/Woche"});return{name:b,total:bc.length,pipe,prov:prov.length,provE,stuck:stuck.length,storno:vCards.filter(c=>c.berater_name===b&&isStorno(c.stage_key)).length,weekDeals,monthDeals,convRate,streak,avgDeal,badges,auftragThisMonth}}).sort((a,b)=>rankSort==="auftraege"?b.auftragThisMonth-a.auftragThisMonth:rankSort==="stuck"?b.stuck-a.stuck:b.provE-a.provE)},[berList,vCards,vMontStatus,role,rankMonth,rankSort]);
 
   // Monteur utilization
   const montUtil=useMemo(()=>{const lk={};mCards.forEach(c=>{if(!c.monteur_name)return;if(!lk[c.monteur_name])lk[c.monteur_name]={name:c.monteur_name,active:0,total:0};lk[c.monteur_name].total++;if(c.phase==="active")lk[c.monteur_name].active++});return Object.values(lk).sort((a,b)=>b.active-a.active)},[mCards]);
@@ -727,7 +731,7 @@ function App(){
           </div>}
 
           {/* ── RANKING VIEW ── */}
-          {dashSub==="rank"&&role==="admin"&&<div style={{display:"flex",flexDirection:"column",gap:mob?10:8}}>
+          {dashSub==="rank"&&role==="admin"&&<div style={{display:"flex",flexDirection:"column",gap:mob?10:8}}><div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",flexWrap:"wrap"}}><span style={{fontSize:10,color:DM,fontWeight:600}}>Sortierung:</span>{[["provE","💰 Provision"],["auftraege","📋 Aufträge"],["stuck","🔴 Stau"]].map(([k,l])=><button key={k} onClick={()=>setRankSort(k)} style={{padding:"3px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:10,fontWeight:rankSort===k?700:400,background:rankSort===k?`${B}25`:"transparent",color:rankSort===k?B:DM}}>{l}</button>)}<span style={{fontSize:10,color:DM,fontWeight:600,marginLeft:8}}>Zeitraum:</span>{[["current","Akt. Monat"],["last","Vr. Monat"],["all","Gesamt"]].map(([k,l])=><button key={k} onClick={()=>setRankMonth(k)} style={{padding:"3px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:10,fontWeight:rankMonth===k?700:400,background:rankMonth===k?`${B}25`:"transparent",color:rankMonth===k?B:DM}}>{l}</button>)}</div>
             {/* ── PODIUM TOP 3 ── */}
             {ranking.length>=3&&<div style={{background:`linear-gradient(180deg,${C1},${DK})`,borderRadius:14,border:`1px solid ${BD}`,padding:mob?"20px 12px":"16px 12px",textAlign:"center"}}>
               <div style={{fontSize:mob?11:9,fontWeight:700,color:DM,textTransform:"uppercase",letterSpacing:2,marginBottom:mob?16:12}}>🏆 Leaderboard</div>
@@ -995,7 +999,7 @@ function App(){
 
       {/* Footer */}
       <div style={{padding:"3px 12px",borderTop:`1px solid ${BD}`,background:C1,display:"flex",justifyContent:"space-between",fontSize:9,color:DM,flexShrink:0}}>
-        <span>{tab==="dash"?`${dashBer} · ${dashCards.length}`:tab==="v"?`Vertrieb · ${vFiltered.length}/${vCards.length}`:`${mBrd} · ${mFiltered.length}/${mCards.length}`}</span>
+        <span>{tab==="dash"?`${dashBer} · ${dashCards.length}`:tab==="v"?`Vertrieb · ${vFiltered.length}/${vCards.length}`:`${mBrd} · ${mFiltered.length}/${mCards.length}`}</span><button onClick={()=>loadData(true)} title="Daten neu laden" style={{background:"transparent",border:`1px solid ${BD}`,borderRadius:6,color:DM,padding:"2px 7px",fontSize:10,cursor:"pointer",marginLeft:6}}>&#x21BB;{lastUpdated?` ${lastUpdated.getHours().toString().padStart(2,"0")}:${lastUpdated.getMinutes().toString().padStart(2,"0")}`:""}</button>
         {err&&<span style={{color:OR,fontWeight:600}}>⚠ {err}</span>}
         <span style={{color:`${B}50`}}>bee-doo · {dbOk?"Supabase":"Demo"}</span>
       </div>
@@ -1331,3 +1335,4 @@ document.addEventListener('DOMContentLoaded', () => setTimeout(() => BEEDOO_KI_V
 </script>
 
 </body></html>
+
