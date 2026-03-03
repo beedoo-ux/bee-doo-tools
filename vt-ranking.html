@@ -969,7 +969,7 @@ function render(){
         +'</svg></div>'
         +'</div>'
         +'<div class="hero-label">bee-doo Sales Ranking</div>'
-        +'<div class="hero-number">'+total+'</div>'
+        +'<div class="hero-number" id="heroCounter">0</div>'
         +'<div class="hero-label">Deals '+(month.length===4?'in':'im')+' '+monat+'</div>'
         +'<div class="hero-split">'
         +'<div class="hero-split-item"><div class="hero-split-val" style="color:#fb923c">☀️ '+tPV+'</div><div class="hero-split-label">PV</div></div>'
@@ -1174,6 +1174,33 @@ function renderChallenge(data){
         +'</div>';
 
     document.getElementById('app').innerHTML=html;
+
+    // Counter animation – zählt langsam von 0 auf die echte Zahl hoch
+    (function(){
+        var el=document.getElementById('heroCounter');
+        if(!el)return;
+        var target=total, duration=2000, startTime=null;
+        function step(ts){
+            if(!startTime)startTime=ts;
+            var p=Math.min((ts-startTime)/duration,1);
+            // Ease out cubic – startet schnell, wird am Ende langsamer
+            var ease=1-Math.pow(1-p,3);
+            el.textContent=Math.round(ease*target);
+            if(p<1)requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    })();
+
+    // Stagger: Rank-Karten nacheinander einblenden
+    document.querySelectorAll('.rank-card').forEach(function(card,i){
+        card.style.opacity='0';
+        card.style.transform='translateY(12px)';
+        card.style.transition='opacity .4s ease, transform .4s ease';
+        setTimeout(function(){
+            card.style.opacity='1';
+            card.style.transform='translateY(0)';
+        }, 500 + i*90);
+    });
 
     document.querySelectorAll('.ch-month-btn').forEach(function(b){
         b.addEventListener('click',function(){challengeMonth=this.getAttribute('data-cm');showChallenge();});
