@@ -17,7 +17,7 @@ async function sevdeskGet(endpoint, params = '') {
 }
 
 async function supabasePost(table, data) {
-  const resp = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+  const resp = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=sevdesk_id`, {
     method: 'POST',
     headers: {
       'apikey': SUPABASE_KEY,
