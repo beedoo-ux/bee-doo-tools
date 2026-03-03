@@ -63,9 +63,23 @@ export default async function handler(req, res) {
     });
 
     // 5. Group by berater
+    // Manual overrides: Leads ohne Berater die wir zuordnen können
+    const BERATER_OVERRIDES = {
+      65347: 'Kevin Kraus', // Brigitte Priem – gleicher Abend+Gebiet wie Kevin's andere ELs
+      65348: 'Kevin Kraus', // Vivien Schmidt
+      65349: 'Kevin Kraus', // Familie Marcinowski
+      65354: 'Kevin Kraus', // Familie Bajrami
+      65355: 'Kevin Kraus', // Gertrud Bank
+    };
+
     const byBerater = {};
     qualifying.forEach(l => {
-      const name = (l.berater || l.responsiblePerson || '(kein Berater)').trim();
+      let name = (l.berater || l.responsiblePerson || '').trim();
+      // Apply manual override if no berater assigned
+      if (!name && BERATER_OVERRIDES[l.id]) {
+        name = BERATER_OVERRIDES[l.id];
+      }
+      if (!name) name = '(kein Berater)';
       if (!byBerater[name]) byBerater[name] = { el: 0, emp: 0, total: 0 };
       if ((l.source || '').trim() === 'Eigenlead') byBerater[name].el++;
       else byBerater[name].emp++;
