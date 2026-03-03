@@ -159,6 +159,9 @@ const gBN = (per,k,nr) => `GS-${per.replace('/','-')}-${k}-${String(nr||1).padSt
 
 
 const sbG = async(t,q='')=>{const r=await fetch(`${SB_URL}/rest/v1/${t}?${q}`,{headers:HDR});if(!r.ok)throw new Error(`GET ${t}:${r.status}`);return r.json();};
+// HP-Erkennung via typeicons (fas fa-fire = Wärmepumpe)
+function isHP(o){var ti=o&&o.typeicons;if(!ti)return o&&o.ist_waermepumpe===true;if(typeof ti==='string'){try{ti=JSON.parse(ti)}catch(e){return false}}if(Array.isArray(ti))return ti.some(function(t){return typeof t==='object'?String(t.icon||'').indexOf('fa-fire')>=0:String(t).indexOf('fa-fire')>=0});return false;}
+function produktLabel(o,prefix){return (prefix?prefix+' – ':'')+(isHP(o)?'WP':'Solar')+' '+(o.kwp||0)+' kWp';}
 const sbP = async(t,d)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(d)});if(!r.ok){const x=await r.text();throw new Error(`POST ${t}:${x}`);}return r.json();};
 const sbU = async(t,q,d)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}?${q}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(d)});if(!r.ok)throw new Error(`PATCH ${t}:${r.status}`);return r.json();};
 const sbD = async(t,q)=>{const r=await fetch(`${SB_URL}/rest/v1/${t}?${q}`,{method:'DELETE',headers:HDR});if(!r.ok)throw new Error(`DEL ${t}:${r.status}`);};
@@ -270,12 +273,12 @@ async function generateAbrechnungen(periode, onProgress){
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=*`),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${leistungsStart}&select=*`),
-    sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,scouter_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
-    sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,scouter_id,auftrag_nr,kunde_name,kwp,auftrags_datum`),
+    sbG('pay_auftraege',`storniert=eq.true&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,scouter_id,auftrag_nr,kunde_name,kwp,auftrags_datum,typeicons,ist_waermepumpe`),
+    sbG('pay_auftraege',`zahlungsstatus=eq.offen&storniert=eq.false&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=vertriebler_id,scouter_id,auftrag_nr,kunde_name,kwp,auftrags_datum,typeicons,ist_waermepumpe`),
     sbG('pay_sonderprovisionen','aktiv=eq.true'),
     sbG('pay_team_bonus','aktiv=eq.true'),
     sbG('pay_sperrlisten','select=*'),
-    sbG('pay_auftraege',`storniert=eq.true&abgerechnet_monat=not.is.null&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,abgerechnet_monat,abgerechnet_jahr,storno_provision_zurueck`),
+    sbG('pay_auftraege',`storniert=eq.true&abgerechnet_monat=not.is.null&select=vertriebler_id,auftrag_nr,kunde_name,kwp,auftrags_datum,abgerechnet_monat,abgerechnet_jahr,storno_provision_zurueck,typeicons,ist_waermepumpe`),
     sbG('pay_staffel_history',`monat=eq.${parseInt(m)}&jahr=eq.${parseInt(y)}&freigegeben=eq.true`),
     sbG('efs_projekte','preismodell=eq.Zero&select=efs_id'),
     sbG('efs_projekte','simplified_status=in.(LAND_REGISTRY_CHECK,REVOKED,MISSING_PROPERTY_OWNERS)&select=efs_id,simplified_status,kunde_name'),
@@ -443,7 +446,7 @@ async function generateAbrechnungen(periode, onProgress){
   efsRevokedOrders.forEach(a => { if(a.scouter_id){if(!stornoByScout[a.scouter_id])stornoByScout[a.scouter_id]=[];stornoByScout[a.scouter_id].push(a);} });
   const allRelevant = await sbG('pay_auftraege','storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&produkt_typ=not.in.(lead_count,termin_count,zero_count)&select=vertriebler_id,scouter_id,auftrags_datum,auftrag_nr,notiz');
   // Paid active orders per VP per month → für rückwirkende Staffel-Korrektur
-  const paidActiveOrders = await sbG('pay_auftraege','storniert=eq.false&abgerechnet_monat=not.is.null&produkt_typ=not.in.(lead_count,termin_count,zero_count)&select=vertriebler_id,auftrags_datum,auftrag_nr,kunde_name,kwp,notiz,efs_projekt_id,abgerechnet_monat,abgerechnet_jahr,storno_provision_zurueck');
+  const paidActiveOrders = await sbG('pay_auftraege','storniert=eq.false&abgerechnet_monat=not.is.null&produkt_typ=not.in.(lead_count,termin_count,zero_count)&select=vertriebler_id,auftrags_datum,auftrag_nr,kunde_name,kwp,notiz,efs_projekt_id,abgerechnet_monat,abgerechnet_jahr,storno_provision_zurueck,typeicons,ist_waermepumpe');
   // EFS Rückforderung: bereits ausgezahlte Aufträge die jetzt LAND_REGISTRY_CHECK/REVOKED sind
   const efsRueckforderungen = [];
   paidActiveOrders.forEach(a => {
@@ -600,7 +603,7 @@ async function generateAbrechnungen(periode, onProgress){
       const nzTag = isNZ ? ' ★NZ' : '';
       const staffelTag = useNZOverride ? ' (NZ-Sonder)' : (sonderFlat ? ' (Sonder)' : (staffel ? ' (Staffel)' : ''));
       for(const o of monthOrders){
-        positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Solar ${o.kwp||0} kWp`,original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffelTag}${nzTag}`});
+        positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:produktLabel(o),original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffelTag}${nzTag}`});
         bruttoTotal+=baseBetrag;
         const q=(o.lead_quelle||'').toLowerCase();
         // Eigenlead-Bonus: bei NZ-Override immer aktiv, sonst nicht bei "kein Eigenlead"
@@ -706,7 +709,7 @@ async function generateAbrechnungen(periode, onProgress){
     }
     // Storno-Info (nur Leistungsmonat)
     const vpStornos = stornoByVP[vpId] || [];
-    vpStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(s.auftrags_datum||'').substring(0,7)}); });
+    vpStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:produktLabel(s,'Storno'),original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(s.auftrags_datum||'').substring(0,7)}); });
     // Storno-Abzüge: werden über ALL1211-Korrektur-System abgewickelt (siehe AUTO KORREKTUREN unten)
     // Offen-Info (LZ + VM getrennt)
     // Sonderzulagen aus Sheet (Zugaben/Abzüge)
@@ -727,10 +730,10 @@ async function generateAbrechnungen(periode, onProgress){
       bruttoTotal += +vp.auto_zuschuss;
     }
     const vpOffen = offenByVP[vpId] || [];
-    vpOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
+    vpOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:produktLabel(o,'Offen'),original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
     // On Hold Info
     const vpOnHold = onHoldByVP[vpId] || [];
-    vpOnHold.forEach(o => { positionen.push({typ:'on_hold_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`On Hold – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
+    vpOnHold.forEach(o => { positionen.push({typ:'on_hold_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:produktLabel(o,'On Hold'),original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
     // === SHEET-DATEN: PV-Blatt Abzüge/Nachzahlungen ===
     const vpShAbz = sheetAbzByVP[vpId] || [];
     vpShAbz.forEach(sa => {
@@ -826,7 +829,7 @@ async function generateAbrechnungen(periode, onProgress){
       const nzTag = isNZ ? ' ★NZ' : '';
       const staffelTag = staffel ? ' (Staffel)' : '';
       for(const o of monthOrders){
-        positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Scout – Solar ${o.kwp||0} kWp`,original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffelTag}${nzTag}`});
+        positionen.push({typ:'provision',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:produktLabel(o,'Scout'),original_betrag:baseBetrag,aktiv:true,zurueckgestellt:false,notiz:`${om}${staffelTag}${nzTag}`});
         bruttoTotal+=baseBetrag;
         const q=(o.lead_quelle||'').toLowerCase();
         if(q.includes('eigenlead')&&regel.betrag_eigenlead>0){positionen.push({typ:'eigenlead',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:'Eigenlead-Bonus',original_betrag:regel.betrag_eigenlead,aktiv:true,zurueckgestellt:false,notiz:`${om}${nzTag}`}); bruttoTotal+=regel.betrag_eigenlead;}
@@ -845,12 +848,12 @@ async function generateAbrechnungen(periode, onProgress){
       for(const [om, mo] of Object.entries(scByMonthNZ)) processScoutOrders(mo, om, true);
     }
     // Storno-Info
-    scStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:`Storno – Solar ${s.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(s.auftrags_datum||'').substring(0,7)}); });
+    scStornos.forEach(s => { positionen.push({typ:'storno_info',auftrag_nr:s.auftrag_nr,kunde:s.kunde_name,produkt:produktLabel(s,'Storno'),original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(s.auftrags_datum||'').substring(0,7)}); });
     // Offen-Info
-    scOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`Offen – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
+    scOffen.forEach(o => { positionen.push({typ:'offen_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:produktLabel(o,'Offen'),original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
     // On Hold Info (Scout)
     const scOnHold = onHoldBySC[scId] || [];
-    scOnHold.forEach(o => { positionen.push({typ:'on_hold_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:`On Hold – Solar ${o.kwp||0} kWp`,original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
+    scOnHold.forEach(o => { positionen.push({typ:'on_hold_info',auftrag_nr:o.auftrag_nr,kunde:o.kunde_name,produkt:produktLabel(o,'On Hold'),original_betrag:0,aktiv:true,zurueckgestellt:false,notiz:(o.auftrags_datum||'').substring(0,7)}); });
     // Lead-Bonus für Angestellt-Scouter
     if(!isHGB && regel.betrag_lead > 0){
       const leadCount = leadByScout[scId] || 0;
