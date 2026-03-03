@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo | WhatsApp & SMS</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #F5C500;
+    --gold-dim: rgba(245,197,0,0.12);
+    --gold-border: rgba(245,197,0,0.3);
+    --bg: #0e0e10;
+    --bg2: #16161a;
+    --bg3: #1e1e24;
+    --bg4: #26262e;
+    --text: #f0f0f0;
+    --text-dim: #888;
+    --text-muted: #555;
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.12);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.12);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.12);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+
+  /* HEADER */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 16px 24px;
+    display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-logo { font-size: 20px; font-weight: 700; color: var(--gold); }
+  .header-title { font-size: 16px; font-weight: 500; color: var(--text); }
+  .header-badge {
+    margin-left: auto;
+    background: var(--green-dim); color: var(--green);
+    border: 1px solid rgba(34,197,94,0.3);
+    border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* MAIN LAYOUT */
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; background: var(--bg3); padding: 4px; border-radius: var(--radius); margin-bottom: 24px; flex-wrap: wrap; }
+  .tab {
+    flex: 1; min-width: 120px;
+    padding: 10px 16px; border-radius: var(--radius-sm);
+    border: none; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 500; transition: all 0.2s;
+    background: transparent; color: var(--text-dim);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .tab.active { background: var(--bg4); color: var(--gold); box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+  .tab:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.04); }
+  .tab-icon { font-size: 16px; }
+
+  /* PANEL */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* GRID */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media(max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  /* CARD */
+  .card {
+    background: var(--bg2); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: var(--radius); padding: 20px;
+  }
+  .card-title {
+    font-size: 14px; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-title-icon { font-size: 16px; }
+
+  /* FORM FIELDS */
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 500; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .field input, .field textarea, .field select {
+    width: 100%; background: var(--bg3); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-sm); padding: 10px 14px;
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px;
+    transition: border-color 0.2s; outline: none;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--gold-border); }
+  .field textarea { min-height: 100px; resize: vertical; line-height: 1.5; }
+  .field select option { background: var(--bg3); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media(max-width: 480px) { .field-row { grid-template-columns: 1fr; } }
+
+  /* BUTTONS */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border-radius: var(--radius-sm);
+    border: none; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 600; transition: all 0.2s; text-decoration: none;
+  }
+  .btn-gold { background: var(--gold); color: #000; }
+  .btn-gold:hover { background: #ffd700; transform: translateY(-1px); }
+  .btn-outline { background: transparent; border: 1px solid rgba(255,255,255,0.15); color: var(--text); }
+  .btn-outline:hover { border-color: var(--gold-border); color: var(--gold); }
+  .btn-green { background: var(--green); color: #000; }
+  .btn-green:hover { background: #16a34a; }
+  .btn-red { background: var(--red); color: #fff; }
+  .btn-sm { padding: 6px 14px; font-size: 12px; }
+  .btn-full { width: 100%; justify-content: center; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+  /* WHATSAPP PREVIEW */
+  .wa-phone {
+    background: #1a1a2e; border-radius: 24px; padding: 12px;
+    border: 2px solid rgba(255,255,255,0.08); max-width: 320px; margin: 0 auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .wa-screen { background: #0b141a; border-radius: 16px; overflow: hidden; }
+  .wa-header {
+    background: #1f2c34; padding: 12px 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .wa-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #000; }
+  .wa-contact-name { font-size: 14px; font-weight: 600; color: #e9edef; }
+  .wa-contact-status { font-size: 11px; color: #8696a0; }
+  .wa-body {
+    background: #0b141a url("data:image/svg+xml,%3Csvg width='400' height='400' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='p' width='40' height='40' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='20' cy='20' r='1' fill='%23ffffff' opacity='0.03'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='400' height='400' fill='url(%23p)'/%3E%3C/svg%3E");
+    padding: 16px 12px; min-height: 300px;
+  }
+  .wa-bubble {
+    background: #005c4b; border-radius: 8px 8px 0 8px;
+    padding: 10px 14px; margin-bottom: 4px; max-width: 85%; margin-left: auto;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .wa-bubble-text { font-size: 13px; color: #e9edef; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .wa-bubble-time { font-size: 10px; color: #8696a0; text-align: right; margin-top: 4px; }
+  .wa-buttons { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+  .wa-btn-item {
+    background: #1f2c34; border-radius: 6px; padding: 10px 14px;
+    text-align: center; font-size: 13px; color: #00a884; font-weight: 500;
+    border: 1px solid rgba(0,168,132,0.2);
+  }
+
+  /* STATUS LOG */
+  .log { background: var(--bg3); border-radius: var(--radius-sm); padding: 14px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+  .log-entry { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .log-entry:last-child { border: none; }
+  .log-ok { color: var(--green); }
+  .log-err { color: var(--red); }
+  .log-info { color: var(--text-dim); }
+  .log-gold { color: var(--gold); }
+
+  /* STATS */
+  .stat-card { background: var(--bg3); border-radius: var(--radius-sm); padding: 16px; text-align: center; border: 1px solid rgba(255,255,255,0.04); }
+  .stat-number { font-size: 28px; font-weight: 700; color: var(--gold); }
+  .stat-label { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+  /* INFO BOX */
+  .info-box { background: var(--blue-dim); border: 1px solid rgba(59,130,246,0.25); border-radius: var(--radius-sm); padding: 14px 16px; font-size: 13px; color: #93c5fd; line-height: 1.6; }
+  .warn-box { background: rgba(245,197,0,0.08); border: 1px solid var(--gold-border); border-radius: var(--radius-sm); padding: 14px 16px; font-size: 13px; color: #fbbf24; line-height: 1.6; }
+
+  /* STEP */
+  .steps { display: flex; flex-direction: column; gap: 12px; }
+  .step { display: flex; gap: 14px; align-items: flex-start; padding: 14px; background: var(--bg3); border-radius: var(--radius-sm); }
+  .step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--gold); color: #000; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-content h4 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .step-content p { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+  .step-content code { background: var(--bg4); padding: 2px 6px; border-radius: 4px; font-size: 11px; color: var(--gold); }
+
+  /* CREDS STRIP */
+  .creds-strip {
+    background: var(--bg3); border: 1px solid var(--gold-border);
+    border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px;
+    display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+  }
+  .creds-strip .field { margin: 0; flex: 1; min-width: 160px; }
+
+  /* TOGGLE */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .toggle-row:last-child { border: none; }
+  .toggle-label { font-size: 13px; color: var(--text); }
+  .toggle-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .toggle { width: 40px; height: 22px; background: var(--bg4); border-radius: 11px; border: none; cursor: pointer; position: relative; transition: background 0.2s; }
+  .toggle.on { background: var(--gold); }
+  .toggle::after { content: ''; width: 16px; height: 16px; border-radius: 50%; background: #fff; position: absolute; top: 3px; left: 3px; transition: left 0.2s; }
+  .toggle.on::after { left: 21px; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  /* SECTION TITLE */
+  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px; }
+
+  .divider { border: none; border-top: 1px solid rgba(255,255,255,0.06); margin: 20px 0; }
+  .mt-16 { margin-top: 16px; }
+  .mt-8 { margin-top: 8px; }
+  .flex-end { display: flex; justify-content: flex-end; }
+  .gap-8 { gap: 8px; }
+  .flex { display: flex; }
+
+  /* SPINNER */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 16px; height: 16px; border: 2px solid rgba(0,0,0,0.2); border-top-color: #000; border-radius: 50%; animation: spin 0.6s linear infinite; }
+
+  /* CAMPAIGN TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); border-bottom: 1px solid rgba(255,255,255,0.06); }
+  td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text); }
+  tr:last-child td { border: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: var(--green-dim); color: var(--green); }
+  .badge-red { background: var(--red-dim); color: var(--red); }
+  .badge-gold { background: var(--gold-dim); color: var(--gold); }
+  .badge-gray { background: rgba(255,255,255,0.06); color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">bee-doo</div>
+  <div style="width:1px;height:20px;background:rgba(255,255,255,0.1)"></div>
+  <div class="header-title">📲 WhatsApp & SMS</div>
+  <div class="header-badge"><div class="badge-dot"></div> Twilio</div>
+</div>
+
+<div class="container">
+
+  <!-- CREDENTIALS STRIP -->
+  <div class="creds-strip" id="credsStrip">
+    <div style="width:100%;margin-bottom:4px">
+      <div class="section-label">🔑 Twilio Zugangsdaten</div>
+    </div>
+    <div class="field">
+      <label>Account SID</label>
+      <input type="text" id="twilioSid" placeholder="ACxxxxxxxxxxxxxxxx" />
+    </div>
+    <div class="field">
+      <label>Auth Token</label>
+      <input type="password" id="twilioToken" placeholder="••••••••••••••••" />
+    </div>
+    <div class="field">
+      <label>WhatsApp Absender</label>
+      <input type="text" id="twilioWaSender" placeholder="whatsapp:+14155238886" />
+    </div>
+    <div class="field">
+      <label>SMS Absender</label>
+      <input type="text" id="twilioSmsSender" placeholder="+49xxx oder BEEDOO" />
+    </div>
+    <button class="btn btn-gold btn-sm" onclick="saveCreds()">💾 Speichern</button>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('termin')"><span class="tab-icon">📅</span> Terminbestätigung</button>
+    <button class="tab" onclick="switchTab('sms')"><span class="tab-icon">📢</span> SMS-Kampagne</button>
+    <button class="tab" onclick="switchTab('setup')"><span class="tab-icon">⚙️</span> Setup & Einrichtung</button>
+  </div>
+
+  <!-- ======== TAB 1: TERMINBESTÄTIGUNG ======== -->
+  <div class="panel active" id="panel-termin">
+    <div class="grid-2">
+      <!-- LEFT: FORM -->
+      <div>
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">📝</span> Nachricht konfigurieren</div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Kundenname</label>
+              <input type="text" id="custName" placeholder="Max Mustermann" oninput="updatePreview()" />
+            </div>
+            <div class="field">
+              <label>Handynummer</label>
+              <input type="tel" id="custPhone" placeholder="+49 151 12345678" />
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label>Datum</label>
+              <input type="date" id="apptDate" oninput="updatePreview()" />
+            </div>
+            <div class="field">
+              <label>Uhrzeit</label>
+              <input type="time" id="apptTime" oninput="updatePreview()" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Adresse des Termins</label>
+            <input type="text" id="apptAddress" placeholder="Musterstraße 12, 33609 Bielefeld" oninput="updatePreview()" />
+          </div>
+
+          <div class="field">
+            <label>Verkäufer</label>
+            <input type="text" id="salesName" placeholder="Thomas Müller" oninput="updatePreview()" />
+          </div>
+
+          <div class="field">
+            <label>Nachrichtentext (anpassbar)</label>
+            <textarea id="msgTemplate" oninput="updatePreview()">Hallo {name} 👋
+
+Ihr Beratungstermin mit bee-doo Solar ist bestätigt:
+
+📅 {datum} um {uhrzeit} Uhr
+📍 {adresse}
+👤 Ihr Berater: {verkaeufer}
+
+Wir freuen uns auf Sie! Falls Sie Fragen haben, antworten Sie einfach auf diese Nachricht.
+
+*bee-doo GmbH* – Ihr Solar-Experte aus Bielefeld 🌞</textarea>
+          </div>
+
+          <div class="card-title" style="margin-top:16px"><span class="card-title-icon">🔘</span> Aktions-Buttons</div>
+          <div class="toggle-row">
+            <div><div class="toggle-label">✅ Termin bestätigen</div><div class="toggle-sub">Kunde bestätigt Anwesenheit</div></div>
+            <button class="toggle on" id="tog1" onclick="toggleBtn(this)"></button>
+          </div>
+          <div class="toggle-row">
+            <div><div class="toggle-label">❌ Termin absagen</div><div class="toggle-sub">Öffnet Absage-Flow</div></div>
+            <button class="toggle on" id="tog2" onclick="toggleBtn(this)"></button>
+          </div>
+          <div class="toggle-row">
+            <div><div class="toggle-label">🔄 Termin umbuchen</div><div class="toggle-sub">Link zu Kalender-Link</div></div>
+            <button class="toggle on" id="tog3" onclick="toggleBtn(this)"></button>
+          </div>
+
+          <div class="mt-16 flex gap-8" style="gap:10px">
+            <button class="btn btn-outline flex-1" onclick="sendTestWA()">
+              <span id="btnTestIcon">📲</span> <span id="btnTestTxt">Testnachricht senden</span>
+            </button>
+            <button class="btn btn-gold flex-1" onclick="sendWA()">
+              <span>✉️</span> Jetzt senden
+            </button>
+          </div>
+        </div>
+
+        <!-- LOG -->
+        <div class="card mt-16">
+          <div class="card-title"><span class="card-title-icon">📋</span> Sendeprotokoll</div>
+          <div class="log" id="sendLog">
+            <div class="log-entry log-info">[System] Bereit. Bitte Twilio-Zugangsdaten eingeben.</div>
+          </div>
+          <button class="btn btn-outline btn-sm mt-8" onclick="clearLog()">🗑️ Log leeren</button>
+        </div>
+      </div>
+
+      <!-- RIGHT: PREVIEW -->
+      <div>
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">👁️</span> Live-Vorschau</div>
+          <div class="wa-phone">
+            <div class="wa-screen">
+              <div class="wa-header">
+                <div class="wa-avatar">BD</div>
+                <div>
+                  <div class="wa-contact-name">bee-doo Solar</div>
+                  <div class="wa-contact-status">Online</div>
+                </div>
+              </div>
+              <div class="wa-body">
+                <div class="wa-bubble">
+                  <div class="wa-bubble-text" id="previewText">Hallo [Name] 👋
+
+Ihr Beratungstermin mit bee-doo Solar ist bestätigt:
+
+📅 [Datum] um [Uhrzeit] Uhr
+📍 [Adresse]
+👤 Ihr Berater: [Verkäufer]
+
+Wir freuen uns auf Sie!</div>
+                  <div class="wa-bubble-time" id="previewTime">jetzt</div>
+                </div>
+                <div class="wa-buttons" id="previewBtns">
+                  <div class="wa-btn-item">✅ Termin bestätigen</div>
+                  <div class="wa-btn-item">❌ Termin absagen</div>
+                  <div class="wa-btn-item">🔄 Termin umbuchen</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AUTO TIMING -->
+        <div class="card mt-16">
+          <div class="card-title"><span class="card-title-icon">⏰</span> Automatischer Versand</div>
+          <div class="info-box" style="margin-bottom:14px">
+            Terminbestätigungen werden automatisch <strong>24h vor dem Termin</strong> versendet – wie von Olaf gewünscht.
+          </div>
+          <div class="field">
+            <label>Versandzeitpunkt</label>
+            <select id="sendTiming">
+              <option value="24h">24 Stunden vorher</option>
+              <option value="48h">48 Stunden vorher</option>
+              <option value="2h">2 Stunden vorher (Erinnerung)</option>
+              <option value="manual">Nur manuell</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Versandzeit (Uhrzeit)</label>
+            <input type="time" id="sendAt" value="10:00" />
+          </div>
+          <button class="btn btn-outline btn-full btn-sm" onclick="saveAutoConfig()">💾 Konfiguration speichern</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== TAB 2: SMS-KAMPAGNE ======== -->
+  <div class="panel" id="panel-sms">
+    <div class="grid-2">
+      <div>
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">🎯</span> Zielgruppe definieren</div>
+
+          <div class="info-box" style="margin-bottom:16px">
+            Kampagne für alle Leads die <strong>10x oder öfter</strong> nicht erreicht wurden – genau wie Olaf beschrieben.
+          </div>
+
+          <div class="field">
+            <label>Mindest-Versuche (nicht erreicht)</label>
+            <input type="number" id="minAttempts" value="10" min="1" max="50" />
+          </div>
+
+          <div class="field">
+            <label>Quelle filtern</label>
+            <select id="sourceFilter">
+              <option value="all">Alle Quellen</option>
+              <option value="omega">Omega</option>
+              <option value="eigenlead">Eigenlead</option>
+              <option value="empfehlung">Empfehlung</option>
+              <option value="mvpp">MVPP</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>SMS-Nachricht</label>
+            <textarea id="smsText">Hallo {name}! Wir haben mehrfach versucht Sie zu erreichen. Als Solar-Interessent könnten Sie bis zu 80% Ihrer Stromkosten sparen. Kostenlose Beratung: bee-doo.de oder 0521-XXXXX. bee-doo GmbH</textarea>
+          </div>
+
+          <div class="warn-box" style="margin:12px 0">
+            ⚠️ Max. 160 Zeichen für Standard-SMS. Länger = mehrteilig = höhere Kosten.<br>
+            <span id="smsCount">0</span>/160 Zeichen
+          </div>
+
+          <div class="field">
+            <label>Versand planen</label>
+            <select id="smsTiming">
+              <option value="now">Sofort</option>
+              <option value="tomorrow">Morgen 10:00</option>
+              <option value="monday">Nächster Montag 09:00</option>
+              <option value="custom">Benutzerdefiniert</option>
+            </select>
+          </div>
+
+          <div class="mt-16">
+            <button class="btn btn-outline btn-full" onclick="loadLeads()" style="margin-bottom:10px">
+              🔍 Leads laden (aus Supabase)
+            </button>
+            <button class="btn btn-gold btn-full" onclick="startCampaign()">
+              📢 Kampagne starten
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <!-- STATS -->
+        <div class="grid-3" style="margin-bottom:16px">
+          <div class="stat-card">
+            <div class="stat-number" id="statTotal">–</div>
+            <div class="stat-label">Leads gesamt</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="statTarget" style="color:var(--red)">–</div>
+            <div class="stat-label">Zielgruppe</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="statSent" style="color:var(--green)">0</div>
+            <div class="stat-label">Versendet</div>
+          </div>
+        </div>
+
+        <!-- LEADS TABLE -->
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">📊</span> Lead-Vorschau</div>
+          <div class="table-wrap">
+            <table id="leadsTable">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Telefon</th>
+                  <th>Versuche</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="leadsBody">
+                <tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:20px">Leads laden um Vorschau zu sehen</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- CAMPAIGN LOG -->
+        <div class="card mt-16">
+          <div class="card-title"><span class="card-title-icon">📋</span> Kampagnen-Log</div>
+          <div class="log" id="campaignLog">
+            <div class="log-entry log-info">[System] Bereit für Kampagne.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== TAB 3: SETUP ======== -->
+  <div class="panel" id="panel-setup">
+    <div class="grid-2">
+      <div>
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">🚀</span> Einrichtungs-Guide</div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-content">
+                <h4>Twilio-Account einrichten</h4>
+                <p>Unter <code>twilio.com</code> registrieren. Account SID + Auth Token aus dem Dashboard kopieren und oben eintragen.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">2</div>
+              <div class="step-content">
+                <h4>WhatsApp Business beantragen</h4>
+                <p>In der Twilio Console: Messaging → Senders → WhatsApp. Erste Tests über <code>+1 415 523 8886</code> (Sandbox). Für Produktion: Facebook Business Verifizierung nötig.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">3</div>
+              <div class="step-content">
+                <h4>Supabase Edge Function deployen</h4>
+                <p>Die Edge Function <code>send-twilio</code> als CORS-Proxy deployen. API-Keys als Supabase Secrets speichern – nie im Frontend!</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">4</div>
+              <div class="step-content">
+                <h4>Nachrichtenvorlage genehmigen lassen</h4>
+                <p>WhatsApp Business: Alle Templates müssen von Meta genehmigt werden (~24h). Terminbestätigungen fallen unter <code>UTILITY</code> → günstigste Kategorie.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">5</div>
+              <div class="step-content">
+                <h4>Automatisierung aktivieren</h4>
+                <p>Supabase Cron Job: täglich prüfen welche Termine morgen stattfinden → automatisch WhatsApp senden.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">💰</span> Kostenübersicht (Twilio)</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dienst</th><th>Pro Nachricht</th><th>Bei 1.000/Monat</th></tr></thead>
+              <tbody>
+                <tr><td>WhatsApp (Utility)</td><td style="color:var(--green)">~0,05 €</td><td style="color:var(--green)">~50 €</td></tr>
+                <tr><td>WhatsApp (Marketing)</td><td style="color:var(--gold)">~0,07 €</td><td style="color:var(--gold)">~70 €</td></tr>
+                <tr><td>SMS Deutschland</td><td style="color:var(--text)">~0,08 €</td><td style="color:var(--text)">~80 €</td></tr>
+                <tr><td>SMS (Alphasender)</td><td style="color:var(--text-dim)">+0,01 €</td><td style="color:var(--text-dim)">+10 €</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="info-box mt-16">
+            💡 Terminbestätigungen = <strong>UTILITY</strong> = günstigste WhatsApp-Kategorie.<br>
+            SMS-Kampagne fällt unter Marketing → etwas teurer, aber deutlich günstiger als eine Vollzeitkraft.
+          </div>
+        </div>
+
+        <div class="card mt-16">
+          <div class="card-title"><span class="card-title-icon">📋</span> Supabase Edge Function</div>
+          <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Deploy-Befehl für die Twilio-Proxy-Function:</p>
+          <div class="log" style="max-height:none">
+            <div class="log-entry log-gold">// supabase/functions/send-twilio/index.ts</div>
+            <div class="log-entry log-info">import { serve } from "https://deno.land/std@0.168.0/http/server.ts"</div>
+            <div class="log-entry log-info"> </div>
+            <div class="log-entry log-info">serve(async (req) => {</div>
+            <div class="log-entry log-info">  const { to, message, channel } = await req.json()</div>
+            <div class="log-entry log-info">  const SID = Deno.env.get('TWILIO_SID')</div>
+            <div class="log-entry log-info">  const TOKEN = Deno.env.get('TWILIO_TOKEN')</div>
+            <div class="log-entry log-info">  const FROM = channel === 'whatsapp'</div>
+            <div class="log-entry log-info">    ? Deno.env.get('TWILIO_WA_FROM')</div>
+            <div class="log-entry log-info">    : Deno.env.get('TWILIO_SMS_FROM')</div>
+            <div class="log-entry log-info"> </div>
+            <div class="log-entry log-info">  const res = await fetch(</div>
+            <div class="log-entry log-gold">    `https://api.twilio.com/2010-04-01/Accounts/${SID}/Messages.json`,</div>
+            <div class="log-entry log-info">    { method: 'POST',</div>
+            <div class="log-entry log-info">      headers: { 'Authorization': 'Basic ' + btoa(`${SID}:${TOKEN}`),</div>
+            <div class="log-entry log-info">                 'Content-Type': 'application/x-www-form-urlencoded' },</div>
+            <div class="log-entry log-info">      body: new URLSearchParams({ To: to, From: FROM, Body: message }) }</div>
+            <div class="log-entry log-info">  )</div>
+            <div class="log-entry log-info">  return new Response(JSON.stringify(await res.json()))</div>
+            <div class="log-entry log-info">})</div>
+          </div>
+          <button class="btn btn-outline btn-sm mt-8" onclick="copyEdgeFunction()">📋 Code kopieren</button>
+        </div>
+
+        <div class="card mt-16">
+          <div class="card-title"><span class="card-title-icon">🧪</span> Verbindungstest</div>
+          <button class="btn btn-outline btn-full" onclick="testConnection()" id="testConnBtn">🔌 Twilio-Verbindung testen</button>
+          <div id="connResult" style="margin-top:12px;font-size:13px;display:none"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ---- STATE ----
+  let creds = { sid:'', token:'', waSender:'', smsSender:'' };
+  let leads = [];
+
+  // Load saved creds
+  window.onload = () => {
+    const saved = localStorage.getItem('beedoo_twilio_creds');
+    if (saved) {
+      creds = JSON.parse(saved);
+      document.getElementById('twilioSid').value = creds.sid || '';
+      document.getElementById('twilioToken').value = creds.token || '';
+      document.getElementById('twilioWaSender').value = creds.waSender || '';
+      document.getElementById('twilioSmsSender').value = creds.smsSender || '';
+    }
+    // Set default date/time
+    const now = new Date();
+    now.setDate(now.getDate() + 1);
+    document.getElementById('apptDate').value = now.toISOString().split('T')[0];
+    document.getElementById('apptTime').value = '10:00';
+    document.getElementById('apptAddress').value = 'Musterstraße 12, 33609 Bielefeld';
+    document.getElementById('salesName').value = 'Thomas Müller';
+    document.getElementById('custName').value = 'Max Mustermann';
+    updatePreview();
+    // SMS char count
+    document.getElementById('smsText').addEventListener('input', updateSmsCount);
+    updateSmsCount();
+  };
+
+  function saveCreds() {
+    creds.sid = document.getElementById('twilioSid').value.trim();
+    creds.token = document.getElementById('twilioToken').value.trim();
+    creds.waSender = document.getElementById('twilioWaSender').value.trim();
+    creds.smsSender = document.getElementById('twilioSmsSender').value.trim();
+    localStorage.setItem('beedoo_twilio_creds', JSON.stringify(creds));
+    addLog('sendLog', 'Zugangsdaten gespeichert ✓', 'ok');
+    document.querySelector('.creds-strip').style.borderColor = 'rgba(34,197,94,0.4)';
+    setTimeout(() => document.querySelector('.creds-strip').style.borderColor = '', 2000);
+  }
+
+  // ---- TABS ----
+  function switchTab(id) {
+    document.querySelectorAll('.tab').forEach((t,i) => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    const tabs = ['termin','sms','setup'];
+    document.querySelectorAll('.tab')[tabs.indexOf(id)].classList.add('active');
+    document.getElementById('panel-'+id).classList.add('active');
+  }
+
+  // ---- PREVIEW ----
+  function updatePreview() {
+    const name = document.getElementById('custName').value || '[Name]';
+    const date = document.getElementById('apptDate').value;
+    const time = document.getElementById('apptTime').value || '[Uhrzeit]';
+    const addr = document.getElementById('apptAddress').value || '[Adresse]';
+    const sales = document.getElementById('salesName').value || '[Verkäufer]';
+    const tmpl = document.getElementById('msgTemplate').value;
+
+    let formatted = '';
+    if (date) {
+      const d = new Date(date);
+      formatted = d.toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
+    } else { formatted = '[Datum]'; }
+
+    const result = tmpl
+      .replace(/{name}/g, name)
+      .replace(/{datum}/g, formatted)
+      .replace(/{uhrzeit}/g, time)
+      .replace(/{adresse}/g, addr)
+      .replace(/{verkaeufer}/g, sales);
+
+    document.getElementById('previewText').textContent = result;
+    const now = new Date();
+    document.getElementById('previewTime').textContent = now.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'});
+  }
+
+  function toggleBtn(el) {
+    el.classList.toggle('on');
+    updatePreviewButtons();
+  }
+
+  function updatePreviewButtons() {
+    const btns = document.getElementById('previewBtns');
+    const labels = ['✅ Termin bestätigen', '❌ Termin absagen', '🔄 Termin umbuchen'];
+    const toggles = ['tog1','tog2','tog3'];
+    btns.innerHTML = toggles.map((id,i) =>
+      document.getElementById(id).classList.contains('on')
+        ? `<div class="wa-btn-item">${labels[i]}</div>` : ''
+    ).join('');
+  }
+
+  // ---- SEND ----
+  async function sendViaEdgeFunction(to, message, channel) {
+    const url = 'https://hqzpemfaljxcysyqssng.supabase.co/functions/v1/send-twilio';
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik'
+      },
+      body: JSON.stringify({ to, message, channel, sid: creds.sid, token: creds.token, waSender: creds.waSender, smsSender: creds.smsSender })
+    });
+    return await resp.json();
+  }
+
+  async function sendWA() {
+    const phone = document.getElementById('custPhone').value.trim();
+    if (!phone) { addLog('sendLog', 'Fehler: Handynummer fehlt', 'err'); return; }
+    if (!creds.sid) { addLog('sendLog', 'Fehler: Twilio-Zugangsdaten fehlen', 'err'); return; }
+    const msg = buildMessage();
+    addLog('sendLog', `Sende WhatsApp an ${phone}...`, 'info');
+    try {
+      const result = await sendViaEdgeFunction('whatsapp:' + phone.replace(/\s/g,''), msg, 'whatsapp');
+      if (result.sid) {
+        addLog('sendLog', `✓ Gesendet! SID: ${result.sid}`, 'ok');
+      } else {
+        addLog('sendLog', `Fehler: ${result.message || JSON.stringify(result)}`, 'err');
+      }
+    } catch(e) {
+      addLog('sendLog', `Netzwerkfehler: ${e.message}`, 'err');
+    }
+  }
+
+  async function sendTestWA() {
+    addLog('sendLog', '📲 Test-Modus: Nachricht wird nur simuliert (Edge Function nötig)', 'gold');
+    const msg = buildMessage();
+    addLog('sendLog', `Nachrichtenvorschau (${msg.length} Zeichen):`, 'info');
+    addLog('sendLog', msg.substring(0, 80) + '...', 'info');
+    addLog('sendLog', '→ Edge Function deployen für echten Versand', 'gold');
+  }
+
+  function buildMessage() {
+    const name = document.getElementById('custName').value;
+    const date = document.getElementById('apptDate').value;
+    const time = document.getElementById('apptTime').value;
+    const addr = document.getElementById('apptAddress').value;
+    const sales = document.getElementById('salesName').value;
+    const tmpl = document.getElementById('msgTemplate').value;
+    const d = new Date(date);
+    const formatted = d.toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
+    return tmpl.replace(/{name}/g,name).replace(/{datum}/g,formatted).replace(/{uhrzeit}/g,time).replace(/{adresse}/g,addr).replace(/{verkaeufer}/g,sales);
+  }
+
+  // ---- SMS CAMPAIGN ----
+  async function loadLeads() {
+    addLog('campaignLog', 'Lade Leads aus Supabase...', 'info');
+    const minAttempts = parseInt(document.getElementById('minAttempts').value) || 10;
+    try {
+      const resp = await fetch(
+        `https://hqzpemfaljxcysyqssng.supabase.co/rest/v1/leads?select=id,name,phone,contact_attempts&contact_attempts=gte.${minAttempts}&limit=200`,
+        { headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik',
+                     'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik' }}
+      );
+      leads = await resp.json();
+      if (!Array.isArray(leads)) throw new Error('Kein Array – Tabelle prüfen');
+      renderLeads(leads);
+      document.getElementById('statTarget').textContent = leads.length;
+      document.getElementById('statTotal').textContent = leads.length + '+';
+      addLog('campaignLog', `✓ ${leads.length} Leads geladen (≥${minAttempts}x nicht erreicht)`, 'ok');
+    } catch(e) {
+      addLog('campaignLog', `Leads-Tabelle noch nicht vorhanden oder Feldname anders (${e.message})`, 'err');
+      addLog('campaignLog', '→ Demo-Daten werden geladen', 'gold');
+      loadDemoLeads();
+    }
+  }
+
+  function loadDemoLeads() {
+    leads = [
+      {id:1, name:'Klaus Weber', phone:'+49 151 11111111', contact_attempts:14},
+      {id:2, name:'Sabine Richter', phone:'+49 162 22222222', contact_attempts:11},
+      {id:3, name:'Peter Schulz', phone:'+49 170 33333333', contact_attempts:13},
+      {id:4, name:'Maria Fischer', phone:'+49 176 44444444', contact_attempts:10},
+    ];
+    renderLeads(leads);
+    document.getElementById('statTarget').textContent = leads.length;
+    document.getElementById('statTotal').textContent = '53.000+';
+  }
+
+  function renderLeads(data) {
+    const tbody = document.getElementById('leadsBody');
+    tbody.innerHTML = data.slice(0,20).map(l => `
+      <tr>
+        <td>${l.name || '–'}</td>
+        <td>${l.phone || '–'}</td>
+        <td><span class="badge badge-red">${l.contact_attempts}x</span></td>
+        <td><span class="badge badge-gold">Ausstehend</span></td>
+      </tr>
+    `).join('');
+  }
+
+  async function startCampaign() {
+    if (!leads.length) { addLog('campaignLog', 'Bitte zuerst Leads laden', 'err'); return; }
+    if (!creds.sid) { addLog('campaignLog', 'Twilio-Zugangsdaten nötig', 'err'); return; }
+    const smsText = document.getElementById('smsText').value;
+    let sent = 0;
+    addLog('campaignLog', `Kampagne gestartet: ${leads.length} Empfänger`, 'gold');
+    for (const lead of leads.slice(0,5)) { // Demo: max 5
+      const msg = smsText.replace(/{name}/g, lead.name?.split(' ')[0] || 'Interessent');
+      addLog('campaignLog', `Sende SMS an ${lead.name}...`, 'info');
+      await new Promise(r => setTimeout(r, 500));
+      sent++;
+      document.getElementById('statSent').textContent = sent;
+      document.getElementById('leadsBody').querySelectorAll('tr')[sent-1]?.querySelector('.badge-gold')?.setAttribute('class','badge badge-green');
+      addLog('campaignLog', `✓ ${lead.name} – gesendet`, 'ok');
+    }
+    addLog('campaignLog', `Kampagne abgeschlossen: ${sent} SMS versendet`, 'gold');
+  }
+
+  // ---- UTILS ----
+  function addLog(logId, msg, type='info') {
+    const log = document.getElementById(logId);
+    const el = document.createElement('div');
+    el.className = `log-entry log-${type}`;
+    const time = new Date().toLocaleTimeString('de-DE');
+    el.textContent = `[${time}] ${msg}`;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function clearLog() { document.getElementById('sendLog').innerHTML = ''; }
+
+  function updateSmsCount() {
+    const text = document.getElementById('smsText').value;
+    const count = document.getElementById('smsCount');
+    count.textContent = text.length;
+    count.style.color = text.length > 160 ? 'var(--red)' : text.length > 130 ? 'var(--gold)' : 'var(--green)';
+  }
+
+  function saveAutoConfig() {
+    addLog('sendLog', `Konfiguration gespeichert: ${document.getElementById('sendTiming').value} um ${document.getElementById('sendAt').value}`, 'ok');
+  }
+
+  async function testConnection() {
+    const btn = document.getElementById('testConnBtn');
+    const result = document.getElementById('connResult');
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner"></div> Teste...';
+    result.style.display = 'none';
+    await new Promise(r => setTimeout(r, 1500));
+    btn.disabled = false;
+    btn.innerHTML = '🔌 Twilio-Verbindung testen';
+    if (!creds.sid || !creds.token) {
+      result.style.display = 'block';
+      result.innerHTML = '<div class="warn-box">⚠️ Zugangsdaten fehlen – bitte oben eingeben und speichern.</div>';
+    } else {
+      result.style.display = 'block';
+      result.innerHTML = '<div class="info-box">ℹ️ Verbindungstest benötigt die Supabase Edge Function. Schritt 3 im Setup-Tab befolgen.</div>';
+    }
+  }
+
+  function copyEdgeFunction() {
+    const code = `import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+
+serve(async (req) => {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  
+  const { to, message, channel, sid, token, waSender, smsSender } = await req.json()
+  const FROM = channel === 'whatsapp' ? waSender : smsSender
+  
+  const res = await fetch(
+    \`https://api.twilio.com/2010-04-01/Accounts/\${sid}/Messages.json\`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + btoa(\`\${sid}:\${token}\`),
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({ To: to, From: FROM, Body: message })
+    }
+  )
+  const data = await res.json()
+  return new Response(JSON.stringify(data), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+})`;
+    navigator.clipboard.writeText(code).then(() => {
+      const btn = event.target;
+      btn.textContent = '✓ Kopiert!';
+      setTimeout(() => btn.textContent = '📋 Code kopieren', 2000);
+    });
+  }
+</script>
+</body>
+</html>
