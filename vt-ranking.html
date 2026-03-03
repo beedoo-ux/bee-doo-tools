@@ -286,10 +286,10 @@ var QUOTES=[
 "Teamwork makes the dream work. 🐝"
 ];
 
-function sn(f){var p=(f||'?').trim().split(/\s+/);if(p.length<2)return p[0];var particles=['van','von','de','den','der','del','di','la','le','ter'];if(p.length>=3&&particles.indexOf(p[1].toLowerCase())>=0)return p[0]+' '+p[1][0].toLowerCase()+'.';return p[0]+' '+p[p.length-1][0].toUpperCase()+'.';}
+function sn(f){var p=(f||'?').trim().split(/\s+/);if(p.length<2)return p[0];var particles=['van','von','de','den','der','del','di','la','le','ter'];var first=p[0];if(first.indexOf('-')>0){var hp=first.split('-');first=hp[0]+'-'+hp[1][0].toUpperCase()+'.';}if(p.length>=3&&particles.indexOf(p[1].toLowerCase())>=0)return first+' '+p[1][0].toLowerCase()+'.';return first+' '+p[p.length-1][0].toUpperCase()+'.';}
 function fmt(n){return Math.round(n).toLocaleString('de-DE')}
 
-var hintDismissed=false;
+var hintDismissed=!!getCookie('beedoo_hint_seen');
 
 // Working days calculation (NRW holidays for 2026)
 function getWorkingDays(year,m){
@@ -719,7 +719,7 @@ function render(){
 
     document.querySelectorAll('[data-sort]').forEach(function(b){b.addEventListener('click',function(){sort=this.getAttribute('data-sort');render()})});
     document.getElementById('ms').addEventListener('change',function(){
-        hintDismissed=true;
+        hintDismissed=true;setCookie('beedoo_hint_seen','1',90);
         var hint=document.getElementById('monthHint');if(hint)hint.remove();
         this.classList.remove('pulse-hint');
         month=this.value;window.history.replaceState(null,'','?m='+month);
@@ -803,8 +803,21 @@ function runBoot(){
     },50);
 }
 
+// Cookie helpers
+function setCookie(n,v,d){var e=new Date();e.setDate(e.getDate()+(d||365));document.cookie=n+'='+v+';expires='+e.toUTCString()+';path=/;SameSite=Lax'}
+function getCookie(n){var m=document.cookie.match('(^|;)\\s*'+n+'=([^;]*)');return m?m[2]:null}
+
 // INIT
-runBoot();
+var bootSeen=getCookie('beedoo_boot_seen');
+if(bootSeen){
+    // Skip boot animation
+    var ov=document.getElementById('bootOverlay');
+    if(ov){ov.style.display='none'}
+    document.getElementById('app').style.display='block';
+} else {
+    runBoot();
+    setCookie('beedoo_boot_seen','1',7);
+}
 if(month==='2026-01'||month==='2026-02')render();else loadMarch();
 
 })();
