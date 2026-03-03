@@ -464,72 +464,66 @@ function App() {
         <div className="fade-in">
           {/* KPI Cards */}
           <div className="kpi-grid">
-            <div className={`kpi red ${selectedKpi === 'open' ? 'kpi-active' : ''}`} onClick={() => setSelectedKpi(selectedKpi === 'open' ? null : 'open')} style={{ cursor:'pointer' }}>
+            <div className={`kpi red ${selectedKpi==='open'?'kpi-active':''}`} onClick={()=>setSelectedKpi(selectedKpi==='open'?null:'open')} style={{cursor:'pointer'}}>
               <div className="kpi-label">Offene Posten</div>
               <div className="kpi-value red">€{fmtK(kpis.totalOpen)}</div>
-              <div className="kpi-sub">{processedOpen.length} Rechnungen {selectedKpi === 'open' ? '▴' : '▾'}</div>
+              <div className="kpi-sub">{processedOpen.length} Rechnungen {selectedKpi==='open'?'▴':'▾'}</div>
             </div>
-            <div className={`kpi orange ${selectedKpi === 'overdue' ? 'kpi-active' : ''}`} onClick={() => setSelectedKpi(selectedKpi === 'overdue' ? null : 'overdue')} style={{ cursor:'pointer' }}>
+            <div className={`kpi orange ${selectedKpi==='overdue'?'kpi-active':''}`} onClick={()=>setSelectedKpi(selectedKpi==='overdue'?null:'overdue')} style={{cursor:'pointer'}}>
               <div className="kpi-label">Überfällig (60+ Tage)</div>
               <div className="kpi-value orange">€{fmtK(kpis.overdue60Sum)}</div>
-              <div className="kpi-sub">{kpis.overdue60Count} Rechnungen · Ø {kpis.avgAge} Tage {selectedKpi === 'overdue' ? '▴' : '▾'}</div>
+              <div className="kpi-sub">{kpis.overdue60Count} Rechnungen · Ø {kpis.avgAge} Tage {selectedKpi==='overdue'?'▴':'▾'}</div>
             </div>
-            <div className={`kpi green ${selectedKpi === 'paid' ? 'kpi-active' : ''}`} onClick={() => setSelectedKpi(selectedKpi === 'paid' ? null : 'paid')} style={{ cursor:'pointer' }}>
+            <div className={`kpi green ${selectedKpi==='paid'?'kpi-active':''}`} onClick={()=>setSelectedKpi(selectedKpi==='paid'?null:'paid')} style={{cursor:'pointer'}}>
               <div className="kpi-label">Bezahlt (März)</div>
               <div className="kpi-value green">€{fmtK(kpis.thisMonthPaidSum)}</div>
-              <div className="kpi-sub">{kpis.thisMonthPaidCount} Rechnungen {selectedKpi === 'paid' ? '▴' : '▾'}</div>
+              <div className="kpi-sub">{kpis.thisMonthPaidCount} Rechnungen {selectedKpi==='paid'?'▴':'▾'}</div>
             </div>
             <div className="kpi blue">
               <div className="kpi-label">Kontostand</div>
               <div className="kpi-value blue">€{fmtK(accountBalance)}</div>
               <div className="kpi-sub">Sparkasse ···9985</div>
             </div>
-            <div className={`kpi ${selectedKpi === 'all' ? 'kpi-active' : ''}`} onClick={() => setSelectedKpi(selectedKpi === 'all' ? null : 'all')} style={{ cursor:'pointer' }}>
+            <div className={`kpi ${selectedKpi==='all'?'kpi-active':''}`} onClick={()=>setSelectedKpi(selectedKpi==='all'?null:'all')} style={{cursor:'pointer'}}>
               <div className="kpi-label">Gesamtvolumen</div>
-              <div className="kpi-value">€{fmtK(kpis.totalOpen + kpis.totalPaidVol)}</div>
-              <div className="kpi-sub">{processedOpen.length + processedPaid.length} Rechnungen gesamt {selectedKpi === 'all' ? '▴' : '▾'}</div>
+              <div className="kpi-value">€{fmtK(kpis.totalOpen+kpis.totalPaidVol)}</div>
+              <div className="kpi-sub">{processedOpen.length+processedPaid.length} Rechnungen gesamt {selectedKpi==='all'?'▴':'▾'}</div>
             </div>
           </div>
 
-          {selectedKpi && (() => {
-            let items=[], title='', clr='#888', isPd=selectedKpi==='paid', isAl=selectedKpi==='all';
-            if(selectedKpi==='open'){title='Alle offenen Rechnungen';items=[...processedOpen].sort((a,b)=>b.offen-a.offen);clr='#ef4444';}
-            else if(selectedKpi==='overdue'){title='Überfällig > 60 Tage';items=[...kpis.overdue60].sort((a,b)=>b.age-a.age);clr='#f59e0b';}
-            else if(isPd){title='Bezahlt im März';items=[...kpis.thisMonthPaid].sort((a,b)=>b.brutto-a.brutto);clr='#22c55e';}
-            else if(isAl){title='Top Rechnungen';clr='#F5C500';items=[...processedOpen.map(i=>({...i,_tp:'offen'})),...processedPaid.slice(0,50).map(i=>({...i,_tp:'bezahlt',offen:0,age:0,bucket:{color:'#22c55e'}}))].sort((a,b)=>b.brutto-a.brutto).slice(0,50);}
-            return (
-              <div style={{marginTop:8,borderTop:'2px solid '+clr,paddingTop:12,animation:'fadeIn .3s ease'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-                  <div style={{fontWeight:700,color:clr,fontSize:15}}>
-                    {title} ({items.length})
-                    {!isPd&&!isAl&&<span style={{marginLeft:10,fontSize:13}}>Σ €{fmt(items.reduce((s,i)=>s+(i.offen||0),0))}</span>}
-                  </div>
-                  <button className="refresh-btn" onClick={()=>setSelectedKpi(null)} style={{fontSize:11,padding:'4px 10px'}}>✕</button>
+          {selectedKpi && !selectedKpi.startsWith('aging') && (()=>{
+            let items=[],title='',color='var(--text)',isPaid=selectedKpi==='paid',isAll=selectedKpi==='all';
+            if(selectedKpi==='open'){title='Alle offenen Rechnungen';items=[...processedOpen].sort((a,b)=>b.offen-a.offen);color='var(--red)';}
+            else if(selectedKpi==='overdue'){title='\u00dcberf\u00e4llig > 60 Tage';items=[...kpis.overdue60].sort((a,b)=>b.age-a.age);color='var(--orange)';}
+            else if(isPaid){title='Bezahlt im M\u00e4rz';items=[...kpis.thisMonthPaid].sort((a,b)=>b.brutto-a.brutto);color='var(--green)';}
+            else if(isAll){title='Top Rechnungen';items=[...processedOpen.map(i=>({...i,_tp:'offen'})),...processedPaid.slice(0,50).map(i=>({...i,_tp:'bezahlt',offen:0,age:0,bucket:{color:'var(--green)'}}))]
+              .sort((a,b)=>b.brutto-a.brutto).slice(0,50);color='var(--gold)';}
+            return (<div className='section fade-in' style={{marginTop:8}}>
+              <div className='section-header' style={{borderTop:'2px solid '+color}}>
+                <div className='section-title' style={{color}}>{title} <span className='section-count'>{items.length}</span>
+                  {!isPaid&&!isAll&&<span style={{marginLeft:8,fontSize:14,fontWeight:700}}>\u03a3 \u20ac{fmt(items.reduce((s,i)=>s+(i.offen||0),0))}</span>}
                 </div>
-                <div style={{maxHeight:420,overflowY:'auto'}}>
-                  <table><thead><tr>
-                    <th>RE-Nr</th><th>Kunde</th><th>Ort</th><th className="text-right">Brutto</th>
-                    {!isPd&&<th className="text-right">Offen</th>}
-                    {!isPd&&!isAl&&<th>Alter</th>}
-                    {isPd&&<th>Bezahlt am</th>}
-                    {isAl&&<th>Status</th>}
-                  </tr></thead><tbody>
-                    {items.map(i=>(
-                      <tr key={i.id}>
-                        <td style={{fontWeight:600,fontFamily:'monospace',fontSize:13}}>{i.invoiceNumber}</td>
-                        <td>{i.name||'–'}</td>
-                        <td style={{color:'#777',fontSize:12}}>{i.addressCity||'–'}</td>
-                        <td className="text-right" style={{fontWeight:600}}>€{fmt(i.brutto)}</td>
-                        {!isPd&&<td className="text-right" style={{color:'#ef4444',fontWeight:600}}>€{fmt(i.offen)}</td>}
-                        {!isPd&&!isAl&&<td><span style={{color:i.bucket.color,fontWeight:600}}>{i.age}d</span></td>}
-                        {isPd&&<td style={{color:'#777'}}>{i.payDate?i.payDate.toLocaleDateString('de-DE'):'–'}</td>}
-                        {isAl&&<td><span className={'badge '+(i._tp==='offen'?'badge-red':'badge-green')}>{i._tp==='offen'?'Offen':'Bezahlt'}</span></td>}
-                      </tr>
-                    ))}
-                  </tbody></table>
-                </div>
+                <button className='refresh-btn' onClick={()=>setSelectedKpi(null)} style={{fontSize:11,padding:'4px 10px'}}>\u2715 Schlie\u00dfen</button>
               </div>
-            );
+              <div className='table-scroll'><table>
+                <thead><tr><th>RE-Nr</th><th>Kunde</th><th>Ort</th><th className='text-right'>Brutto</th>
+                  {!isPaid&&<th className='text-right'>Offen</th>}
+                  {!isPaid&&!isAll&&<th>Alter</th>}
+                  {isPaid&&<th>Bezahlt am</th>}
+                  {isAll&&<th>Status</th>}
+                </tr></thead>
+                <tbody>{items.map(i=>(<tr key={i.id}>
+                  <td style={{fontWeight:600,fontFamily:'monospace',fontSize:13}}>{i.invoiceNumber}</td>
+                  <td>{i.name||'\u2013'}</td>
+                  <td style={{color:'var(--text-dim)',fontSize:12}}>{i.addressCity||'\u2013'}</td>
+                  <td className='text-right' style={{fontWeight:600}}>\u20ac{fmt(i.brutto)}</td>
+                  {!isPaid&&<td className='text-right' style={{color:'var(--red)',fontWeight:600}}>\u20ac{fmt(i.offen)}</td>}
+                  {!isPaid&&!isAll&&<td><span style={{color:i.bucket.color,fontWeight:600}}>{i.age}d</span></td>}
+                  {isPaid&&<td style={{color:'var(--text-dim)'}}>{i.payDate?i.payDate.toLocaleDateString('de-DE'):'\u2013'}</td>}
+                  {isAll&&<td><span className={'badge '+(i._tp==='offen'?'badge-red':'badge-green')}>{i._tp==='offen'?'Offen':'Bezahlt'}</span></td>}
+                </tr>))}</tbody>
+              </table></div>
+            </div>);
           })()}
 
           {/* Charts row */}
@@ -539,38 +533,33 @@ function App() {
               <div className="chart-title">⏳ Fälligkeitsanalyse</div>
               <div className="aging-grid">
                 {agingBuckets.map((b, i) => (
-                  <div className="aging-card" key={i} onClick={() => setSelectedKpi(selectedKpi === "aging_"+i ? null : "aging_"+i)} style={selectedKpi === "aging_"+i ? {borderColor: b.color} : {}}>
+                  <div className='aging-card' key={i} onClick={()=>setSelectedKpi(selectedKpi==='aging_'+i?null:'aging_'+i)} style={{border:selectedKpi==='aging_'+i?'1px solid '+b.color:'1px solid transparent'}}>
                     <div className="aging-amount" style={{ color: b.color }}>€{fmtK(b.sum)}</div>
                     <div className="aging-label">{b.label}</div>
-                    <div className="aging-count">{b.count} RE {selectedKpi === "aging_"+i ? "▴" : "▾"}</div>
+                    <div className='aging-count'>{b.count} RE {selectedKpi==='aging_'+i?'\u25b4':'\u25be'}</div>
                   </div>
                 ))}
               </div>
-              {typeof selectedKpi === 'string' && selectedKpi.startsWith('aging') && (() => {
-                const bi = parseInt(selectedKpi.split('_')[1]);
-                const bk = agingBuckets[bi];
-                const aitems = processedOpen.filter(inv => inv.bucket.idx === bi).sort((a,b) => b.offen - a.offen);
-                return (
-                  <div style={{marginTop:12,borderTop:'2px solid '+bk.color,paddingTop:12}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                      <div style={{fontWeight:700,color:bk.color,fontSize:14}}>{bk.label}: {aitems.length} RE · €{fmt(bk.sum)}</div>
-                      <button className="refresh-btn" onClick={()=>setSelectedKpi(null)} style={{fontSize:11,padding:'4px 10px'}}>✕</button>
-                    </div>
-                    <div style={{maxHeight:350,overflowY:'auto'}}>
-                      <table><thead><tr><th>RE-Nr</th><th>Kunde</th><th>Ort</th><th className="text-right">Brutto</th><th className="text-right">Offen</th><th>Alter</th></tr></thead>
-                      <tbody>{aitems.map(inv=>(
-                        <tr key={inv.id}>
-                          <td style={{fontWeight:600,fontFamily:'monospace',fontSize:13}}>{inv.invoiceNumber}</td>
-                          <td>{inv.name||'–'}</td>
-                          <td style={{color:'#777',fontSize:12}}>{inv.addressCity||'–'}</td>
-                          <td className="text-right">€{fmt(inv.brutto)}</td>
-                          <td className="text-right" style={{color:'#ef4444',fontWeight:600}}>€{fmt(inv.offen)}</td>
-                          <td><span style={{color:bk.color,fontWeight:600}}>{inv.age}d</span></td>
-                        </tr>
-                      ))}</tbody></table>
-                    </div>
+              {typeof selectedKpi==='string'&&selectedKpi.startsWith('aging_')&&(()=>{
+                const bIdx=parseInt(selectedKpi.split('_')[1]);const ab=agingBuckets[bIdx];
+                const aitems=processedOpen.filter(i=>i.bucket.idx===bIdx).sort((a,b)=>b.offen-a.offen);
+                return (<div className='fade-in' style={{marginTop:12,borderTop:'2px solid '+ab.color,paddingTop:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <div style={{fontWeight:700,color:ab.color}}>{ab.label}: {aitems.length} RE \u00b7 \u20ac{fmt(ab.sum)}</div>
+                    <button className='refresh-btn' onClick={()=>setSelectedKpi(null)} style={{fontSize:11,padding:'4px 10px'}}>\u2715</button>
                   </div>
-                );
+                  <div className='table-scroll'><table>
+                    <thead><tr><th>RE-Nr</th><th>Kunde</th><th>Ort</th><th className='text-right'>Brutto</th><th className='text-right'>Offen</th><th>Alter</th></tr></thead>
+                    <tbody>{aitems.map(i=>(<tr key={i.id}>
+                      <td style={{fontWeight:600,fontFamily:'monospace',fontSize:13}}>{i.invoiceNumber}</td>
+                      <td>{i.name||'\u2013'}</td>
+                      <td style={{color:'var(--text-dim)',fontSize:12}}>{i.addressCity||'\u2013'}</td>
+                      <td className='text-right'>\u20ac{fmt(i.brutto)}</td>
+                      <td className='text-right' style={{color:'var(--red)',fontWeight:600}}>\u20ac{fmt(i.offen)}</td>
+                      <td><span style={{color:ab.color,fontWeight:600}}>{i.age}d</span></td>
+                    </tr>))}</tbody>
+                  </table></div>
+                </div>);
               })()}
             </div>
 
