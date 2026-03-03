@@ -122,11 +122,11 @@ function cMap(c) {
     };
 }
 
-async function runContractsSync(config) {
+async function runContractsSync(config, req) {
     const token = await levetoAuth();
     const hours = config?.hours || 1;
     const now = new Date();
-    const isNightlyFull = now.getUTCHours() === 2; // 3 AM CET = 2 UTC → full sync
+    const isNightlyFull = now.getUTCHours() === 2 || req?.query?.full === 'true'; // 3 AM CET or ?full=true
     
     let url = `${LU}/contracts`;
     let mode = 'delta';
@@ -275,7 +275,7 @@ export default async function handler(req, res) {
                         result = await runLevetoSync(cfg.config);
                         break;
                     case 'leveto_contracts':
-                        result = await runContractsSync(cfg.config);
+                        result = await runContractsSync(cfg.config, req);
                         break;
                     case 'lohn_sheet':
                         result = await runLohnSheetSync(cfg.config);
@@ -323,3 +323,4 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: err.message });
     }
 }
+
