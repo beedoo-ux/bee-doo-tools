@@ -44,6 +44,12 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 .hero-number{font-family:'Outfit',sans-serif;font-size:clamp(72px,16vw,110px);font-weight:900;line-height:1;background:linear-gradient(135deg,var(--gold),var(--gold2),#fff,var(--gold));background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shimmer 3s linear infinite}
 @keyframes shimmer{0%{background-position:0% center}100%{background-position:200% center}}
 .hero-sub{font-family:'Outfit',sans-serif;font-size:12px;font-weight:600;color:#3d4566;letter-spacing:2px;text-transform:uppercase;margin-top:8px}
+.hero-today{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:8px 0 4px}
+.hero-today-badge{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;background:rgba(245,197,0,.15);color:var(--gold);border:1px solid rgba(245,197,0,.25);border-radius:20px;padding:3px 10px}
+.hero-today-num{font-family:'Outfit',sans-serif;font-size:22px;font-weight:900;color:var(--gold);line-height:1}
+.hero-today-tag{font-size:12px;font-weight:700;padding:3px 10px;border-radius:8px}
+.hero-today-tag.pv{background:rgba(251,146,60,.12);color:#fb923c}
+.hero-today-tag.hp{background:rgba(6,182,212,.12);color:#22d3ee}
 
 /* Hero PV/HP Split */
 .hero-split{display:flex;justify-content:center;gap:32px;margin-top:12px}
@@ -451,6 +457,7 @@ var FEB=[{n:"Gino Ulitzka",sales:29,kwp:238.8,netto:699010.86,storno:10,el:5,emp
 
 var MONTHS_DATA={'2026-01':JAN,'2026-02':FEB};
 var sort='sales',month='2026-03',marchData=null,marchLoaded=false;
+var todayData={total:0,pv:0,hp:0};
 var qm=new URLSearchParams(window.location.search).get('m');
 if(qm==='2026-01'||qm==='2026-02'||qm==='2026')month=qm;
 var qv=new URLSearchParams(window.location.search).get('view');
@@ -971,10 +978,11 @@ function render(){
         +'<div class="hero-label">bee-doo Sales Ranking</div>'
         +'<div class="hero-number" id="heroCounter">0</div>'
         +'<div class="hero-label">Deals '+(month.length===4?'in':'im')+' '+monat+'</div>'
+        +(isCurMonth&&todayData.total>0?'<div class="hero-today fade-in"><span class="hero-today-badge">Heute</span><span class="hero-today-num">+'+todayData.total+'</span>'+(todayData.pv>0?'<span class="hero-today-tag pv">☀️ '+todayData.pv+' PV</span>':'')+(todayData.hp>0?'<span class="hero-today-tag hp">🔥 '+todayData.hp+' HP</span>':'')+'</div>':'')
         +'<div class="hero-split">'
-        +'<div class="hero-split-item"><div class="hero-split-val" style="color:#fb923c">☀️ '+tPV+'</div><div class="hero-split-label">PV</div></div>'
+        +'<div class="hero-split-item"><div class="hero-split-val" style="color:#fb923c">☀️ '+tPV+'</div><div class="hero-split-label">PV gesamt'+(isCurMonth&&todayData.pv>0?' <em style="color:#fb923c80;font-size:9px;font-style:normal">+'+todayData.pv+' heute</em>':'')+'</div></div>'
         +'<div class="hero-split-sep">|</div>'
-        +'<div class="hero-split-item"><div class="hero-split-val" style="color:var(--cyan)">🔥 '+tHP+'</div><div class="hero-split-label">HP</div></div>'
+        +'<div class="hero-split-item"><div class="hero-split-val" style="color:var(--cyan)">🔥 '+tHP+'</div><div class="hero-split-label">HP gesamt'+(isCurMonth&&todayData.hp>0?' <em style="color:#22d3ee80;font-size:9px;font-style:normal">+'+todayData.hp+' heute</em>':'')+'</div></div>'
         +'</div>'
         +heroRates
         +'<div class="hero-sub" style="opacity:.4;font-size:11px">powered by bee-doo</div></div>'
@@ -1065,13 +1073,18 @@ async function loadChallengeData(mKey){
     var resp=await fetch('/api/challenge-leads?month='+mKey);
     var data=await resp.json();
     if(data.error)throw new Error(data.error+': '+(data.details||''));
+    // Compute today's count from byDay
+    var todayKey=new Date().toISOString().slice(0,10);
+    var byDay=data.byDay||{};
+    var todayCount=byDay[todayKey]||byDay[new Date().getDate()]||0;
     var result={
         total:data.total,
         byPerson:data.byPerson||[],
         allLeads:data.allLeadsCount||0,
-        byDay:data.byDay||{},
+        byDay:byDay,
         recentLeads:data.recentLeads||[],
-        fetchedAt:data.fetchedAt
+        fetchedAt:data.fetchedAt,
+        todayCount:todayCount
     };
     challengeCache[mKey]=result;
     return result;
@@ -1138,6 +1151,7 @@ function renderChallenge(data){
         +'<div class="counter-label">'+monatName+'</div>'
         +'<div class="counter-big" id="challengeCounter">0</div>'
         +'<div class="counter-of">von '+GOAL.toLocaleString('de-DE')+' Eigenleads + Empfehlungen</div>'
+        +(data.todayCount>0?'<div class="hero-today" style="margin:8px 0"><span class="hero-today-badge">Heute</span><span class="hero-today-num">+'+data.todayCount+'</span></div>':'')
         +buildMilestoneConfetti(data.total)
         +'<div class="counter-remaining">'+(goalReached?'🎉 <em>ZIEL ERREICHT!</em> 🎉':'Noch <em>'+remaining.toLocaleString('de-DE')+'</em> bis zum Ziel')+'</div>'
 
@@ -1157,7 +1171,8 @@ function renderChallenge(data){
         +'<div class="ch-rates">'
         +'<div class="ch-rate">ø <b>'+rateDay+'</b> / Tag</div>'
         +(needed>0?'<div class="ch-rate">Nötig: <b>'+needed+'</b> / Tag</div>':'')
-        +'<div class="ch-rate">🎰 <b>'+totalLose+'</b> Lose</div>'
+        +'<div class="ch-rate" style="background:rgba(245,197,0,.08);border-color:rgba(245,197,0,.2);color:var(--gold)">🎰 <b>'+totalLose+'</b> '+(totalLose===1?'Los':'Lose')+' vergeben</div>'
+        +'<div class="ch-rate" style="color:var(--dim)">1 Los je 25 eigene Leads</div>'
         +'</div></div>'
 
         +'<div class="fade-in fd3">'+buildDailyChart(data.byDay||{},yr2,mo3)+'</div>'
@@ -1297,6 +1312,11 @@ async function loadMarch(){
             var d=await r.json();if(!Array.isArray(d)||!d.length)break;all=all.concat(d);if(d.length<1000)break;
         }
         var z=[];try{var eR=await fetch(SB+'/rest/v1/efs_projekte?select=efs_id,preismodell&preismodell=eq.Zero',{headers:hd});if(eR.ok)z=await eR.json()}catch(e){}
+        var todayStr=new Date().toISOString().slice(0,10);
+        todayData={total:0,pv:0,hp:0};
+        var a6today=all.filter(function(o){return(parseFloat(o.calculated_realprice_netto)||0)>=6000&&(o.accepted_date||'').slice(0,10)===todayStr});
+        var bkT={};a6today.forEach(function(o){var l=o.lead_id;if(!l)return;var k=l+'_'+(isHP(o)?'HP':'PV');var an=o.leveto_id||0;if(!bkT[k]||an>(bkT[k].leveto_id||0))bkT[k]=o});
+        Object.values(bkT).forEach(function(o){todayData.total++;if(isHP(o))todayData.hp++;else todayData.pv++;});
         marchData=computeMarch(all,z);marchLoaded=true;render();
     }catch(err){document.getElementById('app').innerHTML='<div class="loading"><div class="load-text" style="color:var(--red)">Fehler: '+err.message+'</div></div>'}
 }
