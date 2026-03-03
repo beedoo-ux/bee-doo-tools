@@ -16,22 +16,62 @@ async function sevdeskGet(endpoint, params = '') {
   return resp.json();
 }
 
-async function supabasePost(table, data) {
-  const resp = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=sevdesk_id`, {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'resolution=merge-duplicates,return=minimal'
-    },
-    body: JSON.stringify(data)
-  });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Supabase ${resp.status}: ${err}`);
+async function supabaseUpsert(table, data) {
+  // Filter: nur neue Einträge (sevdesk_id nicht vorhanden)
+  const ids = data.map(d => d.sevdesk_id).filter(Boolean);
+  if (ids.length === 0) return { inserted: 0, updated: 0 };
+  
+  // Existing IDs abfragen
+  const checkResp = await fetch(
+    `${SUPABASE_URL}/rest/v1/${table}?sevdesk_id=in.(${ids.join(',')})&select=sevdesk_id`,
+    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+  );
+  const existing = (await checkResp.json()).map(r => r.sevdesk_id);
+  const existingSet = new Set(existing);
+  
+  const newItems = data.filter(d => !existingSet.has(d.sevdesk_id));
+  const updateItems = data.filter(d => existingSet.has(d.sevdesk_id));
+  
+  let inserted = 0;
+  // Insert new
+  if (newItems.length > 0) {
+    const resp = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(newItems)
+    });
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`Supabase INSERT ${resp.status}: ${err}`);
+    }
+    inserted = newItems.length;
   }
-  return resp;
+  
+  // Update existing (patch by sevdesk_id)
+  let updated = 0;
+  for (const item of updateItems) {
+    const resp = await fetch(
+      `${SUPABASE_URL}/rest/v1/${table}?sevdesk_id=eq.${item.sevdesk_id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(item)
+      }
+    );
+    if (resp.ok) updated++;
+  }
+  
+  return { inserted, updated };
 }
 
 async function supabaseGet(query) {
@@ -129,8 +169,8 @@ export default async function handler(req, res) {
     let synced = 0;
     for (let i = 0; i < mapped.length; i += 200) {
       const chunk = mapped.slice(i, i + 200);
-      await supabasePost('bank_transactions', chunk);
-      synced += chunk.length;
+      const result = await supabaseUpsert('bank_transactions', chunk);
+      synced += result.inserted + result.updated;
     }
     
     // Update sync config
