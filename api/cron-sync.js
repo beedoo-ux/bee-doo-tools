@@ -223,33 +223,22 @@ async function runAutoMerge() {
     let le = 0, lc = 0, ec = 0;
     
     // Phase 1: EFS ↔ Leveto
-    const er = await (await fetch(ap('efs_projekte') + '?select=efs_id,kunde_nachname,kunde_plz,leveto_id&leveto_id=is.null&limit=2000', { headers: hd() })).json();
-    if (er.length > 0) {
-        const lr = await (await fetch(ap('leveto_leads') + '?select=id,leveto_id,nachname,plz&limit=10000', { headers: hd() })).json();
-        const lk = {};
-        lr.forEach(l => { const k = `${(l.nachname || '').toLowerCase().trim()}_${l.plz || ''}`; if (!lk[k]) lk[k] = []; lk[k].push(l); });
-        for (const e of er) {
-            const k = `${(e.kunde_nachname || '').toLowerCase().trim()}_${e.kunde_plz || ''}`;
-            if (lk[k]) { await fetch(ap('efs_projekte') + `?efs_id=eq.${e.efs_id}`, { method: 'PATCH', headers: hd(), body: JSON.stringify({ leveto_id: lk[k][0].leveto_id }) }); le++; }
+    try {
+        const er = await (await fetch(ap('efs_projekte') + '?select=efs_id,kunde_nachname,kunde_plz,leveto_id&leveto_id=is.null&limit=2000', { headers: hd() })).json();
+        if (Array.isArray(er) && er.length > 0) {
+            const lr = await (await fetch(ap('leveto_leads') + '?select=id,leveto_id,nachname,plz&limit=10000', { headers: hd() })).json();
+            if (Array.isArray(lr)) {
+                const lk = {};
+                lr.forEach(l => { const k = `${(l.nachname || '').toLowerCase().trim()}_${l.plz || ''}`; if (!lk[k]) lk[k] = []; lk[k].push(l); });
+                for (const e of er) {
+                    const k = `${(e.kunde_nachname || '').toLowerCase().trim()}_${e.kunde_plz || ''}`;
+                    if (lk[k]) { await fetch(ap('efs_projekte') + `?efs_id=eq.${e.efs_id}`, { method: 'PATCH', headers: hd(), body: JSON.stringify({ leveto_id: lk[k][0].leveto_id }) }); le++; }
+                }
+            }
         }
-    }
+    } catch (e) { console.error('Auto-merge Phase 1 error:', e.message); }
     
-    // Phase 2: CSV ↔ Leveto
-    const pr = await (await fetch(ap('import_provisions') + '?select=an_nr,lead_id&lead_id=not.is.null&limit=5000', { headers: hd() })).json();
-    if (pr.length > 0) {
-        const li = await (await fetch(ap('leveto_leads') + '?select=id,leveto_id&limit=50000', { headers: hd() })).json();
-        const ik = {}; li.forEach(l => { ik[l.leveto_id] = l.id; });
-        for (const p of pr) if (ik[p.lead_id]) lc++;
-    }
-    
-    // Phase 3: EFS ↔ CSV
-    const ea = await (await fetch(ap('efs_projekte') + '?select=efs_id,kunde_nachname,kunde_plz&limit=2000', { headers: hd() })).json();
-    const pa = await (await fetch(ap('import_provisions') + '?select=an_nr,kunde,kunde_plz&limit=5000', { headers: hd() })).json();
-    const pk = {};
-    pa.forEach(p => { const nm = (p.kunde || '').split(/\s+/).pop() || ''; const k = `${nm.toLowerCase()}_${p.kunde_plz || ''}`; if (!pk[k]) pk[k] = []; pk[k].push(p); });
-    for (const e of ea) { const k = `${(e.kunde_nachname || '').toLowerCase().trim()}_${e.kunde_plz || ''}`; if (pk[k]) ec++; }
-    
-    return { efs_leveto: le, csv_leveto: lc, efs_csv: ec, total: le + lc + ec };
+    return { efs_leveto: le, total: le };
 }
 
 // ═══ MAIN HANDLER ═══
