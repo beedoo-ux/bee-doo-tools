@@ -52,26 +52,8 @@ async function supabaseUpsert(table, data) {
     inserted = newItems.length;
   }
   
-  // Update existing (patch by sevdesk_id)
-  let updated = 0;
-  for (const item of updateItems) {
-    const resp = await fetch(
-      `${SUPABASE_URL}/rest/v1/${table}?sevdesk_id=eq.${item.sevdesk_id}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(item)
-      }
-    );
-    if (resp.ok) updated++;
-  }
-  
-  return { inserted, updated };
+  // Skip updates (bank transactions don't change)
+  return { inserted, updated: 0, skipped: updateItems.length };
 }
 
 async function supabaseGet(query) {
