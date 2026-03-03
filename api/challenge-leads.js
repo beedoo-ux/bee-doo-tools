@@ -100,6 +100,26 @@ export default async function handler(req, res) {
       sources[s] = (sources[s] || 0) + 1;
     });
 
+
+    // 7b. Recent qualifying leads (last 5 for live ticker)
+    const recentLeads = qualifying
+      .map(l => ({
+        name: (l.name || l.lastname || 'Unbekannt').trim(),
+        berater: (l.berater || l.responsiblePerson || '').trim() || BERATER_OVERRIDES[l.id] || '?',
+        source: (l.source || '').trim(),
+        date: l.creationdate || l.created || '',
+        city: (l.city || '').trim()
+      }))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .slice(0, 8);
+
+    // 7c. Group by day for daily chart
+    const byDay = {};
+    qualifying.forEach(l => {
+      const d = (l.creationdate || l.created || '').substring(0, 10);
+      if (d) byDay[d] = (byDay[d] || 0) + 1;
+    });
+
     // 8. Build response
     const persons = Object.entries(byBerater)
       .map(([n, v]) => ({
@@ -117,6 +137,8 @@ export default async function handler(req, res) {
       allLeadsCount: allLeads.length,
       byPerson: persons,
       sources,
+      recentLeads,
+      byDay,
       fetchedAt: new Date().toISOString()
     });
 
