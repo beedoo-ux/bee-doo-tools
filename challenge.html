@@ -205,10 +205,11 @@ function render(data){
         monthBtns+='<button class="ch-month-btn'+(m===curMonth?' active':'')+'" data-m="'+m+'">'+label+' '+msp[0]+'</button>';
     });
 
-    // Leaderboard
-    var maxP=data.byPerson.length?data.byPerson[0].total:1;
+    // Leaderboard (ohne "kein Berater" – werden aber oben im Total mitgezählt)
+    var visiblePersons=data.byPerson.filter(function(p){return p.n&&p.n!=='(kein Berater)';});
+    var maxP=visiblePersons.length?visiblePersons[0].total:1;
     var cards='';
-    data.byPerson.forEach(function(p,i){
+    visiblePersons.forEach(function(p,i){
         var pos=i+1;
         var qualified=p.total>=25;
         var losCount=Math.floor(p.total/25);
@@ -234,13 +235,13 @@ function render(data){
         +'</div>';
     });
 
-    if(!data.byPerson.length){
+    if(!visiblePersons.length){
         cards='<div style="text-align:center;padding:32px;color:var(--dim)">Noch keine Eigenleads / Empfehlungen in '+monatName+'</div>';
     }
 
-    // Count qualified
-    var qualifiedCount=data.byPerson.filter(function(p){return p.total>=25}).length;
-    var totalLose=data.byPerson.reduce(function(s,p){return s+Math.floor(p.total/25)},0);
+    // Count qualified (nur sichtbare Personen für Lose)
+    var qualifiedCount=visiblePersons.filter(function(p){return p.total>=25}).length;
+    var totalLose=visiblePersons.reduce(function(s,p){return s+Math.floor(p.total/25)},0);
 
     var isOver=tl.over;
     var goalReached=data.total>=GOAL;
