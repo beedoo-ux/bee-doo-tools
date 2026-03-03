@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo Live Ticker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0a;--surface:#141414;--card:#1c1c1c;--card-h:#252525;--gold:#F5C500;--gold-d:#F5C50020;--green:#22c55e;--green-d:#22c55e18;--red:#ef4444;--red-d:#ef444418;--blue:#3b82f6;--blue-d:#3b82f618;--purple:#a855f7;--text:#f0f0f0;--dim:#777;--border:#2a2a2a}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.app{max-width:1400px;margin:0 auto;padding:12px}
+.head{display:flex;align-items:center;justify-content:space-between;padding:12px 0 16px;flex-wrap:wrap;gap:8px}
+.head h1{font-size:22px;font-weight:800;display:flex;align-items:center;gap:8px}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--red);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.head-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.clock{font-size:28px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
+.date-badge{font-size:12px;color:var(--dim);padding:4px 10px;background:var(--surface);border-radius:8px}
+.live-count{display:flex;align-items:center;gap:5px;padding:5px 12px;background:var(--green-d);border:1px solid #22c55e44;border-radius:20px;font-size:12px;font-weight:600;color:var(--green)}
+.filters{display:flex;gap:4px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px}
+.fbtn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--dim);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:.2s}
+.fbtn.active{background:var(--gold-d);border-color:var(--gold);color:var(--gold)}
+.fbtn:hover:not(.active){border-color:#555;color:var(--text)}
+.stats{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto}
+.stat{flex:1;min-width:80px;padding:12px;background:var(--card);border-radius:10px;border:1px solid var(--border);text-align:center}
+.stat-n{font-size:26px;font-weight:800;line-height:1}
+.stat-l{font-size:10px;color:var(--dim);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.sec{margin-bottom:16px}
+.sec-h{display:flex;align-items:center;gap:8px;padding:8px 0;font-size:13px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.sec-h .cnt{color:var(--gold)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:8px}
+.tc{background:var(--card);border-radius:10px;border:1px solid var(--border);padding:12px;transition:.2s}
+.tc:hover{border-color:#444;background:var(--card-h)}
+.tc.live{border-color:#22c55e55;background:#22c55e08}
+.tc.cancelled{opacity:.5}
+.tc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px}
+.tc-berater{font-size:14px;font-weight:700;line-height:1.2}
+.tc-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;flex-shrink:0}
+.b-live{background:var(--green-d);color:var(--green);border:1px solid #22c55e44}
+.b-next{background:var(--blue-d);color:var(--blue);border:1px solid #3b82f644}
+.b-done{background:#33333366;color:var(--dim);border:1px solid #44444444}
+.b-cancel{background:var(--red-d);color:var(--red);border:1px solid #ef444444}
+.tc-time{font-size:13px;font-weight:600;color:var(--gold);margin-bottom:4px}
+.tc-kunde{font-size:12px;color:#bbb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc-ort{font-size:11px;color:#666;margin-top:2px}
+.prog{height:3px;background:#333;border-radius:2px;margin-top:8px;overflow:hidden}
+.prog-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--green),var(--gold));transition:width 1s}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;animation:blink 1.5s infinite}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:12px}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{text-align:center;padding:40px;color:var(--dim)}
+@media(max-width:768px){.grid{grid-template-columns:1fr}.stat-n{font-size:20px}.clock{font-size:22px}.head h1{font-size:18px}.app{padding:8px}}
+@media(max-width:480px){.stat{padding:8px 6px;min-width:60px}.stat-n{font-size:16px}.stat-l{font-size:8px}.stats{gap:4px}}
+.fade{animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.back-link{display:inline-flex;align-items:center;gap:4px;color:var(--dim);text-decoration:none;font-size:12px;padding:4px 0;margin-bottom:4px}
+.back-link:hover{color:var(--gold)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const {useState, useEffect, useMemo, useCallback} = React;
+
+const SB_URL = 'https://hqzpemfaljxcysyqssng.supabase.co/rest/v1';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+const MONTAGE_KW = ['gmbh','team','solar','ac/dc','dc-t','ac-t','awat','moj','pvau','diekmann','heimnetz','sun','zarg','vossolar','mpt','hochstift','rusu','giesbrecht','mono','craftsmen','energie ','elektro','kabelmontag'];
+
+function isMontage(n) {
+  const lo = (n || '').toLowerCase();
+  return MONTAGE_KW.some(k => lo.includes(k));
+}
+
+function fmtTime(d) {
+  if (!d) return '--:--';
+  return new Date(d).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
+}
+
+function getProgress(start, end, now) {
+  const s = new Date(start).getTime(), e = new Date(end).getTime(), n = now.getTime();
+  if (n < s) return 0;
+  if (n > e) return 100;
+  return Math.round((n - s) / (e - s) * 100);
+}
+
+function minsUntil(d, now) { return Math.round((new Date(d).getTime() - now.getTime()) / 60000); }
+function minsLeft(d, now) { return Math.max(0, Math.round((new Date(d).getTime() - now.getTime()) / 60000)); }
+
+function App() {
+  const [termine, setTermine] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(new Date());
+  const [filter, setFilter] = useState('alle');
+  const [lastRefresh, setLastRefresh] = useState(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const today = new Date();
+      const start = today.toISOString().slice(0, 10) + 'T00:00:00';
+      const tom = new Date(today); tom.setDate(tom.getDate() + 1);
+      const end = tom.toISOString().slice(0, 10) + 'T00:00:00';
+      const resp = await fetch(
+        SB_URL + '/leveto_termine?start_date=gte.' + start + '&start_date=lt.' + end + '&order=start_date.asc&limit=500',
+        { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY } }
+      );
+      const data = await resp.json();
+      setTermine(Array.isArray(data) ? data : []);
+      setLastRefresh(new Date());
+    } catch (e) { console.error('Load:', e); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { const iv = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(iv); }, []);
+  useEffect(() => { const iv = setInterval(loadData, 60000); return () => clearInterval(iv); }, [loadData]);
+
+  const cats = useMemo(() => {
+    const n = now.getTime();
+    return termine.map(t => {
+      const s = new Date(t.start_date).getTime();
+      const e = new Date(t.end_date).getTime();
+      const mont = isMontage(t.berater);
+      const kunde = [t.vorname, t.nachname].filter(Boolean).join(' ');
+      let cat = 'next';
+      if (t.status === 'Cancelled') cat = 'cancelled';
+      else if (n >= s && n <= e) cat = 'live';
+      else if (n > e) cat = 'done';
+      return { ...t, cat, mont, kunde, ort: t.stadt || '', prog: getProgress(t.start_date, t.end_date, now) };
+    });
+  }, [termine, now]);
+
+  const fil = useMemo(() => {
+    if (filter === 'alle') return cats;
+    if (filter === 'vertrieb') return cats.filter(t => !t.mont);
+    if (filter === 'montage') return cats.filter(t => t.mont);
+    return cats.filter(t => t.cat === filter);
+  }, [cats, filter]);
+
+  const liveT = fil.filter(t => t.cat === 'live');
+  const nextT = fil.filter(t => t.cat === 'next');
+  const doneT = fil.filter(t => t.cat === 'done');
+  const cancT = fil.filter(t => t.cat === 'cancelled');
+
+  const st = useMemo(() => ({
+    total: cats.length,
+    live: cats.filter(t => t.cat === 'live').length,
+    next: cats.filter(t => t.cat === 'next').length,
+    done: cats.filter(t => t.cat === 'done').length,
+    canc: cats.filter(t => t.cat === 'cancelled').length,
+    vt: cats.filter(t => !t.mont && t.cat !== 'cancelled').length,
+    montage: cats.filter(t => t.mont && t.cat !== 'cancelled').length
+  }), [cats]);
+
+  const Card = ({ t }) => {
+    const bc = { live: 'b-live', next: 'b-next', done: 'b-done', cancelled: 'b-cancel' }[t.cat];
+    let label = '';
+    if (t.cat === 'live') label = '\u25CF LIVE';
+    else if (t.cat === 'next') { const m = minsUntil(t.start_date, now); label = m > 0 ? 'in ' + m + 'min' : 'gleich'; }
+    else if (t.cat === 'done') label = '\u2713 Fertig';
+    else label = '\u2715 Abgesagt';
+
+    return (
+      <div className={'tc ' + t.cat}>
+        <div className="tc-top">
+          <div>
+            <div className="tc-berater">
+              {t.cat === 'live' && <span className="pulse" style={{ marginRight: 6 }} />}
+              {t.berater}
+            </div>
+            {t.mont && <span style={{ fontSize: 10, color: 'var(--purple)', fontWeight: 600 }}>MONTAGE</span>}
+          </div>
+          <span className={'tc-badge ' + bc}>{label}</span>
+        </div>
+        <div className="tc-time">
+          {fmtTime(t.start_date)} \u2013 {fmtTime(t.end_date)}
+          {t.cat === 'live' && <span style={{ color: 'var(--green)', marginLeft: 8, fontSize: 12 }}>noch {minsLeft(t.end_date, now)}min</span>}
+        </div>
+        {t.kunde && <div className="tc-kunde">\uD83D\uDC64 {t.kunde}</div>}
+        {t.ort && <div className="tc-ort">\uD83D\uDCCD {t.ort}</div>}
+        {t.cat === 'live' && <div className="prog"><div className="prog-fill" style={{ width: t.prog + '%' }} /></div>}
+      </div>
+    );
+  };
+
+  if (loading) return (
+    <div className="app">
+      <div className="loading"><div className="spinner" /><div style={{ color: 'var(--dim)' }}>Lade Termine...</div></div>
+    </div>
+  );
+
+  return (
+    <div className="app">
+      <a href="index.html" className="back-link">\u2190 Toolbox</a>
+
+      <div className="head">
+        <h1><span className="dot" /> Live Ticker</h1>
+        <div className="head-r">
+          <div className="live-count"><span className="pulse" /> {st.live} live</div>
+          <div className="date-badge">{now.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+          <div className="clock">{now.toLocaleTimeString('de-DE')}</div>
+        </div>
+      </div>
+
+      <div className="stats">
+        <div className="stat"><div className="stat-n" style={{ color: 'var(--text)' }}>{st.total}</div><div className="stat-l">Gesamt</div></div>
+        <div className="stat"><div className="stat-n" style={{ color: 'var(--green)' }}>{st.live}</div><div className="stat-l">Live</div></div>
+        <div className="stat"><div className="stat-n" style={{ color: 'var(--blue)' }}>{st.next}</div><div className="stat-l">Kommend</div></div>
+        <div className="stat"><div className="stat-n" style={{ color: 'var(--dim)' }}>{st.done}</div><div className="stat-l">Fertig</div></div>
+        <div className="stat"><div className="stat-n" style={{ color: 'var(--red)' }}>{st.canc}</div><div className="stat-l">Abgesagt</div></div>
+        <div className="stat"><div className="stat-n" style={{ color: 'var(--gold)' }}>{st.vt}</div><div className="stat-l">Vertrieb</div></div>
+        <div className="stat"><div className="stat-n" style={{ color: 'var(--purple)' }}>{st.montage}</div><div className="stat-l">Montage</div></div>
+      </div>
+
+      <div className="filters">
+        {[
+          { id: 'alle', l: 'Alle' },
+          { id: 'live', l: '\u25CF Live (' + st.live + ')' },
+          { id: 'next', l: 'Kommend (' + st.next + ')' },
+          { id: 'done', l: 'Fertig (' + st.done + ')' },
+          { id: 'vertrieb', l: 'VT (' + st.vt + ')' },
+          { id: 'montage', l: 'Montage (' + st.montage + ')' }
+        ].map(f => (
+          <button key={f.id} className={'fbtn ' + (filter === f.id ? 'active' : '')} onClick={() => setFilter(f.id)}>{f.l}</button>
+        ))}
+      </div>
+
+      {liveT.length > 0 && (
+        <div className="sec fade">
+          <div className="sec-h"><span className="pulse" /> Jetzt im Termin <span className="cnt">{liveT.length}</span></div>
+          <div className="grid">{liveT.map((t, i) => <Card key={t.id || i} t={t} />)}</div>
+        </div>
+      )}
+
+      {nextT.length > 0 && (
+        <div className="sec fade">
+          <div className="sec-h">\u23F3 Als N\u00E4chstes <span className="cnt">{nextT.length}</span></div>
+          <div className="grid">{nextT.slice(0, 20).map((t, i) => <Card key={t.id || i} t={t} />)}</div>
+          {nextT.length > 20 && <div style={{ textAlign: 'center', padding: 8, color: 'var(--dim)', fontSize: 12 }}>+ {nextT.length - 20} weitere</div>}
+        </div>
+      )}
+
+      {doneT.length > 0 && (
+        <div className="sec fade">
+          <div className="sec-h">\u2705 Abgeschlossen <span className="cnt">{doneT.length}</span></div>
+          <div className="grid">{doneT.slice(0, 12).map((t, i) => <Card key={t.id || i} t={t} />)}</div>
+          {doneT.length > 12 && <div style={{ textAlign: 'center', padding: 8, color: 'var(--dim)', fontSize: 12 }}>+ {doneT.length - 12} weitere</div>}
+        </div>
+      )}
+
+      {cancT.length > 0 && (
+        <div className="sec fade">
+          <div className="sec-h">\u274C Abgesagt <span className="cnt">{cancT.length}</span></div>
+          <div className="grid">{cancT.map((t, i) => <Card key={t.id || i} t={t} />)}</div>
+        </div>
+      )}
+
+      {fil.length === 0 && <div className="empty">Keine Termine f\u00FCr den gew\u00E4hlten Filter</div>}
+
+      <div style={{ textAlign: 'center', padding: '16px 0', color: '#444', fontSize: 11 }}>
+        Auto-Refresh 60s \u00B7 Update: {lastRefresh ? lastRefresh.toLocaleTimeString('de-DE') : '\u2013'} \u00B7 Quelle: Supabase/Leveto
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
