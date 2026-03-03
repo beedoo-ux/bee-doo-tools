@@ -322,6 +322,9 @@ function App(){
   const[batchSel,setBatchSel]=useState(new Set());
   const[batchMode,setBatchMode]=useState(false);
   const[assignBer,setAssignBer]=useState("");
+  const[snapshots,setSnapshots]=useState({});
+  const[snapshotDate,setSnapshotDate]=useState("");
+  const[snapshotSaving,setSnapshotSaving]=useState(false);
   const pollRef=useRef(null);
   const prevCards=useRef([]);
   const stornoIds=useRef(new Set());
@@ -479,8 +482,18 @@ function App(){
     return[{label:"🔴 Überfällig",cards:g.overdue,c:RD},{label:"📅 Heute",cards:g.today,c:GN},{label:"Morgen",cards:g.tomorrow,c:BL},{label:"Diese Woche",cards:g.week,c:PP},{label:"Später",cards:g.later,c:DM},{label:"Kein Datum",cards:g.none,c:GY}].filter(x=>x.cards.length>0);
   },[dashCards]);
 
+
+  /* ═══ TAGESENDE-SNAPSHOT – Hochrechnung einfrieren um 20:00 ═══ */
+  const getWorkdayNr=useCallback((date=new Date())=>{let c=0;for(let d=1;d<=date.getDate();d++){const w=new Date(date.getFullYear(),date.getMonth(),d).getDay();if(w!==0&&w!==6)c++;}return Math.max(c,1)},[]);
+
+  const loadSnapshots=useCallback(async()=>{const now=new Date();const y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,"0");try{const r=await fetch(`${SB}/rest/v1/daily_snapshots?select=berater_name,hochrechnung,snapshot_date,auftrag_count,workday_nr&snapshot_date=gte.${y}-${m}-01&snapshot_date=lte.${y}-${m}-31&board=eq.vertrieb&order=snapshot_date.desc`,{headers:HD,signal:AbortSignal.timeout(4000)});if(!r.ok)return;const rows=await r.json();const snap={};rows.forEach(row=>{if(!snap[row.berater_name])snap[row.berater_name]=row});setSnapshots(snap);if(rows.length>0)setSnapshotDate(rows[0].snapshot_date)}catch(e){console.warn("Snapshot load:",e)}},[]);
+
+  const saveSnapshot=useCallback(async(rankData)=>{setSnapshotSaving(true);const now=new Date();const dateStr=now.toISOString().slice(0,10);const wdNr=getWorkdayNr(now);const rows=rankData.map(b=>({snapshot_date:dateStr,board:"vertrieb",berater_name:b.name,auftrag_count:b.auftragThisMonth||0,workday_nr:wdNr,hochrechnung:wdNr>0?parseFloat(((b.auftragThisMonth||0)/wdNr*22).toFixed(1)):0}));try{await fetch(`${SB}/rest/v1/daily_snapshots`,{method:"POST",headers:{...HD,"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(rows),signal:AbortSignal.timeout(6000)});await loadSnapshots();setToast({text:"📸 Snapshot gespeichert – "+dateStr+" (AT "+wdNr+")",time:Date.now()})}catch(e){setToast({text:"Snapshot fehlgeschlagen",time:Date.now()})}setSnapshotSaving(false)},[getWorkdayNr,loadSnapshots]);
+
+  useEffect(()=>{loadSnapshots()},[]);
+  useEffect(()=>{const iv=setInterval(()=>{const n=new Date();if(n.getHours()===20&&n.getMinutes()<1){const today=n.toISOString().slice(0,10);if(snapshotDate!==today)loadSnapshots()}},30000);return ()=>clearInterval(iv)},[snapshotDate,loadSnapshots]);
   // Berater ranking (admin)
-  const ranking=useMemo(()=>{if(role!=="admin")return[];const now=new Date();const weekAgo=new Date(now);weekAgo.setDate(weekAgo.getDate()-7);const monthAgo=new Date(now);monthAgo.setDate(monthAgo.getDate()-30);return berList.map(b=>{const bc=vCards.filter(c=>c.berater_name===b&&!isStorno(c.stage_key));const prov=bc.filter(c=>c.project_id&&vMontStatus[c.project_id]?.prov);const stuck=bc.filter(c=>(c.days_in_stage||0)>=7);const pipe=bc.reduce((s,c)=>s+(Number(c.eur)||0),0);const provE=prov.reduce((s,c)=>s+(Number(c.eur)||0),0);const auftraege=bc.filter(c=>["auftrag","vertrag","finanzierung"].includes(c.stage_key));const weekDeals=auftraege.filter(c=>(c.days_in_stage||0)<=7).length;const monthDeals=auftraege.length;const convRate=bc.length>0?Math.round((auftraege.length/bc.length)*100):0;const streak=Math.min(weekDeals,7);const avgDeal=auftraege.length>0?Math.round(auftraege.reduce((s,c)=>s+(Number(c.eur)||0),0)/auftraege.length):0;const badges=[];if(provE>=100000)badges.push({icon:"💎",label:"100k+ Provision"});if(monthDeals>=10)badges.push({icon:"🔥",label:"10+ Deals/Monat"});if(convRate>=30)badges.push({icon:"🎯",label:"30%+ Conversion"});if(stuck.length===0&&bc.length>5)badges.push({icon:"⚡",label:"Null Stau"});if(weekDeals>=3)badges.push({icon:"🚀",label:"3+ Deals/Woche"});return{name:b,total:bc.length,pipe,prov:prov.length,provE,stuck:stuck.length,storno:vCards.filter(c=>c.berater_name===b&&isStorno(c.stage_key)).length,weekDeals,monthDeals,convRate,streak,avgDeal,badges}}).sort((a,b)=>b.provE-a.provE)},[berList,vCards,vMontStatus,role]);
+  const ranking=useMemo(()=>{if(role!=="admin")return[];const now=new Date();const weekAgo=new Date(now);weekAgo.setDate(weekAgo.getDate()-7);const monthAgo=new Date(now);monthAgo.setDate(monthAgo.getDate()-30);return berList.map(b=>{const bc=vCards.filter(c=>c.berater_name===b&&!isStorno(c.stage_key));const auftragThisMonth=bc.filter(c=>c.stage_key==="auftrag").length;const prov=bc.filter(c=>c.project_id&&vMontStatus[c.project_id]?.prov);const stuck=bc.filter(c=>(c.days_in_stage||0)>=7);const pipe=bc.reduce((s,c)=>s+(Number(c.eur)||0),0);const provE=prov.reduce((s,c)=>s+(Number(c.eur)||0),0);const auftraege=bc.filter(c=>["auftrag","vertrag","finanzierung"].includes(c.stage_key));const weekDeals=auftraege.filter(c=>(c.days_in_stage||0)<=7).length;const monthDeals=auftraege.length;const convRate=bc.length>0?Math.round((auftraege.length/bc.length)*100):0;const streak=Math.min(weekDeals,7);const avgDeal=auftraege.length>0?Math.round(auftraege.reduce((s,c)=>s+(Number(c.eur)||0),0)/auftraege.length):0;const badges=[];if(provE>=100000)badges.push({icon:"💎",label:"100k+ Provision"});if(monthDeals>=10)badges.push({icon:"🔥",label:"10+ Deals/Monat"});if(convRate>=30)badges.push({icon:"🎯",label:"30%+ Conversion"});if(stuck.length===0&&bc.length>5)badges.push({icon:"⚡",label:"Null Stau"});if(weekDeals>=3)badges.push({icon:"🚀",label:"3+ Deals/Woche"});return{name:b,total:bc.length,pipe,prov:prov.length,provE,stuck:stuck.length,storno:vCards.filter(c=>c.berater_name===b&&isStorno(c.stage_key)).length,weekDeals,monthDeals,convRate,streak,avgDeal,badges,auftragThisMonth}}).sort((a,b)=>b.provE-a.provE)},[berList,vCards,vMontStatus,role]);
 
   // Monteur utilization
   const montUtil=useMemo(()=>{const lk={};mCards.forEach(c=>{if(!c.monteur_name)return;if(!lk[c.monteur_name])lk[c.monteur_name]={name:c.monteur_name,active:0,total:0};lk[c.monteur_name].total++;if(c.phase==="active")lk[c.monteur_name].active++});return Object.values(lk).sort((a,b)=>b.active-a.active)},[mCards]);
@@ -739,6 +752,12 @@ function App(){
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:mob?12:8}}>
                 <span style={{fontWeight:700,fontSize:mob?13:11}}>Performance</span>
                 <span style={{fontSize:mob?10:8,color:DM}}>sortiert nach Provision</span>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  {snapshotDate&&<span style={{fontSize:mob?9:7,color:DM,fontStyle:"italic"}}>📅 HR-Basis: {snapshotDate}</span>}
+                  <button onClick={()=>saveSnapshot(ranking)} disabled={snapshotSaving} style={{fontSize:mob?10:8,padding:"3px 10px",borderRadius:6,background:snapshotSaving?BD:B,color:snapshotSaving?"#ccc":"#000",border:"none",cursor:"pointer",fontWeight:700}}>
+                    {snapshotSaving?"⏳...":"📸 Snapshot"}
+                  </button>
+                </div>
               </div>
               {ranking.map((b,i)=>{const maxProv=ranking[0]?.provE||1;const pct=Math.round((b.provE/maxProv)*100);const barColor=i===0?B:i===1?"#C0C0C0":i===2?"#CD7F32":BL;
               return <div key={b.name} onClick={()=>{setDashBer(b.name);setDashSub("list")}} style={{display:"flex",alignItems:"center",gap:mob?10:8,padding:mob?"8px 0":"5px 0",borderBottom:i<ranking.length-1?`1px solid ${BD}40`:"none",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=C2+"60"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
@@ -756,6 +775,7 @@ function App(){
                   </div>
                   <div style={{display:"flex",gap:mob?8:6,marginTop:3,flexWrap:"wrap"}}>
                     <span style={{fontSize:mob?9:7,color:DM}}>{b.total} Aufträge</span>
+                    {(()=>{const sn=snapshots[b.name];const wdn=getWorkdayNr();const hr=sn?sn.hochrechnung:(wdn>0?parseFloat(((b.auftragThisMonth||0)/wdn*22).toFixed(1)):0);const fromSnap=!!sn;return<span style={{fontSize:mob?9:7,color:fromSnap?B:"#94a3b8",fontWeight:fromSnap?700:400}} title={fromSnap?"Hochrechnung aus Snapshot "+sn.snapshot_date:"Live-Hochrechnung (noch kein Snapshot heute)"}>📈 HR: {hr.toFixed(0)}{fromSnap?" ✓":""}</span>})()}
                     <span style={{fontSize:mob?9:7,color:b.convRate>=25?GN:b.convRate>=15?OR:RD}}>{b.convRate}% Conv.</span>
                     <span style={{fontSize:mob?9:7,color:BL}}>Ø {fmt(b.avgDeal)} €</span>
                     {b.streak>=3&&<span style={{fontSize:mob?9:7,color:OR}}>🔥 {b.streak}d Streak</span>}
