@@ -1254,53 +1254,64 @@ function computeMarch(orders,zeros){
     return Object.entries(bv).map(function(e){var v=e[1];v.n=e[0];return v});
 }
 
+var PROXY='/api/leveto-proxy';
+var levTok=null;
+
 async function getLevToken(){
-    var r=await fetch('https://beedoo.leveto.net/API/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'api@bee-doo.de',password:'Patrick123456789!'})});
-    if(!r.ok)throw new Error('Leveto Auth fehlgeschlagen');
+    if(levTok)return levTok;
+    var body='username='+encodeURIComponent('api@bee-doo.de')+'&password='+encodeURIComponent('Patrick123456789!');
+    var r=await fetch(PROXY+'?path=auth',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});
+    if(!r.ok)throw new Error('Leveto Auth '+r.status);
     var d=await r.json();
-    return d.token||d.access_token||d.jwt||Object.values(d).find(function(v){return typeof v==='string'&&v.length>20});
+    if(!d.login)throw new Error('Leveto Auth fehlgeschlagen');
+    levTok=d.token;
+    setTimeout(function(){levTok=null;},14*60*1000); // Reset nach 14 Minuten
+    return levTok;
 }
 
 async function loadMarch(){
-    document.getElementById('app').innerHTML='<div class="loading"><div class="loader"></div><div class="load-text">Lade Live-Daten von Leveto...</div></div>';
+    document.getElementById('app').innerHTML='<div class="loading"><div class="loader"></div><div class="load-text">Lade Live-Daten...</div></div>';
     var z=[];
     try{var eR=await fetch(SB+'/rest/v1/efs_projekte?select=efs_id,preismodell&preismodell=eq.Zero',{headers:hd});if(eR.ok)z=await eR.json()}catch(e){}
 
-    // 1. Try Leveto API directly (live data)
+    // 1. Leveto Live via Proxy
     try{
         var tok=await getLevToken();
-        var all=[],page=1,done=false;
-        while(!done){
-            var r=await fetch('https://beedoo.leveto.net/API/contracts?accepteddate_start=2026-03-01&accepteddate_end=2026-03-31&status=Angenommen&limit=100&page='+page,{headers:{'Authorization':'Bearer '+tok}});
-            if(!r.ok)throw new Error('Leveto '+r.status);
-            var d=await r.json();
-            if(!Array.isArray(d)||d.length===0)break;
-            all=all.concat(d);
-            if(d.length<100)done=true;else page++;
-            if(page>20)break;
+        var all=[],page=1;
+        while(true){
+            var r=await fetch(PROXY+'?path=contracts&accepteddate_start=2026-03-01&status=Angenommen&limit=100&page='+page,{headers:{Authorization:'Bearer '+tok}});
+            if(!r.ok)throw new Error('Leveto Contracts '+r.status);
+            var resp=await r.json();
+            // Leveto returns {data:[...]} or direct array
+            var rows=Array.isArray(resp)?resp:(resp.data||[]);
+            if(!rows.length)break;
+            // Map Leveto contract fields → our schema
+            var mapped=rows.map(function(o){return{
+                ersteller:(o.ersteller||'?'),
+                accepted_date:(o.accepted_date||o.accepteddate||''),
+                calculated_realprice_netto:parseFloat(o.calculated_realprice_netto||0),
+                calculated_realprice_brutto:parseFloat(o.calculated_realprice_brutto||0),
+                status_kunde:(o.status_kunde||o.status||'Angenommen'),
+                quelle:(o.quelle||''),
+                leveto_id:(parseInt(o.id||o.leveto_id||0)),
+                lead_id:(o.lead_id||null),
+                typeicons:(o.typeicons||'')
+            };});
+            all=all.concat(mapped);
+            if(rows.length<100)break;
+            page++;if(page>30)break;
         }
-        if(all.length===0)throw new Error('Keine Leveto-Daten');
-        // Map Leveto fields to our schema
-        var mapped=all.map(function(o){return{
-            ersteller:(o.ersteller||o.creator||o.salesperson||'?'),
-            accepted_date:(o.accepteddate||o.accepteddate_start||o.created||''),
-            calculated_realprice_netto:(parseFloat(o.calculated_realprice_netto||o.price_netto||o.realprice_netto||0)),
-            calculated_realprice_brutto:(parseFloat(o.calculated_realprice_brutto||o.price_brutto||0)),
-            status_kunde:(o.status||o.status_kunde||'Angenommen'),
-            quelle:(o.quelle||o.source||''),
-            leveto_id:(o.id||o.leveto_id||0),
-            lead_id:(o.lead_id||o.leadId||null),
-            typeicons:(o.typeicons||o.type_icons||o.icons||'')
-        };});
-        marchData=computeMarch(mapped,z);marchLoaded=true;
-        document.getElementById('app').innerHTML='';
-        render();
-        return;
+        if(all.length>0){
+            marchData=computeMarch(all,z);marchLoaded=true;
+            console.log('Leveto Live: '+all.length+' Contracts für März');
+            render();return;
+        }
+        throw new Error('Keine Leveto-Daten zurück');
     }catch(levErr){
-        console.warn('Leveto Live-Abruf fehlgeschlagen, nutze Supabase-Cache:',levErr.message);
+        console.warn('Leveto fehlgeschlagen, Supabase-Cache:',levErr.message);
     }
 
-    // 2. Fallback: Supabase cache
+    // 2. Fallback: Supabase Cache
     try{
         var all2=[];
         for(var o2=0;o2<60000;o2+=1000){
@@ -1308,9 +1319,7 @@ async function loadMarch(){
             var d2=await r2.json();if(!Array.isArray(d2)||!d2.length)break;all2=all2.concat(d2);if(d2.length<1000)break;
         }
         marchData=computeMarch(all2,z);marchLoaded=true;
-        // Show warning that data may be outdated
-        var lastId=all2.length?Math.max.apply(null,all2.map(function(x){return x.leveto_id||0})):0;
-        console.warn('Supabase-Fallback: '+all2.length+' Einträge, letzter leveto_id='+lastId);
+        console.warn('Supabase-Cache: '+all2.length+' Einträge (möglicherweise veraltet)');
         render();
     }catch(err){document.getElementById('app').innerHTML='<div class="loading"><div class="load-text" style="color:var(--red)">Fehler: '+err.message+'</div></div>';}
 }
