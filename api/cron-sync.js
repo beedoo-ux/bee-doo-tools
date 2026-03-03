@@ -43,14 +43,33 @@ async function levetoAuth() {
 // Leveto lead mapper
 function lMap(l) {
     const a = l.homeAddress || {}, s = l.status || {}, sf = l.statusFirst || {};
+    const vd = d => d && d !== '0000-00-00' && d !== '0000-00-00 00:00:00' ? d : null;
     return {
         leveto_id: l.id, id_extern: l.idExtern || null,
+        anrede: l.salutation || null,
         vorname: (l.firstName || '').trim(), nachname: (l.lastName || '').trim(),
-        email: l.email || null, telefon: l.telephone || null, mobil: l.mobile || null,
-        strasse: a.fullstreet || a.street || null, plz: a.postalCode || null, ort: a.city || null,
-        lat: a.lat || null, lng: a.lng || null, quelle: l.source || null,
-        berater_name: l.berater || null, status_name: s.name || null,
+        firma: l.companyName || null,
+        email: l.email || null, telefon: l.telephone || null, telefon2: l.telephone2 || null, mobil: l.mobile || null,
+        erreichbarkeit: l.reachability || null,
+        strasse: a.fullstreet || a.street || null, hausnr: a.housenr || null,
+        plz: a.postalCode || null, ort: a.city || null,
+        lat: a.lat || null, lng: a.lng || null,
+        quelle: l.source || null, tags: l.tags || null,
+        berater_name: l.berater || null,
+        berater_ma_nummer: l.berater_ma_nummer || null,
+        status_id: s.id || null, status_name: s.name || null,
         status_indicator: s.indicator || null,
+        status_datum: vd(s.date),
+        erster_status_id: sf.id || null, erster_status_name: sf.name || null,
+        erster_status_datum: vd(sf.date),
+        letzter_status_wechsel: vd(l.last_status_change),
+        assignments_count: l.assignmentsCount || 0,
+        accepted_count: l.acceptedCount || 0,
+        declined_count: l.declinedCount || 0,
+        leveto_erstellt_am: vd(l.createdOn),
+        leveto_importiert_am: vd(l.importedOn),
+        leveto_letzte_bearbeitung: vd(l.lastEditOn),
+        leveto_abgeschlossen_am: vd(l.finishedOn),
         sync_aktualisiert_am: new Date().toISOString()
     };
 }
