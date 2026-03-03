@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo Finanzen</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #121212;
+  --surface: #1a1a1a;
+  --card: #222;
+  --card-hover: #2a2a2a;
+  --gold: #F5C500;
+  --gold-dim: #F5C50033;
+  --green: #22c55e;
+  --green-dim: #22c55e22;
+  --red: #ef4444;
+  --red-dim: #ef444422;
+  --orange: #f59e0b;
+  --orange-dim: #f59e0b22;
+  --blue: #3b82f6;
+  --blue-dim: #3b82f622;
+  --text: #f0f0f0;
+  --text-dim: #888;
+  --border: #333;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+.app { max-width:1400px; margin:0 auto; padding:16px; }
+
+/* Header */
+.header { display:flex; align-items:center; justify-content:space-between; padding:16px 0 24px; flex-wrap:wrap; gap:12px; }
+.header-left { display:flex; align-items:center; gap:12px; }
+.header-left h1 { font-size:24px; font-weight:700; }
+.header-left h1 span { color:var(--gold); }
+.header-right { display:flex; align-items:center; gap:8px; }
+.sync-badge { display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--green-dim); border:1px solid var(--green); border-radius:20px; font-size:12px; color:var(--green); }
+.sync-badge.loading { background:var(--gold-dim); border-color:var(--gold); color:var(--gold); }
+.sync-badge.error { background:var(--red-dim); border-color:var(--red); color:var(--red); }
+.sync-dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+.sync-badge.loading .sync-dot { animation:pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.refresh-btn { background:var(--card); border:1px solid var(--border); color:var(--text); padding:6px 14px; border-radius:8px; cursor:pointer; font-size:13px; font-family:inherit; transition:all .2s; }
+.refresh-btn:hover { background:var(--card-hover); border-color:var(--gold); }
+
+/* Tabs */
+.tabs { display:flex; gap:4px; margin-bottom:20px; background:var(--surface); padding:4px; border-radius:12px; overflow-x:auto; }
+.tab { padding:10px 20px; border-radius:10px; border:none; background:transparent; color:var(--text-dim); font-family:inherit; font-size:14px; font-weight:500; cursor:pointer; transition:all .2s; white-space:nowrap; }
+.tab.active { background:var(--card); color:var(--gold); }
+.tab:hover:not(.active) { color:var(--text); }
+
+/* KPI Cards */
+.kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-bottom:24px; }
+.kpi { background:var(--card); border-radius:14px; padding:20px; border:1px solid var(--border); position:relative; overflow:hidden; }
+.kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--gold); opacity:0.6; }
+.kpi.green::before { background:var(--green); }
+.kpi.red::before { background:var(--red); }
+.kpi.orange::before { background:var(--orange); }
+.kpi.blue::before { background:var(--blue); }
+.kpi-label { font-size:12px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+.kpi-value { font-size:28px; font-weight:700; line-height:1.1; }
+.kpi-sub { font-size:12px; color:var(--text-dim); margin-top:6px; }
+.kpi-value.green { color:var(--green); }
+.kpi-value.red { color:var(--red); }
+.kpi-value.orange { color:var(--orange); }
+.kpi-value.blue { color:var(--blue); }
+
+/* Table */
+.section { background:var(--card); border-radius:14px; border:1px solid var(--border); margin-bottom:20px; overflow:hidden; }
+.section-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:8px; }
+.section-title { font-size:16px; font-weight:600; display:flex; align-items:center; gap:8px; }
+.section-count { background:var(--gold-dim); color:var(--gold); padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600; }
+.search-input { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:8px 14px; border-radius:8px; font-family:inherit; font-size:13px; width:220px; }
+.search-input::placeholder { color:var(--text-dim); }
+.search-input:focus { outline:none; border-color:var(--gold); }
+
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th { background:var(--surface); padding:10px 16px; text-align:left; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim); white-space:nowrap; position:sticky; top:0; }
+td { padding:12px 16px; border-top:1px solid #2a2a2a; white-space:nowrap; }
+tr:hover td { background:var(--card-hover); }
+.text-right { text-align:right; }
+.text-center { text-align:center; }
+
+/* Badges */
+.badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+.badge-green { background:var(--green-dim); color:var(--green); border:1px solid #22c55e44; }
+.badge-red { background:var(--red-dim); color:var(--red); border:1px solid #ef444444; }
+.badge-orange { background:var(--orange-dim); color:var(--orange); border:1px solid #f59e0b44; }
+.badge-gold { background:var(--gold-dim); color:var(--gold); border:1px solid #F5C50044; }
+.badge-blue { background:var(--blue-dim); color:var(--blue); border:1px solid #3b82f644; }
+.badge-gray { background:#33333366; color:var(--text-dim); border:1px solid #44444466; }
+
+/* Age bar */
+.age-bar { width:80px; height:6px; background:#333; border-radius:3px; overflow:hidden; display:inline-block; vertical-align:middle; margin-right:6px; }
+.age-bar-fill { height:100%; border-radius:3px; transition:width .3s; }
+
+/* Chart containers */
+.chart-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+.chart-card { background:var(--card); border-radius:14px; border:1px solid var(--border); padding:20px; }
+.chart-title { font-size:14px; font-weight:600; margin-bottom:16px; color:var(--text-dim); }
+.bar-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.bar-label { width:70px; font-size:12px; color:var(--text-dim); text-align:right; flex-shrink:0; }
+.bar-track { flex:1; height:24px; background:#2a2a2a; border-radius:6px; overflow:hidden; position:relative; }
+.bar-fill { height:100%; border-radius:6px; display:flex; align-items:center; padding:0 8px; font-size:11px; font-weight:600; transition:width .5s ease; min-width:fit-content; }
+.bar-fill.paid { background:linear-gradient(90deg,var(--green),#16a34a); color:#fff; }
+.bar-fill.open { background:linear-gradient(90deg,var(--orange),#d97706); color:#fff; }
+.bar-value { font-size:12px; color:var(--text-dim); width:90px; text-align:right; flex-shrink:0; }
+
+/* Aging donut placeholder */
+.aging-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.aging-card { text-align:center; padding:16px 8px; background:var(--surface); border-radius:10px; }
+.aging-amount { font-size:18px; font-weight:700; margin-bottom:4px; }
+.aging-label { font-size:11px; color:var(--text-dim); }
+.aging-count { font-size:12px; color:var(--text-dim); margin-top:2px; }
+
+/* Loading */
+.loading-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; height:60vh; gap:16px; }
+.spinner { width:40px; height:40px; border:3px solid var(--border); border-top-color:var(--gold); border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+/* Responsive */
+@media(max-width:900px) {
+  .chart-grid { grid-template-columns:1fr; }
+  .kpi-grid { grid-template-columns:repeat(2,1fr); }
+  .aging-grid { grid-template-columns:repeat(2,1fr); }
+}
+@media(max-width:600px) {
+  .app { padding:10px; }
+  .kpi-grid { grid-template-columns:1fr; }
+  .kpi-value { font-size:22px; }
+  .search-input { width:100%; }
+  .header { flex-direction:column; align-items:flex-start; }
+  td, th { padding:8px 10px; font-size:12px; }
+}
+
+/* Fade in */
+.fade-in { animation:fadeIn .4s ease; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+/* Sort header */
+th.sortable { cursor:pointer; user-select:none; }
+th.sortable:hover { color:var(--gold); }
+th.sort-asc::after { content:' ▲'; font-size:10px; }
+th.sort-desc::after { content:' ▼'; font-size:10px; }
+
+/* Scroll shadow */
+.table-scroll { max-height:600px; overflow-y:auto; }
+.table-scroll::-webkit-scrollbar { width:6px; }
+.table-scroll::-webkit-scrollbar-track { background:var(--surface); }
+.table-scroll::-webkit-scrollbar-thumb { background:#444; border-radius:3px; }
+
+/* Today row highlight */
+tr.today td { background:#F5C50008; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+const SEVDESK_TOKEN = '038aa548ad6b053b4d6679676fb859a2';
+const SEVDESK_BASE = 'https://my.sevdesk.de/api/v1';
+
+async function sevdeskGet(endpoint, params = '') {
+  const url = `${SEVDESK_BASE}/${endpoint}${params ? '?' + params : ''}`;
+  const resp = await fetch(url, {
+    headers: { 'Accept': 'application/json', 'Authorization': SEVDESK_TOKEN, 'User-Agent': 'bee-doo-tools/1.0' }
+  });
+  if (!resp.ok) throw new Error(`SevDesk ${resp.status}`);
+  return resp.json();
+}
+
+async function fetchAllInvoices(status) {
+  let all = [];
+  let offset = 0;
+  while (true) {
+    const batch = await sevdeskGet('Invoice', `status=${status}&limit=100&offset=${offset}`);
+    const objs = batch.objects || [];
+    all = all.concat(objs);
+    if (objs.length < 100) break;
+    offset += 100;
+  }
+  return all;
+}
+
+function fmt(n) {
+  return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+function fmtK(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(2).replace('.', ',') + ' Mio';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace('.', ',') + 'K';
+  return fmt(n);
+}
+
+function daysBetween(d1, d2) {
+  return Math.floor((d2 - d1) / 86400000);
+}
+
+function getAgeBucket(days) {
+  if (days <= 14) return { label: '0-14 Tage', color: 'var(--green)', idx: 0 };
+  if (days <= 30) return { label: '15-30 Tage', color: 'var(--gold)', idx: 1 };
+  if (days <= 60) return { label: '31-60 Tage', color: 'var(--orange)', idx: 2 };
+  return { label: '60+ Tage', color: 'var(--red)', idx: 3 };
+}
+
+function App() {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [lastSync, setLastSync] = useState(null);
+
+  const [openInvoices, setOpenInvoices] = useState([]);
+  const [paidInvoices, setPaidInvoices] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [accountBalance, setAccountBalance] = useState(0);
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortCol, setSortCol] = useState('age');
+  const [sortDir, setSortDir] = useState('desc');
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [open, paid, acct, txnData] = await Promise.all([
+        fetchAllInvoices(200),
+        fetchAllInvoices(1000),
+        sevdeskGet('CheckAccount'),
+        sevdeskGet('CheckAccountTransaction', 'limit=50')
+      ]);
+
+      setOpenInvoices(open);
+      setPaidInvoices(paid);
+      setTransactions(txnData.objects || []);
+
+      const mainAcct = (acct.objects || []).find(a => a.iban === 'DE90254501100031039985');
+      if (mainAcct) setAccountBalance(parseFloat(mainAcct.balance || 0));
+
+      setLastSync(new Date());
+    } catch (err) {
+      setError(err.message);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const now = new Date();
+
+  // Process open invoices
+  const processedOpen = useMemo(() => {
+    return openInvoices.map(inv => {
+      const brutto = parseFloat(inv.sumGross || 0);
+      const paid = parseFloat(inv.paidAmount || 0);
+      const offen = brutto - paid;
+      const invDate = new Date(inv.invoiceDate);
+      const age = daysBetween(invDate, now);
+      const bucket = getAgeBucket(age);
+      const name = (inv.addressName || '').replace(/^(Herr|Frau|Firma)\s+/i, '');
+      const typ = inv.invoiceType || 'RE';
+      return { ...inv, brutto, paid, offen, age, bucket, name, typ, invDate };
+    });
+  }, [openInvoices]);
+
+  // Process paid invoices
+  const processedPaid = useMemo(() => {
+    return paidInvoices.map(inv => {
+      const brutto = parseFloat(inv.sumGross || 0);
+      const payDate = inv.payDate ? new Date(inv.payDate) : null;
+      const invDate = new Date(inv.invoiceDate);
+      const name = (inv.addressName || '').replace(/^(Herr|Frau|Firma)\s+/i, '');
+      return { ...inv, brutto, payDate, invDate, name };
+    });
+  }, [paidInvoices]);
+
+  // KPIs
+  const kpis = useMemo(() => {
+    const totalOpen = processedOpen.reduce((s, i) => s + i.offen, 0);
+    const totalPaidVol = processedPaid.reduce((s, i) => s + i.brutto, 0);
+    const overdue60 = processedOpen.filter(i => i.age > 60);
+    const overdue60Sum = overdue60.reduce((s, i) => s + i.offen, 0);
+    const avgAge = processedOpen.length ? Math.round(processedOpen.reduce((s, i) => s + i.age, 0) / processedOpen.length) : 0;
+
+    // This month paid
+    const thisMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const thisMonthPaid = processedPaid.filter(i => i.payDate && (i.payDate.getFullYear() + '-' + String(i.payDate.getMonth() + 1).padStart(2, '0')) === thisMonth);
+    const thisMonthPaidSum = thisMonthPaid.reduce((s, i) => s + i.brutto, 0);
+
+    return { totalOpen, totalPaidVol, overdue60Count: overdue60.length, overdue60Sum, avgAge, thisMonthPaidSum, thisMonthPaidCount: thisMonthPaid.length };
+  }, [processedOpen, processedPaid]);
+
+  // Aging buckets
+  const agingBuckets = useMemo(() => {
+    const buckets = [
+      { label: '0-14 Tage', color: 'var(--green)', sum: 0, count: 0 },
+      { label: '15-30 Tage', color: 'var(--gold)', sum: 0, count: 0 },
+      { label: '31-60 Tage', color: 'var(--orange)', sum: 0, count: 0 },
+      { label: '60+ Tage', color: 'var(--red)', sum: 0, count: 0 }
+    ];
+    processedOpen.forEach(i => {
+      const idx = i.bucket.idx;
+      buckets[idx].sum += i.offen;
+      buckets[idx].count++;
+    });
+    return buckets;
+  }, [processedOpen]);
+
+  // Monthly breakdown
+  const monthlyData = useMemo(() => {
+    const months = {};
+    processedPaid.forEach(i => {
+      const m = (i.invoiceDate || '').slice(0, 7);
+      if (!m) return;
+      if (!months[m]) months[m] = { paid: 0, paidCount: 0, open: 0, openCount: 0 };
+      months[m].paid += i.brutto;
+      months[m].paidCount++;
+    });
+    processedOpen.forEach(i => {
+      const m = (i.invoiceDate || '').slice(0, 7);
+      if (!m) return;
+      if (!months[m]) months[m] = { paid: 0, paidCount: 0, open: 0, openCount: 0 };
+      months[m].open += i.offen;
+      months[m].openCount++;
+    });
+    return Object.entries(months).sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
+  }, [processedPaid, processedOpen]);
+
+  // Filtered & sorted open invoices
+  const filteredOpen = useMemo(() => {
+    let items = [...processedOpen];
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      items = items.filter(i =>
+        (i.name || '').toLowerCase().includes(q) ||
+        (i.invoiceNumber || '').toLowerCase().includes(q) ||
+        (i.addressCity || '').toLowerCase().includes(q)
+      );
+    }
+    items.sort((a, b) => {
+      let va, vb;
+      switch (sortCol) {
+        case 'nr': va = a.invoiceNumber; vb = b.invoiceNumber; break;
+        case 'datum': va = a.invoiceDate; vb = b.invoiceDate; break;
+        case 'name': va = a.name; vb = b.name; break;
+        case 'brutto': va = a.brutto; vb = b.brutto; break;
+        case 'offen': va = a.offen; vb = b.offen; break;
+        case 'age': default: va = a.age; vb = b.age; break;
+      }
+      if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      return sortDir === 'asc' ? va - vb : vb - va;
+    });
+    return items;
+  }, [processedOpen, searchTerm, sortCol, sortDir]);
+
+  // Recent transactions
+  const recentTxns = useMemo(() => {
+    return transactions
+      .map(t => ({
+        date: (t.valueDate || '').slice(0, 10),
+        amount: parseFloat(t.amount || 0),
+        name: t.payeePayerName || '',
+        purpose: t.purpose || ''
+      }))
+      .filter(t => Math.abs(t.amount) > 100)
+      .slice(0, 20);
+  }, [transactions]);
+
+  function handleSort(col) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('desc'); }
+  }
+
+  const thClass = (col) => `sortable ${sortCol === col ? (sortDir === 'asc' ? 'sort-asc' : 'sort-desc') : ''}`;
+
+  if (loading) return (
+    <div className="app">
+      <div className="loading-screen">
+        <div className="spinner"></div>
+        <div style={{ color: 'var(--text-dim)' }}>Lade SevDesk-Daten...</div>
+      </div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="app">
+      <div className="loading-screen">
+        <div style={{ fontSize: 40 }}>⚠️</div>
+        <div style={{ color: 'var(--red)' }}>Fehler: {error}</div>
+        <button className="refresh-btn" onClick={loadData}>Erneut versuchen</button>
+      </div>
+    </div>
+  );
+
+  const maxMonthly = Math.max(...monthlyData.map(([, d]) => d.paid + d.open), 1);
+
+  return (
+    <div className="app">
+      {/* Header */}
+      <div className="header">
+        <div className="header-left">
+          <h1>💰 <span>Finanzen</span></h1>
+        </div>
+        <div className="header-right">
+          <div className={`sync-badge ${loading ? 'loading' : ''}`}>
+            <div className="sync-dot"></div>
+            {lastSync ? `SevDesk ${lastSync.toLocaleTimeString('de-DE')}` : 'Lädt...'}
+          </div>
+          <button className="refresh-btn" onClick={loadData}>⟳ Aktualisieren</button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="tabs">
+        {[
+          { id: 'overview', label: '📊 Übersicht' },
+          { id: 'open', label: `📋 Offene Posten (${processedOpen.length})` },
+          { id: 'paid', label: '✅ Bezahlte' },
+          { id: 'bank', label: '🏦 Konto' }
+        ].map(t => (
+          <button key={t.id} className={`tab ${activeTab === t.id ? 'active' : ''}`} onClick={() => setActiveTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* === OVERVIEW TAB === */}
+      {activeTab === 'overview' && (
+        <div className="fade-in">
+          {/* KPI Cards */}
+          <div className="kpi-grid">
+            <div className="kpi red">
+              <div className="kpi-label">Offene Posten</div>
+              <div className="kpi-value red">€{fmtK(kpis.totalOpen)}</div>
+              <div className="kpi-sub">{processedOpen.length} Rechnungen</div>
+            </div>
+            <div className="kpi orange">
+              <div className="kpi-label">Überfällig (60+ Tage)</div>
+              <div className="kpi-value orange">€{fmtK(kpis.overdue60Sum)}</div>
+              <div className="kpi-sub">{kpis.overdue60Count} Rechnungen · Ø {kpis.avgAge} Tage</div>
+            </div>
+            <div className="kpi green">
+              <div className="kpi-label">Bezahlt (März)</div>
+              <div className="kpi-value green">€{fmtK(kpis.thisMonthPaidSum)}</div>
+              <div className="kpi-sub">{kpis.thisMonthPaidCount} Rechnungen</div>
+            </div>
+            <div className="kpi blue">
+              <div className="kpi-label">Kontostand</div>
+              <div className="kpi-value blue">€{fmtK(accountBalance)}</div>
+              <div className="kpi-sub">Sparkasse ···9985</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-label">Gesamtvolumen</div>
+              <div className="kpi-value">€{fmtK(kpis.totalOpen + kpis.totalPaidVol)}</div>
+              <div className="kpi-sub">{processedOpen.length + processedPaid.length} Rechnungen gesamt</div>
+            </div>
+          </div>
+
+          {/* Charts row */}
+          <div className="chart-grid">
+            {/* Aging Analysis */}
+            <div className="chart-card">
+              <div className="chart-title">⏳ Fälligkeitsanalyse</div>
+              <div className="aging-grid">
+                {agingBuckets.map((b, i) => (
+                  <div className="aging-card" key={i}>
+                    <div className="aging-amount" style={{ color: b.color }}>€{fmtK(b.sum)}</div>
+                    <div className="aging-label">{b.label}</div>
+                    <div className="aging-count">{b.count} RE</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Monthly bars */}
+            <div className="chart-card">
+              <div className="chart-title">📈 Monatsverlauf (bezahlt vs. offen)</div>
+              {monthlyData.map(([month, d]) => {
+                const paidW = Math.max((d.paid / maxMonthly) * 100, 0);
+                const openW = Math.max((d.open / maxMonthly) * 100, 0);
+                const mLabel = month.slice(5) + '/' + month.slice(2, 4);
+                return (
+                  <div className="bar-row" key={month}>
+                    <div className="bar-label">{mLabel}</div>
+                    <div className="bar-track">
+                      <div style={{ display: 'flex', height: '100%' }}>
+                        <div className="bar-fill paid" style={{ width: paidW + '%' }}>
+                          {d.paid > 50000 ? fmtK(d.paid) : ''}
+                        </div>
+                        {d.open > 0 && (
+                          <div className="bar-fill open" style={{ width: openW + '%' }}>
+                            {d.open > 10000 ? fmtK(d.open) : ''}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="bar-value">{fmtK(d.paid + d.open)}</div>
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, color: 'var(--text-dim)' }}>
+                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: 'var(--green)', marginRight: 4 }}></span>Bezahlt</span>
+                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: 'var(--orange)', marginRight: 4 }}></span>Offen</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Top overdue */}
+          <div className="section">
+            <div className="section-header">
+              <div className="section-title">🚨 Kritische offene Posten <span className="section-count">{processedOpen.filter(i => i.age > 60).length}</span></div>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>RE-Nr</th>
+                    <th>Kunde</th>
+                    <th className="text-right">Brutto</th>
+                    <th className="text-right">Offen</th>
+                    <th>Alter</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {processedOpen
+                    .filter(i => i.age > 30)
+                    .sort((a, b) => b.age - a.age)
+                    .slice(0, 10)
+                    .map(i => (
+                      <tr key={i.id}>
+                        <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>{i.invoiceNumber}</td>
+                        <td>{i.name || '–'}</td>
+                        <td className="text-right">€{fmt(i.brutto)}</td>
+                        <td className="text-right" style={{ fontWeight: 600, color: 'var(--red)' }}>€{fmt(i.offen)}</td>
+                        <td>
+                          <div className="age-bar">
+                            <div className="age-bar-fill" style={{ width: Math.min(i.age / 120 * 100, 100) + '%', background: i.bucket.color }}></div>
+                          </div>
+                          <span style={{ color: i.bucket.color, fontWeight: 600 }}>{i.age}d</span>
+                        </td>
+                        <td>
+                          <span className={`badge ${i.age > 90 ? 'badge-red' : i.age > 60 ? 'badge-orange' : 'badge-gold'}`}>
+                            {i.age > 90 ? '🔴 Kritisch' : i.age > 60 ? '🟠 Überfällig' : '🟡 Fällig'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === OFFENE POSTEN TAB === */}
+      {activeTab === 'open' && (
+        <div className="fade-in">
+          <div className="section">
+            <div className="section-header">
+              <div className="section-title">
+                Offene Rechnungen
+                <span className="section-count">{filteredOpen.length} / {processedOpen.length}</span>
+                <span style={{ fontSize: 13, color: 'var(--red)', fontWeight: 600, marginLeft: 8 }}>€{fmt(filteredOpen.reduce((s, i) => s + i.offen, 0))}</span>
+              </div>
+              <input className="search-input" placeholder="🔍 Suche nach Name, RE-Nr..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th className={thClass('nr')} onClick={() => handleSort('nr')}>RE-Nr</th>
+                    <th className={thClass('datum')} onClick={() => handleSort('datum')}>Datum</th>
+                    <th className={thClass('name')} onClick={() => handleSort('name')}>Kunde</th>
+                    <th>Ort</th>
+                    <th>Typ</th>
+                    <th className={`text-right ${thClass('brutto')}`} onClick={() => handleSort('brutto')}>Brutto</th>
+                    <th className={`text-right ${thClass('offen')}`} onClick={() => handleSort('offen')}>Offen</th>
+                    <th className={thClass('age')} onClick={() => handleSort('age')}>Alter</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOpen.map(i => (
+                    <tr key={i.id}>
+                      <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 13 }}>{i.invoiceNumber}</td>
+                      <td style={{ color: 'var(--text-dim)' }}>{(i.invoiceDate || '').slice(0, 10)}</td>
+                      <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.name || '–'}</td>
+                      <td style={{ color: 'var(--text-dim)', fontSize: 12 }}>{i.addressZip} {i.addressCity}</td>
+                      <td><span className={`badge ${i.typ === 'RE' ? 'badge-gold' : i.typ === 'AR' ? 'badge-blue' : 'badge-gray'}`}>{i.typ}</span></td>
+                      <td className="text-right">€{fmt(i.brutto)}</td>
+                      <td className="text-right" style={{ fontWeight: 600, color: i.offen > 10000 ? 'var(--red)' : 'var(--text)' }}>€{fmt(i.offen)}</td>
+                      <td>
+                        <div className="age-bar">
+                          <div className="age-bar-fill" style={{ width: Math.min(i.age / 120 * 100, 100) + '%', background: i.bucket.color }}></div>
+                        </div>
+                        <span style={{ color: i.bucket.color, fontWeight: 600, fontSize: 13 }}>{i.age}d</span>
+                      </td>
+                      <td>
+                        <span className={`badge ${i.age > 90 ? 'badge-red' : i.age > 60 ? 'badge-orange' : i.age > 30 ? 'badge-gold' : 'badge-green'}`}>
+                          {i.age > 90 ? 'Kritisch' : i.age > 60 ? 'Überfällig' : i.age > 30 ? 'Fällig' : 'Aktuell'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === BEZAHLTE TAB === */}
+      {activeTab === 'paid' && (
+        <div className="fade-in">
+          <div className="kpi-grid" style={{ marginBottom: 16 }}>
+            <div className="kpi green">
+              <div className="kpi-label">Gesamt bezahlt</div>
+              <div className="kpi-value green">€{fmtK(kpis.totalPaidVol)}</div>
+              <div className="kpi-sub">{processedPaid.length} Rechnungen</div>
+            </div>
+          </div>
+          <div className="section">
+            <div className="section-header">
+              <div className="section-title">Letzte Zahlungseingänge <span className="section-count">{processedPaid.length}</span></div>
+              <input className="search-input" placeholder="🔍 Suche..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>RE-Nr</th>
+                    <th>RE-Datum</th>
+                    <th>Bezahlt am</th>
+                    <th>Kunde</th>
+                    <th className="text-right">Brutto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {processedPaid
+                    .filter(i => !searchTerm || (i.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (i.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()))
+                    .sort((a, b) => (b.payDate || b.invDate) - (a.payDate || a.invDate))
+                    .slice(0, 100)
+                    .map(i => (
+                      <tr key={i.id}>
+                        <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 13 }}>{i.invoiceNumber}</td>
+                        <td style={{ color: 'var(--text-dim)' }}>{(i.invoiceDate || '').slice(0, 10)}</td>
+                        <td>
+                          <span className="badge badge-green">
+                            {i.payDate ? i.payDate.toLocaleDateString('de-DE') : '–'}
+                          </span>
+                        </td>
+                        <td>{i.name || '–'}</td>
+                        <td className="text-right" style={{ fontWeight: 600, color: 'var(--green)' }}>€{fmt(i.brutto)}</td>
+                      </tr>
+                    ))
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === BANK TAB === */}
+      {activeTab === 'bank' && (
+        <div className="fade-in">
+          <div className="kpi-grid" style={{ marginBottom: 16 }}>
+            <div className="kpi blue">
+              <div className="kpi-label">Kontostand Sparkasse</div>
+              <div className="kpi-value blue">€{fmt(accountBalance)}</div>
+              <div className="kpi-sub">IBAN ···9985</div>
+            </div>
+          </div>
+          <div className="section">
+            <div className="section-header">
+              <div className="section-title">Letzte Kontobewegungen <span className="section-count">{recentTxns.length}</span></div>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Datum</th>
+                    <th>Gegenkonto</th>
+                    <th>Verwendungszweck</th>
+                    <th className="text-right">Betrag</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentTxns.map((t, idx) => (
+                    <tr key={idx}>
+                      <td style={{ color: 'var(--text-dim)' }}>{t.date}</td>
+                      <td style={{ fontWeight: 500 }}>{t.name.slice(0, 35)}</td>
+                      <td style={{ color: 'var(--text-dim)', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 12 }}>{t.purpose.slice(0, 60)}</td>
+                      <td className="text-right" style={{ fontWeight: 700, color: t.amount >= 0 ? 'var(--green)' : 'var(--red)', fontFamily: 'monospace' }}>
+                        {t.amount >= 0 ? '+' : ''}€{fmt(t.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
