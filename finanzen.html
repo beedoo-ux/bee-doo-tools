@@ -224,6 +224,8 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortCol, setSortCol] = useState('age');
   const [sortDir, setSortDir] = useState('desc');
+  const [matchData, setMatchData] = useState(null);
+  const [matchLoading, setMatchLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -251,6 +253,17 @@ function App() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Load matching data on tab switch
+  useEffect(() => {
+    if (activeTab === 'matching' && !matchData && !matchLoading) {
+      setMatchLoading(true);
+      fetch('/api/invoice-match?mode=report')
+        .then(r => r.json())
+        .then(d => { setMatchData(d); setMatchLoading(false); })
+        .catch(() => setMatchLoading(false));
+    }
+  }, [activeTab, matchData, matchLoading]);
 
   const now = new Date();
 
@@ -422,7 +435,8 @@ function App() {
           { id: 'overview', label: '📊 Übersicht' },
           { id: 'open', label: `📋 Offene Posten (${processedOpen.length})` },
           { id: 'paid', label: '✅ Bezahlte' },
-          { id: 'bank', label: '🏦 Konto' }
+          { id: 'bank', label: '🏦 Konto' },
+          { id: 'matching', label: '🔗 RE↔EFS' }
         ].map(t => (
           <button key={t.id} className={`tab ${activeTab === t.id ? 'active' : ''}`} onClick={() => setActiveTab(t.id)}>
             {t.label}
@@ -710,6 +724,147 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* === MATCHING TAB === */}
+      {activeTab === 'matching' && (
+        <div className="fade-in">
+          {matchLoading ? (
+            <div className="loading-screen" style={{ height: '40vh' }}>
+              <div className="spinner"></div>
+              <div style={{ color: 'var(--text-dim)' }}>Lade Matching-Daten...</div>
+            </div>
+          ) : matchData && matchData.ok ? (
+            <>
+              {/* Matching KPIs */}
+              <div className="kpi-grid">
+                <div className="kpi green">
+                  <div className="kpi-label">Gematched</div>
+                  <div className="kpi-value green">{matchData.summary.invoices_matched}</div>
+                  <div className="kpi-sub">von {matchData.summary.invoices_total} Rechnungen ({matchData.summary.match_rate}%)</div>
+                </div>
+                <div className="kpi red">
+                  <div className="kpi-label">Nicht zugeordnet</div>
+                  <div className="kpi-value red">{matchData.summary.invoices_unmatched}</div>
+                  <div className="kpi-sub">Kein Auftrag/EFS gefunden</div>
+                </div>
+                <div className="kpi blue">
+                  <div className="kpi-label">ABS-Zahlungen</div>
+                  <div className="kpi-value blue">{matchData.summary.abs_payments}</div>
+                  <div className="kpi-sub">{matchData.summary.abs_names_matched} Kunden zugeordnet</div>
+                </div>
+                <div className="kpi orange">
+                  <div className="kpi-label">Offene mit EFS</div>
+                  <div className="kpi-value orange">{(matchData.summary.open_with_efs || []).length}</div>
+                  <div className="kpi-sub">Offene RE mit EFS-Projekt</div>
+                </div>
+              </div>
+
+              {/* Match visualization bar */}
+              <div className="section" style={{ marginBottom: 20 }}>
+                <div className="section-header">
+                  <div className="section-title">📊 Matching-Quote</div>
+                </div>
+                <div style={{ padding: 20 }}>
+                  <div style={{ display: 'flex', height: 32, borderRadius: 8, overflow: 'hidden', background: '#333' }}>
+                    <div style={{ width: `${matchData.summary.match_rate}%`, background: 'linear-gradient(90deg, var(--green), #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#fff' }}>
+                      {matchData.summary.match_rate}% gematched
+                    </div>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--text-dim)' }}>
+                      {100 - matchData.summary.match_rate}% offen
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 12, color: 'var(--text-dim)' }}>
+                    <span>✅ {matchData.summary.paid_matched} bezahlt + {matchData.summary.open_matched} offen gematched</span>
+                    <span>🔍 {matchData.summary.abs_names_unmatched} ABS-Namen nicht zugeordnet</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Open invoices with EFS projects */}
+              {(matchData.summary.open_with_efs || []).length > 0 && (
+                <div className="section">
+                  <div className="section-header">
+                    <div className="section-title">💡 Offene Rechnungen mit EFS-Projekt <span className="section-count">{matchData.summary.open_with_efs.length}</span></div>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>RE-Nr</th>
+                          <th>Kunde</th>
+                          <th className="text-right">RE Brutto</th>
+                          <th>EFS Status</th>
+                          <th className="text-right">EFS Auszahlung</th>
+                          <th>Info</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(matchData.summary.open_with_efs || []).map((m, i) => {
+                          const efsColor = {
+                            'COMPLETED': 'badge-green',
+                            'GRID_CONNECTED': 'badge-green',
+                            'INSTALLED': 'badge-blue',
+                            'INSTALLATION_CONFIRMED': 'badge-blue',
+                            'REGISTRATION_SENT': 'badge-gold',
+                            'PROJECT_APPROVED': 'badge-gold',
+                            'OFFER_SENT': 'badge-orange',
+                            'PRE_APPROVED': 'badge-orange'
+                          }[m.efs_status] || 'badge-gray';
+                          
+                          const efsLabel = {
+                            'COMPLETED': 'Fertig',
+                            'GRID_CONNECTED': 'Am Netz',
+                            'INSTALLED': 'Montiert',
+                            'INSTALLATION_CONFIRMED': 'Montage bestätigt',
+                            'REGISTRATION_SENT': 'Anmeldung',
+                            'PROJECT_APPROVED': 'Genehmigt',
+                            'OFFER_SENT': 'Angebot',
+                            'PRE_APPROVED': 'Vorgenehmigt'
+                          }[m.efs_status] || m.efs_status;
+                          
+                          return (
+                            <tr key={i}>
+                              <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>{m.re}</td>
+                              <td>{m.kunde}</td>
+                              <td className="text-right" style={{ color: 'var(--red)', fontWeight: 600 }}>€{fmt(m.brutto)}</td>
+                              <td><span className={`badge ${efsColor}`}>{efsLabel}</span></td>
+                              <td className="text-right" style={{ color: m.efs_auszahlung ? 'var(--green)' : 'var(--text-dim)', fontWeight: 600 }}>
+                                {m.efs_auszahlung ? `€${fmt(m.efs_auszahlung)}` : '–'}
+                              </td>
+                              <td style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                                {m.efs_auszahlung && m.brutto ? 
+                                  (m.efs_auszahlung > m.brutto * 2 ? '🟢 EFS > RE' : m.efs_auszahlung > m.brutto ? '🟡 EFS > RE' : '🔴 RE > EFS')
+                                  : '–'
+                                }
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Sync status */}
+              <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-dim)', fontSize: 12 }}>
+                <button className="refresh-btn" onClick={() => { setMatchData(null); setMatchLoading(false); }}>
+                  ⟳ Matching neu laden
+                </button>
+                <div style={{ marginTop: 8 }}>Daten via /api/invoice-match · SevDesk ↔ Aufträge ↔ EFS</div>
+              </div>
+            </>
+          ) : (
+            <div className="loading-screen" style={{ height: '40vh' }}>
+              <div style={{ fontSize: 40 }}>⚠️</div>
+              <div style={{ color: 'var(--red)' }}>Matching-API nicht erreichbar</div>
+              <button className="refresh-btn" onClick={() => { setMatchData(null); setMatchLoading(false); }}>Erneut</button>
+            </div>
+          )}
+        </div>
+      )
+</script>
+</body>
     </div>
   );
 }
