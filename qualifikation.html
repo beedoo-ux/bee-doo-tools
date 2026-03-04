@@ -140,6 +140,12 @@
   #toast.show { transform: translateY(0); opacity: 1; }
   #toast.success { border-color: var(--green); } #toast.error { border-color: var(--red); } #toast.warn { border-color: var(--gold); }
 
+  .quick-btns { display: flex; gap: 4px; }
+  .qbtn { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; font-family: 'DM Sans',sans-serif; cursor: pointer; border: 1px solid var(--border); background: var(--bg3); color: var(--text2); transition: all .2s; }
+  .qbtn:hover { border-color: var(--gold); color: var(--gold); }
+  .qbtn.active { background: var(--gold); color: #000; border-color: var(--gold); }
+  #customRange { gap: 6px; }
+
   @media (max-width: 900px) { .grid-2, .sett-grid { grid-template-columns: 1fr; } }
   @media (max-width: 640px) { header { padding: 0 14px; } main { padding: 14px; } .kpi-grid { grid-template-columns: repeat(2,1fr); } .lb-nums,.lb-bar-wrap { display: none; } }
 </style>
@@ -170,13 +176,21 @@
   <div class="filter-bar">
     <span class="filter-label">Filter</span>
     <select id="fScouter" onchange="loadData()"><option value="">Alle Scouter</option></select>
-    <input type="date" id="fFrom" onchange="loadData()">
-    <span style="font-size:12px;color:var(--text3)">bis</span>
-    <input type="date" id="fTo" onchange="loadData()">
+    <div class="quick-btns">
+      <button class="qbtn active" id="qbtn-today" onclick="setQuick('today',this)">Heute</button>
+      <button class="qbtn" id="qbtn-week" onclick="setQuick('week',this)">Woche</button>
+      <button class="qbtn" id="qbtn-month" onclick="setQuick('month',this)">Monat</button>
+      <button class="qbtn" id="qbtn-custom" onclick="setQuick('custom',this)">Eigener</button>
+    </div>
+    <div id="customRange" style="display:none;align-items:center;gap:6px;display:flex">
+      <input type="date" id="fFrom" onchange="loadData()">
+      <span style="font-size:12px;color:var(--text3)">bis</span>
+      <input type="date" id="fTo" onchange="loadData()">
+    </div>
     <select id="fStatus" onchange="loadData()">
       <option value="">Alle Status</option>
       <option value="APPOINTMENT">Termin</option>
-      <option value="ORDER_REGISTERED">Auftrag</option>
+      <option value="ORDER_REGISTERED">Lead (CC)</option>
       <option value="FOLLOW_UP">Wiedervorlage</option>
       <option value="NO_INTEREST">Kein Interesse</option>
       <option value="CUSTOMER_NOT_HOME">Nicht erreicht</option>
@@ -193,7 +207,7 @@
   <div class="tsec active" id="tab-dashboard">
     <div class="kpi-grid">
       <div class="kpi" style="--c:var(--green)"><div class="kpi-label">Termine</div><div class="kpi-val" id="k-APPOINTMENT">–</div><div class="kpi-sub" id="k-APPOINTMENT-sub"></div></div>
-      <div class="kpi" style="--c:var(--gold)"><div class="kpi-label">Aufträge</div><div class="kpi-val" id="k-ORDER_REGISTERED">–</div><div class="kpi-sub" id="k-ORDER_REGISTERED-sub"></div></div>
+      <div class="kpi" style="--c:var(--gold)"><div class="kpi-label">Leads (CC)</div><div class="kpi-val" id="k-ORDER_REGISTERED">–</div><div class="kpi-sub" id="k-ORDER_REGISTERED-sub"></div></div>
       <div class="kpi" style="--c:var(--blue)"><div class="kpi-label">Wiedervorlage</div><div class="kpi-val" id="k-FOLLOW_UP">–</div></div>
       <div class="kpi" style="--c:var(--red)"><div class="kpi-label">Kein Interesse</div><div class="kpi-val" id="k-NO_INTEREST">–</div></div>
       <div class="kpi" style="--c:var(--orange)"><div class="kpi-label">Nicht erreicht</div><div class="kpi-val" id="k-CUSTOMER_NOT_HOME">–</div></div>
@@ -337,7 +351,7 @@ const BATCH_SIZE = 300; // rows per Supabase upsert
 
 const STATUS = {
   APPOINTMENT:       { label: 'Termin',           color: '#22c55e' },
-  ORDER_REGISTERED:  { label: 'Auftrag',           color: '#F5C500' },
+  ORDER_REGISTERED:  { label: 'Lead (CC)',          color: '#F5C500' },
   FOLLOW_UP:         { label: 'Wiedervorlage',     color: '#3b82f6' },
   NO_INTEREST:       { label: 'Kein Interesse',    color: '#ef4444' },
   CUSTOMER_NOT_HOME: { label: 'Nicht erreicht',    color: '#f97316' },
@@ -467,12 +481,40 @@ function populateScouterDropdowns() {
     loadedNames.map(n => `<option value="${n}"${n===curP?' selected':''}>${n}</option>`).join('');
 }
 
+let currentQuick = 'month';
+
+function setQuick(mode, btn) {
+  currentQuick = mode;
+  document.querySelectorAll('.qbtn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const now = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  const cr = document.getElementById('customRange');
+
+  if (mode === 'today') {
+    const t = fmt(now);
+    document.getElementById('fFrom').value = t;
+    document.getElementById('fTo').value = t;
+    if (cr) cr.style.display = 'none';
+  } else if (mode === 'week') {
+    const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay()+6)%7));
+    document.getElementById('fFrom').value = fmt(mon);
+    document.getElementById('fTo').value = fmt(now);
+    if (cr) cr.style.display = 'none';
+  } else if (mode === 'month') {
+    document.getElementById('fFrom').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+    document.getElementById('fTo').value = fmt(now);
+    if (cr) cr.style.display = 'none';
+  } else if (mode === 'custom') {
+    if (cr) cr.style.display = 'flex';
+  }
+  loadData();
+}
+
 function resetFilters() {
   document.getElementById('fScouter').value = '';
-  document.getElementById('fFrom').value = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-01`;
-  document.getElementById('fTo').value = '';
   document.getElementById('fStatus').value = '';
-  loadData();
+  setQuick('month', document.getElementById('qbtn-month'));
 }
 
 // ══════════════════════════════════════════════════
@@ -501,7 +543,7 @@ function renderDashboard() {
   const kt = document.getElementById('k-total'); if (kt) kt.textContent = total.toLocaleString('de-DE');
   if (total > 0) {
     const as = document.getElementById('k-APPOINTMENT-sub'); if(as) as.textContent = ((c.APPOINTMENT/total)*100).toFixed(1) + '% Conv.';
-    const os = document.getElementById('k-ORDER_REGISTERED-sub'); if(os) os.textContent = ((c.ORDER_REGISTERED/total)*100).toFixed(1) + '% Abschluss';
+    const os = document.getElementById('k-ORDER_REGISTERED-sub'); if(os) os.textContent = ((c.ORDER_REGISTERED/total)*100).toFixed(1) + '% der Quali.';
     const ts = document.getElementById('k-total-sub'); if(ts) ts.textContent = [...new Set(allData.map(r=>r.mitarbeiter_id))].length + ' Scouter';
   }
   renderDonut(c);
@@ -880,9 +922,7 @@ function showToast(msg, type='info') {
 // INIT
 // ══════════════════════════════════════════════════
 async function init() {
-  const now = new Date();
-  document.getElementById('fFrom').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
-  await loadData();
+  setQuick('month', document.getElementById('qbtn-month'));
 }
 
 document.addEventListener('DOMContentLoaded', init);
