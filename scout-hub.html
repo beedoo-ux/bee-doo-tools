@@ -150,10 +150,32 @@ td.mono{font-family:'DM Mono',monospace;font-size:12px;}
 #toast.show{transform:translateY(0);opacity:1;}
 
 @media(max-width:1100px){.kpi-row{grid-template-columns:repeat(3,1fr);}.app-grid{grid-template-columns:1fr;}.two-col,.three-col{grid-template-columns:1fr;}}
+@media(max-width:640px){main{padding:14px;}header{padding:0 14px;height:auto;min-height:56px;flex-wrap:wrap;padding-top:8px;padding-bottom:8px;}.kpi-row{grid-template-columns:repeat(2,1fr);gap:8px;}.kpi-val{font-size:22px;}.greeting-hello{font-size:20px;}.header-right{gap:6px;}.range-btns,.rbtn{font-size:12px;}.today-table td,.today-table th{padding:9px 10px;font-size:12px;}}
 @media(max-width:700px){main{padding:16px;}header{padding:0 16px;height:56px;}.kpi-row{grid-template-columns:repeat(2,1fr);gap:8px;}.kpi-val{font-size:24px;}.greeting-hello{font-size:20px;}#fireAlarm{padding:10px 16px;}}
 </style>
 </head>
 <body>
+<!-- Scout Nav -->
+<style>
+#scoutNav{background:#0d0d0e;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:0 12px;gap:2px;}
+#scoutNav::-webkit-scrollbar{display:none}
+#scoutNav a{padding:0 16px;height:48px;display:inline-flex;align-items:center;border-radius:0;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;text-decoration:none;color:#555;transition:all .15s;white-space:nowrap;border-bottom:2px solid transparent;flex-shrink:0;}
+#scoutNav a:hover{color:#F5C500;}
+#scoutNav a.cur{color:#F5C500;border-bottom-color:#F5C500;}
+#scoutNav .nav-sep{width:1px;height:20px;background:rgba(255,255,255,.06);flex-shrink:0;margin:0 4px;}
+@media(max-width:640px){#scoutNav a{padding:0 13px;height:50px;font-size:13px;}}
+</style>
+<nav id="scoutNav">
+  <a href="scout-hub.html" id="nav-hub">🏠 Hub</a>
+  <div class="nav-sep"></div>
+  <a href="qualifikation.html" id="nav-quali">📊 Qualifikationen</a>
+  <a href="zeiterfassung.html" id="nav-zeit">🕐 Zeiterfassung</a>
+  <a href="analytics.html" id="nav-ana">⚡ Analytics</a>
+  <a href="qualifikation.html?tab=map" id="nav-map">🗺️ Karte</a>
+</nav>
+<script>
+(function(){var p=location.pathname.split('/').pop()||'scout-hub.html';var q=location.search;var map={'scout-hub.html':'nav-hub','qualifikation.html':'nav-quali','zeiterfassung.html':'nav-zeit','analytics.html':'nav-ana'};if(q.includes('tab=map')){document.getElementById('nav-map').classList.add('cur');return;}var el=document.getElementById(map[p]);if(el){el.classList.add('cur');setTimeout(function(){el.scrollIntoView({inline:'center',behavior:'smooth'});},50);}})();
+</script>
 
 <!-- FIRE ALARM BANNER -->
 <div id="fireAlarm">
@@ -368,7 +390,7 @@ td.mono{font-family:'DM Mono',monospace;font-size:12px;}
 const SB_URL  = 'https://hqzpemfaljxcysyqssng.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
 const TABLE   = 'scout_qualifikationen';
-const SOLL    = { startMax: 9, endMin: 16, minHours: 5 };
+const SOLL    = { endMin: 16, minHours: 5 }; // Startzeit frei
 
 const STATUS_COL = { APPOINTMENT:'#22c55e', ORDER_REGISTERED:'#F5C500', FOLLOW_UP:'#3b82f6', NO_INTEREST:'#ef4444', CUSTOMER_NOT_HOME:'#f97316', EXISTING_CUSTOMER:'#a855f7', NOT_MARKETABLE:'#555', NO_ENTRY:'#444', BLACKLISTED:'#333' };
 const STATUS_LBL = { APPOINTMENT:'Termin', ORDER_REGISTERED:'Lead CC', FOLLOW_UP:'Wiedervorlage', NO_INTEREST:'Kein Interesse', CUSTOMER_NOT_HOME:'Nicht erreicht', EXISTING_CUSTOMER:'Bestandskunde', NOT_MARKETABLE:'Nicht vermarktbar', NO_ENTRY:'Kein Eintritt', BLACKLISTED:'Blacklist' };
@@ -496,7 +518,6 @@ function renderKPIs(data, from, to) {
     const durMin = (end - start) / 60000;
     const now = new Date();
     const isActive = (now - end) / 60000 < 60; // last quali within 60 min
-    if (startH > SOLL.startMax) alerts.push({ name, type: 'late', val: fmt2(startH) });
     // Only flag early end if they haven't done anything in 2 hours AND it's before endMin
     if (!isActive && endH < SOLL.endMin) alerts.push({ name, type: 'early', val: fmt2(endH) });
   });
@@ -510,7 +531,7 @@ function renderKPIs(data, from, to) {
   document.getElementById('k-leads').textContent = leads;
   document.getElementById('k-leads-sub').textContent = `Leads für Call Center`;
   document.getElementById('k-alerts').textContent = alerts.length;
-  document.getElementById('k-alerts-sub').textContent = alerts.length > 0 ? `${alerts.filter(a=>a.type==='late').length}× spät · ${alerts.filter(a=>a.type==='early').length}× früh` : 'Alles OK ✓';
+  document.getElementById('k-alerts-sub').textContent = alerts.length > 0 ? `${alerts.filter(a=>a.type==='early').length}× früh Feierabend` : 'Alles OK ✓';
   document.getElementById('k-alert-badge').textContent = alerts.length > 0 ? '⚠️' : '✓';
 
   // App card stats
@@ -522,7 +543,6 @@ function renderKPIs(data, from, to) {
   if (alerts.length > 0) {
     document.getElementById('fireAlarm').style.display = 'block';
     document.getElementById('alarmList').textContent = alerts.slice(0,3).map(a =>
-      a.type === 'late' ? `${a.name.split(' ')[0]} zu spät gestartet (${a.val})` :
       `${a.name.split(' ')[0]} früh Feierabend (${a.val})`
     ).join(' · ') + (alerts.length > 3 ? ` · +${alerts.length-3} weitere` : '');
   }
@@ -549,7 +569,6 @@ function renderTodayTable(data, multiDay=false) {
     const leads = entries.filter(e => e.qualifikation === 'ORDER_REGISTERED').length;
 
     const alerts = [];
-    if (startH > SOLL.startMax) alerts.push({ t: 'Spät', c: 'tag-orange' });
     if (!isActive && lastH < SOLL.endMin) alerts.push({ t: 'Früh Feierabend', c: 'tag-red' });
 
     const statusTag = isActive
@@ -560,7 +579,7 @@ function renderTodayTable(data, multiDay=false) {
     return `<tr onclick="window.open('zeiterfassung.html','_blank')">
       <td><div class="name-cell"><div class="av ${isActive?'active':''}">${initials}</div><div class="nm">${name}</div></div></td>
       <td>${statusTag}</td>
-      <td class="mono ${startH > SOLL.startMax ? 'style="color:var(--orange)"' : ''}">${start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td class="mono">${start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</td>
       <td class="mono">${last.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</td>
       <td class="r mono" style="font-weight:700">${entries.length}</td>
       <td class="r" style="color:var(--green);font-weight:700">${appointments || '–'}</td>
@@ -591,7 +610,6 @@ function renderAlertFeed(data, multiDay=false) {
     const startH = start.getHours() + start.getMinutes()/60;
     const endH   = last.getHours() + last.getMinutes()/60;
     const isActive = (now - last)/60000 < 60;
-    if (startH > SOLL.startMax) alerts.push({ name, icon:'🕙', color:'var(--orange)', bg:'var(--orange-dim)', title:`Spät gestartet: ${start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr`, sub:'Sollte bis 09:00 starten' });
     if (!isActive && endH < SOLL.endMin) alerts.push({ name, icon:'🏃', color:'var(--red)', bg:'var(--red-dim)', title:`Früh Feierabend: ${last.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr`, sub:`Letzte Aktivität vor ${Math.round((now-last)/60000)} Min` });
     if (entries.length < 5 && !isActive) alerts.push({ name, icon:'😴', color:'var(--blue)', bg:'var(--blue-dim)', title:`Nur ${entries.length} Qualifikationen heute`, sub:'Sehr geringe Aktivität' });
   });
