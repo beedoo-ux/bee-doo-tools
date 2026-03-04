@@ -73,6 +73,8 @@ export default async function handler(req, res) {
       65349: 'Kevin Kraus',
       65354: 'Kevin Kraus',
       65355: 'Kevin Kraus',
+      65687: 'Kevin Kraus',
+      65689: 'Kevin Kraus',
     };
 
     // 7. Group qualifying leads by berater
