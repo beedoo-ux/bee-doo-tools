@@ -40,7 +40,9 @@ function lMap(l) {
     };
 }
 
+// ⚠️ PAUSED 2026-03-04: Switching to Overview API
 export default async function handler(req, res) {
+  return res.status(200).json({ status: 'paused', reason: 'Switched to Overview API 2026-03-04' });
     res.setHeader('Access-Control-Allow-Origin', '*');
     if (req.method === 'OPTIONS') return res.status(200).end();
 
