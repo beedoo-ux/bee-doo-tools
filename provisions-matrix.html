@@ -1308,9 +1308,9 @@ function TabImport({ toast, mitarbeiterList }) {
     try {
       if(mode === 'replace') {
         addLog('🗑️ Lösche bestehende Daten...');
-        await db.del('abrechnung_positionen','id=not.is.null').catch(()=>{});
-        await db.del('abrechnung_positionen','id=not.is.null').catch(()=>{});
-        await db.del('abrechnungen','id=not.is.null').catch(()=>{});
+        // removed: abrechnung_positionen deleted in cleanup
+        // removed: abrechnung_positionen deleted in cleanup
+        // removed: abrechnungen deleted in cleanup
         await db.del('auftraege','id=not.is.null').catch(()=>{});
         addLog('✅ Alte Daten gelöscht');
       }
@@ -1960,15 +1960,15 @@ function TabMonatssteuerung({ regeln, sonder, stufen, teamBonus, overrides, setO
 
     try {
       if (next === "standard" && existing) {
-        await db.del("regel_overrides", `id=eq.${existing.id}`);
+        await db.del("pay_regel_overrides", `id=eq.${existing.id}`);
         setOverrides(prev => prev.filter(o => o.id !== existing.id));
         toast("Override entfernt → Standard", "ok");
       } else if (next !== "standard") {
         if (existing) {
-          const res = await db.patch("regel_overrides", `id=eq.${existing.id}`, { aktiv: next === "on", geaendert_am: ts() });
+          const res = await db.patch("pay_regel_overrides", `id=eq.${existing.id}`, { aktiv: next === "on", geaendert_am: ts() });
           setOverrides(prev => prev.map(o => o.id === existing.id ? res[0] : o));
         } else {
-          const res = await db.post("regel_overrides", { regel_typ: regelTyp, regel_id: regelId, periode: selPeriode, aktiv: next === "on" });
+          const res = await db.post("pay_regel_overrides", { regel_typ: regelTyp, regel_id: regelId, periode: selPeriode, aktiv: next === "on" });
           setOverrides(prev => [...prev, res[0]]);
         }
         toast(next === "on" ? "Aktiviert für " + selPeriode : "Deaktiviert für " + selPeriode, "ok");
@@ -1995,14 +1995,14 @@ function TabMonatssteuerung({ regeln, sonder, stufen, teamBonus, overrides, setO
   const cycleStateQuiet = async (regelTyp, regelId, currentState, targetState) => {
     const existing = findOv(regelTyp, regelId);
     if (targetState === "standard" && existing) {
-      await db.del("regel_overrides", `id=eq.${existing.id}`);
+      await db.del("pay_regel_overrides", `id=eq.${existing.id}`);
       setOverrides(prev => prev.filter(o => o.id !== existing.id));
     } else if (targetState !== "standard") {
       if (existing) {
-        const res = await db.patch("regel_overrides", `id=eq.${existing.id}`, { aktiv: targetState === "on", geaendert_am: ts() });
+        const res = await db.patch("pay_regel_overrides", `id=eq.${existing.id}`, { aktiv: targetState === "on", geaendert_am: ts() });
         setOverrides(prev => prev.map(o => o.id === existing.id ? res[0] : o));
       } else {
-        const res = await db.post("regel_overrides", { regel_typ: regelTyp, regel_id: regelId, periode: selPeriode, aktiv: targetState === "on" });
+        const res = await db.post("pay_regel_overrides", { regel_typ: regelTyp, regel_id: regelId, periode: selPeriode, aktiv: targetState === "on" });
         setOverrides(prev => [...prev, res[0]]);
       }
     }
@@ -2013,10 +2013,10 @@ function TabMonatssteuerung({ regeln, sonder, stufen, teamBonus, overrides, setO
     const existing = findOv(regelTyp, regelId);
     try {
       if (existing) {
-        const res = await db.patch("regel_overrides", `id=eq.${existing.id}`, { override_betrag: betrag || null, geaendert_am: ts() });
+        const res = await db.patch("pay_regel_overrides", `id=eq.${existing.id}`, { override_betrag: betrag || null, geaendert_am: ts() });
         setOverrides(prev => prev.map(o => o.id === existing.id ? res[0] : o));
       } else {
-        const res = await db.post("regel_overrides", { regel_typ: regelTyp, regel_id: regelId, periode: selPeriode, aktiv: true, override_betrag: betrag || null });
+        const res = await db.post("pay_regel_overrides", { regel_typ: regelTyp, regel_id: regelId, periode: selPeriode, aktiv: true, override_betrag: betrag || null });
         setOverrides(prev => [...prev, res[0]]);
       }
       toast("Betrag aktualisiert", "ok");
@@ -2212,7 +2212,7 @@ function App() {
           db.get("pay_duplikate", "?order=kunde_name.asc").catch(() => []),
           db.get("pay_provisions_historie", "?order=mitarbeiter_name.asc,gueltig_ab.asc").catch(() => []),
           db.get("mitarbeiter", "?select=id,vorname,nachname,typ&order=nachname.asc").catch(() => []),
-          db.get("regel_overrides", "?order=periode.asc").catch(() => []),
+          db.get("pay_regel_overrides", "?order=periode.asc").catch(() => []),
         ]);
         setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp); setHistorieData(hi); setMitarbeiterList(ma); setOverrides(ov);
         setLoading(false);
