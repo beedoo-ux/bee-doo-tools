@@ -646,7 +646,7 @@ function setQuick(mode, btn) {
 function resetFilters() {
   document.getElementById('fScouter').value = '';
   document.getElementById('fStatus').value = '';
-  setQuick('month', document.getElementById('qbtn-month'));
+  setQuick('today', document.getElementById('qbtn-today'));
 }
 
 // ══════════════════════════════════════════════════
@@ -1162,21 +1162,28 @@ function initMap() {
 async function geocodeAll(rows) {
   const GKEY = 'AIzaSyB7Y7FgAc4R6GX1V6GjGzm0bSNK5IfBg7o';
   const unique = [...new Set(rows.filter(r=>r.strasse).map(r => `${r.strasse} ${r.hausnummer||''}, ${r.plz||''} ${r.ort||''}`))];
+  const todo = unique.filter(a => !geoCache[a]);
+  if (!todo.length) return;
+
+  const BATCH = 8; // parallel requests
   let done = 0;
-  for (const addr of unique) {
-    if (geoCache[addr]) { done++; continue; }
-    try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${GKEY}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.results && data.results[0]) {
-        const loc = data.results[0].geometry.location;
-        geoCache[addr] = { lat: loc.lat, lng: loc.lng };
-      }
-    } catch(e) {}
-    done++;
-    document.getElementById('mapLoadTxt') && (document.getElementById('mapLoadTxt').textContent = `Geocodiere... ${done}/${unique.length}`);
-    await new Promise(r => setTimeout(r, 60));
+  for (let i = 0; i < todo.length; i += BATCH) {
+    const batch = todo.slice(i, i + BATCH);
+    await Promise.all(batch.map(async addr => {
+      try {
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${GKEY}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.results && data.results[0]) {
+          const loc = data.results[0].geometry.location;
+          geoCache[addr] = { lat: loc.lat, lng: loc.lng };
+        }
+      } catch(e) {}
+      done++;
+    }));
+    const el = document.getElementById('mapLoadTxt');
+    if (el) el.textContent = `Geocodiere... ${done}/${todo.length}`;
+    if (i + BATCH < todo.length) await new Promise(r => setTimeout(r, 120));
   }
 }
 
@@ -1402,11 +1409,35 @@ function openAnalytics() {
   window.open('analytics.html' + (name ? '?scouter=' + encodeURIComponent(name) : ''), '_blank');
 }
 
+
+// ── populateMapScouter ──
+async function populateMapScouter() {
+  const sel = document.getElementById('mapScouter');
+  if (!sel) return;
+  const cur = sel.value;
+  try {
+    // Letzte 30 Tage direkt aus DB – unabhängig vom Datumsfilter
+    const since = new Date(); since.setDate(since.getDate()-30);
+    const sinceStr = since.toISOString().split('T')[0];
+    const rows = await sbFetch(`select=mitarbeiter_name&created=gte.${sinceStr}T00:00:00&order=mitarbeiter_name.asc`);
+    const names = [...new Set(rows.map(r => r.mitarbeiter_name).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">Scouter auswählen...</option>' +
+      names.map(n => `<option value="${n}"${n===cur?' selected':''}>${n}</option>`).join('');
+  } catch(e) {
+    // Fallback: aus allData
+    const names = [...new Set(allData.map(r => r.mitarbeiter_name).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">Scouter auswählen...</option>' +
+      names.map(n => `<option value="${n}"${n===cur?' selected':''}>${n}</option>`).join('');
+  }
+}
+
+// ── mapScouterChanged ──
+
 // ══════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════
 async function init() {
-  setQuick('month', document.getElementById('qbtn-month'));
+  setQuick('today', document.getElementById('qbtn-today'));
   // Auto-open tab from URL ?tab= (after data loaded)
   const urlTab = new URLSearchParams(location.search).get('tab');
   if (urlTab) {
