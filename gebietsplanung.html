@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gebietsplanung · bee-doo</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --card: #1a1a26;
+  --border: #2a2a3a;
+  --gold: #F5C500;
+  --gold2: #e6b800;
+  --text: #f0f0f5;
+  --text2: #9090aa;
+  --text3: #606075;
+  --green: #22c55e;
+  --red: #ef4444;
+  --blue: #3b82f6;
+  --orange: #f97316;
+  --purple: #a855f7;
+  --teal: #14b8a6;
+  --radius: 14px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', system-ui, sans-serif; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── HEADER ── */
+.hdr {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  height: 56px;
+  display: flex; align-items: center; gap: 12px;
+  flex-shrink: 0;
+  z-index: 100;
+}
+.hdr-logo { font-size: 20px; font-weight: 800; color: var(--gold); letter-spacing: -0.5px; }
+.hdr-title { font-size: 14px; font-weight: 600; color: var(--text2); }
+.hdr-sep { width: 1px; height: 20px; background: var(--border); }
+.hdr-back { 
+  margin-left: auto; padding: 7px 14px; border-radius: 8px;
+  background: var(--card); border: 1px solid var(--border);
+  color: var(--text2); font-size: 13px; cursor: pointer; text-decoration: none;
+  display: flex; align-items: center; gap: 6px;
+}
+.hdr-back:hover { color: var(--text); border-color: var(--gold); }
+
+/* ── LAYOUT ── */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: 320px;
+  min-width: 320px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  z-index: 50;
+}
+
+.sb-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.sb-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); margin-bottom: 8px; }
+
+/* PLZ Search */
+.plz-row { display: flex; gap: 8px; }
+.plz-input {
+  flex: 1; background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px; color: var(--text);
+  font-size: 16px; font-family: inherit; font-weight: 600;
+  outline: none; transition: border-color .2s;
+}
+.plz-input:focus { border-color: var(--gold); }
+.plz-btn {
+  background: var(--gold); color: #000; border: none; border-radius: 10px;
+  padding: 10px 16px; font-weight: 700; font-size: 13px; cursor: pointer;
+  font-family: inherit; transition: background .15s;
+  white-space: nowrap;
+}
+.plz-btn:hover { background: var(--gold2); }
+.plz-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Stats Bar */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-box { background: var(--card); border-radius: 10px; padding: 10px 12px; border: 1px solid var(--border); }
+.stat-val { font-size: 22px; font-weight: 800; color: var(--text); line-height: 1; }
+.stat-lbl { font-size: 11px; color: var(--text3); margin-top: 3px; }
+.stat-box.highlight { border-color: var(--gold); }
+.stat-box.highlight .stat-val { color: var(--gold); }
+
+/* Progress */
+.prog-bar { height: 6px; background: var(--border); border-radius: 3px; margin: 8px 0 4px; overflow: hidden; }
+.prog-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--gold) 0%, var(--green) 100%); transition: width .6s ease; }
+.prog-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); }
+
+/* Legend */
+.legend { display: flex; flex-direction: column; gap: 6px; }
+.leg-row { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 6px; border-radius: 7px; transition: background .15s; }
+.leg-row:hover { background: var(--card); }
+.leg-row.hidden { opacity: .4; }
+.leg-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.leg-name { font-size: 12px; color: var(--text2); flex: 1; }
+.leg-count { font-size: 11px; font-weight: 700; color: var(--text3); background: var(--card); padding: 2px 7px; border-radius: 5px; }
+
+/* Street ranking */
+.sb-scroll { flex: 1; overflow-y: auto; }
+.sb-scroll::-webkit-scrollbar { width: 4px; }
+.sb-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.street-item {
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .15s; display: flex; align-items: center; gap: 10px;
+}
+.street-item:hover { background: var(--card); }
+.street-item.active { background: rgba(245,197,0,.07); border-left: 3px solid var(--gold); }
+.st-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.st-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.st-prog { flex-shrink: 0; text-align: right; }
+.st-pct { font-size: 13px; font-weight: 700; }
+.st-bar { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin-top: 3px; overflow: hidden; }
+.st-bar-fill { height: 100%; border-radius: 2px; }
+.badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 700; }
+.badge.appt { background: rgba(34,197,94,.15); color: var(--green); }
+.badge.followup { background: rgba(245,197,0,.15); color: var(--gold); }
+
+/* ── MAP ── */
+#map { flex: 1; z-index: 1; }
+
+/* ── TOOLTIP ── */
+.leaflet-popup-content-wrapper {
+  background: var(--card) !important; border: 1px solid var(--border) !important;
+  border-radius: 12px !important; box-shadow: 0 8px 32px rgba(0,0,0,.6) !important;
+  color: var(--text) !important; padding: 0 !important;
+}
+.leaflet-popup-content { margin: 0 !important; }
+.leaflet-popup-tip { background: var(--card) !important; }
+.leaflet-popup-close-button { color: var(--text2) !important; top: 8px !important; right: 8px !important; }
+.popup-inner { padding: 14px 16px; min-width: 200px; }
+.popup-addr { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.popup-row { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.popup-lbl { font-size: 11px; color: var(--text3); width: 70px; flex-shrink: 0; }
+.popup-val { font-size: 12px; color: var(--text); font-weight: 500; }
+
+/* ── LOADING ── */
+.loading-overlay {
+  position: absolute; inset: 0; background: rgba(10,10,15,.85);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 999; backdrop-filter: blur(4px);
+  gap: 14px;
+}
+.spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-txt { font-size: 14px; color: var(--text2); }
+
+/* ── FILTER BAR ── */
+.filter-bar {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.fchip {
+  padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); background: var(--card);
+  color: var(--text2); transition: all .15s; user-select: none;
+}
+.fchip.active { background: var(--gold); color: #000; border-color: var(--gold); }
+.fchip:hover:not(.active) { border-color: var(--text3); color: var(--text); }
+
+/* ── MOBILE ── */
+@media (max-width: 768px) {
+  .sidebar { width: 100%; min-width: unset; max-height: 45dvh; border-right: none; border-bottom: 1px solid var(--border); }
+  .main { flex-direction: column; }
+  #map { min-height: 55dvh; }
+  .stats-grid { grid-template-columns: repeat(4, 1fr); }
+  .stat-val { font-size: 18px; }
+  .sb-scroll { max-height: 180px; }
+}
+@media (max-width: 480px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .hdr { padding: 0 12px; }
+}
+
+/* ── EMPTY STATE ── */
+.empty-state { padding: 32px 16px; text-align: center; color: var(--text3); }
+.empty-icon { font-size: 36px; margin-bottom: 10px; }
+.empty-txt { font-size: 14px; }
+.empty-sub { font-size: 12px; margin-top: 6px; color: var(--text3); }
+
+/* ── MAP CONTROLS ── */
+.map-badge {
+  position: absolute; top: 12px; right: 12px; z-index: 20;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 14px;
+  font-size: 12px; font-weight: 600; color: var(--text2);
+  pointer-events: none;
+}
+.map-wrapper { position: relative; flex: 1; display: flex; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-logo">bee-doo</div>
+  <div class="hdr-sep"></div>
+  <div class="hdr-title">🗺️ Gebietsplanung</div>
+  <a href="qualifikation.html" class="hdr-back">← Qualifikationen</a>
+</div>
+
+<div class="main">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- PLZ-Suche -->
+    <div class="sb-section">
+      <div class="sb-label">PLZ-Gebiet laden</div>
+      <div class="plz-row">
+        <input class="plz-input" id="plzInput" type="text" maxlength="5" placeholder="z.B. 33609" inputmode="numeric">
+        <button class="plz-btn" id="loadBtn" onclick="loadGebiet()">Laden</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="sb-section" id="statsSection" style="display:none">
+      <div class="sb-label" id="gebietName">–</div>
+      <div class="stats-grid">
+        <div class="stat-box highlight">
+          <div class="stat-val" id="statTotal">–</div>
+          <div class="stat-lbl">Adressen gesamt</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="statVisited" style="color:var(--green)">–</div>
+          <div class="stat-lbl">Besucht</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="statAppt" style="color:var(--gold)">–</div>
+          <div class="stat-lbl">Termine</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="statOpen" style="color:var(--text3)">–</div>
+          <div class="stat-lbl">Offen</div>
+        </div>
+      </div>
+      <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+      <div class="prog-labels">
+        <span id="progPct">0% bearbeitet</span>
+        <span id="progDays">–</span>
+      </div>
+    </div>
+
+    <!-- Filter -->
+    <div class="filter-bar" id="filterBar" style="display:none">
+      <div class="fchip active" data-filter="all" onclick="setFilter(this,'all')">Alle</div>
+      <div class="fchip" data-filter="open" onclick="setFilter(this,'open')">⬜ Offen</div>
+      <div class="fchip" data-filter="appointment" onclick="setFilter(this,'appointment')">🟢 Termin</div>
+      <div class="fchip" data-filter="followup" onclick="setFilter(this,'followup')">🟡 Follow-up</div>
+      <div class="fchip" data-filter="visited" onclick="setFilter(this,'visited')">🔵 Besucht</div>
+    </div>
+
+    <!-- Legende -->
+    <div class="sb-section" id="legendSection" style="display:none">
+      <div class="sb-label">Legende</div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <!-- Straßen-Ranking -->
+    <div class="sb-label" style="padding:12px 16px 4px; display:none" id="streetLbl">Straßen · beste Chancen</div>
+    <div class="sb-scroll" id="streetList">
+      <div class="empty-state">
+        <div class="empty-icon">📍</div>
+        <div class="empty-txt">PLZ eingeben um zu starten</div>
+        <div class="empty-sub">Alle Adressen + Scout-Aktivität werden geladen</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div class="map-wrapper">
+    <div id="map"></div>
+    <div class="map-badge" id="mapBadge" style="display:none"></div>
+    <div class="loading-overlay" id="loadingOverlay" style="display:none">
+      <div class="spinner"></div>
+      <div class="loading-txt" id="loadingTxt">Lade Gebiet...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const K  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const H  = { apikey: K, Authorization: `Bearer ${K}`, Accept: 'application/json' };
+
+// Status → { color, label, prio }
+const STATUS = {
+  open:             { color: '#3a3a55', label: 'Unbesucht',     prio: 0 },
+  CUSTOMER_NOT_HOME:{ color: '#6366f1', label: 'Nicht angetr.', prio: 1 },
+  NO_INTEREST:      { color: '#ef4444', label: 'Kein Interesse', prio: 2 },
+  NOT_MARKETABLE:   { color: '#78716c', label: 'Nicht relevant', prio: 3 },
+  EXISTING_CUSTOMER:{ color: '#f97316', label: 'Bestandskunde',  prio: 4 },
+  BLACKLISTED:      { color: '#1a1a26', label: 'Blacklist',      prio: 5 },
+  NO_ENTRY:         { color: '#94a3b8', label: 'Kein Zutritt',   prio: 6 },
+  FOLLOW_UP:        { color: '#F5C500', label: 'Follow-up',      prio: 7 },
+  ORDER_REGISTERED: { color: '#22c55e', label: 'Auftrag',        prio: 8 },
+  APPOINTMENT:      { color: '#22c55e', label: 'Termin',         prio: 9 },
+};
+
+let map, allRows = [], markers = [], currentFilter = 'all', markerLayer;
+
+// Init map
+map = L.map('map', { zoomControl: false }).setView([51.5, 7.5], 11);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '©OpenStreetMap ©CARTO', maxZoom: 19
+}).addTo(map);
+markerLayer = L.layerGroup().addTo(map);
+
+// Enter key on input
+document.getElementById('plzInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadGebiet();
+});
+
+async function sbFetchAll(table, params, loadingTxtEl, label) {
+  const PAGE = 1000;
+  let all = [], from = 0;
+  while (true) {
+    if (loadingTxtEl) loadingTxtEl.textContent = `${label}... ${all.length} geladen`;
+    const r = await fetch(`${SB}/rest/v1/${table}?${params}`, {
+      headers: { ...H, Range: `${from}-${from+PAGE-1}`, 'Range-Unit': 'items' }
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const rows = await r.json();
+    all = all.concat(rows);
+    if (rows.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
+async function loadGebiet() {
+  const plz = document.getElementById('plzInput').value.trim();
+  if (plz.length !== 5 || !/^\d{5}$/.test(plz)) {
+    alert('Bitte eine gültige 5-stellige PLZ eingeben.');
+    return;
+  }
+
+  const overlay = document.getElementById('loadingOverlay');
+  const loadTxt = document.getElementById('loadingTxt');
+  const loadBtn = document.getElementById('loadBtn');
+  overlay.style.display = 'flex';
+  loadBtn.disabled = true;
+
+  try {
+    // Parallel: infas_adressen + letztes Scout-Datum
+    loadTxt.textContent = 'Lade Adressen aus infas360...';
+    const rows = await sbFetchAll(
+      'infas_adressen',
+      `plz=eq.${plz}&lat=not.is.null&select=id,stn,hnr,hnrz,ort,lat,lng,last_quali,last_scout_name,last_visited_at,visited_count`,
+      null, 'Adressen'
+    );
+
+    if (!rows.length) {
+      overlay.style.display = 'none';
+      loadBtn.disabled = false;
+      alert(`Keine Adressen für PLZ ${plz} gefunden.`);
+      return;
+    }
+
+    allRows = rows;
+    loadTxt.textContent = 'Rendere Karte...';
+    await new Promise(r => setTimeout(r, 30));
+
+    renderMap(rows);
+    renderStats(rows, plz);
+    renderStreets(rows);
+    renderLegend(rows);
+
+    document.getElementById('statsSection').style.display = '';
+    document.getElementById('filterBar').style.display = '';
+    document.getElementById('legendSection').style.display = '';
+    document.getElementById('streetLbl').style.display = '';
+    document.getElementById('mapBadge').style.display = '';
+    document.getElementById('mapBadge').textContent = `📍 ${rows.length.toLocaleString('de')} Adressen · PLZ ${plz}`;
+
+    // Zoom to bounds
+    if (markers.length) {
+      const bounds = L.latLngBounds(markers.map(m => m.getLatLng()));
+      map.fitBounds(bounds, { padding: [30, 30] });
+    }
+
+  } catch(e) {
+    console.error(e);
+    overlay.style.display = 'none';
+    alert('Fehler: ' + e.message);
+  }
+
+  overlay.style.display = 'none';
+  loadBtn.disabled = false;
+}
+
+function getStatus(row) {
+  if (!row.last_quali) return 'open';
+  return row.last_quali;
+}
+
+function renderMap(rows) {
+  markerLayer.clearLayers();
+  markers = [];
+
+  rows.forEach(row => {
+    if (!row.lat || !row.lng) return;
+    const status = getStatus(row);
+    const cfg = STATUS[status] || STATUS.open;
+    if (currentFilter !== 'all' && !matchFilter(status)) return;
+
+    const marker = L.circleMarker([row.lat, row.lng], {
+      radius: status === 'open' ? 4 : 6,
+      fillColor: cfg.color,
+      fillOpacity: status === 'open' ? 0.5 : 0.9,
+      color: status === 'open' ? 'transparent' : cfg.color,
+      weight: 1,
+      stroke: status !== 'open'
+    });
+
+    marker.bindPopup(() => buildPopup(row), { maxWidth: 260 });
+    markerLayer.addLayer(marker);
+    markers.push(marker);
+  });
+}
+
+function buildPopup(row) {
+  const status = getStatus(row);
+  const cfg = STATUS[status] || STATUS.open;
+  const addr = `${row.stn} ${row.hnr}${row.hnrz||''}, ${row.ort||''}`;
+  const dateStr = row.last_visited_at
+    ? new Date(row.last_visited_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' })
+    : '–';
+  return `<div class="popup-inner">
+    <div class="popup-addr">${addr}</div>
+    <div class="popup-row">
+      <div class="popup-lbl">Status</div>
+      <div class="popup-val" style="color:${cfg.color};font-weight:700">${cfg.label}</div>
+    </div>
+    ${row.last_scout_name ? `<div class="popup-row"><div class="popup-lbl">Scout</div><div class="popup-val">${row.last_scout_name}</div></div>` : ''}
+    ${row.visited_count ? `<div class="popup-row"><div class="popup-lbl">Besuche</div><div class="popup-val">${row.visited_count}×</div></div>` : ''}
+    ${row.last_visited_at ? `<div class="popup-row"><div class="popup-lbl">Zuletzt</div><div class="popup-val">${dateStr}</div></div>` : ''}
+  </div>`;
+}
+
+function matchFilter(status) {
+  if (currentFilter === 'open') return status === 'open';
+  if (currentFilter === 'appointment') return status === 'APPOINTMENT' || status === 'ORDER_REGISTERED';
+  if (currentFilter === 'followup') return status === 'FOLLOW_UP';
+  if (currentFilter === 'visited') return status !== 'open';
+  return true;
+}
+
+function setFilter(el, filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.fchip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderMap(allRows);
+}
+
+function renderStats(rows, plz) {
+  const total = rows.length;
+  const visited = rows.filter(r => r.last_quali).length;
+  const appts = rows.filter(r => r.last_quali === 'APPOINTMENT' || r.last_quali === 'ORDER_REGISTERED').length;
+  const open = total - visited;
+  const pct = total ? Math.round(visited / total * 100) : 0;
+
+  document.getElementById('statTotal').textContent = total.toLocaleString('de');
+  document.getElementById('statVisited').textContent = visited.toLocaleString('de');
+  document.getElementById('statAppt').textContent = appts.toLocaleString('de');
+  document.getElementById('statOpen').textContent = open.toLocaleString('de');
+  document.getElementById('progFill').style.width = pct + '%';
+  document.getElementById('progPct').textContent = `${pct}% bearbeitet`;
+
+  // Unique scouts
+  const scouts = new Set(rows.filter(r => r.last_scout_name).map(r => r.last_scout_name));
+  document.getElementById('progDays').textContent = `${scouts.size} Scouter aktiv`;
+
+  // Area name
+  const ort = rows[0]?.ort || plz;
+  document.getElementById('gebietName').textContent = `${ort} · ${plz}`;
+}
+
+function renderLegend(rows) {
+  const counts = {};
+  rows.forEach(r => {
+    const s = getStatus(r);
+    counts[s] = (counts[s] || 0) + 1;
+  });
+
+  // Sort by prio desc
+  const ordered = Object.entries(counts)
+    .sort(([a],[b]) => (STATUS[b]?.prio||0) - (STATUS[a]?.prio||0));
+
+  const legend = document.getElementById('legend');
+  legend.innerHTML = ordered.map(([s, cnt]) => {
+    const cfg = STATUS[s] || { color: '#666', label: s };
+    return `<div class="leg-row">
+      <div class="leg-dot" style="background:${cfg.color}"></div>
+      <div class="leg-name">${cfg.label}</div>
+      <div class="leg-count">${cnt.toLocaleString('de')}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderStreets(rows) {
+  // Group by street
+  const streets = {};
+  rows.forEach(r => {
+    const stn = r.stn || '?';
+    if (!streets[stn]) streets[stn] = { total: 0, visited: 0, appts: 0, followup: 0, rows: [] };
+    streets[stn].total++;
+    streets[stn].rows.push(r);
+    if (r.last_quali) {
+      streets[stn].visited++;
+      if (r.last_quali === 'APPOINTMENT' || r.last_quali === 'ORDER_REGISTERED') streets[stn].appts++;
+      if (r.last_quali === 'FOLLOW_UP') streets[stn].followup++;
+    }
+  });
+
+  // Score = openness (not yet visited = opportunity) + followup bonus
+  const scored = Object.entries(streets).map(([stn, d]) => ({
+    stn,
+    ...d,
+    pct: d.total ? Math.round(d.visited / d.total * 100) : 0,
+    // Opportunity score: many open + some appointments = good street
+    score: (d.total - d.visited) + d.followup * 2 + d.appts * 3
+  }));
+
+  // Sort: most opportunity first
+  scored.sort((a, b) => b.score - a.score);
+  const topStreets = scored.slice(0, 40);
+
+  const list = document.getElementById('streetList');
+  if (!topStreets.length) {
+    list.innerHTML = '<div class="empty-state"><div>Keine Straßen gefunden</div></div>';
+    return;
+  }
+
+  list.innerHTML = topStreets.map(s => {
+    const progColor = s.pct > 70 ? 'var(--green)' : s.pct > 30 ? 'var(--gold)' : 'var(--text3)';
+    const badges = [
+      s.appts   ? `<span class="badge appt">🟢 ${s.appts} Termin${s.appts>1?'e':''}</span>` : '',
+      s.followup? `<span class="badge followup">🟡 ${s.followup} Follow-up</span>` : '',
+    ].filter(Boolean).join('');
+    return `<div class="street-item" onclick="focusStreet('${s.stn.replace(/'/g,"\\'")}')">
+      <div style="flex:1;min-width:0">
+        <div class="st-name">${s.stn}</div>
+        <div class="st-meta">${s.total} Häuser · ${s.visited} besucht${badges ? ' · ' + badges : ''}</div>
+      </div>
+      <div class="st-prog">
+        <div class="st-pct" style="color:${progColor}">${s.pct}%</div>
+        <div class="st-bar"><div class="st-bar-fill" style="width:${s.pct}%;background:${progColor}"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function focusStreet(stn) {
+  // Highlight street on map
+  const streetRows = allRows.filter(r => r.stn === stn && r.lat && r.lng);
+  if (!streetRows.length) return;
+
+  const bounds = L.latLngBounds(streetRows.map(r => [r.lat, r.lng]));
+  map.fitBounds(bounds, { padding: [80, 80], maxZoom: 17 });
+
+  // Flash highlight
+  markerLayer.eachLayer(m => {
+    const ll = m.getLatLng();
+    const isThis = streetRows.some(r => Math.abs(r.lat - ll.lat) < 0.0001 && Math.abs(r.lng - ll.lng) < 0.0001);
+    if (isThis) {
+      m.setStyle({ radius: 9, weight: 2, color: '#fff' });
+      setTimeout(() => m.setStyle({ radius: getStatus(streetRows[0]) === 'open' ? 4 : 6, weight: 1, color: 'transparent' }), 2000);
+    }
+  });
+
+  // Highlight list item
+  document.querySelectorAll('.street-item').forEach(el => {
+    el.classList.toggle('active', el.querySelector('.st-name')?.textContent === stn);
+  });
+}
+
+// Auto-load from URL param
+const urlPlz = new URLSearchParams(location.search).get('plz');
+if (urlPlz) {
+  document.getElementById('plzInput').value = urlPlz;
+  loadGebiet();
+}
+</script>
+</body>
+</html>
