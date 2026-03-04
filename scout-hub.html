@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scout Hub – bee-doo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold:#F5C500; --gold-dim:rgba(245,197,0,.1); --gold-glow:rgba(245,197,0,.04);
+  --bg:#060607; --bg2:#0d0d0e; --bg3:#141415; --bg4:#1b1b1c; --bg5:#222223;
+  --border:rgba(255,255,255,.06); --border2:rgba(255,255,255,.1);
+  --text:#f0f0f0; --text2:#888; --text3:#444;
+  --green:#22c55e; --red:#ef4444; --orange:#f97316; --blue:#3b82f6; --purple:#a855f7;
+  --green-dim:rgba(34,197,94,.1); --red-dim:rgba(239,68,68,.1);
+  --orange-dim:rgba(249,115,22,.1); --blue-dim:rgba(59,130,246,.1);
+  --r:14px; --r2:10px; --r3:7px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+/* ── HEADER ── */
+header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 28px;height:64px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:12px;}
+.logo-bee{width:36px;height:36px;background:var(--gold);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#000;}
+.logo-info{}
+.logo-name{font-size:17px;font-weight:800;letter-spacing:-.4px;}
+.logo-name span{color:var(--gold);}
+.logo-sub{font-size:11px;color:var(--text3);margin-top:1px;}
+.header-right{display:flex;align-items:center;gap:10px;}
+.live-badge{display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--green-dim);border:1px solid rgba(34,197,94,.2);border-radius:20px;font-size:12px;font-weight:600;color:var(--green);}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.time-display{font-family:'DM Mono',monospace;font-size:13px;color:var(--text2);}
+
+/* ── FIRE ALARM ── */
+#fireAlarm{display:none;background:rgba(239,68,68,.06);border-bottom:2px solid var(--red);padding:12px 28px;}
+.alarm-inner{display:flex;align-items:center;gap:14px;max-width:1400px;margin:0 auto;}
+.alarm-icon{font-size:22px;animation:shake 1s infinite;}
+@keyframes shake{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}
+.alarm-text{flex:1;font-size:14px;font-weight:700;color:var(--red);}
+.alarm-list{font-size:13px;color:rgba(239,68,68,.8);font-weight:400;margin-top:2px;}
+.alarm-close{padding:6px 14px;border-radius:var(--r3);font-size:12px;font-weight:700;border:1px solid rgba(239,68,68,.3);background:transparent;color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;}
+
+/* ── MAIN ── */
+main{padding:28px;max-width:1400px;margin:0 auto;}
+
+/* ── GREETING ── */
+.greeting{margin-bottom:28px;}
+.greeting-hello{font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1.1;}
+.greeting-hello span{color:var(--gold);}
+.greeting-date{font-size:14px;color:var(--text2);margin-top:4px;}
+
+/* ── LIVE KPIs ── */
+.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:28px;}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;position:relative;overflow:hidden;transition:border-color .2s,transform .15s;}
+.kpi:hover{transform:translateY(-1px);border-color:var(--border2);}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--c,var(--border));}
+.kpi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.kpi-icon{font-size:18px;}
+.kpi-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.3px;}
+.kpi-val{font-size:30px;font-weight:900;line-height:1;letter-spacing:-.5px;}
+.kpi-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-top:5px;}
+.kpi-sub{font-size:12px;color:var(--text2);margin-top:4px;}
+.kpi-loading{font-size:22px;color:var(--text3);}
+
+/* ── SECTION TITLE ── */
+.sec{margin-bottom:28px;}
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.sec-title{font-size:15px;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:8px;}
+.sec-sub{font-size:12px;color:var(--text3);}
+.sec-link{font-size:12px;color:var(--gold);text-decoration:none;font-weight:600;padding:5px 10px;border:1px solid var(--gold-dim);border-radius:var(--r3);transition:all .15s;}
+.sec-link:hover{background:var(--gold-dim);}
+
+/* ── APP CARDS ── */
+.app-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+.app-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;text-decoration:none;color:var(--text);transition:all .18s;display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden;}
+.app-card::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,var(--c,transparent) 0%,transparent 60%);opacity:0;transition:opacity .2s;}
+.app-card:hover{border-color:var(--c2,var(--border2));transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4);}
+.app-card:hover::after{opacity:1;}
+.app-card-top{display:flex;align-items:flex-start;justify-content:space-between;}
+.app-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.app-live{font-size:10px;font-weight:700;color:var(--green);background:var(--green-dim);padding:3px 8px;border-radius:4px;letter-spacing:.3px;}
+.app-name{font-size:16px;font-weight:800;letter-spacing:-.3px;margin-top:2px;}
+.app-desc{font-size:13px;color:var(--text2);line-height:1.5;}
+.app-stats{display:flex;gap:14px;margin-top:4px;}
+.app-stat{font-size:12px;color:var(--text3);}
+.app-stat strong{color:var(--text);font-weight:700;}
+.app-arrow{font-size:16px;color:var(--text3);position:absolute;bottom:18px;right:18px;transition:transform .18s;}
+.app-card:hover .app-arrow{transform:translateX(4px);color:var(--text2);}
+
+/* ── TODAY TABLE ── */
+.today-table{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+table{width:100%;border-collapse:collapse;}
+thead tr{background:var(--bg3);border-bottom:1px solid var(--border2);}
+th{padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);text-align:left;white-space:nowrap;}
+th.r{text-align:right;}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s;cursor:pointer;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:var(--bg3);}
+td{padding:11px 16px;font-size:13px;}
+td.r{text-align:right;}
+td.mono{font-family:'DM Mono',monospace;font-size:12px;}
+.name-cell{display:flex;align-items:center;gap:10px;}
+.av{width:30px;height:30px;border-radius:50%;background:var(--bg4);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text2);flex-shrink:0;}
+.av.active{border-color:var(--green);background:var(--green-dim);}
+.nm{font-weight:600;}
+.tag{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+.tag-red{background:var(--red-dim);color:var(--red);}
+.tag-orange{background:var(--orange-dim);color:var(--orange);}
+.tag-green{background:var(--green-dim);color:var(--green);}
+.tag-grey{background:var(--bg4);color:var(--text3);}
+.tag-gold{background:var(--gold-dim);color:var(--gold);}
+
+/* ── ALERTS LIST ── */
+.alert-feed{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.alert-item{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);transition:background .12s;}
+.alert-item:last-child{border-bottom:none;}
+.alert-item:hover{background:var(--bg3);}
+.al-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.al-body{flex:1;}
+.al-title{font-size:13px;font-weight:600;}
+.al-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+.al-time{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;white-space:nowrap;}
+
+/* ── ACTIVITY FEED ── */
+.activity{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;max-height:380px;overflow-y:auto;}
+.act-item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);transition:background .1s;}
+.act-item:last-child{border-bottom:none;}
+.act-item:hover{background:var(--bg3);}
+.act-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.act-name{font-size:12px;font-weight:600;flex-shrink:0;width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.act-status{font-size:11px;flex:1;}
+.act-time{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;white-space:nowrap;}
+
+/* ── GRID LAYOUTS ── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:28px;}
+.three-col{display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-bottom:28px;}
+
+/* ── EMPTY / LOADING ── */
+.empty-td{text-align:center;padding:30px;color:var(--text3);font-size:13px;}
+.spin{width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:sp .7s linear infinite;display:inline-block;}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:20px;right:20px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r2);padding:11px 16px;font-size:13px;box-shadow:0 8px 32px rgba(0,0,0,.6);transform:translateY(60px);opacity:0;transition:all .3s;z-index:999;}
+#toast.show{transform:translateY(0);opacity:1;}
+
+@media(max-width:1100px){.kpi-row{grid-template-columns:repeat(3,1fr);}.app-grid{grid-template-columns:1fr;}.two-col,.three-col{grid-template-columns:1fr;}}
+@media(max-width:700px){main{padding:16px;}header{padding:0 16px;height:56px;}.kpi-row{grid-template-columns:repeat(2,1fr);gap:8px;}.kpi-val{font-size:24px;}.greeting-hello{font-size:20px;}#fireAlarm{padding:10px 16px;}}
+</style>
+</head>
+<body>
+
+<!-- FIRE ALARM BANNER -->
+<div id="fireAlarm">
+  <div class="alarm-inner">
+    <div class="alarm-icon">🚨</div>
+    <div>
+      <div class="alarm-text">Auffälligkeiten heute!</div>
+      <div class="alarm-list" id="alarmList"></div>
+    </div>
+    <button class="alarm-close" onclick="document.getElementById('fireAlarm').style.display='none'">Schließen</button>
+  </div>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-bee">b</div>
+    <div class="logo-info">
+      <div class="logo-name">Scout <span>Hub</span></div>
+      <div class="logo-sub">Noah · Teamleitung Scouting</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div>Live</div>
+    <div class="time-display" id="clock"></div>
+  </div>
+</header>
+
+<main>
+  <!-- GREETING -->
+  <div class="greeting">
+    <div class="greeting-hello" id="greeting">Guten Morgen, <span>Noah</span> 👋</div>
+    <div class="greeting-date" id="greetDate"></div>
+  </div>
+
+  <!-- LIVE KPIs (heute) -->
+  <div class="kpi-row" id="kpiRow">
+    <div class="kpi" style="--c:var(--green)">
+      <div class="kpi-top"><span class="kpi-icon">👟</span><span class="kpi-badge tag-green" id="k-active-badge">Heute</span></div>
+      <div class="kpi-val kpi-loading" id="k-active">–</div>
+      <div class="kpi-label">Scouter aktiv</div>
+      <div class="kpi-sub" id="k-active-sub">Lädt...</div>
+    </div>
+    <div class="kpi" style="--c:var(--gold)">
+      <div class="kpi-top"><span class="kpi-icon">📊</span><span class="kpi-badge tag-gold">Heute</span></div>
+      <div class="kpi-val kpi-loading" id="k-quali">–</div>
+      <div class="kpi-label">Qualifikationen</div>
+      <div class="kpi-sub" id="k-quali-sub">Lädt...</div>
+    </div>
+    <div class="kpi" style="--c:var(--green)">
+      <div class="kpi-top"><span class="kpi-icon">🎯</span><span class="kpi-badge tag-green">Heute</span></div>
+      <div class="kpi-val kpi-loading" id="k-termine">–</div>
+      <div class="kpi-label">Termine</div>
+      <div class="kpi-sub" id="k-termine-sub">Lädt...</div>
+    </div>
+    <div class="kpi" style="--c:var(--orange)">
+      <div class="kpi-top"><span class="kpi-icon">📋</span><span class="kpi-badge tag-gold">Heute</span></div>
+      <div class="kpi-val kpi-loading" id="k-leads">–</div>
+      <div class="kpi-label">Leads (CC)</div>
+      <div class="kpi-sub" id="k-leads-sub">Lädt...</div>
+    </div>
+    <div class="kpi" style="--c:var(--red)" id="k-alert-card">
+      <div class="kpi-top"><span class="kpi-icon">⚠️</span><span class="kpi-badge tag-red" id="k-alert-badge">–</span></div>
+      <div class="kpi-val kpi-loading" id="k-alerts">–</div>
+      <div class="kpi-label">Auffälligkeiten</div>
+      <div class="kpi-sub" id="k-alerts-sub">Lädt...</div>
+    </div>
+  </div>
+
+  <!-- APPS + TODAY TABLE -->
+  <div class="three-col">
+
+    <!-- LEFT: Apps -->
+    <div class="sec">
+      <div class="sec-head">
+        <div class="sec-title">📱 Scout Tools</div>
+      </div>
+      <div class="app-grid">
+        <a href="qualifikation.html" class="app-card" style="--c:rgba(245,197,0,.03);--c2:rgba(245,197,0,.2)">
+          <div class="app-card-top">
+            <div class="app-icon" style="background:var(--gold-dim);font-size:22px">📊</div>
+            <span class="app-live">LIVE</span>
+          </div>
+          <div class="app-name">Qualifikationen</div>
+          <div class="app-desc">Leaderboard, Dashboard, Scouter-Profile, Rohdaten</div>
+          <div class="app-stats">
+            <span class="app-stat"><strong id="as-quali">–</strong> heute</span>
+            <span class="app-stat"><strong id="as-scouter">–</strong> Scouter</span>
+          </div>
+          <span class="app-arrow">→</span>
+        </a>
+        <a href="zeiterfassung.html" class="app-card" style="--c:rgba(239,68,68,.03);--c2:rgba(239,68,68,.2)">
+          <div class="app-card-top">
+            <div class="app-icon" style="background:var(--red-dim)">🕐</div>
+            <span class="app-live">LIVE</span>
+          </div>
+          <div class="app-name">Zeiterfassung</div>
+          <div class="app-desc">Start, Feierabend, Auffälligkeiten, CSV Export</div>
+          <div class="app-stats">
+            <span class="app-stat"><strong id="as-alerts">–</strong> Alerts heute</span>
+          </div>
+          <span class="app-arrow">→</span>
+        </a>
+        <a href="analytics.html" class="app-card" style="--c:rgba(59,130,246,.03);--c2:rgba(59,130,246,.2)">
+          <div class="app-card-top">
+            <div class="app-icon" style="background:var(--blue-dim)">⚡</div>
+            <span class="app-live">LIVE</span>
+          </div>
+          <div class="app-name">Analytics</div>
+          <div class="app-desc">KI-Analyse, Laufstrecke, Arbeitszeit, Teamvergleich</div>
+          <div class="app-stats">
+            <span class="app-stat">Claude AI · Google Maps</span>
+          </div>
+          <span class="app-arrow">→</span>
+        </a>
+        <a href="qualifikation.html#map" class="app-card" style="--c:rgba(168,85,247,.03);--c2:rgba(168,85,247,.2)">
+          <div class="app-card-top">
+            <div class="app-icon" style="background:rgba(168,85,247,.1)">🗺️</div>
+            <span class="app-live">LIVE</span>
+          </div>
+          <div class="app-name">Scout Karte</div>
+          <div class="app-desc">Route, Heatmap, Pins nach Status, Tages-Slider</div>
+          <div class="app-stats">
+            <span class="app-stat">Leaflet · Geocoding</span>
+          </div>
+          <span class="app-arrow">→</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- RIGHT: Alerts -->
+    <div class="sec">
+      <div class="sec-head">
+        <div class="sec-title">🔥 Aktuelle Alerts</div>
+        <a href="zeiterfassung.html" class="sec-link">Alle →</a>
+      </div>
+      <div class="alert-feed" id="alertFeed">
+        <div style="padding:24px;text-align:center;color:var(--text3);font-size:13px"><div class="spin"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TODAY SCOUTER STATUS -->
+  <div class="sec">
+    <div class="sec-head">
+      <div class="sec-title">👥 Scouter – Heute <span style="font-size:12px;color:var(--text3);font-weight:400" id="todayDateLbl"></span></div>
+      <a href="qualifikation.html" class="sec-link">Details →</a>
+    </div>
+    <div class="today-table">
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Scouter</th>
+            <th>Status</th>
+            <th>Start</th>
+            <th>Letzte Quali</th>
+            <th class="r">Quali</th>
+            <th class="r">Termine</th>
+            <th class="r">Leads</th>
+            <th>Alerts</th>
+          </tr></thead>
+          <tbody id="todayTbody">
+            <tr><td colspan="8" class="empty-td"><div class="spin"></div> Lade...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIVE FEED -->
+  <div class="two-col">
+    <div class="sec">
+      <div class="sec-head">
+        <div class="sec-title">⚡ Live Aktivitäten <span style="font-size:11px;font-weight:400;color:var(--text3)">(letzte 30 Min)</span></div>
+        <button onclick="loadAll()" style="font-size:12px;color:var(--gold);background:none;border:none;cursor:pointer;font-weight:600">↻ Aktualisieren</button>
+      </div>
+      <div class="activity" id="actFeed">
+        <div style="padding:20px;text-align:center;color:var(--text3);font-size:13px"><div class="spin"></div></div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-head">
+        <div class="sec-title">📈 Monat im Überblick</div>
+        <a href="qualifikation.html" class="sec-link">Details →</a>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px" id="monthBox">
+        <div style="text-align:center;color:var(--text3);font-size:13px;padding:20px"><div class="spin"></div></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+const SB_URL  = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const TABLE   = 'scout_qualifikationen';
+const SOLL    = { startMax: 9, endMin: 16, minHours: 5 };
+
+const STATUS_COL = { APPOINTMENT:'#22c55e', ORDER_REGISTERED:'#F5C500', FOLLOW_UP:'#3b82f6', NO_INTEREST:'#ef4444', CUSTOMER_NOT_HOME:'#f97316', EXISTING_CUSTOMER:'#a855f7', NOT_MARKETABLE:'#555', NO_ENTRY:'#444', BLACKLISTED:'#333' };
+const STATUS_LBL = { APPOINTMENT:'Termin', ORDER_REGISTERED:'Lead CC', FOLLOW_UP:'Wiedervorlage', NO_INTEREST:'Kein Interesse', CUSTOMER_NOT_HOME:'Nicht erreicht', EXISTING_CUSTOMER:'Bestandskunde', NOT_MARKETABLE:'Nicht vermarktbar', NO_ENTRY:'Kein Eintritt', BLACKLISTED:'Blacklist' };
+
+// ── Clock + Greeting ──
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const h = now.getHours();
+  const greet = h < 10 ? 'Guten Morgen' : h < 13 ? 'Hallo' : h < 17 ? 'Guten Tag' : 'Guten Abend';
+  document.getElementById('greeting').innerHTML = `${greet}, <span>Noah</span> 👋`;
+  document.getElementById('greetDate').textContent = now.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  document.getElementById('todayDateLbl').textContent = '· ' + now.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Fetch ──
+async function sbFetch(params) {
+  const PAGE = 1000; let all = [], from = 0;
+  while (true) {
+    const r = await fetch(`${SB_URL}/rest/v1/${TABLE}?${params}`, {
+      headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`, Accept: 'application/json', Range: `${from}-${from+PAGE-1}`, 'Range-Unit': 'items' }
+    });
+    if (!r.ok) throw new Error('DB ' + r.status);
+    const rows = await r.json();
+    all = all.concat(rows); if (rows.length < PAGE) break; from += PAGE;
+  }
+  return all;
+}
+
+const fmt2 = n => String(Math.floor(n)).padStart(2,'0') + ':' + String(Math.round((n%1)*60)).padStart(2,'0');
+
+// ── Load All ──
+async function loadAll() {
+  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  const thirtyAgo = new Date(now - 30*60*1000).toISOString();
+
+  try {
+    const [todayData, monthData, recentData] = await Promise.all([
+      sbFetch(`order=created.asc&created=gte.${today}T00:00:00&created=lte.${today}T23:59:59`),
+      sbFetch(`order=created.asc&created=gte.${monthStart}T00:00:00&created=lte.${today}T23:59:59&select=mitarbeiter_name,qualifikation,created`),
+      sbFetch(`order=created.desc&created=gte.${thirtyAgo}&select=mitarbeiter_name,qualifikation,created,strasse,hausnummer,ort`)
+    ]);
+
+    renderKPIs(todayData);
+    renderTodayTable(todayData);
+    renderAlertFeed(todayData);
+    renderActivityFeed(recentData);
+    renderMonthBox(monthData, today);
+  } catch(e) {
+    showToast('Fehler: ' + e.message);
+  }
+}
+
+// ── KPIs ──
+function renderKPIs(data) {
+  const byScouter = {};
+  data.forEach(r => { if (!byScouter[r.mitarbeiter_name]) byScouter[r.mitarbeiter_name] = []; byScouter[r.mitarbeiter_name].push(r); });
+  const activeScouters = Object.keys(byScouter);
+  const appointments = data.filter(r => r.qualifikation === 'APPOINTMENT').length;
+  const leads = data.filter(r => r.qualifikation === 'ORDER_REGISTERED').length;
+
+  // Alerts
+  const alerts = [];
+  activeScouters.forEach(name => {
+    const entries = byScouter[name].sort((a,b) => a.created.localeCompare(b.created));
+    const start = new Date(entries[0].created);
+    const end   = new Date(entries[entries.length-1].created);
+    const startH = start.getHours() + start.getMinutes()/60;
+    const endH   = end.getHours() + end.getMinutes()/60;
+    const durMin = (end - start) / 60000;
+    const now = new Date();
+    const isActive = (now - end) / 60000 < 60; // last quali within 60 min
+    if (startH > SOLL.startMax) alerts.push({ name, type: 'late', val: fmt2(startH) });
+    // Only flag early end if they haven't done anything in 2 hours AND it's before endMin
+    if (!isActive && endH < SOLL.endMin) alerts.push({ name, type: 'early', val: fmt2(endH) });
+  });
+
+  document.getElementById('k-active').textContent = activeScouters.length;
+  document.getElementById('k-active-sub').textContent = `Scouter draußen heute`;
+  document.getElementById('k-quali').textContent = data.length.toLocaleString('de-DE');
+  document.getElementById('k-quali-sub').textContent = `${(data.length/Math.max(activeScouters.length,1)).toFixed(1)} Ø pro Scouter`;
+  document.getElementById('k-termine').textContent = appointments;
+  document.getElementById('k-termine-sub').textContent = `${data.length > 0 ? (appointments/data.length*100).toFixed(1) : 0}% Conv. Rate`;
+  document.getElementById('k-leads').textContent = leads;
+  document.getElementById('k-leads-sub').textContent = `Leads für Call Center`;
+  document.getElementById('k-alerts').textContent = alerts.length;
+  document.getElementById('k-alerts-sub').textContent = alerts.length > 0 ? `${alerts.filter(a=>a.type==='late').length}× spät · ${alerts.filter(a=>a.type==='early').length}× früh` : 'Alles OK ✓';
+  document.getElementById('k-alert-badge').textContent = alerts.length > 0 ? '⚠️' : '✓';
+
+  // App card stats
+  document.getElementById('as-quali').textContent = data.length.toLocaleString('de-DE');
+  document.getElementById('as-scouter').textContent = activeScouters.length;
+  document.getElementById('as-alerts').textContent = alerts.length;
+
+  // Fire alarm
+  if (alerts.length > 0) {
+    document.getElementById('fireAlarm').style.display = 'block';
+    document.getElementById('alarmList').textContent = alerts.slice(0,3).map(a =>
+      a.type === 'late' ? `${a.name.split(' ')[0]} zu spät gestartet (${a.val})` :
+      `${a.name.split(' ')[0]} früh Feierabend (${a.val})`
+    ).join(' · ') + (alerts.length > 3 ? ` · +${alerts.length-3} weitere` : '');
+  }
+}
+
+// ── Today Table ──
+function renderTodayTable(data) {
+  const byScouter = {};
+  data.forEach(r => {
+    if (!byScouter[r.mitarbeiter_name]) byScouter[r.mitarbeiter_name] = [];
+    byScouter[r.mitarbeiter_name].push(r);
+  });
+
+  const now = new Date();
+  const rows = Object.entries(byScouter).map(([name, entries]) => {
+    const sorted = [...entries].sort((a,b) => a.created.localeCompare(b.created));
+    const start  = new Date(sorted[0].created);
+    const last   = new Date(sorted[sorted.length-1].created);
+    const startH = start.getHours() + start.getMinutes()/60;
+    const lastH  = last.getHours() + last.getMinutes()/60;
+    const minAgo = Math.round((now - last) / 60000);
+    const isActive = minAgo < 45;
+    const appointments = entries.filter(e => e.qualifikation === 'APPOINTMENT').length;
+    const leads = entries.filter(e => e.qualifikation === 'ORDER_REGISTERED').length;
+
+    const alerts = [];
+    if (startH > SOLL.startMax) alerts.push({ t: 'Spät', c: 'tag-orange' });
+    if (!isActive && lastH < SOLL.endMin) alerts.push({ t: 'Früh Feierabend', c: 'tag-red' });
+
+    const statusTag = isActive
+      ? '<span class="tag tag-green">● Aktiv</span>'
+      : `<span class="tag tag-grey">${minAgo}m inaktiv</span>`;
+
+    const initials = name.split(' ').map(p=>p[0]).join('').toUpperCase().slice(0,2);
+    return `<tr onclick="window.open('zeiterfassung.html','_blank')">
+      <td><div class="name-cell"><div class="av ${isActive?'active':''}">${initials}</div><div class="nm">${name}</div></div></td>
+      <td>${statusTag}</td>
+      <td class="mono ${startH > SOLL.startMax ? 'style="color:var(--orange)"' : ''}">${start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td class="mono">${last.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td class="r mono" style="font-weight:700">${entries.length}</td>
+      <td class="r" style="color:var(--green);font-weight:700">${appointments || '–'}</td>
+      <td class="r" style="color:var(--gold);font-weight:700">${leads || '–'}</td>
+      <td>${alerts.map(a=>`<span class="tag ${a.c}">${a.t}</span>`).join(' ') || '<span class="tag tag-grey">✓</span>'}</td>
+    </tr>`;
+  }).sort((a,b) => (b.includes('tag-green')?1:-1));
+
+  document.getElementById('todayTbody').innerHTML = rows.length
+    ? rows.join('')
+    : '<tr><td colspan="8" class="empty-td">Heute noch keine Aktivität</td></tr>';
+}
+
+// ── Alert Feed ──
+function renderAlertFeed(data) {
+  const byScouter = {};
+  data.forEach(r => {
+    if (!byScouter[r.mitarbeiter_name]) byScouter[r.mitarbeiter_name] = [];
+    byScouter[r.mitarbeiter_name].push(r);
+  });
+
+  const alerts = [];
+  const now = new Date();
+  Object.entries(byScouter).forEach(([name, entries]) => {
+    const sorted = entries.sort((a,b) => a.created.localeCompare(b.created));
+    const start = new Date(sorted[0].created);
+    const last  = new Date(sorted[sorted.length-1].created);
+    const startH = start.getHours() + start.getMinutes()/60;
+    const endH   = last.getHours() + last.getMinutes()/60;
+    const isActive = (now - last)/60000 < 60;
+    if (startH > SOLL.startMax) alerts.push({ name, icon:'🕙', color:'var(--orange)', bg:'var(--orange-dim)', title:`Spät gestartet: ${start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr`, sub:'Sollte bis 09:00 starten' });
+    if (!isActive && endH < SOLL.endMin) alerts.push({ name, icon:'🏃', color:'var(--red)', bg:'var(--red-dim)', title:`Früh Feierabend: ${last.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr`, sub:`Letzte Aktivität vor ${Math.round((now-last)/60000)} Min` });
+    if (entries.length < 5 && !isActive) alerts.push({ name, icon:'😴', color:'var(--blue)', bg:'var(--blue-dim)', title:`Nur ${entries.length} Qualifikationen heute`, sub:'Sehr geringe Aktivität' });
+  });
+
+  const box = document.getElementById('alertFeed');
+  if (!alerts.length) {
+    box.innerHTML = '<div style="padding:28px;text-align:center;font-size:13px;color:var(--green)">✓ Keine Auffälligkeiten heute</div>';
+    return;
+  }
+  box.innerHTML = alerts.slice(0,8).map(a => `
+    <div class="alert-item">
+      <div class="al-icon" style="background:${a.bg}">${a.icon}</div>
+      <div class="al-body">
+        <div class="al-title">${a.name}</div>
+        <div class="al-sub">${a.title} · ${a.sub}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Activity Feed ──
+function renderActivityFeed(data) {
+  const box = document.getElementById('actFeed');
+  if (!data.length) { box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px">Keine Aktivität in den letzten 30 Min</div>'; return; }
+  box.innerHTML = data.slice(0,30).map(r => {
+    const col = STATUS_COL[r.qualifikation] || '#555';
+    const lbl = STATUS_LBL[r.qualifikation] || r.qualifikation;
+    const t = new Date(r.created).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+    const addr = r.strasse ? `${r.strasse} ${r.hausnummer||''}, ${r.ort||''}` : '';
+    return `<div class="act-item">
+      <div class="act-dot" style="background:${col}"></div>
+      <div class="act-name">${r.mitarbeiter_name.split(' ')[0]}</div>
+      <div class="act-status" style="color:${col}">${lbl}${addr ? ' · <span style="color:var(--text3)">'+addr+'</span>' : ''}</div>
+      <div class="act-time">${t}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Month Box ──
+function renderMonthBox(data, today) {
+  const days = [...new Set(data.map(r=>r.created.split('T')[0]))].sort();
+  const activeScouters = [...new Set(data.map(r=>r.mitarbeiter_name))];
+  const appts = data.filter(r=>r.qualifikation==='APPOINTMENT').length;
+  const leads = data.filter(r=>r.qualifikation==='ORDER_REGISTERED').length;
+  const now = new Date();
+  const monthName = now.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
+
+  document.getElementById('monthBox').innerHTML = `
+    <div style="font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px">${monthName}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div><div style="font-size:26px;font-weight:800">${data.length.toLocaleString('de-DE')}</div><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Qualifikationen</div></div>
+      <div><div style="font-size:26px;font-weight:800;color:var(--green)">${appts}</div><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Termine</div></div>
+      <div><div style="font-size:26px;font-weight:800;color:var(--gold)">${leads}</div><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Leads CC</div></div>
+      <div><div style="font-size:26px;font-weight:800;color:var(--blue)">${activeScouters.length}</div><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Aktive Scouter</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Tagesaktivität</div>
+    <div style="display:flex;gap:2px;flex-wrap:wrap">
+      ${days.map(d => {
+        const count = data.filter(r=>r.created.startsWith(d)).length;
+        const alpha = Math.min(1, 0.1 + count/50);
+        const isToday = d === today;
+        return `<div title="${d}: ${count} Quali" style="width:12px;height:12px;border-radius:3px;background:rgba(245,197,0,${alpha.toFixed(2)});${isToday?'outline:2px solid var(--gold);outline-offset:1px':''}"></div>`;
+      }).join('')}
+    </div>`;
+}
+
+let toastT;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show';
+  clearTimeout(toastT); toastT = setTimeout(() => el.className = '', 4000);
+}
+
+// Auto-refresh every 2 minutes
+loadAll();
+setInterval(loadAll, 120000);
+</script>
+</body>
+</html>
