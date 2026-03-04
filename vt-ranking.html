@@ -708,16 +708,12 @@ function sendNotification(title,body){
 
 function checkForNewDeals(){
     if(!notifEnabled||!isCurrentMonth(month))return;
-    var SB2='https://hqzpemfaljxcysyqssng.supabase.co';
-    var AK2='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
-    fetch(SB2+'/rest/v1/leveto_contracts?select=id&accepted_date=gte.2026-03-01T00:00:00&accepted_date=lt.2026-04-01T00:00:00&calculated_realprice_netto=gte.6000',{
-        headers:{apikey:AK2,Authorization:'Bearer '+AK2}
-    }).then(function(r){return r.json()}).then(function(data){
-        var newTotal=data.length;
+    fetch('/api/overview-march?month=2026-03').then(function(r){return r.json()}).then(function(data){
+        var contracts=(data.contracts||[]).filter(function(c){return(parseFloat(c.netto)||0)>=6000});
+        var newTotal=contracts.length;
         if(lastKnownTotal!==null&&newTotal>lastKnownTotal){
             var diff=newTotal-lastKnownTotal;
-            sendNotification('🐝 Neuer Deal!',diff===1?'Ein neuer Deal ist reingekommen! Jetzt '+newTotal+' Deals im März.':diff+' neue Deals! Jetzt '+newTotal+' Deals im März.');
-            // Reload data
+            sendNotification('Neuer Deal!',diff===1?'Ein neuer Deal ist reingekommen! Jetzt '+newTotal+' Deals im März.':diff+' neue Deals! Jetzt '+newTotal+' Deals im März.');
             loadMarch();
         }
         lastKnownTotal=newTotal;
@@ -1264,9 +1260,9 @@ function computeMarch(orders,zeros){
     a6.forEach(function(o){var l=o.lead_id;if(!l)return;var k=l+'_'+(isHP(o)?'HP':'PV');var an=o.leveto_id||0;if(!bk[k]||an>(bk[k].leveto_id||0))bk[k]=o});
     var u=Object.values(bk),bv={};
     u.forEach(function(o){
-        var n=(o.ersteller||'?').trim();
+        var n=(o.berater||o.ersteller||'?').trim();
         if(!bv[n])bv[n]={sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,zero:0,hp:0,pv:0};
-        var d=bv[n];d.sales++;d.kwp+=Math.round((parseFloat(o.calculated_realprice_netto)||0)/2550*10)/10;d.netto+=parseFloat(o.calculated_realprice_netto)||0;
+        var d=bv[n];d.sales++;d.kwp+=o.kwp_real>0?Math.round(o.kwp_real*10)/10:Math.round((parseFloat(o.calculated_realprice_netto)||0)/2550*10)/10;d.netto+=parseFloat(o.calculated_realprice_netto)||0;
         if(o.status_kunde==='Storniert')d.storno++;
         var q=(o.quelle||'').toLowerCase();
         if(q==='eigenlead')d.el++;if(q==='empfehlung')d.emp++;
@@ -1277,13 +1273,26 @@ function computeMarch(orders,zeros){
 }
 
 async function loadMarch(){
-    document.getElementById('app').innerHTML='<div class="loading"><div class="loader"></div><div class="load-text">Lade März-Daten...</div></div>';
+    document.getElementById('app').innerHTML='<div class="loading"><div class="loader"></div><div class="load-text">Lade Live-Daten...</div></div>';
     try{
-        var all=[];
-        for(var o=0;o<60000;o+=1000){
-            var r=await fetch(SB+'/rest/v1/leveto_contracts?select=ersteller,accepted_date,calculated_realprice_netto,calculated_realprice_brutto,status_kunde,quelle,leveto_id,lead_id,typeicons&accepted_date=gte.2026-03-01T00:00:00&accepted_date=lt.2026-04-01T00:00:00&limit=1000&offset='+o,{headers:hd});
-            var d=await r.json();if(!Array.isArray(d)||!d.length)break;all=all.concat(d);if(d.length<1000)break;
-        }
+        // Fetch from Overview API (LIVE from Leveto, no Supabase sync lag)
+        var r=await fetch('/api/overview-march?month=2026-03');
+        var j=await r.json();
+        if(j.error)throw new Error(j.error);
+        // Map API response to internal format
+        var all=(j.contracts||[]).map(function(c){return{
+            berater:c.berater||c.ersteller||'',
+            ersteller:c.ersteller||'',
+            accepted_date:c.accepted_date||'',
+            calculated_realprice_netto:c.netto||0,
+            calculated_realprice_brutto:c.brutto||0,
+            status_kunde:c.auftragsstatus||'',
+            quelle:c.quelle||'',
+            leveto_id:c.contract_id||0,
+            lead_id:c.lead_id||0,
+            typeicons:c.typeicons||[],
+            kwp_real:c.kwp_real||0
+        }});
         var z=[];try{var eR=await fetch(SB+'/rest/v1/efs_projekte?select=efs_id,preismodell&preismodell=eq.Zero',{headers:hd});if(eR.ok)z=await eR.json()}catch(e){}
         var todayStr=new Date().toISOString().slice(0,10);
         todayData={total:0,pv:0,hp:0};
