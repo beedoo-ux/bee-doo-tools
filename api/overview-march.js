@@ -1,6 +1,7 @@
 // api/overview-march.js — Fetches Leveto Overview server-side,
 // extracts only target month contracts, returns filtered + enriched data.
-// This avoids CORS and timeout issues from loading 53k leads in browser.
+// Fixes: contracts/appointments are JSON STRINGS, field is "creator" not "ersteller",
+// quelle is on Lead level, netto = an_netto, storno not yet available (XXX).
 
 export const config = { maxDuration: 30 };
 
@@ -13,8 +14,6 @@ export default async function handler(req, res) {
   const LEVETO_BASE = 'https://beedoo.leveto.net/API';
   const LEVETO_USER = 'api@bee-doo.de';
   const LEVETO_PW = 'Patrick123456789!';
-
-  // Optional: ?month=2026-03 (default current month)
   const targetMonth = req.query.month || new Date().toISOString().slice(0, 7);
 
   try {
@@ -40,10 +39,12 @@ export default async function handler(req, res) {
     const ovData = await ovRes.json();
     const fetchMs = Date.now() - t0;
 
-    // 3. FIND LEADS ARRAY
+    // 3. FIND LEADS — response is { data: [...] }
     let leads = [];
     if (Array.isArray(ovData)) {
       leads = ovData;
+    } else if (ovData.data && Array.isArray(ovData.data)) {
+      leads = ovData.data;
     } else {
       for (const key of Object.keys(ovData)) {
         if (Array.isArray(ovData[key]) && ovData[key].length > 100) {
@@ -54,31 +55,38 @@ export default async function handler(req, res) {
     }
 
     // 4. EXTRACT CONTRACTS FOR TARGET MONTH
+    // CRITICAL: contracts + appointments come as JSON STRINGS!
     const contracts = [];
     let totalLeads = leads.length;
     let totalContracts = 0;
     let leadsWithContracts = 0;
 
     for (const lead of leads) {
-      const lc = lead.contracts || [];
-      if (!Array.isArray(lc)) continue;
+      let lc = lead.contracts || '[]';
+      if (typeof lc === 'string') {
+        try { lc = JSON.parse(lc); } catch(e) { lc = []; }
+      }
+      if (!Array.isArray(lc) || !lc.length) continue;
+
       totalContracts += lc.length;
-      if (lc.length > 0) leadsWithContracts++;
+      leadsWithContracts++;
 
       for (const c of lc) {
-        const ad = c.accepted_date || c.acceptedDate || '';
+        const ad = c.accepted_date || '';
         if (!ad.startsWith(targetMonth)) continue;
 
-        // Calc kWp from products (amount × watt / 1000)
-        let kwp = 0;
-        let moduleCount = 0;
-        let moduleType = '';
-        let speicherKwh = 0;
-        let speicherCount = 0;
-        let speicherNames = [];
+        // Products may also be a JSON string
+        let prods = c.products || [];
+        if (typeof prods === 'string') {
+          try { prods = JSON.parse(prods); } catch(e) { prods = []; }
+        }
 
-        if (Array.isArray(c.products)) {
-          for (const p of c.products) {
+        // Calc kWp from products
+        let kwp = 0, moduleCount = 0, moduleType = '';
+        let speicherKwh = 0, speicherCount = 0, speicherNames = [];
+
+        if (Array.isArray(prods)) {
+          for (const p of prods) {
             const watt = parseFloat(p.watt) || 0;
             const amount = parseFloat(p.amount) || 0;
             const battery = parseFloat(p.battery) || 0;
@@ -95,35 +103,47 @@ export default async function handler(req, res) {
           }
         }
 
+        // typeicons may be string or array
+        let typeicons = c.typeicons || [];
+        if (typeof typeicons === 'string') {
+          try { typeicons = JSON.parse(typeicons); } catch(e) { }
+        }
+
         contracts.push({
           contract_id: c.id || null,
           lead_id: lead.id,
-          lead_name: `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),
-          ersteller: c.ersteller || c.creator || '',
-          berater: c.berater || lead.berater || '',
+          lead_name: `${lead.vorname || ''} ${lead.nachname || ''}`.trim(),
+          // creator = Ersteller (Overview field name)
+          ersteller: c.creator || '',
+          ersteller_ma: c.creator_ma_number || '',
+          // berater is on LEAD level
+          berater: lead.berater || '',
+          berater_ma: lead.berater_ma_nummer || '',
           accepted_date: ad,
-          netto: parseFloat(c.an_netto || c.calculated_realprice_netto || 0),
-          brutto: parseFloat(c.an_brutto || c.calculated_realprice_brutto || 0),
-          status_kunde: c.status_kunde || '',
-          storno: c.storno === true || c.storno === 1 || c.storno === '1' || (c.status_kunde || '') === 'Storniert',
-          quelle: c.quelle || c.source || lead.source || '',
-          typeicons: c.typeicons || null,
+          an_nummer: c.dyn_offernum || '',
+          // an_netto (not calculated_realprice_netto)
+          netto: parseFloat(c.an_netto || 0),
+          brutto: parseFloat(c.an_brutto || 0),
+          // storno: auftragsstatus still XXX — not detectable yet
+          auftragsstatus: c.auftragsstatus || '',
+          storno: false,
+          // quelle is on LEAD level
+          quelle: lead.quelle || '',
+          typeicons,
           kwp_real: Math.round(kwp * 100) / 100,
           module_count: moduleCount,
           module_type: moduleType,
           speicher_kwh: Math.round(speicherKwh * 10) / 10,
           speicher_count: speicherCount,
           speicher_names: speicherNames.join(', '),
-          mvp_id: c.mvp_id || lead.mvp_id || '',
-          mvp_name: c.mvp_nummer || lead.mvp_nummer || '',
+          mvp_id: lead.mvp_id || '',
+          mvp_name: lead.mvp_nummer || '',
           efs_prozent: c.efs_prozent || null,
-          // Include raw product data for debugging
-          products: c.products || []
+          products: prods
         });
       }
     }
 
-    // 5. RETURN
     return res.status(200).json({
       month: targetMonth,
       fetchMs,
@@ -132,10 +152,17 @@ export default async function handler(req, res) {
       leadsWithContracts,
       filteredContracts: contracts.length,
       contracts,
-      // Log which fields exist in first contract for debugging
-      sampleFields: contracts.length > 0
-        ? Object.keys(contracts[0]).filter(k => k !== 'products')
-        : []
+      _fieldMapping: {
+        ersteller: 'contract.creator',
+        berater: 'lead.berater',
+        quelle: 'lead.quelle',
+        netto: 'contract.an_netto',
+        storno: 'NOT YET (auftragsstatus=XXX)',
+        kwp: 'products: amount*watt/1000',
+        speicher: 'products: battery>0',
+        wp: 'typeicons: fa-fire',
+        scout: 'lead.mvp_id + lead.mvp_nummer'
+      }
     });
 
   } catch (err) {
