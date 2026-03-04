@@ -1398,6 +1398,330 @@ function TabImport({ toast, mitarbeiterList }) {
   </div>;
 }
 
+
+// ═══ Tab: Abrechnungsübersicht ═══
+function TabAbrechnung({ mitarbeiterList, historie, sonder, teamBonus, regeln, toast }) {
+  const now = new Date();
+  const [monat, setMonat] = useState(now.getMonth() === 0 ? 12 : now.getMonth());
+  const [jahr, setJahr] = useState(now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear());
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [editedCells, setEditedCells] = useState({});
+
+  const regelMap = {};
+  (regeln || []).forEach(r => { regelMap[r.name] = r; });
+
+  const typToModell = {
+    hgb_vertriebler_haupt: "HGB Vertriebler Haupt §84",
+    hgb_vertriebler: "HGB Vertriebler Haupt §84",
+    hgb84: "HGB Vertriebler Haupt §84",
+    angestellt_vertriebler: "Angestellter Vertriebler",
+    angestellt_vt: "Angestellter Vertriebler",
+    vertriebler: "Vertriebler",
+    hgb_vertriebler_agentur: "HGB Vertriebler Agentur §84",
+    hgb_scouter: "HGB Scouter §84",
+    angestellt_scouter: "Angestellter Scouter",
+    montage_partner: "Montage Partner",
+  };
+
+  const rolleFromTyp = (typ) => {
+    if (!typ) return "?";
+    if (typ.includes("scout")) return "Scout";
+    if (typ.includes("montage")) return "Montage";
+    if (typ.includes("buero")) return "Buero";
+    return "VT";
+  };
+
+  const statusFromTyp = (typ) => {
+    if (!typ) return "?";
+    if (typ.startsWith("hgb")) return "HGB";
+    if (typ.startsWith("angestellt")) return "Angestellt";
+    return typ;
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const pad = (n) => String(n).padStart(2, "0");
+      const lzStart = `${jahr}-${pad(monat)}-01`;
+      const nextM = monat === 12 ? 1 : monat + 1;
+      const nextJ = monat === 12 ? jahr + 1 : jahr;
+      const lzEnd = `${nextJ}-${pad(nextM)}-01`;
+
+      const auftraege = await db.get("pay_auftraege", 
+        `?auftrags_datum=gte.${lzStart}&auftrags_datum=lt.${lzEnd}&storno=eq.false&select=id,berater_name,quelle,auftrags_datum,an_brutto,an_netto,auftrag_nr,lead_id,zahlungsstatus`
+      ).catch(() => []);
+
+      const salesByVT = {};
+      auftraege.forEach(a => {
+        const name = a.berater_name || "Unbekannt";
+        if (!salesByVT[name]) salesByVT[name] = { count: 0, brutto: 0, el: 0, emp: 0, auftraege: [] };
+        salesByVT[name].count++;
+        salesByVT[name].brutto += (a.an_brutto || 0);
+        salesByVT[name].auftraege.push(a);
+        const q = (a.quelle || "").toLowerCase();
+        if (q === "eigenlead") salesByVT[name].el++;
+        if (q === "empfehlung") salesByVT[name].emp++;
+      });
+
+      const allNames = new Set([...Object.keys(salesByVT)]);
+      mitarbeiterList.forEach(m => {
+        const name = `${m.vorname || ""} ${m.nachname || ""}`.trim();
+        const rolle = rolleFromTyp(m.typ);
+        if (rolle === "VT" || rolle === "Scout") allNames.add(name);
+      });
+
+      const maMap = {};
+      mitarbeiterList.forEach(m => {
+        const name = `${m.vorname || ""} ${m.nachname || ""}`.trim();
+        maMap[name] = m;
+      });
+
+      const histMap = {};
+      (historie || []).forEach(h => {
+        const key = h.mitarbeiter_name;
+        if (!histMap[key]) histMap[key] = [];
+        histMap[key].push(h);
+      });
+
+      const sonderMap = {};
+      (sonder || []).forEach(s => {
+        const key = s.mitarbeiter_name;
+        if (!sonderMap[key]) sonderMap[key] = [];
+        sonderMap[key].push(s);
+      });
+
+      const teamMap = {};
+      (teamBonus || []).forEach(t => {
+        teamMap[t.mitarbeiter_name] = t;
+      });
+
+      const skipNames = new Set();
+      (sonder || []).filter(s => s.typ === "skip_abrechnung").forEach(s => skipNames.add(s.mitarbeiter_name));
+
+      const result = [];
+      allNames.forEach(name => {
+        const ma = maMap[name];
+        const typ = ma?.typ || "?";
+        const rolle = rolleFromTyp(typ);
+        const status = statusFromTyp(typ);
+        const sales = salesByVT[name] || { count: 0, brutto: 0, el: 0, emp: 0 };
+
+        const histEntries = histMap[name] || [];
+        let hist = null;
+        if (histEntries.length > 0) {
+          const refDate = `${jahr}-${pad(monat)}-15`;
+          const matching = histEntries.filter(h => h.gueltig_ab <= refDate && (!h.gueltig_bis || h.gueltig_bis >= refDate));
+          hist = matching.length > 0 ? matching[matching.length - 1] : histEntries[histEntries.length - 1];
+        }
+
+        const modellName = typToModell[typ] || "?";
+        const modell = regelMap[modellName];
+
+        const basis = hist?.basis_betrag ?? modell?.basis_betrag ?? 0;
+        const staffel = hist?.staffel_betrag ?? modell?.staffel_betrag ?? 0;
+        const schwelle = hist?.staffel_schwelle ?? modell?.staffel_schwelle ?? 8;
+        const elBonus = hist?.eigenlead_betrag ?? modell?.eigenlead_betrag ?? 0;
+        const empBonus = hist?.empfehlung_betrag ?? modell?.empfehlung_betrag ?? 0;
+        const spBonus = hist?.speicher_betrag ?? modell?.speicher_betrag ?? 0;
+        const isFlat = hist?.ist_flat_rate ?? false;
+        const stufenBerechtigt = hist?.stufenbonus_berechtigt ?? true;
+        const isSkip = skipNames.has(name);
+
+        const sonderInfo = (sonderMap[name] || []).map(s => s.typ).join(", ");
+        const teamInfo = teamMap[name];
+
+        let provBetrag = 0;
+        if (!isSkip && sales.count > 0) {
+          const rate = (sales.count >= schwelle && !isFlat) ? staffel : basis;
+          provBetrag = sales.count * rate;
+          provBetrag += sales.el * elBonus;
+          provBetrag += sales.emp * empBonus;
+        }
+
+        result.push({
+          name, status, rolle, typ,
+          isFlat, basis, staffel, schwelle,
+          elBonus, empBonus, spBonus,
+          stufenBerechtigt, isSkip,
+          sales: sales.count, brutto: sales.brutto,
+          elCount: sales.el, empCount: sales.emp,
+          sonderInfo, teamInfo,
+          provBetrag, histSource: hist ? "Historie" : (modell ? "Modell" : "?"),
+          modellName,
+        });
+      });
+
+      result.sort((a, b) => {
+        if (a.isSkip !== b.isSkip) return a.isSkip ? 1 : -1;
+        if (a.sales !== b.sales) return b.sales - a.sales;
+        return a.name.localeCompare(b.name);
+      });
+
+      setRows(result);
+      setEditedCells({});
+    } catch (e) {
+      toast("Fehler: " + e.message, "err");
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, [monat, jahr]);
+
+  const monate = ["Jan","Feb","Mrz","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+  const jahre = [2025, 2026, 2027];
+
+  const vtRows = rows.filter(r => r.rolle === "VT" && r.sales > 0);
+  const scoutRows = rows.filter(r => r.rolle === "Scout" && r.sales > 0);
+  const zeroRows = rows.filter(r => r.sales === 0 && !r.isSkip);
+  const skipRows = rows.filter(r => r.isSkip);
+
+  const totalProv = vtRows.reduce((s, r) => s + r.provBetrag, 0);
+  const totalSales = vtRows.reduce((s, r) => s + r.sales, 0);
+
+  const eur = (v) => v.toLocaleString("de-DE", { minimumFractionDigits: 0 }) + " \u20ac";
+
+  const cellStyle = (edited) => ({
+    padding: "6px 8px", fontSize: 12, borderBottom: "1px solid var(--bd)",
+    background: edited ? "#F5C50022" : "transparent",
+    whiteSpace: "nowrap",
+  });
+
+  const thStyle = {
+    padding: "8px", fontSize: 11, fontWeight: 700, color: "var(--ts)",
+    borderBottom: "2px solid var(--bd)", textAlign: "left",
+    position: "sticky", top: 0, background: "var(--s1)", zIndex: 2,
+    whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.5px",
+  };
+
+  const renderTable = (data, title, color) => {
+    if (data.length === 0) return null;
+    return React.createElement("div", { style: { marginBottom: 24 } },
+      React.createElement("div", { style: {
+        fontSize: 14, fontWeight: 700, color: color, marginBottom: 8,
+        display: "flex", alignItems: "center", gap: 8,
+      }}, title, React.createElement("span", {
+        style: { fontSize: 11, fontWeight: 400, color: "var(--ts)", background: "var(--s2)", padding: "2px 8px", borderRadius: 10 }
+      }, data.length + " MA")),
+
+      React.createElement("div", { style: { overflowX: "auto", borderRadius: 8, border: "1px solid var(--bd)" } },
+        React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", minWidth: 1200 } },
+          React.createElement("thead", null,
+            React.createElement("tr", null,
+              ["#","Name","Status","Rolle","Modell","Flat","Basis","Staffel","Ab","EL","Emp","Sp","Stufe","Sales","EL","Emp","Brutto","Provision","Quelle"].map((h, i) =>
+                React.createElement("th", { key: i, style: { ...thStyle, textAlign: i >= 6 ? "right" : "left" } }, h)
+              )
+            )
+          ),
+          React.createElement("tbody", null,
+            data.map((r, idx) => {
+              const isWarning = r.histSource === "?" || (r.sales > 0 && r.provBetrag === 0 && !r.isSkip);
+              const rowBg = r.isSkip ? "#ff444418" : isWarning ? "#F5C50018" : (idx % 2 === 0 ? "transparent" : "var(--s2)");
+              return React.createElement("tr", { key: r.name, style: { background: rowBg } },
+                React.createElement("td", { style: cellStyle() }, idx + 1),
+                React.createElement("td", { style: { ...cellStyle(), fontWeight: 600, minWidth: 160, color: r.isSkip ? "var(--r)" : "var(--tx)" } },
+                  r.name, r.isSkip && React.createElement("span", { style: { fontSize: 10, color: "var(--r)", marginLeft: 6 } }, "SKIP")
+                ),
+                React.createElement("td", { style: { ...cellStyle(), color: r.status === "HGB" ? "#4fc3f7" : r.status === "Angestellt" ? "#81c784" : "var(--ts)" } },
+                  React.createElement("span", { style: { padding: "2px 6px", borderRadius: 4, fontSize: 11, fontWeight: 600, background: r.status === "HGB" ? "#4fc3f722" : "#81c78422" } }, r.status)
+                ),
+                React.createElement("td", { style: cellStyle() }, r.rolle),
+                React.createElement("td", { style: { ...cellStyle(), fontSize: 11, color: "var(--ts)", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" } }, r.modellName),
+                React.createElement("td", { style: cellStyle() },
+                  r.isFlat ? React.createElement("span", { style: { color: "#F5C500", fontWeight: 700, fontSize: 11 } }, "FLAT") : ""
+                ),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600 } }, eur(r.basis)),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right", fontVariantNumeric: "tabular-nums" } }, eur(r.staffel)),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right" } }, r.schwelle),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right" } }, r.elBonus > 0 ? eur(r.elBonus) : "-"),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right" } }, r.empBonus > 0 ? eur(r.empBonus) : "-"),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right" } }, r.spBonus > 0 ? eur(r.spBonus) : "-"),
+                React.createElement("td", { style: cellStyle() },
+                  r.stufenBerechtigt ? React.createElement("span", { style: { color: "#81c784", fontSize: 11 } }, "Ja") : React.createElement("span", { style: { color: "var(--ts)", fontSize: 11 } }, "Nein")
+                ),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right", fontWeight: 700, fontSize: 14, color: r.sales > 0 ? "var(--tx)" : "var(--ts)" } }, r.sales),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right", color: r.elCount > 0 ? "#4fc3f7" : "var(--ts)" } }, r.elCount || "-"),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right", color: r.empCount > 0 ? "#81c784" : "var(--ts)" } }, r.empCount || "-"),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right", fontVariantNumeric: "tabular-nums", fontSize: 11 } }, eur(r.brutto)),
+                React.createElement("td", { style: { ...cellStyle(), textAlign: "right", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: r.provBetrag > 0 ? "#F5C500" : r.isSkip ? "var(--r)" : "var(--ts)" } },
+                  r.isSkip ? "SKIP" : eur(r.provBetrag)
+                ),
+                React.createElement("td", { style: { ...cellStyle(), fontSize: 10, color: r.histSource === "Historie" ? "#81c784" : r.histSource === "Modell" ? "#4fc3f7" : "var(--r)" } }, r.histSource)
+              );
+            })
+          )
+        )
+      )
+    );
+  };
+
+  return React.createElement("div", null,
+    React.createElement("div", { style: { display: "flex", gap: 12, marginBottom: 20, alignItems: "center", flexWrap: "wrap" } },
+      React.createElement("div", { style: { display: "flex", gap: 4, background: "var(--s2)", borderRadius: 8, padding: 4 } },
+        monate.map((m, i) => React.createElement("button", {
+          key: i, onClick: () => setMonat(i + 1),
+          style: {
+            padding: "6px 10px", fontSize: 12, fontWeight: monat === i + 1 ? 700 : 400, borderRadius: 6,
+            background: monat === i + 1 ? "var(--y)" : "transparent",
+            color: monat === i + 1 ? "#000" : "var(--ts)",
+            border: "none", cursor: "pointer",
+          }
+        }, m))
+      ),
+      React.createElement("div", { style: { display: "flex", gap: 4, background: "var(--s2)", borderRadius: 8, padding: 4 } },
+        jahre.map(j => React.createElement("button", {
+          key: j, onClick: () => setJahr(j),
+          style: {
+            padding: "6px 12px", fontSize: 12, fontWeight: jahr === j ? 700 : 400, borderRadius: 6,
+            background: jahr === j ? "var(--y)" : "transparent",
+            color: jahr === j ? "#000" : "var(--ts)",
+            border: "none", cursor: "pointer",
+          }
+        }, j))
+      ),
+      React.createElement("div", { style: { fontSize: 13, color: "var(--ts)", marginLeft: 8 } },
+        "Leistungszeitraum: ", React.createElement("strong", { style: { color: "var(--tx)" } }, monate[monat - 1] + " " + jahr),
+        " \u2192 Abrechnung ", React.createElement("strong", { style: { color: "var(--y)" } },
+          monate[monat === 12 ? 0 : monat] + " " + (monat === 12 ? jahr + 1 : jahr)
+        )
+      ),
+      loading && React.createElement("div", { className: "spin", style: { width: 18, height: 18, border: "2px solid var(--bd)", borderTopColor: "var(--y)", borderRadius: "50%" } })
+    ),
+
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 20 } },
+      [
+        { label: "VTs mit Sales", value: vtRows.length, color: "var(--y)" },
+        { label: "Gesamt Sales", value: totalSales, color: "#4fc3f7" },
+        { label: "Gesamt Provisionen", value: eur(totalProv), color: "#81c784" },
+        { label: "Ohne Sales", value: zeroRows.length, color: "var(--ts)" },
+        { label: "Skip", value: skipRows.length, color: "var(--r)" },
+      ].map((c, i) => React.createElement("div", { key: i, style: {
+        background: "var(--s2)", borderRadius: 10, padding: "12px 16px",
+        borderLeft: `3px solid ${c.color}`,
+      }},
+        React.createElement("div", { style: { fontSize: 11, color: "var(--ts)", marginBottom: 4 } }, c.label),
+        React.createElement("div", { style: { fontSize: 20, fontWeight: 700, color: c.color, fontVariantNumeric: "tabular-nums" } }, c.value)
+      ))
+    ),
+
+    renderTable(vtRows, "Vertriebler mit Sales", "var(--y)"),
+    renderTable(scoutRows, "Scouts mit Sales", "#4fc3f7"),
+    renderTable(skipRows, "Skip (keine Abrechnung)", "var(--r)"),
+
+    zeroRows.length > 0 && React.createElement("details", { style: { marginTop: 16 } },
+      React.createElement("summary", { style: { cursor: "pointer", fontSize: 13, color: "var(--ts)", padding: "8px 12px", background: "var(--s2)", borderRadius: 8 } },
+        "Ohne Sales im " + monate[monat - 1] + " (" + zeroRows.length + " MA) \u25BC"
+      ),
+      React.createElement("div", { style: { marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 12px" } },
+        zeroRows.map(r => React.createElement("span", { key: r.name, style: {
+          fontSize: 11, color: "var(--ts)", background: "var(--s2)", padding: "3px 8px", borderRadius: 6
+        }}, r.name))
+      )
+    )
+  );
+}
+
+
 // ═══ Tab: Monatssteuerung (Override pro Monat) ═══
 function TabMonatssteuerung({ regeln, sonder, stufen, teamBonus, overrides, setOverrides, toast }) {
   const now = new Date();
@@ -1728,6 +2052,7 @@ function App() {
     historie: `${historieData.length} Provisions-Perioden – Stichtagsprinzip: DatumErstellt bestimmt den Satz`,
     staffel: `Vormonat-Daten pro VT eintragen und Staffel-Korrekturen manuell freigeben`,
     monatssteuerung: `Provisionen pro Monat ein-/ausschalten – Overrides für einzelne Monate`,
+    abrechnung: `Abrechnungsübersicht – Monat wählen, alle VTs + Scouts mit Provisions-Daten auf einen Blick`,
     import: `Leveto CSV-Import – DatumAngenommen als Auftragsdatum, Ausgezahlt am = bereits abgerechnet`,
   };
 
@@ -1791,6 +2116,7 @@ function App() {
         {tab === "historie" && <TabHistorie historie={historieData} setHistorie={setHistorieData} toast={toast} />}
         {tab === "staffel" && <TabStaffelHistory mitarbeiterList={mitarbeiterList} toast={toast} />}
         {tab === "monatssteuerung" && <TabMonatssteuerung regeln={regeln} sonder={sonder} stufen={stufen} teamBonus={teamBonus} overrides={overrides} setOverrides={setOverrides} toast={toast} />}
+        {tab === "abrechnung" && <TabAbrechnung mitarbeiterList={mitarbeiterList} historie={historieData} sonder={sonder} teamBonus={teamBonus} regeln={regeln} toast={toast} />}
         {tab === "import" && <TabImport toast={toast} mitarbeiterList={mitarbeiterList} />}
       </div>
     </div>
