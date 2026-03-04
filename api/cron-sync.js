@@ -302,6 +302,17 @@ async function runScoutSync() {
     // Server-side geocoding for rows missing lat/lng
     await geocodeScoutRows();
 
+    // 1. Neue Koordinaten aus UTM32 befüllen (Hintergrund-Migration 23M Zeilen)
+    await geocodeScoutRows();
+
+    // 2. Scout-Besuche → infas_adressen (Coverage-Karte aktuell halten)
+    try {
+        await fetch(ap('rpc/sync_scout_to_infas'), {
+            method: 'POST', headers: hd(),
+            body: JSON.stringify({ batch_size: 1000 })
+        });
+    } catch(e) { console.warn('sync_scout_to_infas:', e.message); }
+
     return { synced, skipped, success: true };
 }
 
@@ -316,6 +327,19 @@ async function geocodeScoutRows() {
     if (!r.ok) return;
     const count = await r.json();
     if (count > 0) console.log(`Geocoded ${count} scout rows via infas_adressen`);
+}
+
+
+// ═══ INFAS KOORDINATEN MIGRATION (UTM32 → WGS84, Hintergrund) ═══
+async function runInfasCoordsMigration() {
+    // Läuft bis alle 23M Zeilen konvertiert sind, dann 0
+    const r = await fetch(ap('rpc/fill_infas_coords'), {
+        method: 'POST', headers: hd(),
+        body: JSON.stringify({ batch_size: 3000 })
+    });
+    if (!r.ok) return { done: 0, success: false };
+    const count = await r.json();
+    return { done: count, success: true, complete: count === 0 };
 }
 
 // ═══ MAIN HANDLER ═══
@@ -359,6 +383,9 @@ export default async function handler(req, res) {
                         break;
                     case 'auto_merge':
                         result = await runAutoMerge();
+                        break;
+                    case 'infas_coords':
+                        result = await runInfasCoordsMigration();
                         break;
                     case 'scout_sync':
                         result = await runScoutSync();
