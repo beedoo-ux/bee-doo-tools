@@ -23,7 +23,9 @@ async function levetoAuth() {
 }
 
 function vd(d) {
-  return d && d !== '0000-00-00' && d !== '0000-00-00 00:00:00' ? d : null;
+  // Returns null for empty/zero dates, otherwise the value
+  if (!d || d === '0000-00-00' || d === '0000-00-00 00:00:00' || d === 'None') return null;
+  return d;
 }
 
 export default async function handler(req, res) {
@@ -59,7 +61,6 @@ export default async function handler(req, res) {
         const total = d.totalrecords || 0;
         if (page * 100 >= total) break;
         page++;
-        // Rate limit: 14 req per burst
         if (page % 14 === 0) await new Promise(r => setTimeout(r, 22000));
       }
     }
@@ -68,7 +69,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, synced: 0, msg: 'No Enpal leads found in Leveto' });
     }
 
-    // 2. Fetch contracts for Enpal leads (all)
+    // 2. Fetch contracts
     const r2 = await fetch(`${LU}/contracts`, { headers: lhd });
     const contractsData = await r2.json();
     const allContracts = contractsData.data || [];
@@ -84,6 +85,7 @@ export default async function handler(req, res) {
     }
 
     // 3. Map to enpal_leads schema
+    // KEY FIX: use importedOn (not createdOn which is always 0000-00-00 for Enpal leads)
     const now = new Date().toISOString();
     const terminiertStatuses = ['Terminiert', 'Angebot erstellt', 'Angebot angenommen', 'AB erstellt', 'Kontakt/Angebot per Mail'];
 
@@ -92,6 +94,9 @@ export default async function handler(req, res) {
       const a = l.homeAddress || {};
       const c = contractsByLead[l.id] || null;
       const hat_termin = terminiertStatuses.includes(s.name);
+
+      // importedOn = real "created at" for Enpal leads (createdOn is always 0000-00-00)
+      const importedDate = vd(l.importedOn);
 
       return {
         leveto_id: l.id,
@@ -106,7 +111,7 @@ export default async function handler(req, res) {
         telefon: l.telephone || null,
         email: l.email || null,
         notizen: null,
-        leveto_erstellt_am: vd(l.createdOn),
+        leveto_erstellt_am: importedDate,       // importedOn = actual lead creation date for Enpal
         letzte_aenderung: vd(l.lastEditOn),
         stromverbrauch_kwh: null,
         eigentuemer: null,
@@ -124,7 +129,7 @@ export default async function handler(req, res) {
         auftrag_netto: c?.calculated_realprice_netto ? parseFloat(c.calculated_realprice_netto) : null,
         storniert: c ? !!c.storno_date : false,
         sync_am: now,
-        erstellt_am: vd(l.createdOn) || now,
+        erstellt_am: importedDate || now,       // fallback to sync time only if importedOn missing
       };
     });
 
@@ -145,7 +150,7 @@ export default async function handler(req, res) {
       ok: true,
       synced,
       total: allLeads.length,
-      contracts_matched: allContracts.length,
+      contracts_matched: Object.keys(contractsByLead).length,
       duration_ms: Date.now() - startTime
     });
 
