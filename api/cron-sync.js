@@ -241,6 +241,65 @@ async function runAutoMerge() {
     return { efs_leveto: le, total: le };
 }
 
+
+// ═══ SCOUT QUALIFIKATION SYNC (Dennis API → Supabase) ═══
+async function runScoutSync() {
+    const DENNIS_TOKEN = 'tcp_2a71c5e2cff94d04b03eb447ea645a3719f3705c63ffcb44f22e3585fd9f6496';
+    const PAGE_SIZE = 100;
+    let synced = 0, skipped = 0, page = 1;
+
+    // Fetch newest synced timestamp from Supabase
+    const latestR = await fetch(ap('scout_qualifikationen') + '?select=synced_at&order=synced_at.desc&limit=1', { headers: hd() });
+    const latestArr = await latestR.json();
+    // Sync everything from last 2 hours to catch any gaps (5min cron + buffer)
+    const sinceDate = new Date(Date.now() - 2 * 3600 * 1000).toISOString().split('T')[0];
+    const createdAfter = sinceDate + 'T00:00:00%2B01:00';
+
+    while (true) {
+        const url = `https://api.bee-doo.de/api/adress_qualifikations?page=${page}&itemsPerPage=${PAGE_SIZE}&order%5Bcreated%5D=desc&created%5Bafter%5D=${createdAfter}`;
+        const r = await fetch(url, { headers: { 'X-AUTH-TOKEN': DENNIS_TOKEN } });
+        if (!r.ok) throw new Error('Dennis API error: ' + r.status);
+        const data = await r.json();
+        const items = data['hydra:member'] || [];
+        if (!items.length) break;
+
+        const rows = items.map(item => ({
+            id:                item['@id'].split('/').pop() + '_' + item.created,
+            api_id:            item['@id'],
+            mitarbeiter_id:    item.mitarbeiter?.id || null,
+            mitarbeiter_name:  item.mitarbeiter?.name || null,
+            qualifikation:     item.qualifikation || null,
+            created:           item.created,
+            plz:               item.wohneinheit?.adresse?.plz || null,
+            ort:               item.wohneinheit?.adresse?.ort || null,
+            strasse:           item.wohneinheit?.adresse?.strasse || null,
+            hausnummer:        item.wohneinheit?.adresse?.hausnummer || null,
+            hausnummer_zusatz: item.wohneinheit?.adresse?.hausnummerZusatz || null,
+            synced_at:         new Date().toISOString()
+        }));
+
+        // Upsert to Supabase
+        const upsertR = await fetch(ap('scout_qualifikationen'), {
+            method: 'POST',
+            headers: { ...hd(), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+            body: JSON.stringify(rows)
+        });
+        if (!upsertR.ok) {
+            const err = await upsertR.text();
+            throw new Error('Upsert error: ' + err.slice(0, 200));
+        }
+        synced += rows.length;
+
+        // Check pagination
+        const total = data['hydra:totalItems'] || 0;
+        if (page * PAGE_SIZE >= total) break;
+        page++;
+        await new Promise(r => setTimeout(r, 300)); // rate limit
+    }
+
+    return { synced, skipped, success: true };
+}
+
 // ═══ MAIN HANDLER ═══
 export default async function handler(req, res) {
     // Verify cron secret or allow manual trigger
@@ -282,6 +341,9 @@ export default async function handler(req, res) {
                         break;
                     case 'auto_merge':
                         result = await runAutoMerge();
+                        break;
+                    case 'scout_sync':
+                        result = await runScoutSync();
                         break;
                     case 'efs_sync':
                         // EFS has its own cron at /api/efs-sync
