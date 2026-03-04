@@ -119,7 +119,7 @@ td.mono{font-family:'DM Mono',monospace;font-size:12px;}
 .day-date{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:8px;}
 .day-times{display:flex;justify-content:space-between;margin-bottom:6px;}
 .day-time-item{text-align:center;}
-.day-time-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;}
+.day-time-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;}
 .day-time-val{font-size:14px;font-weight:700;font-family:'DM Mono',monospace;color:var(--text);}
 .day-time-val.late{color:var(--orange);}
 .day-time-val.early{color:var(--red);}
@@ -216,7 +216,6 @@ td.mono{font-family:'DM Mono',monospace;font-size:12px;}
   </select>
   <select id="selAlert" onchange="applyFilter()">
     <option value="">Alle anzeigen</option>
-    <option value="late">Spät gestartet (nach 09:00)</option>
     <option value="early">Früh Feierabend (vor 16:00)</option>
     <option value="short">Kurzer Tag (unter 5h)</option>
     <option value="missing">Fehltage</option>
@@ -300,7 +299,7 @@ const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const TABLE   = 'scout_qualifikationen';
 
 // Soll-Zeiten (konfigurierbar)
-const SOLL = { startMax: 9, endMin: 16, minHours: 5 };
+const SOLL = { endMin: 16, minHours: 5 }; // Startzeit frei – Scouter entscheiden selbst
 
 let rawData = [], scouterStats = [], filtered = [], expandedRows = new Set();
 let dateFrom = '', dateTo = '';
@@ -408,7 +407,6 @@ function calcScouterStats(s) {
   const alerts = [];
   dayStats.forEach(d => {
     if (d.missing) return;
-    if (d.startH > SOLL.startMax) alerts.push({ type:'late', day: d.date, val: fmtH(d.startH), sev:'orange' });
     if (d.endH < SOLL.endMin)     alerts.push({ type:'early', day: d.date, val: fmtH(d.endH), sev:'red' });
     if (d.durMin < SOLL.minHours * 60) alerts.push({ type:'short', day: d.date, val: fmtMin(d.durMin), sev:'orange' });
   });
@@ -426,7 +424,6 @@ function calcDayStats(date, entries) {
   const durMin = Math.round((end - start) / 60000);
 
   const alerts = [];
-  if (startH > SOLL.startMax) alerts.push('late');
   if (endH < SOLL.endMin)     alerts.push('early');
   if (durMin < SOLL.minHours * 60) alerts.push('short');
 
@@ -488,19 +485,19 @@ function updateSummary() {
   const avgDur   = durs.length ? durs.reduce((a,b)=>a+b,0)/durs.length : null;
   const avgQuali = qualis.length ? qualis.reduce((a,b)=>a+b,0)/qualis.length : null;
   const totalAlerts = filtered.reduce((a,s)=>a+s.totalAlerts, 0);
-  const lateCount = filtered.reduce((a,s)=>a+s.alerts.filter(al=>al.type==='late').length, 0);
+  const lateCount = 0;
   const earlyCount = filtered.reduce((a,s)=>a+s.alerts.filter(al=>al.type==='early').length, 0);
 
   document.getElementById('sc-active').textContent = active.length;
   document.getElementById('sc-active-sub').textContent = `von ${filtered.length} Scoutern`;
   document.getElementById('sc-avgstart').textContent = avgStart !== null ? fmtH(avgStart) : '–';
-  document.getElementById('sc-start-sub').textContent = avgStart !== null ? (avgStart > SOLL.startMax ? '⚠️ über 09:00' : '✓ pünktlich') : '';
+  document.getElementById('sc-start-sub').textContent = avgStart !== null ? (avgStart < 8 ? '🌅 Frühstarter' : avgStart < 12 ? '✓ Vormittags' : '☀️ Nachmittags') : '';
   document.getElementById('sc-avgend').textContent = avgEnd !== null ? fmtH(avgEnd) : '–';
   document.getElementById('sc-end-sub').textContent = avgEnd !== null ? (avgEnd < SOLL.endMin ? '⚠️ vor 16:00' : '✓ regulär') : '';
   document.getElementById('sc-avgdur').textContent = avgDur !== null ? fmtMin(avgDur) : '–';
   document.getElementById('sc-dur-sub').textContent = avgDur !== null ? (avgDur < SOLL.minHours*60 ? `⚠️ unter ${SOLL.minHours}h` : `✓ über ${SOLL.minHours}h`) : '';
   document.getElementById('sc-alerts').textContent = totalAlerts;
-  document.getElementById('sc-alerts-sub').textContent = `${lateCount}× spät · ${earlyCount}× früh`;
+  document.getElementById('sc-alerts-sub').textContent = `${earlyCount}× früh · kurze Tage: ${filtered.reduce((a,s)=>a+s.alerts.filter(al=>al.type==='short').length,0)}`;
   document.getElementById('sc-quali').textContent = avgQuali !== null ? avgQuali.toFixed(1) : '–';
   document.getElementById('sc-quali-sub').textContent = 'Qualifikationen Ø';
 
@@ -531,13 +528,12 @@ function renderTable() {
     const alertTag = s.totalAlerts > 0
       ? `<span class="tag tag-red">⚠️ ${s.totalAlerts} Auffällig.</span>`
       : `<span class="tag tag-green">✓ OK</span>`;
-    const lateTag = s.alerts.filter(a=>a.type==='late').length > 0
-      ? `<span class="tag tag-orange">↑ ${s.alerts.filter(a=>a.type==='late').length}× spät</span>` : '';
+    const lateTag = '';
     const earlyTag = s.alerts.filter(a=>a.type==='early').length > 0
       ? `<span class="tag tag-red">↓ ${s.alerts.filter(a=>a.type==='early').length}× früh</span>` : '';
 
-    const avgStartClass = s.avgStart > SOLL.startMax ? 'time-late' : 'time-ok';
-    const latestStartClass = s.latestStart > SOLL.startMax + 0.5 ? 'time-late' : '';
+    const avgStartClass = 'time-ok'; // Startzeit frei
+    const latestStartClass = '';
     const earliestEndClass = s.earliestEnd < SOLL.endMin - 0.5 ? 'time-early' : '';
 
     const durPct = s.avgDur ? Math.round(s.avgDur / maxDur * 100) : 0;
@@ -603,7 +599,7 @@ function renderDetailRow(s, id) {
         return `<div class="day-card missing alert"><div class="day-date">${wd} ${date.slice(5)}</div><div style="font-size:11px;color:var(--red)">⚠️ Kein Eintrag</div></div>`;
       }
       const wd = new Date(date).toLocaleDateString('de-DE',{weekday:'short'});
-      const isLate = ds.startH > SOLL.startMax;
+      const isLate = false; // Startzeit frei wählbar
       const isEarly = ds.endH < SOLL.endMin;
       const isShort = ds.durMin < SOLL.minHours * 60;
       const cls = (isLate||isEarly||isShort) ? 'alert' : 'good';
@@ -671,11 +667,9 @@ function renderAlerts() {
   document.getElementById('alertsList').innerHTML = sorted.map(a => {
     const icon  = a.type==='late' ? '🕙' : a.type==='early' ? '🏃' : '⏱';
     const color = a.type==='late' ? 'var(--orange)' : a.type==='early' ? 'var(--red)' : 'var(--orange)';
-    const title = a.type==='late'  ? `Spät gestartet: ${a.val} Uhr`
-                : a.type==='early' ? `Früh Feierabend: ${a.val} Uhr`
+    const title = a.type==='early' ? `Früh Feierabend: ${a.val} Uhr`
                 : `Kurzer Tag: nur ${a.val}`;
-    const desc  = a.type==='late'  ? `Soll-Startzeit: vor ${SOLL.startMax}:00 Uhr`
-                : a.type==='early' ? `Soll-Feierabend: nach ${SOLL.endMin}:00 Uhr`
+    const desc  = a.type==='early' ? `Soll-Feierabend: nach ${SOLL.endMin}:00 Uhr`
                 : `Soll-Mindestdauer: ${SOLL.minHours} Stunden`;
     return `<div class="alert-item" onclick="document.getElementById('selScouter').value='${a.scouter}';applyFilter()">
       <div class="alert-icon" style="background:${color}22">${icon}</div>
@@ -704,7 +698,6 @@ function exportCSV() {
         return;
       }
       const alerts = [];
-      if (ds.startH > SOLL.startMax) alerts.push('Spät gestartet');
       if (ds.endH < SOLL.endMin) alerts.push('Früh Feierabend');
       if (ds.durMin < SOLL.minHours*60) alerts.push('Kurzer Tag');
       rows.push([s.name, date, fmtH(ds.startH), fmtH(ds.endH), ds.durMin, ds.total, ds.appointments, ds.leads, alerts.join(', ')]);
