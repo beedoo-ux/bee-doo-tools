@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo | Overview API Test</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0a;--surface:#141414;--card:#1a1a1a;--border:#2a2a2a;
+  --text:#e8e8e8;--text2:#999;--text3:#666;
+  --gold:#F5C500;--gold2:#d4a800;
+  --green:#22c55e;--red:#ef4444;--blue:#3b82f6;--orange:#f97316;--purple:#a855f7;
+  --radius:14px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:20px}
+.container{max-width:1400px;margin:0 auto}
+
+/* Header */
+.header{display:flex;align-items:center;gap:16px;margin-bottom:28px;flex-wrap:wrap}
+.header h1{font-size:24px;font-weight:700;color:var(--gold)}
+.header h1 span{color:var(--text2);font-weight:400;font-size:16px;margin-left:8px}
+.badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.badge-test{background:rgba(249,115,22,.15);color:var(--orange);border:1px solid rgba(249,115,22,.3)}
+.badge-live{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.badge-off{background:rgba(255,255,255,.05);color:var(--text3);border:1px solid var(--border)}
+
+/* Status Bar */
+.status-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.status-dot.ok{background:var(--green);box-shadow:0 0 8px rgba(34,197,94,.4)}
+.status-dot.err{background:var(--red);box-shadow:0 0 8px rgba(239,68,68,.4)}
+.status-dot.wait{background:var(--orange);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.status-text{font-size:13px;color:var(--text2)}
+.status-text strong{color:var(--text)}
+
+/* Buttons */
+.btn{padding:10px 20px;border-radius:10px;border:none;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-gold{background:var(--gold);color:#000}
+.btn-gold:hover{background:var(--gold2);transform:translateY(-1px)}
+.btn-gold:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.btn-outline:hover{border-color:var(--text3);color:var(--text)}
+.btn-sm{padding:6px 14px;font-size:12px}
+
+/* Grid */
+.grid{display:grid;gap:16px;margin-bottom:20px}
+.grid-4{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(400px,1fr))}
+.grid-3{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+
+/* Stat Cards */
+.stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.stat-label{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.stat-value{font-size:28px;font-weight:700}
+.stat-sub{font-size:12px;color:var(--text2);margin-top:4px}
+.stat-icon{float:right;font-size:20px;opacity:.4;margin-top:-4px}
+
+/* Section */
+.section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;overflow:hidden}
+.section-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.section-head h2{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.section-head h2 i{color:var(--gold);font-size:14px}
+.section-body{padding:20px;max-height:600px;overflow-y:auto}
+
+/* Table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;padding:10px 12px;color:var(--text3);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface)}
+.tbl td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.03);color:var(--text2)}
+.tbl tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
+
+/* Tags */
+.tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:500}
+.tag-pv{background:rgba(245,197,0,.1);color:var(--gold)}
+.tag-wp{background:rgba(239,68,68,.1);color:var(--red)}
+.tag-sp{background:rgba(59,130,246,.1);color:var(--blue)}
+.tag-fin{background:rgba(168,85,247,.1);color:var(--purple)}
+.tag-ok{background:rgba(34,197,94,.1);color:var(--green)}
+.tag-err{background:rgba(239,68,68,.1);color:var(--red)}
+
+/* Comparison */
+.cmp{display:flex;align-items:center;gap:8px;font-size:12px}
+.cmp-match{color:var(--green)}
+.cmp-diff{color:var(--orange)}
+.cmp-new{color:var(--blue)}
+
+/* Log */
+.log{background:#0d0d0d;border-radius:10px;padding:16px;font-family:'SF Mono',Monaco,monospace;font-size:12px;color:var(--text2);max-height:300px;overflow-y:auto;line-height:1.8}
+.log .ok{color:var(--green)}.log .err{color:var(--red)}.log .warn{color:var(--orange)}.log .info{color:var(--blue)}.log .dim{color:var(--text3)}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;margin-bottom:0}
+.tab{padding:8px 16px;border-radius:8px 8px 0 0;font-size:12px;font-weight:500;cursor:pointer;color:var(--text3);border:1px solid transparent;border-bottom:none;transition:all .2s}
+.tab:hover{color:var(--text2)}
+.tab.active{background:var(--surface);color:var(--gold);border-color:var(--border)}
+
+/* Responsive */
+@media(max-width:768px){
+  body{padding:12px}
+  .grid-4{grid-template-columns:1fr 1fr}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .stat-value{font-size:22px}
+  .section-body{padding:12px}
+  .tbl{font-size:12px}
+  .tbl th,.tbl td{padding:8px}
+  .header h1{font-size:18px}
+}
+@media(max-width:480px){
+  .grid-4{grid-template-columns:1fr}
+  .status-bar{flex-direction:column;align-items:flex-start}
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1><i class="fas fa-flask" style="margin-right:8px"></i>Overview API Test <span>Leveto → Supabase Vergleich</span></h1>
+    <span class="badge badge-test">Read-Only Test</span>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="status-dot wait" id="statusDot"></div>
+    <div class="status-text" id="statusText">Bereit zum Testen</div>
+    <div style="flex:1"></div>
+    <button class="btn btn-gold" id="btnStart" onclick="startTest()">
+      <i class="fas fa-play" style="margin-right:6px"></i>Overview abrufen
+    </button>
+    <button class="btn btn-outline btn-sm" onclick="startComparison()" id="btnCompare" disabled>
+      <i class="fas fa-code-compare" style="margin-right:4px"></i>Mit Supabase vergleichen
+    </button>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-4" id="statsGrid" style="display:none">
+    <div class="stat">
+      <div class="stat-icon"><i class="fas fa-users"></i></div>
+      <div class="stat-label">Leads</div>
+      <div class="stat-value" id="sLeads">-</div>
+      <div class="stat-sub" id="sLeadsSub"></div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon"><i class="fas fa-file-signature"></i></div>
+      <div class="stat-label">Aufträge</div>
+      <div class="stat-value" id="sContracts">-</div>
+      <div class="stat-sub" id="sContractsSub"></div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon"><i class="fas fa-fire"></i></div>
+      <div class="stat-label">Wärmepumpen</div>
+      <div class="stat-value" id="sWP">-</div>
+      <div class="stat-sub" id="sWPSub"></div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon"><i class="fas fa-calendar"></i></div>
+      <div class="stat-label">Termine</div>
+      <div class="stat-value" id="sAppts">-</div>
+      <div class="stat-sub" id="sApptsSub"></div>
+    </div>
+  </div>
+
+  <!-- Extra Stats Row -->
+  <div class="grid grid-4" id="statsGrid2" style="display:none">
+    <div class="stat">
+      <div class="stat-icon"><i class="fas fa-sun"></i></div>
+      <div class="stat-label">kWp Gesamt</div>
+      <div class="stat-value" id="sKwp">-</div>
+      <div class="stat-sub" id="sKwpSub"></div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon"><i class="fas fa-battery-half"></i></div>
+      <div class="stat-label">Speichererweiterungen</div>
+      <div class="stat-value" id="sSpeicher">-</div>
+      <div class="stat-sub" id="sSpeicherSub"></div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon"><i class="fas fa-user-tie"></i></div>
+      <div class="stat-label">Scouts (MVP)</div>
+      <div class="stat-value" id="sScouts">-</div>
+      <div class="stat-sub" id="sScoutsSub"></div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon"><i class="fas fa-clock"></i></div>
+      <div class="stat-label">Ladezeit</div>
+      <div class="stat-value" id="sTime">-</div>
+      <div class="stat-sub">Overview-Endpoint</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabBar" style="display:none">
+    <div class="tab active" onclick="showTab('contracts')">Aufträge</div>
+    <div class="tab" onclick="showTab('leads')">Leads</div>
+    <div class="tab" onclick="showTab('appointments')">Termine</div>
+    <div class="tab" onclick="showTab('comparison')">Vergleich</div>
+    <div class="tab" onclick="showTab('raw')">Raw JSON</div>
+    <div class="tab" onclick="showTab('log')">Log</div>
+  </div>
+
+  <!-- Contracts Tab -->
+  <div class="section" id="sec-contracts" style="display:none">
+    <div class="section-head">
+      <h2><i class="fas fa-file-signature"></i>Aufträge aus Overview <span id="contractCount" style="color:var(--text3);font-weight:400;font-size:12px;margin-left:8px"></span></h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="filterMonth" onchange="renderContracts()" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-family:inherit;font-size:12px">
+          <option value="">Alle Monate</option>
+        </select>
+        <select id="filterType" onchange="renderContracts()" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-family:inherit;font-size:12px">
+          <option value="">Alle Typen</option>
+          <option value="pv">PV</option>
+          <option value="wp">Wärmepumpe</option>
+          <option value="speicher">Speicher</option>
+        </select>
+      </div>
+    </div>
+    <div class="section-body" id="contractsBody"></div>
+  </div>
+
+  <!-- Leads Tab -->
+  <div class="section" id="sec-leads" style="display:none">
+    <div class="section-head">
+      <h2><i class="fas fa-users"></i>Leads aus Overview <span id="leadCount" style="color:var(--text3);font-weight:400;font-size:12px;margin-left:8px"></span></h2>
+    </div>
+    <div class="section-body" id="leadsBody"></div>
+  </div>
+
+  <!-- Appointments Tab -->
+  <div class="section" id="sec-appointments" style="display:none">
+    <div class="section-head">
+      <h2><i class="fas fa-calendar"></i>Termine aus Overview <span id="apptCount" style="color:var(--text3);font-weight:400;font-size:12px;margin-left:8px"></span></h2>
+    </div>
+    <div class="section-body" id="apptsBody"></div>
+  </div>
+
+  <!-- Comparison Tab -->
+  <div class="section" id="sec-comparison" style="display:none">
+    <div class="section-head">
+      <h2><i class="fas fa-code-compare"></i>Vergleich: Overview vs. Supabase</h2>
+      <button class="btn btn-outline btn-sm" onclick="startComparison()"><i class="fas fa-sync" style="margin-right:4px"></i>Vergleichen</button>
+    </div>
+    <div class="section-body" id="comparisonBody">
+      <p style="color:var(--text3);font-size:13px">Klicke auf "Mit Supabase vergleichen" um die Daten abzugleichen.</p>
+    </div>
+  </div>
+
+  <!-- Raw JSON Tab -->
+  <div class="section" id="sec-raw" style="display:none">
+    <div class="section-head">
+      <h2><i class="fas fa-code"></i>Raw JSON Response</h2>
+      <button class="btn btn-outline btn-sm" onclick="copyRaw()"><i class="fas fa-copy" style="margin-right:4px"></i>Kopieren</button>
+    </div>
+    <div class="section-body">
+      <pre class="log" id="rawJson" style="max-height:500px;white-space:pre-wrap;word-break:break-all">Noch keine Daten geladen.</pre>
+    </div>
+  </div>
+
+  <!-- Log Tab -->
+  <div class="section" id="sec-log">
+    <div class="section-head">
+      <h2><i class="fas fa-terminal"></i>Test-Log</h2>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('logBody').innerHTML=''"><i class="fas fa-trash" style="margin-right:4px"></i>Leeren</button>
+    </div>
+    <div class="section-body">
+      <div class="log" id="logBody"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// CONFIG — Read-Only, kein DB-Write!
+// ============================================================
+const LEVETO_BASE = 'https://beedoo.leveto.net/API';
+const LEVETO_USER = 'api@bee-doo.de';
+const LEVETO_PW   = 'Patrick123456789!';
+const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+let overviewData = null; // raw response
+let allContracts = [];   // flattened contracts
+let allLeads = [];       // leads array
+let allAppointments = []; // flattened appointments
+
+// ============================================================
+// LOGGING
+// ============================================================
+function log(msg, cls='') {
+  const el = document.getElementById('logBody');
+  const ts = new Date().toLocaleTimeString('de-DE');
+  el.innerHTML += `<div class="${cls}"><span class="dim">[${ts}]</span> ${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+// ============================================================
+// LEVETO AUTH — application/x-www-form-urlencoded + username
+// ============================================================
+async function levetoAuth() {
+  log('Auth: POST /auth (x-www-form-urlencoded, username)...', 'info');
+  const body = new URLSearchParams();
+  body.append('username', LEVETO_USER);
+  body.append('password', LEVETO_PW);
+  
+  const res = await fetch(`${LEVETO_BASE}/auth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString()
+  });
+  const data = await res.json();
+  if (data.login === true || data.token) {
+    log(`Auth OK ✓ Token: ${(data.token||'').substring(0,20)}...`, 'ok');
+    return data.token;
+  } else {
+    throw new Error(`Auth fehlgeschlagen: ${JSON.stringify(data)}`);
+  }
+}
+
+// ============================================================
+// OVERVIEW FETCH
+// ============================================================
+async function fetchOverview(token) {
+  log('Rufe GET /overview ab...', 'info');
+  const t0 = performance.now();
+  
+  const res = await fetch(`${LEVETO_BASE}/overview`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  
+  const data = await res.json();
+  const ms = Math.round(performance.now() - t0);
+  log(`Overview geladen in ${ms}ms`, 'ok');
+  return { data, ms };
+}
+
+// ============================================================
+// PRODUCTS PARSING (Torsten's Logik aus dem Chat)
+// ============================================================
+
+// kWp: Produkt mit watt > 0 → amount × watt / 1000
+function calcKwp(products) {
+  if (!products || !Array.isArray(products)) return 0;
+  let kwp = 0;
+  for (const p of products) {
+    const watt = parseFloat(p.watt);
+    const amount = parseFloat(p.amount);
+    if (watt > 0 && amount > 0) {
+      kwp += (amount * watt) / 1000;
+    }
+  }
+  return Math.round(kwp * 100) / 100;
+}
+
+// Modulanzahl: Produkt mit watt > 0 → amount
+function calcModuleCount(products) {
+  if (!products || !Array.isArray(products)) return 0;
+  let count = 0;
+  for (const p of products) {
+    if (parseFloat(p.watt) > 0) {
+      count += parseFloat(p.amount) || 0;
+    }
+  }
+  return Math.round(count);
+}
+
+// Modultyp: Produkt mit watt > 0 → productname
+function getModuleType(products) {
+  if (!products || !Array.isArray(products)) return '';
+  for (const p of products) {
+    if (parseFloat(p.watt) > 0) return p.productname || '';
+  }
+  return '';
+}
+
+// Speicher: Produkt mit battery > 0 (aktuell nur Erweiterung)
+function getSpeicherErweiterungen(products) {
+  if (!products || !Array.isArray(products)) return [];
+  return products.filter(p => parseFloat(p.battery) > 0);
+}
+
+// Speicher kWh gesamt
+function calcSpeicherKwh(products) {
+  const sp = getSpeicherErweiterungen(products);
+  let total = 0;
+  for (const p of sp) {
+    total += (parseFloat(p.battery) || 0) * (parseFloat(p.amount) || 1);
+  }
+  return Math.round(total * 10) / 10;
+}
+
+// WP-Erkennung: typeicons enthält "fa-fire"
+function isWP(typeicons) {
+  if (!typeicons) return false;
+  if (typeof typeicons === 'string') {
+    try { typeicons = JSON.parse(typeicons); } catch(e) { return typeicons.includes('fa-fire'); }
+  }
+  if (Array.isArray(typeicons)) return typeicons.some(t => t.includes('fa-fire'));
+  return false;
+}
+
+// Typeicons → Tags
+function typeIconTags(typeicons) {
+  if (!typeicons) return '';
+  let arr = typeicons;
+  if (typeof arr === 'string') {
+    try { arr = JSON.parse(arr); } catch(e) { return ''; }
+  }
+  if (!Array.isArray(arr)) return '';
+  return arr.map(icon => {
+    if (icon.includes('fa-fire'))        return '<span class="tag tag-wp"><i class="fas fa-fire"></i> WP</span>';
+    if (icon.includes('fa-sun'))         return '<span class="tag tag-pv"><i class="fas fa-sun"></i> PV</span>';
+    if (icon.includes('fa-battery'))     return '<span class="tag tag-sp"><i class="fas fa-battery-half"></i> Speicher</span>';
+    if (icon.includes('fa-coins'))       return '<span class="tag tag-fin"><i class="fas fa-coins"></i> Finanz.</span>';
+    return `<span class="tag">${icon}</span>`;
+  }).join(' ');
+}
+
+// ============================================================
+// MAIN TEST
+// ============================================================
+async function startTest() {
+  const btn = document.getElementById('btnStart');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:6px"></i>Lade...';
+  setStatus('wait', 'Verbinde mit Leveto API...');
+  
+  try {
+    // 1. Auth
+    const token = await levetoAuth();
+    
+    // 2. Fetch Overview
+    setStatus('wait', 'Lade Overview-Daten...');
+    const { data, ms } = await fetchOverview(token);
+    overviewData = data;
+    
+    // 3. Parse structure
+    log('Parse Datenstruktur...', 'info');
+    
+    // Detect structure: could be { leads: [...] } or { data: [...] } or direct array
+    let leads = [];
+    if (Array.isArray(data)) {
+      leads = data;
+    } else if (data.leads && Array.isArray(data.leads)) {
+      leads = data.leads;
+    } else if (data.data && Array.isArray(data.data)) {
+      leads = data.data;
+    } else {
+      // Try to find any array in the response
+      for (const key of Object.keys(data)) {
+        if (Array.isArray(data[key]) && data[key].length > 100) {
+          leads = data[key];
+          log(`Leads gefunden unter key "${key}"`, 'warn');
+          break;
+        }
+      }
+    }
+    
+    allLeads = leads;
+    log(`${leads.length} Leads gefunden`, 'ok');
+    
+    // Log response keys for debugging
+    if (!Array.isArray(data)) {
+      log(`Response-Keys: ${Object.keys(data).join(', ')}`, 'dim');
+      for (const key of Object.keys(data)) {
+        const val = data[key];
+        if (Array.isArray(val)) log(`  ${key}: Array[${val.length}]`, 'dim');
+        else if (typeof val === 'object' && val !== null) log(`  ${key}: Object`, 'dim');
+        else log(`  ${key}: ${JSON.stringify(val)}`, 'dim');
+      }
+    }
+    
+    // 4. Flatten contracts + appointments
+    allContracts = [];
+    allAppointments = [];
+    let wpCount = 0, totalKwp = 0, speicherCount = 0;
+    const scoutSet = new Set();
+    const months = new Set();
+    
+    for (const lead of leads) {
+      // Contracts
+      const contracts = lead.contracts || [];
+      if (Array.isArray(contracts)) {
+        for (const c of contracts) {
+          const kwp = calcKwp(c.products);
+          const wp = isWP(c.typeicons);
+          const speicher = getSpeicherErweiterungen(c.products || []);
+          const enriched = {
+            ...c,
+            _leadId: lead.id,
+            _leadName: `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),
+            _leadSource: lead.source || '',
+            _leadStatus: lead.leadstatus || lead.status?.name || '',
+            _berater: c.berater || lead.berater || '',
+            _ersteller: c.ersteller || c.creator || '',
+            _kwp: kwp,
+            _moduleCount: calcModuleCount(c.products),
+            _moduleType: getModuleType(c.products),
+            _isWP: wp,
+            _speicherKwh: calcSpeicherKwh(c.products || []),
+            _speicherCount: speicher.length,
+            _speicherNames: speicher.map(s => s.productname).join(', '),
+            _scoutId: c.mvp_id || lead.mvp_id || '',
+            _scoutName: c.mvp_nummer || lead.mvp_nummer || '',
+            _typeicons: c.typeicons
+          };
+          allContracts.push(enriched);
+          
+          if (wp) wpCount++;
+          totalKwp += kwp;
+          if (speicher.length > 0) speicherCount++;
+          if (enriched._scoutName) scoutSet.add(enriched._scoutName);
+          
+          // Month
+          const ad = c.accepted_date || c.acceptedDate || '';
+          if (ad) {
+            const m = ad.substring(0, 7); // YYYY-MM
+            months.add(m);
+          }
+        }
+      }
+      
+      // Appointments
+      const appts = lead.appointments || [];
+      if (Array.isArray(appts)) {
+        for (const a of appts) {
+          allAppointments.push({
+            ...a,
+            _leadId: lead.id,
+            _leadName: `${lead.firstName || ''} ${lead.lastName || ''}`.trim()
+          });
+        }
+      }
+    }
+    
+    log(`${allContracts.length} Aufträge extrahiert`, 'ok');
+    log(`${allAppointments.length} Termine extrahiert`, 'ok');
+    log(`${wpCount} Wärmepumpen erkannt (typeicons fa-fire)`, wp > 0 ? 'ok' : 'dim');
+    log(`${totalKwp.toFixed(1)} kWp gesamt berechnet (products: amount×watt/1000)`, 'ok');
+    log(`${speicherCount} Speichererweiterungen (products: battery>0)`, 'ok');
+    log(`${scoutSet.size} Scouts gefunden (mvp_id/mvp_nummer)`, 'ok');
+    
+    // Log first contract structure for debugging
+    if (allContracts.length > 0) {
+      const sample = allContracts[0];
+      const keys = Object.keys(sample).filter(k => !k.startsWith('_'));
+      log(`Contract-Felder: ${keys.join(', ')}`, 'dim');
+      
+      // Check which fields are XXX
+      const xxFields = keys.filter(k => sample[k] === 'XXX' || sample[k] === 'xxx');
+      if (xxFields.length > 0) {
+        log(`Noch XXX: ${xxFields.join(', ')}`, 'warn');
+      }
+    }
+    
+    // Log first lead structure
+    if (leads.length > 0) {
+      const sampleLead = leads[0];
+      const lKeys = Object.keys(sampleLead).filter(k => !['contracts','appointments'].includes(k));
+      log(`Lead-Felder: ${lKeys.join(', ')}`, 'dim');
+    }
+    
+    // 5. Update UI
+    document.getElementById('statsGrid').style.display = '';
+    document.getElementById('statsGrid2').style.display = '';
+    document.getElementById('tabBar').style.display = '';
+    
+    document.getElementById('sLeads').textContent = leads.length.toLocaleString('de-DE');
+    document.getElementById('sLeadsSub').textContent = `davon ${leads.filter(l => (l.contracts||[]).length > 0).length} mit Aufträgen`;
+    document.getElementById('sContracts').textContent = allContracts.length.toLocaleString('de-DE');
+    
+    // März Aufträge
+    const marz = allContracts.filter(c => {
+      const ad = c.accepted_date || c.acceptedDate || '';
+      return ad.startsWith('2026-03');
+    });
+    document.getElementById('sContractsSub').textContent = `${marz.length} im März 2026`;
+    
+    document.getElementById('sWP').textContent = wpCount;
+    document.getElementById('sWPSub').textContent = 'via typeicons fa-fire';
+    document.getElementById('sAppts').textContent = allAppointments.length.toLocaleString('de-DE');
+    
+    // Appointment types
+    const apptTypes = {};
+    allAppointments.forEach(a => {
+      const t = a.appointment_type || 'Unbekannt';
+      apptTypes[t] = (apptTypes[t] || 0) + 1;
+    });
+    const topType = Object.entries(apptTypes).sort((a,b) => b[1]-a[1])[0];
+    document.getElementById('sApptsSub').textContent = topType ? `häufigster: ${topType[0]}` : '';
+    
+    document.getElementById('sKwp').textContent = totalKwp.toFixed(1);
+    document.getElementById('sKwpSub').textContent = `Ø ${allContracts.length > 0 ? (totalKwp / allContracts.filter(c=>c._kwp>0).length).toFixed(1) : 0} kWp/Auftrag`;
+    document.getElementById('sSpeicher').textContent = speicherCount;
+    document.getElementById('sSpeicherSub').textContent = 'Erweiterungen (battery>0)';
+    document.getElementById('sScouts').textContent = scoutSet.size;
+    document.getElementById('sScoutsSub').textContent = scoutSet.size > 0 ? [...scoutSet].slice(0,3).join(', ') + (scoutSet.size > 3 ? '...' : '') : 'keine mvp_id/mvp_nummer';
+    document.getElementById('sTime').textContent = `${(ms/1000).toFixed(1)}s`;
+    
+    // Populate month filter
+    const sel = document.getElementById('filterMonth');
+    [...months].sort().reverse().forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      const [y, mm] = m.split('-');
+      const monthNames = ['','Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+      opt.textContent = `${monthNames[parseInt(mm)]} ${y}`;
+      sel.appendChild(opt);
+    });
+    
+    // Render tabs
+    renderContracts();
+    renderLeads();
+    renderAppointments();
+    
+    // Raw JSON (first 2 leads as sample)
+    const sample = Array.isArray(data) ? data.slice(0,2) : 
+      (data.leads ? { ...data, leads: data.leads.slice(0,2) } : data);
+    document.getElementById('rawJson').textContent = JSON.stringify(sample, null, 2);
+    
+    setStatus('ok', `Overview geladen: ${leads.length.toLocaleString('de-DE')} Leads, ${allContracts.length} Aufträge, ${allAppointments.length} Termine in ${(ms/1000).toFixed(1)}s`);
+    document.getElementById('btnCompare').disabled = false;
+    
+    showTab('contracts');
+    
+  } catch (err) {
+    log(`FEHLER: ${err.message}`, 'err');
+    setStatus('err', `Fehler: ${err.message}`);
+  }
+  
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-play" style="margin-right:6px"></i>Nochmal abrufen';
+}
+
+// ============================================================
+// RENDER CONTRACTS TABLE
+// ============================================================
+function renderContracts() {
+  const month = document.getElementById('filterMonth').value;
+  const type = document.getElementById('filterType').value;
+  
+  let filtered = allContracts;
+  if (month) {
+    filtered = filtered.filter(c => (c.accepted_date || c.acceptedDate || '').startsWith(month));
+  }
+  if (type === 'wp') filtered = filtered.filter(c => c._isWP);
+  if (type === 'pv') filtered = filtered.filter(c => !c._isWP && c._kwp > 0);
+  if (type === 'speicher') filtered = filtered.filter(c => c._speicherCount > 0);
+  
+  // Sort by accepted_date desc
+  filtered.sort((a, b) => (b.accepted_date || b.acceptedDate || '').localeCompare(a.accepted_date || a.acceptedDate || ''));
+  
+  document.getElementById('contractCount').textContent = `${filtered.length} Aufträge`;
+  
+  let html = `<table class="tbl"><thead><tr>
+    <th>ID</th><th>Datum</th><th>Berater</th><th>Typ</th><th>kWp</th><th>Module</th>
+    <th>Speicher</th><th>Scout</th><th>Netto</th><th>Quelle</th><th>Status</th>
+  </tr></thead><tbody>`;
+  
+  for (const c of filtered.slice(0, 200)) {
+    const ad = c.accepted_date || c.acceptedDate || '-';
+    const date = ad !== '-' ? ad.substring(0, 10) : '-';
+    const netto = c.an_netto ? parseFloat(c.an_netto).toLocaleString('de-DE', {minimumFractionDigits:0}) + ' €' : '-';
+    const storno = c.storno === true || c.storno === 1 || c.storno === '1';
+    
+    html += `<tr style="${storno ? 'opacity:.5;text-decoration:line-through' : ''}">
+      <td style="color:var(--text);font-weight:500">${c.id || c._leadId || '-'}</td>
+      <td>${date}</td>
+      <td>${c._berater || '-'}</td>
+      <td>${typeIconTags(c._typeicons)}</td>
+      <td style="color:${c._kwp > 0 ? 'var(--gold)' : 'var(--text3)'};font-weight:600">${c._kwp > 0 ? c._kwp.toFixed(1) : '-'}</td>
+      <td>${c._moduleCount || '-'} ${c._moduleType ? '<span style="color:var(--text3);font-size:10px">'+c._moduleType.substring(0,20)+'</span>' : ''}</td>
+      <td>${c._speicherCount > 0 ? '<span class="tag tag-sp">'+c._speicherKwh+' kWh</span>' : '-'}</td>
+      <td>${c._scoutName ? '<span style="color:var(--blue)">'+c._scoutName+'</span>' : '<span style="color:var(--text3)">-</span>'}</td>
+      <td style="font-weight:500">${netto}</td>
+      <td style="color:var(--text3)">${c._leadSource || '-'}</td>
+      <td>${storno ? '<span class="tag tag-err">Storno</span>' : '<span class="tag tag-ok">Aktiv</span>'}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  if (filtered.length > 200) html += `<p style="color:var(--text3);font-size:12px;margin-top:12px">... und ${filtered.length-200} weitere (zeige max 200)</p>`;
+  
+  document.getElementById('contractsBody').innerHTML = html;
+}
+
+// ============================================================
+// RENDER LEADS TABLE
+// ============================================================
+function renderLeads() {
+  // Show last 100 leads by import date
+  const sorted = [...allLeads].sort((a, b) => (b.importiert || b.importedOn || '').localeCompare(a.importiert || a.importedOn || ''));
+  const show = sorted.slice(0, 100);
+  
+  document.getElementById('leadCount').textContent = `${allLeads.length} Leads (zeige letzte 100)`;
+  
+  let html = `<table class="tbl"><thead><tr>
+    <th>ID</th><th>Name</th><th>Ort</th><th>Quelle</th><th>Status</th><th>Berater</th><th>Importiert</th><th>Aufträge</th><th>Termine</th>
+  </tr></thead><tbody>`;
+  
+  for (const l of show) {
+    const name = `${l.firstName || ''} ${l.lastName || ''}`.trim() || '-';
+    const addr = l.homeAddress ? `${l.homeAddress.postalCode || ''} ${l.homeAddress.city || ''}`.trim() : '-';
+    const status = l.leadstatus || l.status?.name || '-';
+    const contracts = (l.contracts || []).length;
+    const appts = (l.appointments || []).length;
+    const imported = (l.importiert || l.importedOn || '').substring(0, 10);
+    
+    html += `<tr>
+      <td style="color:var(--text);font-weight:500">${l.id || '-'}</td>
+      <td>${name}</td>
+      <td style="color:var(--text3)">${addr}</td>
+      <td>${l.source || '-'}</td>
+      <td><span style="color:${status.includes('REKLAMATION') || status.includes('ausfall') ? 'var(--red)' : status.includes('Neuer') ? 'var(--blue)' : 'var(--text2)'}">${status}</span></td>
+      <td>${l.berater || '-'}</td>
+      <td style="color:var(--text3)">${imported}</td>
+      <td style="text-align:center;color:${contracts > 0 ? 'var(--green)' : 'var(--text3)'}">${contracts}</td>
+      <td style="text-align:center;color:${appts > 0 ? 'var(--gold)' : 'var(--text3)'}">${appts}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('leadsBody').innerHTML = html;
+}
+
+// ============================================================
+// RENDER APPOINTMENTS TABLE
+// ============================================================
+function renderAppointments() {
+  const sorted = [...allAppointments].sort((a, b) => (b.date || b.start || '').localeCompare(a.date || a.start || ''));
+  const show = sorted.slice(0, 100);
+  
+  document.getElementById('apptCount').textContent = `${allAppointments.length} Termine (zeige letzte 100)`;
+  
+  let html = `<table class="tbl"><thead><tr>
+    <th>Lead</th><th>Typ</th><th>Datum</th><th>Details</th>
+  </tr></thead><tbody>`;
+  
+  for (const a of show) {
+    // Try various field names
+    const date = a.date || a.start || a.termin || '-';
+    const type = a.appointment_type || a.type || '-';
+    
+    html += `<tr>
+      <td style="color:var(--text)">${a._leadName || a._leadId || '-'}</td>
+      <td><span class="tag tag-pv">${type}</span></td>
+      <td>${typeof date === 'string' ? date.substring(0, 16) : '-'}</td>
+      <td style="color:var(--text3);font-size:12px">${JSON.stringify(Object.keys(a).filter(k => !k.startsWith('_')).reduce((o,k) => { if(a[k] && !['_leadId','_leadName'].includes(k)) o[k]=a[k]; return o; }, {})).substring(0,120)}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('apptsBody').innerHTML = html;
+}
+
+// ============================================================
+// SUPABASE COMPARISON (Read-Only!)
+// ============================================================
+async function startComparison() {
+  log('Starte Supabase-Vergleich (read-only)...', 'info');
+  
+  const sbHeaders = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'count=exact'
+  };
+  
+  let html = '';
+  
+  try {
+    // 1. leveto_contracts count + recent
+    log('Lade leveto_contracts...', 'dim');
+    const cRes = await fetch(`${SUPABASE_URL}/rest/v1/leveto_contracts?select=leveto_id,berater_name,accepted_date,an_netto,typeicons,ist_waermepumpe,storno&order=accepted_date.desc&limit=50`, {
+      headers: sbHeaders
+    });
+    const sbContracts = await cRes.json();
+    const cTotal = cRes.headers.get('content-range')?.split('/')[1] || sbContracts.length;
+    
+    // 2. leveto_leads count
+    log('Lade leveto_leads count...', 'dim');
+    const lRes = await fetch(`${SUPABASE_URL}/rest/v1/leveto_leads?select=id&limit=1`, {
+      headers: { ...sbHeaders, 'Prefer': 'count=exact' }
+    });
+    const lTotal = lRes.headers.get('content-range')?.split('/')[1] || '?';
+    
+    // 3. auftraege count (legacy)
+    log('Lade auftraege (legacy)...', 'dim');
+    const aRes = await fetch(`${SUPABASE_URL}/rest/v1/auftraege?select=id&limit=1`, {
+      headers: { ...sbHeaders, 'Prefer': 'count=exact' }
+    });
+    const aTotal = aRes.headers.get('content-range')?.split('/')[1] || '?';
+    
+    // Compare
+    const ovContracts = allContracts.length;
+    const ovLeads = allLeads.length;
+    const ovWP = allContracts.filter(c => c._isWP).length;
+    const sbWP = Array.isArray(sbContracts) ? sbContracts.filter(c => c.ist_waermepumpe).length : '?';
+    
+    html += `<h3 style="font-size:14px;margin-bottom:16px;color:var(--gold)"><i class="fas fa-chart-bar" style="margin-right:8px"></i>Datenvergleich</h3>`;
+    
+    html += `<table class="tbl"><thead><tr><th>Metrik</th><th>Overview API</th><th>Supabase</th><th>Status</th></tr></thead><tbody>`;
+    
+    // Leads
+    const leadMatch = parseInt(lTotal) > 0;
+    html += `<tr>
+      <td style="color:var(--text)">Leads Gesamt</td>
+      <td style="font-weight:600">${ovLeads.toLocaleString('de-DE')}</td>
+      <td>${parseInt(lTotal).toLocaleString('de-DE')} <span style="color:var(--text3)">(leveto_leads)</span></td>
+      <td>${Math.abs(ovLeads - parseInt(lTotal)) < 100 ? '<span class="tag tag-ok">≈ Match</span>' : '<span class="tag tag-err">Differenz: '+(ovLeads-parseInt(lTotal))+'</span>'}</td>
+    </tr>`;
+    
+    // Contracts
+    html += `<tr>
+      <td style="color:var(--text)">Aufträge Gesamt</td>
+      <td style="font-weight:600">${ovContracts.toLocaleString('de-DE')}</td>
+      <td>${parseInt(cTotal).toLocaleString('de-DE')} <span style="color:var(--text3)">(leveto_contracts)</span></td>
+      <td>${Math.abs(ovContracts - parseInt(cTotal)) < 50 ? '<span class="tag tag-ok">≈ Match</span>' : '<span class="tag tag-err">Differenz: '+(ovContracts-parseInt(cTotal))+'</span>'}</td>
+    </tr>`;
+    
+    // Legacy auftraege
+    html += `<tr>
+      <td style="color:var(--text)">Legacy Aufträge</td>
+      <td style="color:var(--text3)">-</td>
+      <td>${parseInt(aTotal).toLocaleString('de-DE')} <span style="color:var(--text3)">(auftraege - CSV)</span></td>
+      <td><span class="tag" style="background:rgba(255,255,255,.05);color:var(--text3)">Legacy</span></td>
+    </tr>`;
+    
+    // WP
+    html += `<tr>
+      <td style="color:var(--text)">Wärmepumpen</td>
+      <td style="font-weight:600">${ovWP}</td>
+      <td>${sbWP} <span style="color:var(--text3)">(ist_waermepumpe)</span></td>
+      <td>${ovWP === sbWP ? '<span class="tag tag-ok">Match ✓</span>' : '<span class="tag tag-err">Diff: '+(ovWP-sbWP)+'</span>'}</td>
+    </tr>`;
+    
+    // kWp
+    const ovKwp = allContracts.reduce((s,c) => s + c._kwp, 0).toFixed(1);
+    html += `<tr>
+      <td style="color:var(--text)">kWp Gesamt (berechnet)</td>
+      <td style="font-weight:600;color:var(--gold)">${ovKwp}</td>
+      <td style="color:var(--text3)">nicht in DB</td>
+      <td><span class="tag" style="background:rgba(59,130,246,.1);color:var(--blue)">NEU via products</span></td>
+    </tr>`;
+    
+    // Speicher
+    const ovSp = allContracts.filter(c => c._speicherCount > 0).length;
+    html += `<tr>
+      <td style="color:var(--text)">Speichererweiterungen</td>
+      <td style="font-weight:600">${ovSp}</td>
+      <td style="color:var(--text3)">nicht in DB</td>
+      <td><span class="tag" style="background:rgba(59,130,246,.1);color:var(--blue)">NEU via products</span></td>
+    </tr>`;
+    
+    // Scouts
+    const scouts = new Set(allContracts.map(c => c._scoutName).filter(Boolean));
+    html += `<tr>
+      <td style="color:var(--text)">Scouts (MVP)</td>
+      <td style="font-weight:600">${scouts.size}</td>
+      <td style="color:var(--text3)">nicht in DB</td>
+      <td><span class="tag" style="background:rgba(59,130,246,.1);color:var(--blue)">NEU via mvp_id/mvp_nummer</span></td>
+    </tr>`;
+    
+    html += `</tbody></table>`;
+    
+    // New fields highlight
+    html += `<div style="margin-top:20px;padding:16px;background:rgba(59,130,246,.05);border:1px solid rgba(59,130,246,.15);border-radius:10px">
+      <h4 style="font-size:13px;color:var(--blue);margin-bottom:8px"><i class="fas fa-sparkles" style="margin-right:6px"></i>Neue Daten durch Overview</h4>
+      <p style="font-size:12px;color:var(--text2);line-height:1.7">
+        <strong style="color:var(--text)">kWp:</strong> Berechnet aus products (amount × watt / 1000) — bisher nicht in DB<br>
+        <strong style="color:var(--text)">Speichererweiterung:</strong> Aus products (battery > 0) — bisher nur in CSV<br>
+        <strong style="color:var(--text)">Scout (MVP):</strong> mvp_id + mvp_nummer — neu von Torsten<br>
+        <strong style="color:var(--text)">appointment_type:</strong> Termintyp z.B. "Termin vor Ort PV" — neu<br>
+        <strong style="color:var(--text)">importiert:</strong> Importdatum des Leads — neu<br>
+        <strong style="color:var(--text)">leadstatus:</strong> Aktueller Lead-Status — neu<br>
+      </p>
+    </div>`;
+    
+    // XXX fields warning
+    if (allContracts.length > 0) {
+      const sample = allContracts[0];
+      const xxFields = Object.keys(sample).filter(k => !k.startsWith('_') && (sample[k] === 'XXX' || sample[k] === 'xxx'));
+      if (xxFields.length > 0) {
+        html += `<div style="margin-top:12px;padding:16px;background:rgba(249,115,22,.05);border:1px solid rgba(249,115,22,.15);border-radius:10px">
+          <h4 style="font-size:13px;color:var(--orange);margin-bottom:8px"><i class="fas fa-triangle-exclamation" style="margin-right:6px"></i>Noch nicht befüllt (XXX)</h4>
+          <p style="font-size:12px;color:var(--text2)">${xxFields.join(', ')}</p>
+        </div>`;
+      }
+    }
+    
+    log(`Vergleich abgeschlossen: ${parseInt(cTotal)} Contracts in Supabase vs ${ovContracts} in Overview`, 'ok');
+    
+  } catch (err) {
+    html = `<p style="color:var(--red)">Fehler beim Vergleich: ${err.message}</p>`;
+    log(`Vergleich-Fehler: ${err.message}`, 'err');
+  }
+  
+  document.getElementById('comparisonBody').innerHTML = html;
+  showTab('comparison');
+}
+
+// ============================================================
+// UI HELPERS
+// ============================================================
+function setStatus(state, text) {
+  const dot = document.getElementById('statusDot');
+  dot.className = `status-dot ${state}`;
+  document.getElementById('statusText').innerHTML = text;
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('[id^="sec-"]').forEach(s => s.style.display = 'none');
+  
+  const sec = document.getElementById(`sec-${name}`);
+  if (sec) sec.style.display = '';
+  
+  // Always show log
+  document.getElementById('sec-log').style.display = '';
+  
+  document.querySelectorAll('.tab').forEach(t => {
+    if (t.textContent.toLowerCase().includes(name) || 
+        (name === 'contracts' && t.textContent.includes('Aufträge')) ||
+        (name === 'leads' && t.textContent.includes('Leads')) ||
+        (name === 'appointments' && t.textContent.includes('Termine')) ||
+        (name === 'comparison' && t.textContent.includes('Vergleich')) ||
+        (name === 'raw' && t.textContent.includes('Raw')) ||
+        (name === 'log' && t.textContent.includes('Log'))) {
+      t.classList.add('active');
+    }
+  });
+}
+
+function copyRaw() {
+  const text = document.getElementById('rawJson').textContent;
+  navigator.clipboard.writeText(text).then(() => log('Raw JSON kopiert', 'ok'));
+}
+
+// Init
+log('Overview API Test bereit. Klicke auf "Overview abrufen" zum Starten.', 'info');
+log('⚠️ Read-Only Modus — es werden KEINE Daten geschrieben!', 'warn');
+</script>
+</body>
+</html>
