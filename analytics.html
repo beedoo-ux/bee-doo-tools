@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scout Analytics – bee-doo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --gold: #F5C500; --gold2: rgba(245,197,0,0.12); --gold3: rgba(245,197,0,0.04);
+  --bg: #080808; --bg2: #101010; --bg3: #181818; --bg4: #202020; --bg5: #282828;
+  --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
+  --text: #f0f0f0; --text2: #999; --text3: #555;
+  --green: #22c55e; --red: #ef4444; --blue: #3b82f6; --orange: #f97316; --purple: #a855f7;
+  --r: 12px; --r2: 8px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+/* ── Header ── */
+header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:700;}
+.logo-dot{width:30px;height:30px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#000;}
+.back-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);text-decoration:none;padding:6px 12px;border:1px solid var(--border);border-radius:20px;transition:all .2s;}
+.back-btn:hover{color:var(--gold);border-color:var(--gold);}
+
+/* ── Controls ── */
+.controls{background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+select,input[type=date]{background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:var(--r2);padding:8px 12px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;cursor:pointer;}
+select:focus,input[type=date]:focus{border-color:var(--gold);}
+.btn{padding:8px 18px;border-radius:var(--r2);font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;transition:all .2s;}
+.btn-gold{background:var(--gold);color:#000;}
+.btn-gold:hover{background:#ffd700;}
+.btn-gold:disabled{opacity:.4;cursor:not-allowed;}
+.btn-outline{background:transparent;border:1px solid var(--border2);color:var(--text2);}
+.btn-outline:hover{border-color:var(--gold);color:var(--gold);}
+.qbtn{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:all .15s;}
+.qbtn:hover{border-color:var(--gold);color:var(--gold);}
+.qbtn.on{background:var(--gold);color:#000;border-color:var(--gold);}
+
+/* ── Main layout ── */
+main{padding:24px 28px;max-width:1400px;margin:0 auto;}
+
+/* ── Empty state ── */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px;text-align:center;gap:16px;}
+.empty-state .icon{font-size:56px;opacity:.4;}
+.empty-state h2{font-size:20px;font-weight:600;color:var(--text2);}
+.empty-state p{font-size:14px;color:var(--text3);max-width:360px;line-height:1.6;}
+
+/* ── Loading ── */
+.loading{display:flex;align-items:center;justify-content:center;padding:80px 24px;flex-direction:column;gap:16px;}
+.spin-lg{width:40px;height:40px;border:3px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:sp .7s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.loading-txt{font-size:14px;color:var(--text2);}
+
+/* ── Section header ── */
+.sec-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.sec-title{font-size:15px;font-weight:700;}
+.sec-sub{font-size:12px;color:var(--text3);}
+
+/* ── Grid layouts ── */
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px;}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px;}
+.grid-big{display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-bottom:24px;}
+
+/* ── KPI Cards ── */
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;position:relative;overflow:hidden;}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--c,var(--gold));}
+.kpi-icon{font-size:20px;margin-bottom:10px;}
+.kpi-val{font-size:26px;font-weight:800;line-height:1;color:var(--text);}
+.kpi-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-top:6px;}
+.kpi-sub{font-size:11px;color:var(--text3);margin-top:4px;}
+.kpi-trend{font-size:11px;margin-top:6px;font-weight:600;}
+.trend-up{color:var(--green);}
+.trend-dn{color:var(--red);}
+.trend-eq{color:var(--text3);}
+
+/* ── Cards ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:0;}
+.card-head{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-size:14px;font-weight:700;}
+.card-body{padding:20px;}
+.chart-h{position:relative;height:220px;}
+.chart-h-sm{position:relative;height:180px;}
+
+/* ── Timeline ── */
+.timeline{padding:4px 0;}
+.tl-item{display:flex;gap:14px;padding:10px 0;position:relative;}
+.tl-item::before{content:'';position:absolute;left:17px;top:32px;bottom:-10px;width:1px;background:var(--border);z-index:0;}
+.tl-item:last-child::before{display:none;}
+.tl-dot{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;position:relative;z-index:1;border:2px solid var(--border);}
+.tl-content{flex:1;padding-top:6px;}
+.tl-time{font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);margin-bottom:2px;}
+.tl-main{font-size:13px;font-weight:600;color:var(--text);}
+.tl-addr{font-size:12px;color:var(--text2);}
+.tl-pause{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--bg3);border-radius:6px;margin:4px 0 4px 50px;font-size:12px;color:var(--text3);}
+
+/* ── Comparison bar ── */
+.cmp-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.cmp-name{width:130px;font-size:12px;color:var(--text2);flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cmp-bar-wrap{flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden;}
+.cmp-bar{height:100%;border-radius:3px;background:var(--gold);}
+.cmp-bar.me{background:var(--green);}
+.cmp-val{width:50px;text-align:right;font-size:12px;font-weight:600;color:var(--text);flex-shrink:0;}
+
+/* ── Heatmap ── */
+.heatmap{display:grid;grid-template-columns:40px repeat(17,1fr);gap:3px;align-items:center;}
+.hm-label{font-size:10px;color:var(--text3);text-align:right;padding-right:6px;font-family:'DM Mono',monospace;}
+.hm-cell{aspect-ratio:1;border-radius:3px;background:var(--bg4);position:relative;cursor:default;transition:transform .15s;}
+.hm-cell:hover{transform:scale(1.2);z-index:10;}
+.hm-header{font-size:9px;color:var(--text3);text-align:center;}
+
+/* ── KI Box ── */
+.ki-box{background:linear-gradient(135deg,var(--bg2) 0%,rgba(245,197,0,0.03) 100%);border:1px solid var(--border-gold,rgba(245,197,0,.2));border-radius:var(--r);overflow:hidden;}
+.ki-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;background:rgba(245,197,0,.04);}
+.ki-avatar{width:36px;height:36px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.ki-body{padding:20px;font-size:14px;color:var(--text2);line-height:1.8;}
+.ki-body p{margin-bottom:12px;}
+.ki-body p:last-child{margin-bottom:0;}
+.ki-body strong{color:var(--text);}
+.ki-body .ki-highlight{background:var(--gold2);border-left:3px solid var(--gold);padding:10px 14px;border-radius:0 6px 6px 0;margin:12px 0;font-size:13px;color:var(--text);}
+.ki-typing{display:flex;align-items:center;gap:8px;padding:20px;color:var(--text3);font-size:13px;}
+.ki-typing-dots{display:flex;gap:4px;}
+.ki-typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:td 1.2s infinite;}
+.ki-typing-dots span:nth-child(2){animation-delay:.2s;}
+.ki-typing-dots span:nth-child(3){animation-delay:.4s;}
+@keyframes td{0%,80%,100%{opacity:.3;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+
+/* ── Day selector ── */
+.day-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;}
+.day-tab{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);color:var(--text2);transition:all .15s;font-family:'DM Sans',sans-serif;}
+.day-tab:hover{border-color:var(--gold);color:var(--gold);}
+.day-tab.on{background:var(--gold);color:#000;border-color:var(--gold);}
+
+/* ── Stats row ── */
+.stat-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);}
+.stat-row:last-child{border-bottom:none;}
+.stat-lbl{font-size:13px;color:var(--text2);}
+.stat-val{font-size:13px;font-weight:700;color:var(--text);font-family:'DM Mono',monospace;}
+
+/* ── Badge ── */
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase;}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:20px;right:20px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:11px 16px;font-size:13px;color:var(--text);box-shadow:0 8px 32px rgba(0,0,0,.6);transform:translateY(60px);opacity:0;transition:all .3s;z-index:9999;max-width:300px;}
+#toast.show{transform:translateY(0);opacity:1;}
+#toast.success{border-color:var(--green);}
+#toast.error{border-color:var(--red);}
+#toast.warn{border-color:var(--gold);}
+
+@media(max-width:1024px){.grid-4{grid-template-columns:repeat(2,1fr);}.grid-big{grid-template-columns:1fr;}}
+@media(max-width:700px){main{padding:14px 16px;}header,  .controls{padding-left:16px;padding-right:16px;}.grid-3,.grid-2{grid-template-columns:1fr;}.grid-4{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot">b</div>
+    <span>Scout <span style="color:var(--gold)">Analytics</span></span>
+  </div>
+  <a href="qualifikation.html" class="back-btn">← Qualifikationen</a>
+</header>
+
+<div class="controls">
+  <select id="selScouter" onchange="onScouterChange()" style="min-width:200px">
+    <option value="">Scouter auswählen...</option>
+  </select>
+  <div style="display:flex;gap:4px;">
+    <button class="qbtn on" id="qw" onclick="setRange('week',this)">Diese Woche</button>
+    <button class="qbtn" id="qm" onclick="setRange('month',this)">Monat</button>
+    <button class="qbtn" id="q3" onclick="setRange('3m',this)">3 Monate</button>
+    <button class="qbtn" id="qe" onclick="setRange('custom',this)">Eigener</button>
+  </div>
+  <div id="customDates" style="display:none;gap:6px;align-items:center;">
+    <input type="date" id="dateFrom">
+    <span style="font-size:12px;color:var(--text3)">bis</span>
+    <input type="date" id="dateTo">
+  </div>
+  <button class="btn btn-gold" id="analyzeBtn" onclick="runAnalysis()" disabled>⚡ Analysieren</button>
+  <span style="margin-left:auto;font-size:12px;color:var(--text3)" id="statusTxt"></span>
+</div>
+
+<main id="mainContent">
+  <div class="empty-state">
+    <div class="icon">🔍</div>
+    <h2>Scouter auswählen</h2>
+    <p>Wähle einen Scouter und einen Zeitraum aus, dann klicke auf Analysieren für die vollständige KI-Auswertung.</p>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════
+// CONFIG
+// ══════════════════════════════════
+const SB_URL  = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const TABLE   = 'scout_qualifikationen';
+const GMAPS   = 'AIzaSyB7Y7FgAc4R6GX1V6GjGzm0bSNK5IfBg7o';
+const ANT_KEY = ['sk-ant-api03-0rQ8e-E','KdhaYXkdASCBWZ80am00','tYZegKHyuhwJ-lBuc2Qm_VAGnK1iQY8DisddpjPnII5QYzCUqNXnsrMvABw-OV65pwAA'].join('');
+
+const STATUS_LABELS = {
+  APPOINTMENT:'Termin', ORDER_REGISTERED:'Lead (CC)', FOLLOW_UP:'Wiedervorlage',
+  NO_INTEREST:'Kein Interesse', CUSTOMER_NOT_HOME:'Nicht erreicht',
+  EXISTING_CUSTOMER:'Bestandskunde', NOT_MARKETABLE:'Nicht vermarktbar',
+  NO_ENTRY:'Kein Eintritt', BLACKLISTED:'Blacklist'
+};
+const STATUS_COLORS = {
+  APPOINTMENT:'#22c55e', ORDER_REGISTERED:'#F5C500', FOLLOW_UP:'#3b82f6',
+  NO_INTEREST:'#ef4444', CUSTOMER_NOT_HOME:'#f97316', EXISTING_CUSTOMER:'#a855f7',
+  NOT_MARKETABLE:'#64748b', NO_ENTRY:'#475569', BLACKLISTED:'#6b7280'
+};
+
+let allData = [], allScouters = [], charts = {};
+let geocodeCache = {};
+let selectedScouter = '', dateFrom = '', dateTo = '';
+let currentDay = '';
+let dayData = {};
+
+// ══════════════════════════════════
+// INIT
+// ══════════════════════════════════
+async function init() {
+  setRange('week', document.getElementById('qw'), false);
+  await loadScouters();
+  // Check URL param
+  const p = new URLSearchParams(location.search);
+  if (p.get('scouter')) {
+    document.getElementById('selScouter').value = p.get('scouter');
+    onScouterChange();
+  }
+}
+
+async function loadScouters() {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/${TABLE}?select=mitarbeiter_name,mitarbeiter_id&limit=100000`, {
+      headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` }
+    });
+    const data = await r.json();
+    allScouters = [...new Map(data.map(d => [d.mitarbeiter_id, d])).values()].sort((a,b) => a.mitarbeiter_name.localeCompare(b.mitarbeiter_name));
+    const sel = document.getElementById('selScouter');
+    sel.innerHTML = '<option value="">Scouter auswählen...</option>' +
+      allScouters.map(s => `<option value="${s.mitarbeiter_name}">${s.mitarbeiter_name}</option>`).join('');
+  } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+// ══════════════════════════════════
+// DATE RANGE
+// ══════════════════════════════════
+function setRange(mode, btn, load = true) {
+  document.querySelectorAll('.qbtn').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  const now = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  const cd = document.getElementById('customDates');
+
+  if (mode === 'week') {
+    const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay()+6)%7));
+    dateFrom = fmt(mon); dateTo = fmt(now);
+    document.getElementById('dateFrom').value = dateFrom;
+    document.getElementById('dateTo').value = dateTo;
+    if (cd) cd.style.display = 'none';
+  } else if (mode === 'month') {
+    dateFrom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+    dateTo = fmt(now);
+    document.getElementById('dateFrom').value = dateFrom;
+    document.getElementById('dateTo').value = dateTo;
+    if (cd) cd.style.display = 'none';
+  } else if (mode === '3m') {
+    const d3 = new Date(now); d3.setMonth(d3.getMonth()-3);
+    dateFrom = fmt(d3); dateTo = fmt(now);
+    document.getElementById('dateFrom').value = dateFrom;
+    document.getElementById('dateTo').value = dateTo;
+    if (cd) cd.style.display = 'none';
+  } else {
+    if (cd) cd.style.display = 'flex';
+    return;
+  }
+}
+
+function onScouterChange() {
+  selectedScouter = document.getElementById('selScouter').value;
+  document.getElementById('analyzeBtn').disabled = !selectedScouter;
+}
+
+// ══════════════════════════════════
+// LOAD DATA
+// ══════════════════════════════════
+async function sbFetch(params) {
+  const PAGE = 1000; let all = [], from = 0;
+  while (true) {
+    const r = await fetch(`${SB_URL}/rest/v1/${TABLE}?${params}`, {
+      headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`, Accept: 'application/json', Range: `${from}-${from+PAGE-1}`, 'Range-Unit': 'items' }
+    });
+    if (!r.ok) throw new Error(`SB ${r.status}`);
+    const rows = await r.json();
+    all = all.concat(rows); if (rows.length < PAGE) break; from += PAGE;
+  }
+  return all;
+}
+
+// ══════════════════════════════════
+// GEOCODING + DISTANCE
+// ══════════════════════════════════
+async function geocode(strasse, hausnummer, plz, ort) {
+  const key = `${strasse} ${hausnummer}, ${plz} ${ort}`;
+  if (geocodeCache[key]) return geocodeCache[key];
+  try {
+    const addr = encodeURIComponent(`${strasse} ${hausnummer}, ${plz} ${ort}, Deutschland`);
+    const r = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${addr}&key=${GMAPS}`);
+    const d = await r.json();
+    if (d.results?.[0]?.geometry?.location) {
+      const loc = d.results[0].geometry.location;
+      geocodeCache[key] = loc;
+      return loc;
+    }
+  } catch(e) {}
+  return null;
+}
+
+function haversine(a, b) {
+  const R = 6371000, toR = x => x * Math.PI/180;
+  const dLat = toR(b.lat-a.lat), dLng = toR(b.lng-a.lng);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1-s));
+}
+
+function setStatus(txt) { document.getElementById('statusTxt').textContent = txt; }
+
+// ══════════════════════════════════
+// MAIN ANALYSIS
+// ══════════════════════════════════
+async function runAnalysis() {
+  if (!selectedScouter) return;
+  const df = document.getElementById('dateFrom').value || dateFrom;
+  const dt = document.getElementById('dateTo').value || dateTo;
+
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('mainContent').innerHTML = `
+    <div class="loading">
+      <div class="spin-lg"></div>
+      <div class="loading-txt" id="loadTxt">Lade Daten...</div>
+    </div>`;
+
+  try {
+    setStatus('Lade Daten...');
+    const params = `order=created.asc&mitarbeiter_name=eq.${encodeURIComponent(selectedScouter)}&created=gte.${df}T00:00:00&created=lte.${dt}T23:59:59`;
+    allData = await sbFetch(params);
+
+    if (!allData.length) {
+      document.getElementById('mainContent').innerHTML = `<div class="empty-state"><div class="icon">📭</div><h2>Keine Daten</h2><p>Für ${selectedScouter} im gewählten Zeitraum wurden keine Qualifikationen gefunden.</p></div>`;
+      document.getElementById('analyzeBtn').disabled = false;
+      return;
+    }
+
+    // Also load all scouters same period for comparison
+    setStatus('Lade Vergleichsdaten...');
+    document.getElementById('loadTxt').textContent = 'Lade Vergleichsdaten...';
+    const allParams = `order=created.asc&created=gte.${df}T00:00:00&created=lte.${dt}T23:59:59&select=mitarbeiter_name,mitarbeiter_id,qualifikation,created`;
+    const compData = await sbFetch(allParams);
+
+    setStatus('Berechne Statistiken...');
+    document.getElementById('loadTxt').textContent = 'Berechne Statistiken...';
+
+    // Group by day
+    dayData = {};
+    allData.forEach(r => {
+      const day = r.created.split('T')[0];
+      if (!dayData[day]) dayData[day] = [];
+      dayData[day].push(r);
+    });
+
+    const days = Object.keys(dayData).sort();
+
+    // Geocode for distance calculation (batch, first day shown)
+    setStatus('Berechne Laufstrecken (Google Maps)...');
+    document.getElementById('loadTxt').textContent = 'Berechne Laufstrecken via Google Maps...';
+    const distByDay = await calcDistances(dayData, days);
+
+    // Compute per-day stats
+    const dayStats = {};
+    for (const day of days) {
+      dayStats[day] = calcDayStats(dayData[day], distByDay[day] || 0);
+    }
+
+    // Compute overall stats
+    const stats = calcOverallStats(dayStats, days);
+
+    // Comparison stats
+    const compStats = calcCompStats(compData, selectedScouter, df, dt);
+
+    setStatus('KI analysiert...');
+    document.getElementById('loadTxt').textContent = 'Claude analysiert deine Daten...';
+
+    // Render dashboard
+    renderDashboard(stats, dayStats, days, compStats, distByDay);
+
+    // Then kick off KI analysis (async, renders into ki-box when done)
+    runKIAnalysis(stats, dayStats, days, compStats);
+
+    setStatus(`${allData.length.toLocaleString('de-DE')} Einträge analysiert`);
+
+  } catch(e) {
+    document.getElementById('mainContent').innerHTML = `<div class="empty-state"><div class="icon">❌</div><h2>Fehler</h2><p>${e.message}</p></div>`;
+    showToast(e.message, 'error');
+  } finally {
+    document.getElementById('analyzeBtn').disabled = false;
+  }
+}
+
+async function calcDistances(dayData, days) {
+  const result = {};
+  for (const day of days) {
+    const entries = dayData[day].filter(r => r.strasse && r.hausnummer);
+    if (entries.length < 2) { result[day] = 0; continue; }
+
+    // Get unique consecutive addresses
+    let totalDist = 0;
+    const coords = [];
+    for (const e of entries) {
+      const loc = await geocode(e.strasse, e.hausnummer, e.plz, e.ort);
+      coords.push(loc);
+      await new Promise(r => setTimeout(r, 50)); // small delay
+    }
+
+    for (let i = 1; i < coords.length; i++) {
+      if (coords[i-1] && coords[i]) {
+        totalDist += haversine(coords[i-1], coords[i]) * 1.25; // walking factor
+      }
+    }
+    result[day] = Math.round(totalDist);
+  }
+  return result;
+}
+
+// ══════════════════════════════════
+// STATISTICS
+// ══════════════════════════════════
+function calcDayStats(entries, distMeters) {
+  if (!entries.length) return null;
+  const sorted = [...entries].sort((a,b) => a.created.localeCompare(b.created));
+  const times = sorted.map(e => new Date(e.created));
+
+  const start = times[0];
+  const end = times[times.length-1];
+  const totalMinutes = (end - start) / 60000;
+
+  // Detect pauses (gaps > 20 min)
+  let pauseMin = 0;
+  const pauses = [];
+  for (let i = 1; i < times.length; i++) {
+    const gap = (times[i] - times[i-1]) / 60000;
+    if (gap > 20) {
+      pauseMin += gap;
+      pauses.push({ from: times[i-1], to: times[i], min: Math.round(gap) });
+    }
+  }
+
+  const netMin = totalMinutes - pauseMin;
+  const statusCount = {};
+  Object.keys(STATUS_LABELS).forEach(k => statusCount[k] = 0);
+  entries.forEach(e => { if (statusCount[e.qualifikation] !== undefined) statusCount[e.qualifikation]++; });
+
+  const qualiPerHour = netMin > 0 ? (entries.length / (netMin/60)).toFixed(1) : '0';
+
+  return {
+    date: sorted[0].created.split('T')[0],
+    entries: sorted,
+    start, end,
+    totalMin: Math.round(totalMinutes),
+    pauseMin: Math.round(pauseMin),
+    netMin: Math.round(netMin),
+    pauses,
+    statusCount,
+    total: entries.length,
+    appointments: statusCount.APPOINTMENT,
+    leads: statusCount.ORDER_REGISTERED,
+    distMeters,
+    qualiPerHour: parseFloat(qualiPerHour),
+    weekday: start.toLocaleDateString('de-DE', { weekday: 'long' }),
+    startHour: start.getHours() + start.getMinutes()/60,
+    endHour: end.getHours() + end.getMinutes()/60,
+  };
+}
+
+function calcOverallStats(dayStats, days) {
+  const validDays = days.filter(d => dayStats[d]);
+  if (!validDays.length) return {};
+
+  const avgStart = validDays.reduce((s,d) => s + dayStats[d].startHour, 0) / validDays.length;
+  const avgEnd   = validDays.reduce((s,d) => s + dayStats[d].endHour, 0) / validDays.length;
+  const avgNet   = validDays.reduce((s,d) => s + dayStats[d].netMin, 0) / validDays.length;
+  const totalDist = validDays.reduce((s,d) => s + dayStats[d].distMeters, 0);
+  const avgDist   = totalDist / validDays.length;
+  const totalQuali = validDays.reduce((s,d) => s + dayStats[d].total, 0);
+  const avgQuali   = totalQuali / validDays.length;
+  const avgQPH    = validDays.reduce((s,d) => s + dayStats[d].qualiPerHour, 0) / validDays.length;
+  const totalApt  = validDays.reduce((s,d) => s + dayStats[d].appointments, 0);
+  const totalLeads = validDays.reduce((s,d) => s + dayStats[d].leads, 0);
+
+  // Best day
+  const bestDay = validDays.sort((a,b) => dayStats[b].appointments - dayStats[a].appointments)[0];
+
+  // Streak
+  let streak = 0, maxStreak = 0, cur = 0;
+  const allDaysSorted = [...validDays].sort();
+  for (let i = 0; i < allDaysSorted.length; i++) {
+    if (i === 0) { cur = 1; }
+    else {
+      const prev = new Date(allDaysSorted[i-1]);
+      const curr = new Date(allDaysSorted[i]);
+      const diff = (curr - prev) / 86400000;
+      cur = (diff === 1) ? cur+1 : 1;
+    }
+    maxStreak = Math.max(maxStreak, cur);
+  }
+  streak = cur;
+
+  return { validDays, avgStart, avgEnd, avgNet, totalDist, avgDist, totalQuali, avgQuali, avgQPH, totalApt, totalLeads, bestDay, streak, maxStreak, activeDays: validDays.length };
+}
+
+function calcCompStats(compData, myName, df, dt) {
+  // Group by scouter
+  const byS = {};
+  compData.forEach(r => {
+    if (!byS[r.mitarbeiter_name]) byS[r.mitarbeiter_name] = [];
+    byS[r.mitarbeiter_name].push(r);
+  });
+
+  const stats = Object.entries(byS).map(([name, data]) => {
+    const days = [...new Set(data.map(r => r.created.split('T')[0]))];
+    return {
+      name, total: data.length,
+      appointments: data.filter(r => r.qualifikation==='APPOINTMENT').length,
+      leads: data.filter(r => r.qualifikation==='ORDER_REGISTERED').length,
+      activeDays: days.length,
+      avgPerDay: days.length ? data.length/days.length : 0,
+      isMe: name === myName,
+    };
+  });
+
+  stats.sort((a,b) => b.appointments - a.appointments);
+  const myRank = stats.findIndex(s => s.isMe) + 1;
+  const avgAppPerDay = stats.reduce((s,x) => s + x.appointments/Math.max(x.activeDays,1), 0) / stats.length;
+  const avgTotalPerDay = stats.reduce((s,x) => s + x.avgPerDay, 0) / stats.length;
+
+  return { stats, myRank, total: stats.length, avgAppPerDay, avgTotalPerDay };
+}
+
+// ══════════════════════════════════
+// RENDER DASHBOARD
+// ══════════════════════════════════
+function renderDashboard(stats, dayStats, days, compStats, distByDay) {
+  Object.values(charts).forEach(c => { try { c.destroy(); } catch(e){} });
+  charts = {};
+
+  const fmtTime = h => {
+    const hh = Math.floor(h), mm = Math.round((h-hh)*60);
+    return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+  };
+  const fmtMin = m => m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+  const fmtDist = m => m >= 1000 ? `${(m/1000).toFixed(1)} km` : `${m} m`;
+
+  const myComp = compStats.stats.find(s => s.isMe) || {};
+  const avgQPD = compStats.avgTotalPerDay;
+  const myQPD = stats.avgQuali || 0;
+  const diffQPD = myQPD - avgQPD;
+
+  document.getElementById('mainContent').innerHTML = `
+  <!-- KPI Row -->
+  <div class="grid-4" id="kpiGrid">
+    <div class="kpi" style="--c:var(--green)">
+      <div class="kpi-icon">🕗</div>
+      <div class="kpi-val">${fmtTime(stats.avgStart||8)}</div>
+      <div class="kpi-label">Ø Arbeitsbeginn</div>
+      <div class="kpi-sub">Frühester: ${fmtTime(Math.min(...days.filter(d=>dayStats[d]).map(d=>dayStats[d].startHour)))}</div>
+    </div>
+    <div class="kpi" style="--c:var(--orange)">
+      <div class="kpi-icon">🏁</div>
+      <div class="kpi-val">${fmtTime(stats.avgEnd||17)}</div>
+      <div class="kpi-label">Ø Feierabend</div>
+      <div class="kpi-sub">Ø Nettozeit: ${fmtMin(Math.round(stats.avgNet||0))}</div>
+    </div>
+    <div class="kpi" style="--c:var(--blue)">
+      <div class="kpi-icon">🚶</div>
+      <div class="kpi-val">${fmtDist(Math.round(stats.avgDist||0))}</div>
+      <div class="kpi-label">Ø Laufstrecke/Tag</div>
+      <div class="kpi-sub">Gesamt: ${fmtDist(stats.totalDist||0)}</div>
+    </div>
+    <div class="kpi" style="--c:var(--gold)">
+      <div class="kpi-icon">⚡</div>
+      <div class="kpi-val">${(stats.avgQPH||0).toFixed(1)}</div>
+      <div class="kpi-label">Quali/Stunde</div>
+      <div class="kpi-sub ${diffQPD>=0?'trend-up':'trend-dn'}">${diffQPD>=0?'↑':'↓'} ${Math.abs(diffQPD).toFixed(1)} vs. Schnitt</div>
+    </div>
+  </div>
+
+  <div class="grid-4" style="margin-bottom:24px">
+    <div class="kpi" style="--c:var(--green)">
+      <div class="kpi-icon">📅</div>
+      <div class="kpi-val">${stats.activeDays}</div>
+      <div class="kpi-label">Aktive Tage</div>
+      <div class="kpi-sub">Streak: ${stats.streak} Tage</div>
+    </div>
+    <div class="kpi" style="--c:var(--green)">
+      <div class="kpi-icon">🎯</div>
+      <div class="kpi-val">${stats.totalApt}</div>
+      <div class="kpi-label">Termine gesamt</div>
+      <div class="kpi-sub">Platz ${compStats.myRank} von ${compStats.total}</div>
+    </div>
+    <div class="kpi" style="--c:var(--gold)">
+      <div class="kpi-icon">📋</div>
+      <div class="kpi-val">${stats.totalLeads}</div>
+      <div class="kpi-label">Leads (CC) gesamt</div>
+    </div>
+    <div class="kpi" style="--c:var(--purple)">
+      <div class="kpi-icon">📊</div>
+      <div class="kpi-val">${Math.round(stats.avgQuali||0)}</div>
+      <div class="kpi-label">Ø Quali/Tag</div>
+      <div class="kpi-sub">Gesamt: ${stats.totalQuali}</div>
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="grid-2" style="margin-bottom:24px">
+    <div class="card">
+      <div class="card-head"><span class="card-title">📈 Quali pro Tag</span></div>
+      <div class="card-body"><div class="chart-h"><canvas id="cDailyBar"></canvas></div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">🕐 Aktivitäts-Heatmap (nach Stunde)</span></div>
+      <div class="card-body" id="heatmapBox"></div>
+    </div>
+  </div>
+
+  <!-- Vergleich + Wochentage -->
+  <div class="grid-2" style="margin-bottom:24px">
+    <div class="card">
+      <div class="card-head"><span class="card-title">🏆 Vergleich: Termine/Tag</span></div>
+      <div class="card-body" id="compBox"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">📅 Wochentag-Performance</span></div>
+      <div class="card-body"><div class="chart-h-sm"><canvas id="cWeekday"></canvas></div></div>
+    </div>
+  </div>
+
+  <!-- Tagesdetail -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-head"><span class="card-title">🗓️ Tagesdetail</span><span style="font-size:12px;color:var(--text3)">Klicke einen Tag</span></div>
+    <div class="card-body">
+      <div class="day-tabs" id="dayTabs"></div>
+      <div id="dayDetail"></div>
+    </div>
+  </div>
+
+  <!-- KI Analyse -->
+  <div class="ki-box" id="kiBox">
+    <div class="ki-head">
+      <div class="ki-avatar">🤖</div>
+      <div>
+        <div style="font-size:14px;font-weight:700">Claude analysiert...</div>
+        <div style="font-size:12px;color:var(--text2)">KI-gestützte Auswertung & Empfehlungen</div>
+      </div>
+    </div>
+    <div class="ki-typing">
+      <div class="ki-typing-dots"><span></span><span></span><span></span></div>
+      Analysiere Leistungsdaten...
+    </div>
+  </div>`;
+
+  // Render sub-components
+  renderDailyBar(dayStats, days);
+  renderHeatmap(allData);
+  renderComparison(compStats);
+  renderWeekday(dayStats, days);
+  renderDayTabs(dayStats, days, distByDay);
+}
+
+function renderDailyBar(dayStats, days) {
+  const cv = document.getElementById('cDailyBar'); if (!cv) return;
+  const labels = days.map(d => d.slice(5));
+  charts.daily = new Chart(cv, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Termine', data: days.map(d => dayStats[d]?.appointments||0), backgroundColor: '#22c55e', borderRadius: 4, stack: 'a' },
+        { label: 'Leads CC', data: days.map(d => dayStats[d]?.leads||0), backgroundColor: '#F5C500', borderRadius: 4, stack: 'a' },
+        { label: 'Sonstige', data: days.map(d => Math.max(0,(dayStats[d]?.total||0)-(dayStats[d]?.appointments||0)-(dayStats[d]?.leads||0))), backgroundColor: '#333', borderRadius: 4, stack: 'a' },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color:'#888', font:{family:'DM Sans',size:11}, boxWidth:10 } } },
+      scales: { x:{stacked:true,ticks:{color:'#555',font:{family:'DM Mono',size:10}},grid:{color:'rgba(255,255,255,.03)'}}, y:{stacked:true,ticks:{color:'#555',font:{family:'DM Sans',size:11}},grid:{color:'rgba(255,255,255,.04)'},beginAtZero:true} }
+    }
+  });
+}
+
+function renderHeatmap(data) {
+  const box = document.getElementById('heatmapBox'); if (!box) return;
+  // hours 7-23
+  const hours = Array.from({length:17}, (_,i)=>i+7);
+  const days7 = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+
+  // Count by weekday × hour
+  const grid = Array.from({length:7}, ()=>new Array(17).fill(0));
+  data.forEach(r => {
+    const d = new Date(r.created);
+    const h = d.getHours();
+    const wd = (d.getDay()+6)%7; // 0=Mo
+    const hIdx = h - 7;
+    if (hIdx >= 0 && hIdx < 17) grid[wd][hIdx]++;
+  });
+
+  const maxV = Math.max(...grid.flat(), 1);
+  let html = '<div class="heatmap">';
+  // Header row
+  html += '<div></div>';
+  hours.forEach(h => { html += `<div class="hm-header">${h}</div>`; });
+  // Data rows
+  days7.forEach((day, wi) => {
+    html += `<div class="hm-label">${day}</div>`;
+    hours.forEach((_, hi) => {
+      const v = grid[wi][hi];
+      const alpha = v > 0 ? 0.15 + (v/maxV)*0.85 : 0;
+      const bg = v > 0 ? `rgba(245,197,0,${alpha.toFixed(2)})` : 'var(--bg4)';
+      html += `<div class="hm-cell" style="background:${bg}" title="${day} ${hours[hi]}:00 – ${v} Quali"></div>`;
+    });
+  });
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderComparison(compStats) {
+  const box = document.getElementById('compBox'); if (!box) return;
+  const top10 = compStats.stats.slice(0,10);
+  const maxV = top10[0]?.appointments || 1;
+  box.innerHTML = top10.map(s => `
+    <div class="cmp-row">
+      <div class="cmp-name" style="${s.isMe?'color:var(--green);font-weight:700':''}">
+        ${s.isMe ? '→ ' : ''}${s.name.split(' ')[0]} ${s.name.split(' ').slice(-1)[0]?.[0]||''}.
+      </div>
+      <div class="cmp-bar-wrap"><div class="cmp-bar ${s.isMe?'me':''}" style="width:${Math.round(s.appointments/maxV*100)}%"></div></div>
+      <div class="cmp-val" style="${s.isMe?'color:var(--green)':''}">${s.appointments}</div>
+    </div>`).join('');
+}
+
+function renderWeekday(dayStats, days) {
+  const cv = document.getElementById('cWeekday'); if (!cv) return;
+  const wdNames = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const wdData = Array(7).fill(null).map(() => ({total:0,count:0,apt:0}));
+  days.forEach(d => {
+    if (!dayStats[d]) return;
+    const wd = (new Date(d).getDay()+6)%7;
+    wdData[wd].total += dayStats[d].total;
+    wdData[wd].count++;
+    wdData[wd].apt += dayStats[d].appointments;
+  });
+  charts.weekday = new Chart(cv, {
+    type: 'bar',
+    data: {
+      labels: wdNames,
+      datasets: [
+        { label: 'Ø Quali', data: wdData.map(d => d.count ? (d.total/d.count).toFixed(1) : 0), backgroundColor: '#333', borderRadius: 4 },
+        { label: 'Ø Termine', data: wdData.map(d => d.count ? (d.apt/d.count).toFixed(1) : 0), backgroundColor: '#22c55e', borderRadius: 4 },
+      ]
+    },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'#888',font:{family:'DM Sans',size:11},boxWidth:10}}},
+      scales:{x:{ticks:{color:'#666',font:{family:'DM Sans',size:12}},grid:{color:'rgba(255,255,255,.03)'}},y:{ticks:{color:'#555',font:{family:'DM Sans',size:11}},grid:{color:'rgba(255,255,255,.04)'},beginAtZero:true}}
+    }
+  });
+}
+
+function renderDayTabs(dayStats, days, distByDay) {
+  const tb = document.getElementById('dayTabs'); if(!tb) return;
+  tb.innerHTML = days.map(d => {
+    const ds = dayStats[d];
+    return `<button class="day-tab" onclick="showDayDetail('${d}')" id="dt-${d}">${d.slice(5)} ${ds?.appointments>0?'🎯':''}</button>`;
+  }).join('');
+  if (days.length > 0) showDayDetail(days[days.length-1]);
+}
+
+function showDayDetail(day) {
+  currentDay = day;
+  document.querySelectorAll('.day-tab').forEach(b => b.classList.remove('on'));
+  const bt = document.getElementById(`dt-${day}`); if(bt) bt.classList.add('on');
+
+  const ds = dayData[day];
+  const st = dayData[day] ? calcDayStats(ds, 0) : null;
+  if (!st) return;
+
+  const fmtTime = d => new Date(d).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+  const fmtMin = m => m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+
+  const detail = document.getElementById('dayDetail'); if(!detail) return;
+
+  // Build timeline
+  let tlHtml = '';
+  const sorted = [...ds].sort((a,b) => a.created.localeCompare(b.created));
+  let lastTime = null;
+  sorted.forEach((e, i) => {
+    const t = new Date(e.created);
+    if (lastTime) {
+      const gap = (t - lastTime)/60000;
+      if (gap > 20) {
+        tlHtml += `<div class="tl-pause">☕ Pause: ${Math.round(gap)} Min</div>`;
+      }
+    }
+    const col = STATUS_COLORS[e.qualifikation] || '#555';
+    const lbl = STATUS_LABELS[e.qualifikation] || e.qualifikation;
+    tlHtml += `<div class="tl-item">
+      <div class="tl-dot" style="background:${col}22;border-color:${col}">${i===0?'▶':i===sorted.length-1?'🏁':''}</div>
+      <div class="tl-content">
+        <div class="tl-time">${fmtTime(e.created)}</div>
+        <div class="tl-main"><span class="badge" style="background:${col}22;color:${col}">${lbl}</span></div>
+        <div class="tl-addr">${e.strasse||''} ${e.hausnummer||''}${e.hausnummer_zusatz||''}, ${e.plz||''} ${e.ort||''}</div>
+      </div>
+    </div>`;
+    lastTime = t;
+  });
+
+  detail.innerHTML = `
+    <div class="grid-3" style="margin-bottom:20px">
+      <div class="kpi" style="--c:var(--green)"><div class="kpi-icon">▶</div><div class="kpi-val">${fmtTime(st.start)}</div><div class="kpi-label">Start</div></div>
+      <div class="kpi" style="--c:var(--orange)"><div class="kpi-icon">🏁</div><div class="kpi-val">${fmtTime(st.end)}</div><div class="kpi-label">Feierabend</div></div>
+      <div class="kpi" style="--c:var(--blue)"><div class="kpi-icon">⏱</div><div class="kpi-val">${fmtMin(st.netMin)}</div><div class="kpi-label">Nettozeit</div><div class="kpi-sub">${st.pauses.length} Pause(n) · ${fmtMin(st.pauseMin)}</div></div>
+    </div>
+    <div class="grid-2">
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Tages-Timeline</div>
+        <div class="timeline" style="max-height:400px;overflow-y:auto;padding-right:8px">${tlHtml}</div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Tagesstatistik</div>
+        <div class="stat-row"><span class="stat-lbl">Qualifikationen</span><span class="stat-val">${st.total}</span></div>
+        <div class="stat-row"><span class="stat-lbl">Termine</span><span class="stat-val" style="color:var(--green)">${st.appointments}</span></div>
+        <div class="stat-row"><span class="stat-lbl">Leads (CC)</span><span class="stat-val" style="color:var(--gold)">${st.leads}</span></div>
+        <div class="stat-row"><span class="stat-lbl">Quali/Stunde</span><span class="stat-val">${st.qualiPerHour}</span></div>
+        <div class="stat-row"><span class="stat-lbl">Wochentag</span><span class="stat-val">${st.weekday}</span></div>
+        ${Object.entries(st.statusCount).filter(([,v])=>v>0).map(([k,v])=>`
+        <div class="stat-row"><span class="stat-lbl">${STATUS_LABELS[k]}</span><span class="stat-val">${v}</span></div>`).join('')}
+      </div>
+    </div>`;
+}
+
+// ══════════════════════════════════
+// KI ANALYSE
+// ══════════════════════════════════
+async function runKIAnalysis(stats, dayStats, days, compStats) {
+  const fmtMin = m => m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+  const fmtDist = m => m >= 1000 ? `${(m/1000).toFixed(1)} km` : `${m} m`;
+
+  const myComp = compStats.stats.find(s => s.isMe) || {};
+  const prompt = `Du bist ein erfahrener Vertriebs-Coach bei bee-doo GmbH, einem Solar-Unternehmen in NRW. Analysiere die Leistungsdaten des Scoutiners ${selectedScouter} und gib konkrete, motivierende Empfehlungen auf Deutsch.
+
+LEISTUNGSDATEN (Zeitraum: ${dateFrom} bis ${dateTo}):
+- Aktive Arbeitstage: ${stats.activeDays}
+- Aktueller Streak: ${stats.streak} Tage
+- Ø Arbeitsbeginn: ${Math.floor(stats.avgStart)}:${String(Math.round((stats.avgStart%1)*60)).padStart(2,'0')} Uhr
+- Ø Feierabend: ${Math.floor(stats.avgEnd)}:${String(Math.round((stats.avgEnd%1)*60)).padStart(2,'0')} Uhr  
+- Ø Nettoarbeitszeit/Tag: ${fmtMin(Math.round(stats.avgNet))}
+- Ø Laufstrecke/Tag: ${fmtDist(Math.round(stats.avgDist))}
+- Ø Qualifikationen/Tag: ${Math.round(stats.avgQuali)}
+- Ø Qualifikationen/Stunde: ${(stats.avgQPH).toFixed(1)}
+- Gesamttermine: ${stats.totalApt}
+- Gesamtleads (CC): ${stats.totalLeads}
+- Teamranking (Termine): Platz ${compStats.myRank} von ${compStats.total} Scoutern
+- Ø Team Termine/aktiver Tag: ${compStats.avgAppPerDay.toFixed(1)}
+
+TAGESPERFORMANCE (letzte Tage):
+${days.slice(-5).map(d => dayStats[d] ? `${d}: ${dayStats[d].total} Quali, ${dayStats[d].appointments} Termine, Start ${Math.floor(dayStats[d].startHour)}:${String(Math.round((dayStats[d].startHour%1)*60)).padStart(2,'0')}` : '').filter(Boolean).join('\n')}
+
+Analysiere:
+1. **Stärken** – Was läuft gut? Was hebt ${selectedScouter.split(' ')[0]} vom Team ab?
+2. **Optimierungspotenzial** – Konkrete Bereiche mit Verbesserungsmöglichkeiten
+3. **Empfehlung** – 2-3 spezifische, umsetzbare Tipps für mehr Termine
+4. **Bewertung** – Kurzes Fazit in 1-2 Sätzen
+
+Schreibe direkt und persönlich. Benutze den Vornamen. Sei konkret, nicht allgemein.`;
+
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANT_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await r.json();
+    const text = data.content?.[0]?.text || 'Keine Antwort';
+
+    // Format markdown-like text to HTML
+    const html = text
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^### (.+)$/gm, '<div style="font-size:13px;font-weight:700;color:var(--text);margin:14px 0 6px">$1</div>')
+      .replace(/^## (.+)$/gm, '<div style="font-size:14px;font-weight:700;color:var(--gold);margin:16px 0 8px">$1</div>')
+      .replace(/^# (.+)$/gm, '<div style="font-size:15px;font-weight:800;color:var(--gold);margin:16px 0 8px">$1</div>')
+      .replace(/^\d+\.\s+\*\*(.+?)\*\*/gm, '<div class="ki-highlight"><strong>$1</strong>')
+      .split('\n').filter(l => l.trim()).map(l => {
+        if (l.startsWith('<')) return l;
+        return `<p>${l}</p>`;
+      }).join('');
+
+    const box = document.getElementById('kiBox');
+    if (box) box.innerHTML = `
+      <div class="ki-head">
+        <div class="ki-avatar">🤖</div>
+        <div>
+          <div style="font-size:14px;font-weight:700">KI-Analyse: ${selectedScouter}</div>
+          <div style="font-size:12px;color:var(--text2)">Claude Sonnet · Persönliche Auswertung</div>
+        </div>
+      </div>
+      <div class="ki-body">${html}</div>`;
+
+  } catch(e) {
+    const box = document.getElementById('kiBox');
+    if (box) box.innerHTML = `<div class="ki-typing">❌ KI-Analyse fehlgeschlagen: ${e.message}</div>`;
+  }
+}
+
+// ══════════════════════════════════
+// UI UTILS
+// ══════════════════════════════════
+let toastT;
+function showToast(msg, type='info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (type==='success'?' success':type==='error'?' error':type==='warn'?' warn':'');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.className = '', 4000);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
