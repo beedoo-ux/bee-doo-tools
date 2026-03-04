@@ -1071,291 +1071,63 @@ function initMap() {
   }).addTo(leafMap);
 }
 
-async function mapScouterChanged() {
+async async function mapScouterChanged() {
   const name = document.getElementById('mapScouter').value;
   if (!name) return;
 
-  // Show loading
   document.getElementById('mapLoadingOverlay').style.display = 'flex';
   document.getElementById('mapLoadTxt').textContent = 'Lade Daten...';
   document.getElementById('mapModeControls').style.display = 'none';
   document.getElementById('daySliderWrap').style.display = 'none';
   setMapStatus('Lade...');
+  initMap();
 
   try {
-    initMap();
-    // Use currently loaded allData if same scouter, otherwise fetch
-    let data = allData.filter(r => r.mitarbeiter_name === name);
-    if (!data.length) {
-      const from = document.getElementById('fFrom').value;
-      const to = document.getElementById('fTo').value;
-      let params = 'order=created.asc&mitarbeiter_name=eq.' + encodeURIComponent(name);
-      if (from) params += '&created=gte.' + from + 'T00:00:00';
-      if (to)   params += '&created=lte.' + to + 'T23:59:59';
-      data = await sbFetch(params);
+    // Use the global date filter (fFrom/fTo) – fallback to last 30 days if today has no data
+    let from = document.getElementById('fFrom').value;
+    let to   = document.getElementById('fTo').value;
+    // If range is just today and today has 0 entries, expand to last 30 days
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    if (from === todayStr && to === todayStr) {
+      // Check if we should use a wider range for the map
+      const since30 = new Date(now); since30.setDate(since30.getDate()-30);
+      from = since30.toISOString().split('T')[0];
+      to   = todayStr;
     }
-    mapScouterData = [...data].sort((a,b) => a.created.localeCompare(b.created));
 
-    // Get unique days
-    mapDays = [...new Set(mapScouterData.map(r => r.created.split('T')[0]))].sort();
+    const rows = await sbFetch(
+      `order=created.asc&mitarbeiter_name=eq.${encodeURIComponent(name)}&created=gte.${from}T00:00:00&created=lte.${to}T23:59:59`
+    );
+    mapScouterData = rows;
 
-    // Setup day slider
+    if (!rows.length) {
+      setMapStatus('Keine Einträge im gewählten Zeitraum');
+      document.getElementById('mapLoadingOverlay').style.display = 'none';
+      return;
+    }
+
+    // Build day list
+    mapDays = [...new Set(rows.map(r => r.created.split('T')[0]))].sort();
     const slider = document.getElementById('daySlider');
-    slider.max = mapDays.length;
-    slider.value = 0;
+    if (slider) { slider.max = mapDays.length; slider.value = 0; }
+    document.getElementById('dayLabel') && (document.getElementById('dayLabel').textContent = 'Alle Tage');
     document.getElementById('daySliderWrap').style.display = 'flex';
+
+    // Geocode
+    setMapStatus('Geocodiere Adressen...');
+    await geocodeAll(rows);
+
     document.getElementById('mapModeControls').style.display = 'flex';
-
-    // Geocode all addresses
-    await geocodeAll(mapScouterData);
-    mapCurrentDay = 'all';
-    document.getElementById('btnAllDays').classList.add('on');
-    await renderMap();
-
+    document.getElementById('mapLoadingOverlay').style.display = 'none';
+    currentMapDay = null;
+    renderMap();
+    setMapStatus(`✓ ${rows.length} Einträge · ${mapDays.length} Tage · ${from} – ${to}`);
   } catch(e) {
     setMapStatus('Fehler: ' + e.message);
-  } finally {
     document.getElementById('mapLoadingOverlay').style.display = 'none';
   }
 }
-
-async function geocodeAll(data) {
-  const unique = {};
-  data.forEach(r => {
-    if (r.strasse && r.hausnummer) {
-      const k = r.strasse + ' ' + r.hausnummer + ',' + (r.plz||'') + ' ' + (r.ort||'');
-      unique[k] = { strasse: r.strasse, hausnummer: r.hausnummer, plz: r.plz, ort: r.ort };
-    }
-  });
-  const keys = Object.keys(unique).filter(k => !geoCache[k]);
-  let done = 0;
-  for (const k of keys) {
-    const a = unique[k];
-    document.getElementById('mapLoadTxt').textContent = 'Geocodiere ' + (++done) + '/' + keys.length + '...';
-    const addr = encodeURIComponent(a.strasse + ' ' + a.hausnummer + ', ' + (a.plz||'') + ' ' + (a.ort||'') + ', Deutschland');
-    try {
-      const r = await fetch('https://maps.googleapis.com/maps/api/geocode/json?address=' + addr + '&key=' + GMAPS_KEY);
-      const d = await r.json();
-      if (d.results?.[0]?.geometry?.location) geoCache[k] = d.results[0].geometry.location;
-    } catch(e) {}
-    await new Promise(r => setTimeout(r, 60));
-  }
-}
-
-function getGeoKey(r) {
-  return r.strasse + ' ' + r.hausnummer + ',' + (r.plz||'') + ' ' + (r.ort||'');
-}
-
-function getVisibleData() {
-  if (mapCurrentDay === 'all') return mapScouterData;
-  return mapScouterData.filter(r => r.created.split('T')[0] === mapCurrentDay);
-}
-
-async function renderMap() {
-  if (!leafMap) return;
-  // Clear all layers
-  Object.values(mapLayers).forEach(l => { if (l) { try { leafMap.removeLayer(l); } catch(e){} } });
-  mapLayers = { pins: null, route: null, heat: null };
-
-  const data = getVisibleData();
-  const withCoords = data.map(r => ({ ...r, coords: geoCache[getGeoKey(r)] })).filter(r => r.coords);
-
-  // Update stats
-  updateMapStats(data, withCoords);
-
-  if (!withCoords.length) { setMapStatus('Keine kartierten Adressen'); return; }
-
-  if (mapMode === 'pins' || mapMode === 'route') renderPins(withCoords);
-  if (mapMode === 'route') renderRoute(withCoords);
-  if (mapMode === 'heat') renderHeat(withCoords);
-
-  // Fit bounds
-  const bounds = withCoords.map(r => [r.coords.lat, r.coords.lng]);
-  try { leafMap.fitBounds(bounds, { padding: [30, 30] }); } catch(e){}
-  setMapStatus(withCoords.length + ' Adressen kartiert');
-  updateLegend();
-}
-
-const STATUS_COLORS_MAP = {
-  APPOINTMENT: '#22c55e', ORDER_REGISTERED: '#F5C500', FOLLOW_UP: '#3b82f6',
-  NO_INTEREST: '#ef4444', CUSTOMER_NOT_HOME: '#f97316', EXISTING_CUSTOMER: '#a855f7',
-  NOT_MARKETABLE: '#64748b', NO_ENTRY: '#475569', BLACKLISTED: '#6b7280'
-};
-
-function renderPins(data) {
-  const group = L.layerGroup();
-  data.forEach((r, i) => {
-    const col = STATUS_COLORS_MAP[r.qualifikation] || '#888';
-    const lbl = (STATUS_LABELS || {})[r.qualifikation] || r.qualifikation;
-    const t = new Date(r.created);
-    const timeStr = t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    const icon = L.divIcon({
-      html: `<div style="width:${r.qualifikation==='APPOINTMENT'?16:10}px;height:${r.qualifikation==='APPOINTMENT'?16:10}px;border-radius:50%;background:${col};border:2px solid rgba(255,255,255,0.6);box-shadow:0 0 ${r.qualifikation==='APPOINTMENT'?'8px 2px':'4px 1px'} ${col}"></div>`,
-      className: '', iconSize: [r.qualifikation==='APPOINTMENT'?16:10, r.qualifikation==='APPOINTMENT'?16:10], iconAnchor: [r.qualifikation==='APPOINTMENT'?8:5, r.qualifikation==='APPOINTMENT'?8:5]
-    });
-    const marker = L.marker([r.coords.lat, r.coords.lng], { icon })
-      .bindPopup(`<div style="font-family:DM Sans,sans-serif;min-width:180px">
-        <div style="font-weight:700;color:${col};margin-bottom:4px">${lbl}</div>
-        <div style="font-size:12px;color:#666;margin-bottom:6px">📍 ${r.strasse} ${r.hausnummer}, ${r.plz} ${r.ort}</div>
-        <div style="font-size:12px">🕐 ${timeStr} Uhr · ${r.created.split('T')[0]}</div>
-        ${i > 0 ? '<div style="font-size:11px;color:#999;margin-top:4px">#' + (i+1) + ' am Tag</div>' : ''}
-      </div>`);
-    group.addLayer(marker);
-  });
-  mapLayers.pins = group.addTo(leafMap);
-}
-
-function renderRoute(data) {
-  if (data.length < 2) return;
-  const coords = data.map(r => [r.coords.lat, r.coords.lng]);
-  // Color segments: green for productive, grey for rest
-  for (let i = 0; i < coords.length - 1; i++) {
-    const col = (data[i].qualifikation === 'APPOINTMENT' || data[i+1].qualifikation === 'APPOINTMENT') ? '#22c55e' :
-                (data[i].qualifikation === 'ORDER_REGISTERED') ? '#F5C500' : 'rgba(255,255,255,0.25)';
-    L.polyline([coords[i], coords[i+1]], { color: col, weight: 2.5, opacity: 0.8 }).addTo(leafMap);
-  }
-  // Start/end markers
-  const startIcon = L.divIcon({ html: '<div style="background:#22c55e;color:#000;font-size:10px;font-weight:700;padding:2px 5px;border-radius:4px;white-space:nowrap">START</div>', className: '', iconSize: [40, 18] });
-  const endIcon = L.divIcon({ html: '<div style="background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:2px 5px;border-radius:4px;white-space:nowrap">ENDE</div>', className: '', iconSize: [36, 18] });
-  L.marker([coords[0][0], coords[0][1]], { icon: startIcon }).addTo(leafMap);
-  L.marker([coords[coords.length-1][0], coords[coords.length-1][1]], { icon: endIcon }).addTo(leafMap);
-  mapLayers.route = L.layerGroup(); // dummy to track
-}
-
-function renderHeat(data) {
-  const points = data.map(r => {
-    const w = r.qualifikation === 'APPOINTMENT' ? 3 : r.qualifikation === 'ORDER_REGISTERED' ? 2 : 1;
-    return [r.coords.lat, r.coords.lng, w];
-  });
-  if (typeof L.heatLayer !== 'undefined') {
-    mapLayers.heat = L.heatLayer(points, { radius: 25, blur: 20, maxZoom: 17, gradient: { 0.2: '#3b82f6', 0.5: '#f97316', 0.8: '#ef4444', 1.0: '#F5C500' } }).addTo(leafMap);
-  }
-}
-
-function updateMapStats(data, withCoords) {
-  document.getElementById('ms-total').textContent = data.length;
-  document.getElementById('ms-geocoded').textContent = withCoords.length;
-  document.getElementById('ms-apt').textContent = data.filter(r=>r.qualifikation==='APPOINTMENT').length;
-  document.getElementById('ms-lead').textContent = data.filter(r=>r.qualifikation==='ORDER_REGISTERED').length;
-  document.getElementById('mapStats').style.display = 'grid';
-
-  // Distance
-  let dist = 0;
-  for (let i = 1; i < withCoords.length; i++) {
-    const a = withCoords[i-1].coords, b = withCoords[i].coords;
-    const R = 6371000, toR = x => x*Math.PI/180;
-    const dLat = toR(b.lat-a.lat), dLng = toR(b.lng-a.lng);
-    const s = Math.sin(dLat/2)**2 + Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;
-    dist += R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1-s)) * 1.25;
-  }
-  document.getElementById('ms-dist').textContent = dist >= 1000 ? (dist/1000).toFixed(1)+' km' : Math.round(dist)+' m';
-
-  // Work time
-  if (data.length >= 2) {
-    const sorted = [...data].sort((a,b)=>a.created.localeCompare(b.created));
-    const mins = Math.round((new Date(sorted[sorted.length-1].created) - new Date(sorted[0].created)) / 60000);
-    document.getElementById('ms-time').textContent = mins >= 60 ? Math.floor(mins/60)+'h '+(mins%60)+'m' : mins+'m';
-  }
-}
-
-function updateLegend() {
-  if (mapMode === 'heat') { document.getElementById('mapLegend').innerHTML = ''; return; }
-  const items = [
-    { color: '#22c55e', label: 'Termin' }, { color: '#F5C500', label: 'Lead CC' },
-    { color: '#3b82f6', label: 'Wiedervorlage' }, { color: '#ef4444', label: 'Kein Interesse' },
-    { color: '#f97316', label: 'Nicht erreicht' }
-  ];
-  document.getElementById('mapLegend').innerHTML = items.map(i =>
-    `<div class="map-legend-item"><div class="map-legend-dot" style="background:${i.color}"></div>${i.label}</div>`
-  ).join('');
-}
-
-function setMapMode(mode) {
-  mapMode = mode;
-  ['pins','route','heat'].forEach(m => document.getElementById('btn'+m.charAt(0).toUpperCase()+m.slice(1))?.classList.remove('on'));
-  document.getElementById('btn' + mode.charAt(0).toUpperCase() + mode.slice(1))?.classList.add('on');
-  renderMap();
-}
-
-function setMapDay(day) {
-  mapCurrentDay = day;
-  const slider = document.getElementById('daySlider');
-  if (day === 'all') {
-    slider.value = 0;
-    document.getElementById('dayLabel').textContent = 'Alle Tage';
-    document.getElementById('btnAllDays').classList.add('on');
-  } else {
-    const idx = mapDays.indexOf(day);
-    if (idx >= 0) slider.value = idx + 1;
-    document.getElementById('dayLabel').textContent = new Date(day).toLocaleDateString('de-DE', {weekday:'short',day:'2-digit',month:'2-digit'});
-    document.getElementById('btnAllDays').classList.remove('on');
-  }
-  renderMap();
-}
-
-function onSliderChange(val) {
-  const v = parseInt(val);
-  if (v === 0) { setMapDay('all'); return; }
-  const day = mapDays[v-1];
-  if (day) setMapDay(day);
-}
-
-function changeDay(delta) {
-  if (mapCurrentDay === 'all') {
-    if (delta > 0) setMapDay(mapDays[0]);
-    return;
-  }
-  const idx = mapDays.indexOf(mapCurrentDay);
-  const next = idx + delta;
-  if (next < 0) setMapDay('all');
-  else if (next >= mapDays.length) setMapDay(mapDays[mapDays.length-1]);
-  else setMapDay(mapDays[next]);
-}
-
-function setMapStatus(txt) { const el = document.getElementById('mapStatus'); if(el) el.textContent = txt; }
-
-// ── LIVE MAP AUTO-REFRESH ──
-let liveMapInterval = null;
-function startLiveMap() {
-  if (liveMapInterval) clearInterval(liveMapInterval);
-  liveMapInterval = setInterval(async () => {
-    if (!mapScouterData.length || !document.getElementById('tab-map')?.classList.contains('active')) return;
-    const name = document.getElementById('mapScouter').value;
-    if (!name) return;
-    // Only live-refresh for today
-    const today = new Date().toISOString().split('T')[0];
-    const from = document.getElementById('fFrom')?.value;
-    if (from !== today) return;
-    // Fetch new entries since last known
-    const lastTs = mapScouterData.length ? mapScouterData[mapScouterData.length-1].created : today + 'T00:00:00';
-    const params = 'order=created.asc&mitarbeiter_name=eq.' + encodeURIComponent(name) + '&created=gt.' + lastTs;
-    try {
-      const newRows = await sbFetch(params);
-      if (!newRows.length) return;
-      mapScouterData = [...mapScouterData, ...newRows].sort((a,b)=>a.created.localeCompare(b.created));
-      await geocodeAll(newRows);
-      // Add new days to slider
-      const newDays = [...new Set(mapScouterData.map(r=>r.created.split('T')[0]))].sort();
-      if (newDays.length !== mapDays.length) {
-        mapDays = newDays;
-        const slider = document.getElementById('daySlider');
-        if (slider) slider.max = mapDays.length;
-      }
-      renderMap();
-      setMapStatus('🟢 Live · ' + newRows.length + ' neue Einträge · ' + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}));
-    } catch(e) {}
-  }, 60000); // every 60 seconds
-}
-
-function populateMapScouter() {
-  const loadedNames = [...new Set(allData.map(r => r.mitarbeiter_name))].sort();
-  const sel = document.getElementById('mapScouter');
-  if (!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Scouter auswählen...</option>' +
-    loadedNames.map(n => `<option value="${n}"${n===cur?' selected':''}>${n}</option>`).join('');
-}
-
 // ══════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════
