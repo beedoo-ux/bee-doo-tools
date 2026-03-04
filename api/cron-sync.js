@@ -1,5 +1,9 @@
 // Vercel Cron Job: Runs enabled syncs from sync_configs table
 // Schedule: Every hour, checks which syncs are due
+// ⚠️ PAUSED 2026-03-04: Switching to Overview API. All data now comes from /api/overview-march.
+// Old Supabase sync is no longer the primary data source for vt-ranking or challenge.
+
+const PAUSED = true; // Set to false to re-enable
 
 const SU = 'https://hqzpemfaljxcysyqssng.supabase.co';
 const SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
@@ -302,48 +306,53 @@ async function runScoutSync() {
     // Server-side geocoding for rows missing lat/lng
     await geocodeScoutRows();
 
-    // 1. Neue Koordinaten aus UTM32 befüllen (Hintergrund-Migration 23M Zeilen)
-    await geocodeScoutRows();
-
-    // 2. Scout-Besuche → infas_adressen (Coverage-Karte aktuell halten)
-    try {
-        await fetch(ap('rpc/sync_scout_to_infas'), {
-            method: 'POST', headers: hd(),
-            body: JSON.stringify({ batch_size: 1000 })
-        });
-    } catch(e) { console.warn('sync_scout_to_infas:', e.message); }
-
     return { synced, skipped, success: true };
 }
 
-// Koordinaten aus infas_adressen befüllen (kein Google API nötig)
+// Geocode scout rows that have address but no lat/lng (server-side, up to 50 per run)
 async function geocodeScoutRows() {
-    // Nutzt PostGIS-Funktion fill_scout_coords – matched gegen 23 Mio infas_adressen
-    const r = await fetch(ap('rpc/fill_scout_coords'), {
-        method: 'POST',
-        headers: hd(),
-        body: JSON.stringify({ batch_size: 1000 })
-    });
+    const GKEY = 'AIzaSyB7Y7FgAc4R6GX1V6GjGzm0bSNK5IfBg7o';
+    // Get rows needing geocoding (distinct addresses, limit 50 per run)
+    const r = await fetch(ap('scout_qualifikationen') + 
+        '?select=id,strasse,hausnummer,plz,ort&lat=is.null&strasse=not.is.null&limit=50', 
+        { headers: hd() });
     if (!r.ok) return;
-    const count = await r.json();
-    if (count > 0) console.log(`Geocoded ${count} scout rows via infas_adressen`);
-}
+    const rows = await r.json();
+    if (!rows.length) return;
 
-
-// ═══ INFAS KOORDINATEN MIGRATION (UTM32 → WGS84, Hintergrund) ═══
-async function runInfasCoordsMigration() {
-    // Läuft bis alle 23M Zeilen konvertiert sind, dann 0
-    const r = await fetch(ap('rpc/fill_infas_coords'), {
-        method: 'POST', headers: hd(),
-        body: JSON.stringify({ batch_size: 3000 })
+    let geocoded = 0;
+    // Group by unique address to minimize API calls
+    const addrMap = {};
+    rows.forEach(row => {
+        const key = `${row.strasse} ${row.hausnummer||''}, ${row.plz} ${row.ort}`.trim();
+        if (!addrMap[key]) addrMap[key] = [];
+        addrMap[key].push(row.id);
     });
-    if (!r.ok) return { done: 0, success: false };
-    const count = await r.json();
-    return { done: count, success: true, complete: count === 0 };
+
+    for (const [addr, ids] of Object.entries(addrMap)) {
+        try {
+            const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${GKEY}`;
+            const gr = await fetch(gUrl);
+            const gd = await gr.json();
+            if (gd.results?.[0]) {
+                const { lat, lng } = gd.results[0].geometry.location;
+                // Update all rows with this address
+                await fetch(ap('scout_qualifikationen') + `?id=in.(${ids.map(id => `"${id}"`).join(',')})`, {
+                    method: 'PATCH',
+                    headers: hd(),
+                    body: JSON.stringify({ lat, lng })
+                });
+                geocoded++;
+            }
+        } catch(e) {}
+        await new Promise(r => setTimeout(r, 50));
+    }
+    console.log(`Geocoded ${geocoded} unique addresses`);
 }
 
 // ═══ MAIN HANDLER ═══
 export default async function handler(req, res) {
+    if (PAUSED) return res.status(200).json({ status: 'paused', reason: 'Switched to Overview API 2026-03-04' });
     // Verify cron secret or allow manual trigger
     const authHeader = req.headers.authorization;
     if (authHeader !== 'Bearer manual' && req.headers['x-vercel-cron'] !== '1') {
@@ -383,9 +392,6 @@ export default async function handler(req, res) {
                         break;
                     case 'auto_merge':
                         result = await runAutoMerge();
-                        break;
-                    case 'infas_coords':
-                        result = await runInfasCoordsMigration();
                         break;
                     case 'scout_sync':
                         result = await runScoutSync();
