@@ -6,6 +6,9 @@
 <title>Scouter Qualifikationen – bee-doo</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <style>
   :root {
     --gold: #F5C500; --bg: #0a0a0a; --bg2: #111111; --bg3: #1a1a1a; --bg4: #222222;
@@ -136,6 +139,29 @@
   .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: sp .6s linear infinite; vertical-align: middle; margin-right: 5px; }
   @keyframes sp { to { transform: rotate(360deg); } }
 
+  /* ── Map Tab ── */
+  #mapContainer { height: calc(100vh - 280px); min-height: 420px; border-radius: var(--radius); overflow: hidden; position: relative; }
+  .map-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .map-btn { padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; font-family: 'DM Sans',sans-serif; cursor: pointer; border: 1px solid var(--border); background: var(--bg3); color: var(--text2); transition: all .15s; }
+  .map-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .map-btn.on { background: var(--gold); color: #000; border-color: var(--gold); }
+  .map-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .day-slider-wrap { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; flex-wrap: wrap; }
+  .day-slider-wrap input[type=range] { flex: 1; min-width: 120px; accent-color: var(--gold); height: 4px; cursor: pointer; }
+  .day-label { font-size: 13px; font-weight: 700; color: var(--gold); min-width: 100px; }
+  .day-nav { display: flex; gap: 4px; }
+  .day-nav-btn { width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg3); color: var(--text2); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .day-nav-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .map-legend { display: flex; gap: 10px; flex-wrap: wrap; }
+  .map-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text2); }
+  .map-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .map-loading { position: absolute; inset: 0; background: rgba(10,10,10,.85); display: flex; align-items: center; justify-content: center; z-index: 1000; border-radius: var(--radius); flex-direction: column; gap: 12px; }
+  .map-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px,1fr)); gap: 8px; margin-bottom: 12px; }
+  .map-stat { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .map-stat-v { font-size: 20px; font-weight: 700; color: var(--text); }
+  .map-stat-l { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; }
+  @media (max-width: 640px) { #mapContainer { height: 60vh; } .map-controls { gap: 6px; } .map-btn { padding: 9px 12px; font-size: 12px; min-height: 40px; } }
+
   #toast { position: fixed; bottom: 20px; right: 20px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 11px 16px; font-size: 13px; color: var(--text); box-shadow: 0 8px 32px rgba(0,0,0,.5); transform: translateY(60px); opacity: 0; transition: all .3s; z-index: 9999; max-width: 300px; }
   #toast.show { transform: translateY(0); opacity: 1; }
   #toast.success { border-color: var(--green); } #toast.error { border-color: var(--red); } #toast.warn { border-color: var(--gold); }
@@ -217,6 +243,7 @@
   <div class="tab" onclick="switchTab('profile',this)">👤 Scouter-Profil</div>
   <div class="tab" onclick="switchTab('data',this)">📋 Rohdaten</div>
   <div class="tab" onclick="switchTab('settings',this)">⚙️ Einstellungen</div>
+  <div class="tab" onclick="switchTab('map',this)">🗺️ Karte</div>
 </div>
 
 <main>
@@ -356,6 +383,47 @@
         </div>
       </div>
     </div>
+
+  <!-- ═══ KARTE ═══ -->
+  <div class="tsec" id="tab-map">
+    <div style="margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <select id="mapScouter" onchange="mapScouterChanged()" style="min-width:220px;font-size:14px;padding:9px 12px">
+        <option value="">Scouter auswählen...</option>
+      </select>
+      <span style="font-size:12px;color:var(--text3)" id="mapStatus"></span>
+    </div>
+    <div class="day-slider-wrap" id="daySliderWrap" style="display:none">
+      <div class="day-nav">
+        <button class="day-nav-btn" onclick="changeDay(-1)">‹</button>
+        <button class="day-nav-btn" onclick="changeDay(1)">›</button>
+      </div>
+      <input type="range" id="daySlider" min="0" value="0" oninput="onSliderChange(this.value)">
+      <div class="day-label" id="dayLabel">–</div>
+      <button class="map-btn on" id="btnAllDays" onclick="setMapDay('all')">Alle Tage</button>
+    </div>
+    <div class="map-controls" id="mapModeControls" style="display:none">
+      <span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;flex-shrink:0">Ansicht:</span>
+      <button class="map-btn on" id="btnPins" onclick="setMapMode('pins')">📍 Pins</button>
+      <button class="map-btn" id="btnRoute" onclick="setMapMode('route')">🛤️ Route</button>
+      <button class="map-btn" id="btnHeat" onclick="setMapMode('heat')">🔥 Heatmap</button>
+      <div class="map-legend" id="mapLegend" style="margin-left:auto"></div>
+    </div>
+    <div class="map-stats" id="mapStats">
+      <div class="map-stat"><div class="map-stat-v" id="ms-total">–</div><div class="map-stat-l">Quali</div></div>
+      <div class="map-stat"><div class="map-stat-v" id="ms-geocoded">–</div><div class="map-stat-l">Kartiert</div></div>
+      <div class="map-stat"><div class="map-stat-v" id="ms-apt" style="color:var(--green)">–</div><div class="map-stat-l">Termine</div></div>
+      <div class="map-stat"><div class="map-stat-v" id="ms-lead" style="color:var(--gold)">–</div><div class="map-stat-l">Leads CC</div></div>
+      <div class="map-stat"><div class="map-stat-v" id="ms-dist">–</div><div class="map-stat-l">Strecke</div></div>
+      <div class="map-stat"><div class="map-stat-v" id="ms-time">–</div><div class="map-stat-l">Arbeitszeit</div></div>
+    </div>
+    <div id="mapContainer">
+      <div id="mapLoadingOverlay" class="map-loading" style="display:none">
+        <div class="spin" style="width:24px;height:24px;border-width:3px"></div>
+        <div style="font-size:13px;color:var(--text2)" id="mapLoadTxt">Geocodiere Adressen...</div>
+      </div>
+      <div id="theMap" style="width:100%;height:100%"></div>
+    </div>
+  </div>
   </div>
 </main>
 
@@ -527,6 +595,8 @@ function populateScouterDropdowns() {
   document.getElementById('profSel').innerHTML =
     '<option value="">Scouter auswählen...</option>' +
     loadedNames.map(n => `<option value="${n}"${n===curP?' selected':''}>${n}</option>`).join('');
+  // Also populate map scouter dropdown
+  populateMapScouter();
 }
 
 let currentQuick = 'month';
@@ -943,6 +1013,7 @@ function switchTab(name, el) {
   if (name==='leaderboard') renderLB();
   if (name==='data') renderTable();
   if (name==='settings') updateSettings();
+  if (name==='map') { initMap(); populateMapScouter(); setTimeout(()=>{if(leafMap)leafMap.invalidateSize();},200); }
 }
 
 function setStatus(type, txt) {
@@ -965,6 +1036,277 @@ function showToast(msg, type='info') {
   el.className = 'show ' + (type==='success'?'success':type==='error'?'error':type==='warn'?'warn':'');
   clearTimeout(toastT);
   toastT = setTimeout(()=>el.className='', 4000);
+}
+
+
+// ══════════════════════════════════════════════════
+// MAP TAB
+// ══════════════════════════════════════════════════
+const GMAPS_KEY = 'AIzaSyB7Y7FgAc4R6GX1V6GjGzm0bSNK5IfBg7o';
+let leafMap = null, mapMode = 'pins', mapDays = [], mapCurrentDay = 'all';
+let mapData = [], geoCache = {}, mapLayers = { pins: null, route: null, heat: null };
+let mapScouterData = [];
+
+function initMap() {
+  if (leafMap) return;
+  const el = document.getElementById('theMap');
+  if (!el) return;
+  leafMap = L.map('theMap', { zoomControl: true }).setView([51.9, 8.4], 11);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '©OpenStreetMap ©CartoDB', maxZoom: 19
+  }).addTo(leafMap);
+}
+
+async function mapScouterChanged() {
+  const name = document.getElementById('mapScouter').value;
+  if (!name) return;
+
+  // Show loading
+  document.getElementById('mapLoadingOverlay').style.display = 'flex';
+  document.getElementById('mapLoadTxt').textContent = 'Lade Daten...';
+  document.getElementById('mapModeControls').style.display = 'none';
+  document.getElementById('daySliderWrap').style.display = 'none';
+  setMapStatus('Lade...');
+
+  try {
+    initMap();
+    // Use currently loaded allData if same scouter, otherwise fetch
+    let data = allData.filter(r => r.mitarbeiter_name === name);
+    if (!data.length) {
+      const from = document.getElementById('fFrom').value;
+      const to = document.getElementById('fTo').value;
+      let params = 'order=created.asc&mitarbeiter_name=eq.' + encodeURIComponent(name);
+      if (from) params += '&created=gte.' + from + 'T00:00:00';
+      if (to)   params += '&created=lte.' + to + 'T23:59:59';
+      data = await sbFetch(params);
+    }
+    mapScouterData = [...data].sort((a,b) => a.created.localeCompare(b.created));
+
+    // Get unique days
+    mapDays = [...new Set(mapScouterData.map(r => r.created.split('T')[0]))].sort();
+
+    // Setup day slider
+    const slider = document.getElementById('daySlider');
+    slider.max = mapDays.length;
+    slider.value = 0;
+    document.getElementById('daySliderWrap').style.display = 'flex';
+    document.getElementById('mapModeControls').style.display = 'flex';
+
+    // Geocode all addresses
+    await geocodeAll(mapScouterData);
+    mapCurrentDay = 'all';
+    document.getElementById('btnAllDays').classList.add('on');
+    await renderMap();
+
+  } catch(e) {
+    setMapStatus('Fehler: ' + e.message);
+  } finally {
+    document.getElementById('mapLoadingOverlay').style.display = 'none';
+  }
+}
+
+async function geocodeAll(data) {
+  const unique = {};
+  data.forEach(r => {
+    if (r.strasse && r.hausnummer) {
+      const k = r.strasse + ' ' + r.hausnummer + ',' + (r.plz||'') + ' ' + (r.ort||'');
+      unique[k] = { strasse: r.strasse, hausnummer: r.hausnummer, plz: r.plz, ort: r.ort };
+    }
+  });
+  const keys = Object.keys(unique).filter(k => !geoCache[k]);
+  let done = 0;
+  for (const k of keys) {
+    const a = unique[k];
+    document.getElementById('mapLoadTxt').textContent = 'Geocodiere ' + (++done) + '/' + keys.length + '...';
+    const addr = encodeURIComponent(a.strasse + ' ' + a.hausnummer + ', ' + (a.plz||'') + ' ' + (a.ort||'') + ', Deutschland');
+    try {
+      const r = await fetch('https://maps.googleapis.com/maps/api/geocode/json?address=' + addr + '&key=' + GMAPS_KEY);
+      const d = await r.json();
+      if (d.results?.[0]?.geometry?.location) geoCache[k] = d.results[0].geometry.location;
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 60));
+  }
+}
+
+function getGeoKey(r) {
+  return r.strasse + ' ' + r.hausnummer + ',' + (r.plz||'') + ' ' + (r.ort||'');
+}
+
+function getVisibleData() {
+  if (mapCurrentDay === 'all') return mapScouterData;
+  return mapScouterData.filter(r => r.created.split('T')[0] === mapCurrentDay);
+}
+
+async function renderMap() {
+  if (!leafMap) return;
+  // Clear all layers
+  Object.values(mapLayers).forEach(l => { if (l) { try { leafMap.removeLayer(l); } catch(e){} } });
+  mapLayers = { pins: null, route: null, heat: null };
+
+  const data = getVisibleData();
+  const withCoords = data.map(r => ({ ...r, coords: geoCache[getGeoKey(r)] })).filter(r => r.coords);
+
+  // Update stats
+  updateMapStats(data, withCoords);
+
+  if (!withCoords.length) { setMapStatus('Keine kartierten Adressen'); return; }
+
+  if (mapMode === 'pins' || mapMode === 'route') renderPins(withCoords);
+  if (mapMode === 'route') renderRoute(withCoords);
+  if (mapMode === 'heat') renderHeat(withCoords);
+
+  // Fit bounds
+  const bounds = withCoords.map(r => [r.coords.lat, r.coords.lng]);
+  try { leafMap.fitBounds(bounds, { padding: [30, 30] }); } catch(e){}
+  setMapStatus(withCoords.length + ' Adressen kartiert');
+  updateLegend();
+}
+
+const STATUS_COLORS_MAP = {
+  APPOINTMENT: '#22c55e', ORDER_REGISTERED: '#F5C500', FOLLOW_UP: '#3b82f6',
+  NO_INTEREST: '#ef4444', CUSTOMER_NOT_HOME: '#f97316', EXISTING_CUSTOMER: '#a855f7',
+  NOT_MARKETABLE: '#64748b', NO_ENTRY: '#475569', BLACKLISTED: '#6b7280'
+};
+
+function renderPins(data) {
+  const group = L.layerGroup();
+  data.forEach((r, i) => {
+    const col = STATUS_COLORS_MAP[r.qualifikation] || '#888';
+    const lbl = (STATUS_LABELS || {})[r.qualifikation] || r.qualifikation;
+    const t = new Date(r.created);
+    const timeStr = t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    const icon = L.divIcon({
+      html: `<div style="width:${r.qualifikation==='APPOINTMENT'?16:10}px;height:${r.qualifikation==='APPOINTMENT'?16:10}px;border-radius:50%;background:${col};border:2px solid rgba(255,255,255,0.6);box-shadow:0 0 ${r.qualifikation==='APPOINTMENT'?'8px 2px':'4px 1px'} ${col}"></div>`,
+      className: '', iconSize: [r.qualifikation==='APPOINTMENT'?16:10, r.qualifikation==='APPOINTMENT'?16:10], iconAnchor: [r.qualifikation==='APPOINTMENT'?8:5, r.qualifikation==='APPOINTMENT'?8:5]
+    });
+    const marker = L.marker([r.coords.lat, r.coords.lng], { icon })
+      .bindPopup(`<div style="font-family:DM Sans,sans-serif;min-width:180px">
+        <div style="font-weight:700;color:${col};margin-bottom:4px">${lbl}</div>
+        <div style="font-size:12px;color:#666;margin-bottom:6px">📍 ${r.strasse} ${r.hausnummer}, ${r.plz} ${r.ort}</div>
+        <div style="font-size:12px">🕐 ${timeStr} Uhr · ${r.created.split('T')[0]}</div>
+        ${i > 0 ? '<div style="font-size:11px;color:#999;margin-top:4px">#' + (i+1) + ' am Tag</div>' : ''}
+      </div>`);
+    group.addLayer(marker);
+  });
+  mapLayers.pins = group.addTo(leafMap);
+}
+
+function renderRoute(data) {
+  if (data.length < 2) return;
+  const coords = data.map(r => [r.coords.lat, r.coords.lng]);
+  // Color segments: green for productive, grey for rest
+  for (let i = 0; i < coords.length - 1; i++) {
+    const col = (data[i].qualifikation === 'APPOINTMENT' || data[i+1].qualifikation === 'APPOINTMENT') ? '#22c55e' :
+                (data[i].qualifikation === 'ORDER_REGISTERED') ? '#F5C500' : 'rgba(255,255,255,0.25)';
+    L.polyline([coords[i], coords[i+1]], { color: col, weight: 2.5, opacity: 0.8 }).addTo(leafMap);
+  }
+  // Start/end markers
+  const startIcon = L.divIcon({ html: '<div style="background:#22c55e;color:#000;font-size:10px;font-weight:700;padding:2px 5px;border-radius:4px;white-space:nowrap">START</div>', className: '', iconSize: [40, 18] });
+  const endIcon = L.divIcon({ html: '<div style="background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:2px 5px;border-radius:4px;white-space:nowrap">ENDE</div>', className: '', iconSize: [36, 18] });
+  L.marker([coords[0][0], coords[0][1]], { icon: startIcon }).addTo(leafMap);
+  L.marker([coords[coords.length-1][0], coords[coords.length-1][1]], { icon: endIcon }).addTo(leafMap);
+  mapLayers.route = L.layerGroup(); // dummy to track
+}
+
+function renderHeat(data) {
+  const points = data.map(r => {
+    const w = r.qualifikation === 'APPOINTMENT' ? 3 : r.qualifikation === 'ORDER_REGISTERED' ? 2 : 1;
+    return [r.coords.lat, r.coords.lng, w];
+  });
+  if (typeof L.heatLayer !== 'undefined') {
+    mapLayers.heat = L.heatLayer(points, { radius: 25, blur: 20, maxZoom: 17, gradient: { 0.2: '#3b82f6', 0.5: '#f97316', 0.8: '#ef4444', 1.0: '#F5C500' } }).addTo(leafMap);
+  }
+}
+
+function updateMapStats(data, withCoords) {
+  document.getElementById('ms-total').textContent = data.length;
+  document.getElementById('ms-geocoded').textContent = withCoords.length;
+  document.getElementById('ms-apt').textContent = data.filter(r=>r.qualifikation==='APPOINTMENT').length;
+  document.getElementById('ms-lead').textContent = data.filter(r=>r.qualifikation==='ORDER_REGISTERED').length;
+  document.getElementById('mapStats').style.display = 'grid';
+
+  // Distance
+  let dist = 0;
+  for (let i = 1; i < withCoords.length; i++) {
+    const a = withCoords[i-1].coords, b = withCoords[i].coords;
+    const R = 6371000, toR = x => x*Math.PI/180;
+    const dLat = toR(b.lat-a.lat), dLng = toR(b.lng-a.lng);
+    const s = Math.sin(dLat/2)**2 + Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;
+    dist += R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1-s)) * 1.25;
+  }
+  document.getElementById('ms-dist').textContent = dist >= 1000 ? (dist/1000).toFixed(1)+' km' : Math.round(dist)+' m';
+
+  // Work time
+  if (data.length >= 2) {
+    const sorted = [...data].sort((a,b)=>a.created.localeCompare(b.created));
+    const mins = Math.round((new Date(sorted[sorted.length-1].created) - new Date(sorted[0].created)) / 60000);
+    document.getElementById('ms-time').textContent = mins >= 60 ? Math.floor(mins/60)+'h '+(mins%60)+'m' : mins+'m';
+  }
+}
+
+function updateLegend() {
+  if (mapMode === 'heat') { document.getElementById('mapLegend').innerHTML = ''; return; }
+  const items = [
+    { color: '#22c55e', label: 'Termin' }, { color: '#F5C500', label: 'Lead CC' },
+    { color: '#3b82f6', label: 'Wiedervorlage' }, { color: '#ef4444', label: 'Kein Interesse' },
+    { color: '#f97316', label: 'Nicht erreicht' }
+  ];
+  document.getElementById('mapLegend').innerHTML = items.map(i =>
+    `<div class="map-legend-item"><div class="map-legend-dot" style="background:${i.color}"></div>${i.label}</div>`
+  ).join('');
+}
+
+function setMapMode(mode) {
+  mapMode = mode;
+  ['pins','route','heat'].forEach(m => document.getElementById('btn'+m.charAt(0).toUpperCase()+m.slice(1))?.classList.remove('on'));
+  document.getElementById('btn' + mode.charAt(0).toUpperCase() + mode.slice(1))?.classList.add('on');
+  renderMap();
+}
+
+function setMapDay(day) {
+  mapCurrentDay = day;
+  const slider = document.getElementById('daySlider');
+  if (day === 'all') {
+    slider.value = 0;
+    document.getElementById('dayLabel').textContent = 'Alle Tage';
+    document.getElementById('btnAllDays').classList.add('on');
+  } else {
+    const idx = mapDays.indexOf(day);
+    if (idx >= 0) slider.value = idx + 1;
+    document.getElementById('dayLabel').textContent = new Date(day).toLocaleDateString('de-DE', {weekday:'short',day:'2-digit',month:'2-digit'});
+    document.getElementById('btnAllDays').classList.remove('on');
+  }
+  renderMap();
+}
+
+function onSliderChange(val) {
+  const v = parseInt(val);
+  if (v === 0) { setMapDay('all'); return; }
+  const day = mapDays[v-1];
+  if (day) setMapDay(day);
+}
+
+function changeDay(delta) {
+  if (mapCurrentDay === 'all') {
+    if (delta > 0) setMapDay(mapDays[0]);
+    return;
+  }
+  const idx = mapDays.indexOf(mapCurrentDay);
+  const next = idx + delta;
+  if (next < 0) setMapDay('all');
+  else if (next >= mapDays.length) setMapDay(mapDays[mapDays.length-1]);
+  else setMapDay(mapDays[next]);
+}
+
+function setMapStatus(txt) { const el = document.getElementById('mapStatus'); if(el) el.textContent = txt; }
+
+function populateMapScouter() {
+  const loadedNames = [...new Set(allData.map(r => r.mitarbeiter_name))].sort();
+  const sel = document.getElementById('mapScouter');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Scouter auswählen...</option>' +
+    loadedNames.map(n => `<option value="${n}"${n===cur?' selected':''}>${n}</option>`).join('');
 }
 
 // ══════════════════════════════════════════════════
