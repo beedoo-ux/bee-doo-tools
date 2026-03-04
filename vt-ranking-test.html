@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>bee-doo · VT-Ranking Vergleich (Overview vs. Original)</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--gold:#F5C500;--gold2:#FFE066;--bg:#08090f;--bg2:#0e1019;--card:#12141f;--card2:#181b28;--border:#1e2235;--text:#e8ecf4;--dim:#7b87a8;--green:#22c55e;--blue:#3b82f6;--red:#ef4444;--orange:#f59e0b;--cyan:#06b6d4;--purple:#a855f7}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,#F5C50006 0%,transparent 50%),radial-gradient(ellipse at 70% 80%,#3b82f604 0%,transparent 50%);pointer-events:none;z-index:0}
+
+.main{max-width:1200px;margin:0 auto;padding:20px 16px 60px;position:relative;z-index:1}
+
+/* Header */
+.hdr{text-align:center;margin-bottom:24px}
+.hdr h1{font-family:'Outfit',sans-serif;font-size:28px;font-weight:800;background:linear-gradient(135deg,var(--gold),var(--gold2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hdr p{color:var(--dim);font-size:13px;margin-top:4px}
+.hdr-badges{display:flex;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-orig{background:rgba(59,130,246,.12);color:var(--blue);border:1px solid rgba(59,130,246,.25)}
+.badge-over{background:rgba(245,197,0,.12);color:var(--gold);border:1px solid rgba(245,197,0,.25)}
+.badge-test{background:rgba(249,115,22,.12);color:var(--orange);border:1px solid rgba(249,115,22,.25)}
+
+/* Controls */
+.ctrl{display:flex;gap:10px;justify-content:center;margin-bottom:24px;flex-wrap:wrap}
+.btn{padding:10px 22px;border-radius:10px;border:none;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-gold{background:var(--gold);color:#000}
+.btn-gold:hover{background:var(--gold2);transform:translateY(-1px)}
+.btn-gold:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-out{background:transparent;border:1px solid var(--border);color:var(--dim)}
+.btn-out:hover{border-color:var(--dim);color:var(--text)}
+
+/* Status */
+.status{text-align:center;margin-bottom:20px;font-size:13px;color:var(--dim)}
+.status .ok{color:var(--green)}.status .err{color:var(--red)}.status .load{color:var(--orange)}
+
+/* Summary Stats */
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+.sum-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;text-align:center}
+.sum-label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:6px}
+.sum-row{display:flex;justify-content:center;gap:20px;align-items:baseline}
+.sum-val{font-family:'Outfit',sans-serif;font-size:22px;font-weight:800}
+.sum-val.orig{color:var(--blue)}
+.sum-val.over{color:var(--gold)}
+.sum-vs{font-size:10px;color:var(--dim);font-weight:600}
+.sum-match{font-size:11px;font-weight:700;margin-top:4px}
+.sum-match.yes{color:var(--green)}.sum-match.no{color:var(--red)}.sum-match.close{color:var(--orange)}
+
+/* Table */
+.tbl-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.tbl-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.tbl-head h2{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.tbl-head h2 i{color:var(--gold)}
+.tbl-scroll{overflow-x:auto;max-height:70vh;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:900px}
+th{position:sticky;top:0;background:var(--card2);text-align:left;padding:10px 10px;color:var(--dim);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--border);white-space:nowrap;z-index:2}
+td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.02);white-space:nowrap}
+tr:hover td{background:rgba(255,255,255,.02)}
+th.col-orig{background:rgba(59,130,246,.06);color:var(--blue)}
+th.col-over{background:rgba(245,197,0,.06);color:var(--gold)}
+th.col-diff{background:rgba(34,197,94,.04);color:var(--green)}
+
+.cell-match{color:var(--green);font-weight:700}
+.cell-diff{color:var(--red);font-weight:700;background:rgba(239,68,68,.06)}
+.cell-close{color:var(--orange);font-weight:600}
+.rank-num{font-family:'Outfit',sans-serif;font-weight:800;font-size:15px;color:var(--gold)}
+.name{font-weight:600;color:var(--text);font-size:13px}
+
+/* Log */
+.log-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;margin-top:20px;overflow:hidden}
+.log-head{padding:12px 18px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.log{padding:14px 18px;font-family:'SF Mono',Monaco,monospace;font-size:11px;color:var(--dim);max-height:250px;overflow-y:auto;line-height:1.9}
+.log .ok{color:var(--green)}.log .err{color:var(--red)}.log .warn{color:var(--orange)}.log .info{color:var(--blue)}.log .d{color:#444}
+
+/* Legend */
+.legend{display:flex;gap:16px;justify-content:center;margin-top:16px;flex-wrap:wrap;font-size:11px;color:var(--dim)}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot-b{background:var(--blue)}.dot-g{background:var(--gold)}.dot-gr{background:var(--green)}.dot-r{background:var(--red)}
+
+@media(max-width:768px){
+  .main{padding:12px 10px 40px}
+  .hdr h1{font-size:20px}
+  .sum{grid-template-columns:1fr 1fr}
+  table{font-size:11px}
+}
+@media(max-width:480px){
+  .sum{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="main">
+
+  <div class="hdr">
+    <h1>🐝 VT-Ranking Vergleich</h1>
+    <p>Original (Supabase leveto_contracts) vs. Leveto Overview API — gleiche Logik, andere Quelle</p>
+    <div class="hdr-badges">
+      <span class="badge badge-orig">🔵 Original = Supabase</span>
+      <span class="badge badge-over">🟡 Overview = Leveto API</span>
+      <span class="badge badge-test">⚗️ Read-Only Test</span>
+    </div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn btn-gold" id="btnGo" onclick="runComparison()">▶ Vergleich starten</button>
+    <button class="btn btn-out" onclick="document.getElementById('logEl').innerHTML=''">Log leeren</button>
+  </div>
+
+  <div class="status" id="status">Bereit — klicke auf "Vergleich starten"</div>
+
+  <!-- Summary -->
+  <div class="sum" id="sumGrid" style="display:none"></div>
+
+  <!-- Ranking Table -->
+  <div class="tbl-wrap" id="tblWrap" style="display:none">
+    <div class="tbl-head">
+      <h2><i class="fas fa-trophy"></i> Ranking März 2026 — Feld-für-Feld Vergleich</h2>
+      <span style="font-size:11px;color:var(--dim)" id="tblInfo"></span>
+    </div>
+    <div class="tbl-scroll" id="tblBody"></div>
+  </div>
+
+  <div class="legend" id="legend" style="display:none">
+    <span><span class="dot dot-gr"></span> Werte identisch</span>
+    <span><span class="dot dot-r"></span> Abweichung</span>
+    <span><span class="dot dot-b"></span> Original (Supabase)</span>
+    <span><span class="dot dot-g"></span> Overview (API)</span>
+  </div>
+
+  <!-- Log -->
+  <div class="log-wrap">
+    <div class="log-head">📟 Log</div>
+    <div class="log" id="logEl"></div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════
+var SB_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+var SB_HD = {apikey:SB_KEY, Authorization:'Bearer '+SB_KEY};
+var LV_BASE = 'https://beedoo.leveto.net/API';
+var LV_USER = 'api@bee-doo.de';
+var LV_PW = 'Patrick123456789!';
+
+function log(m,c){var el=document.getElementById('logEl');var t=new Date().toLocaleTimeString('de-DE');el.innerHTML+='<div class="'+(c||'')+'"><span class="d">['+t+']</span> '+m+'</div>';el.scrollTop=el.scrollHeight}
+function setStatus(html){document.getElementById('status').innerHTML=html}
+
+// ═══════════════════════════════════════════
+// SHARED: Type detection (identisch zum Original!)
+// ═══════════════════════════════════════════
+function isHP(ti){
+  if(!ti)return false;
+  if(typeof ti==='string'){try{ti=JSON.parse(ti)}catch(e){return ti.indexOf('fa-fire')>=0}}
+  if(Array.isArray(ti))return ti.some(function(t){return typeof t==='object'?String(t.icon||'').indexOf('fa-fire')>=0:String(t).indexOf('fa-fire')>=0});
+  return false;
+}
+function hasSpeicher(ti){
+  if(!ti)return false;
+  if(typeof ti==='string'){try{ti=JSON.parse(ti)}catch(e){return ti.indexOf('fa-battery')>=0}}
+  if(Array.isArray(ti))return ti.some(function(t){return typeof t==='object'?String(t.icon||'').indexOf('fa-battery')>=0:String(t).indexOf('fa-battery')>=0});
+  return false;
+}
+
+// ═══════════════════════════════════════════
+// kWp from products (Torsten's Logik)
+// ═══════════════════════════════════════════
+function calcKwpProducts(products){
+  if(!products||!Array.isArray(products))return 0;
+  var kwp=0;
+  for(var i=0;i<products.length;i++){
+    var w=parseFloat(products[i].watt);
+    var a=parseFloat(products[i].amount);
+    if(w>0&&a>0)kwp+=a*w/1000;
+  }
+  return Math.round(kwp*100)/100;
+}
+
+// Speichererweiterung from products (battery > 0)
+function hasSpeicherProducts(products){
+  if(!products||!Array.isArray(products))return false;
+  return products.some(function(p){return parseFloat(p.battery)>0});
+}
+
+// ═══════════════════════════════════════════
+// 1. ORIGINAL: Lade aus Supabase (exakt wie vt-ranking.html)
+// ═══════════════════════════════════════════
+async function loadOriginal(){
+  log('🔵 Original: Lade leveto_contracts aus Supabase...','info');
+  var all=[];
+  for(var o=0;o<60000;o+=1000){
+    var r=await fetch(SB_URL+'/rest/v1/leveto_contracts?select=ersteller,accepted_date,calculated_realprice_netto,status_kunde,quelle,leveto_id,lead_id,typeicons&accepted_date=gte.2026-03-01T00:00:00&accepted_date=lt.2026-04-01T00:00:00&limit=1000&offset='+o,{headers:SB_HD});
+    var d=await r.json();
+    if(!Array.isArray(d)||!d.length)break;
+    all=all.concat(d);
+    if(d.length<1000)break;
+  }
+  log('🔵 '+all.length+' Roh-Contracts geladen','ok');
+
+  // Exakt gleiche Logik wie computeMarch():
+  // 1. Filter netto >= 6000
+  var a6=all.filter(function(o){return(parseFloat(o.calculated_realprice_netto)||0)>=6000});
+  log('🔵 '+a6.length+' nach Filter ≥6000€ netto','d');
+
+  // 2. Deduplizierung: lead_id + HP/PV, höchste leveto_id
+  var bk={};
+  a6.forEach(function(o){
+    var l=o.lead_id;if(!l)return;
+    var k=l+'_'+(isHP(o.typeicons)?'HP':'PV');
+    var an=o.leveto_id||0;
+    if(!bk[k]||an>(bk[k].leveto_id||0))bk[k]=o;
+  });
+  var unique=Object.values(bk);
+  log('🔵 '+unique.length+' nach Deduplizierung (lead_id+typ)','d');
+
+  // 3. Gruppierung nach ersteller
+  var bv={};
+  unique.forEach(function(o){
+    var n=(o.ersteller||'?').trim();
+    if(!bv[n])bv[n]={sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,hp:0,pv:0};
+    var d=bv[n];
+    d.sales++;
+    d.kwp+=Math.round((parseFloat(o.calculated_realprice_netto)||0)/2550*10)/10;
+    d.netto+=parseFloat(o.calculated_realprice_netto)||0;
+    if(o.status_kunde==='Storniert')d.storno++;
+    var q=(o.quelle||'').toLowerCase();
+    if(q==='eigenlead')d.el++;
+    if(q==='empfehlung')d.emp++;
+    if(hasSpeicher(o.typeicons))d.sp++;
+    if(isHP(o.typeicons))d.hp++;else d.pv++;
+  });
+  var result=Object.entries(bv).map(function(e){e[1].n=e[0];return e[1]});
+  result.sort(function(a,b){return b.sales-a.sales||b.netto-a.netto});
+  log('🔵 '+result.length+' Vertriebler im Original-Ranking','ok');
+  return {ranking:result, rawCount:all.length, filteredCount:a6.length, uniqueCount:unique.length};
+}
+
+// ═══════════════════════════════════════════
+// 2. OVERVIEW: Lade aus Leveto Overview API
+// ═══════════════════════════════════════════
+async function loadOverview(){
+  // Auth
+  log('🟡 Overview: Auth POST /auth...','info');
+  var body=new URLSearchParams();
+  body.append('username',LV_USER);
+  body.append('password',LV_PW);
+  var aRes=await fetch(LV_BASE+'/auth',{
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:body.toString()
+  });
+  var aData=await aRes.json();
+  if(!aData.token)throw new Error('Auth fehlgeschlagen: '+JSON.stringify(aData));
+  log('🟡 Auth OK ✓','ok');
+
+  // Fetch overview
+  log('🟡 GET /overview...','info');
+  var t0=performance.now();
+  var oRes=await fetch(LV_BASE+'/overview',{headers:{Authorization:'Bearer '+aData.token}});
+  if(!oRes.ok)throw new Error('HTTP '+oRes.status);
+  var oData=await oRes.json();
+  var ms=Math.round(performance.now()-t0);
+
+  // Find leads array
+  var leads=[];
+  if(Array.isArray(oData))leads=oData;
+  else{for(var k in oData){if(Array.isArray(oData[k])&&oData[k].length>100){leads=oData[k];break}}}
+  log('🟡 '+leads.length+' Leads geladen in '+ms+'ms','ok');
+
+  // Extract ALL contracts from March
+  var allContracts=[];
+  leads.forEach(function(lead){
+    var contracts=lead.contracts||[];
+    if(!Array.isArray(contracts))return;
+    contracts.forEach(function(c){
+      var ad=c.accepted_date||c.acceptedDate||'';
+      if(!ad.startsWith('2026-03'))return;
+      allContracts.push({
+        ersteller: c.ersteller||c.berater||lead.berater||'?',
+        berater: c.berater||lead.berater||'?',
+        accepted_date: ad,
+        netto: parseFloat(c.an_netto||c.calculated_realprice_netto||0),
+        storno: c.storno===true||c.storno===1||c.storno==='1'||(c.status_kunde||'')==='Storniert',
+        quelle: (c.quelle||c.source||lead.source||'').toLowerCase(),
+        contract_id: c.id||0,
+        lead_id: lead.id,
+        typeicons: c.typeicons,
+        products: c.products||[],
+        _raw: c
+      });
+    });
+  });
+  log('🟡 '+allContracts.length+' März-Contracts extrahiert','ok');
+
+  // Log which name field is available
+  if(allContracts.length>0){
+    var s=allContracts[0];
+    log('🟡 Felder-Check: ersteller="'+(s._raw.ersteller||'FEHLT')+'", berater="'+(s._raw.berater||'FEHLT')+'"','warn');
+    log('🟡 Netto-Feld: an_netto='+(s._raw.an_netto||'FEHLT')+', calculated_realprice_netto='+(s._raw.calculated_realprice_netto||'FEHLT'),'warn');
+    // Log all contract keys for debugging
+    var cKeys=Object.keys(s._raw).filter(function(k){return k!=='products'}).join(', ');
+    log('🟡 Contract-Keys: '+cKeys,'d');
+  }
+
+  // 1. Filter netto >= 6000
+  var a6=allContracts.filter(function(o){return o.netto>=6000});
+  log('🟡 '+a6.length+' nach Filter ≥6000€ netto','d');
+
+  // 2. Deduplizierung: lead_id + HP/PV, höchste contract_id
+  var bk={};
+  a6.forEach(function(o){
+    var l=o.lead_id;if(!l)return;
+    var k=l+'_'+(isHP(o.typeicons)?'HP':'PV');
+    var an=o.contract_id||0;
+    if(!bk[k]||an>(bk[k].contract_id||0))bk[k]=o;
+  });
+  var unique=Object.values(bk);
+  log('🟡 '+unique.length+' nach Deduplizierung','d');
+
+  // 3. Gruppierung — GLEICHE Logik, aber echte kWp aus products
+  var bv={};
+  unique.forEach(function(o){
+    // Verwende ersteller wenn vorhanden, sonst berater
+    var n=(o.ersteller||o.berater||'?').trim();
+    if(!bv[n])bv[n]={sales:0,kwp:0,kwp_real:0,netto:0,storno:0,el:0,emp:0,sp:0,sp_prod:0,hp:0,pv:0};
+    var d=bv[n];
+    d.sales++;
+    d.kwp+=Math.round(o.netto/2550*10)/10; // gleiche Schätzung wie Original
+    d.kwp_real+=calcKwpProducts(o.products); // ECHTE kWp aus products!
+    d.netto+=o.netto;
+    if(o.storno)d.storno++;
+    if(o.quelle==='eigenlead')d.el++;
+    if(o.quelle==='empfehlung')d.emp++;
+    if(hasSpeicher(o.typeicons))d.sp++;
+    if(hasSpeicherProducts(o.products))d.sp_prod++; // Speicher aus products
+    if(isHP(o.typeicons))d.hp++;else d.pv++;
+  });
+  var result=Object.entries(bv).map(function(e){e[1].n=e[0];return e[1]});
+  result.sort(function(a,b){return b.sales-a.sales||b.netto-a.netto});
+  log('🟡 '+result.length+' Vertriebler im Overview-Ranking','ok');
+  return {ranking:result, rawCount:allContracts.length, filteredCount:a6.length, uniqueCount:unique.length, leadCount:leads.length, ms:ms};
+}
+
+// ═══════════════════════════════════════════
+// COMPARISON LOGIC
+// ═══════════════════════════════════════════
+async function runComparison(){
+  var btn=document.getElementById('btnGo');
+  btn.disabled=true;btn.textContent='⏳ Lade...';
+  setStatus('<span class="load">Lade Original-Daten aus Supabase...</span>');
+
+  try{
+    // Load both
+    var orig=await loadOriginal();
+    setStatus('<span class="load">Lade Overview-Daten aus Leveto API...</span>');
+    var over=await loadOverview();
+
+    // Build comparison
+    setStatus('<span class="ok">✅ Beide Quellen geladen — vergleiche...</span>');
+
+    // Summary
+    renderSummary(orig,over);
+
+    // Detail table
+    renderTable(orig.ranking,over.ranking);
+
+    log('━━━ Vergleich abgeschlossen ━━━','ok');
+    setStatus('<span class="ok">✅ Vergleich fertig</span> — Scroll runter für Details');
+
+  }catch(err){
+    log('FEHLER: '+err.message,'err');
+    setStatus('<span class="err">❌ '+err.message+'</span>');
+  }
+  btn.disabled=false;btn.textContent='▶ Nochmal vergleichen';
+}
+
+// ═══════════════════════════════════════════
+// RENDER SUMMARY
+// ═══════════════════════════════════════════
+function renderSummary(orig,over){
+  var grid=document.getElementById('sumGrid');
+  grid.style.display='';
+
+  var totalOrigSales=orig.ranking.reduce(function(s,r){return s+r.sales},0);
+  var totalOverSales=over.ranking.reduce(function(s,r){return s+r.sales},0);
+  var totalOrigNetto=orig.ranking.reduce(function(s,r){return s+r.netto},0);
+  var totalOverNetto=over.ranking.reduce(function(s,r){return s+r.netto},0);
+  var totalOrigHP=orig.ranking.reduce(function(s,r){return s+r.hp},0);
+  var totalOverHP=over.ranking.reduce(function(s,r){return s+r.hp},0);
+  var totalOverKwpReal=over.ranking.reduce(function(s,r){return s+(r.kwp_real||0)},0);
+  var totalOrigKwp=orig.ranking.reduce(function(s,r){return s+r.kwp},0);
+
+  function card(label,vOrig,vOver,fmt,note){
+    var vo=fmt?fmt(vOrig):vOrig;
+    var vv=fmt?fmt(vOver):vOver;
+    var match=vOrig===vOver;
+    var close=!match&&Math.abs(vOrig-vOver)<=Math.max(1,Math.abs(vOrig)*0.05);
+    var mCls=match?'yes':(close?'close':'no');
+    var mTxt=match?'✅ Identisch':(close?'≈ Fast gleich':'❌ Differenz: '+(vOver-vOrig)):
+    html='<div class="sum-card"><div class="sum-label">'+label+'</div>';
+    html+='<div class="sum-row"><span class="sum-val orig">'+vo+'</span><span class="sum-vs">vs</span><span class="sum-val over">'+vv+'</span></div>';
+    html+='<div class="sum-match '+mCls+'">'+mTxt+'</div>';
+    if(note)html+='<div style="font-size:10px;color:var(--dim);margin-top:4px">'+note+'</div>';
+    html+='</div>';
+    return html;
+  }
+
+  var h='';
+  h+=card('Sales Gesamt',totalOrigSales,totalOverSales);
+  h+=card('Vertriebler',orig.ranking.length,over.ranking.length);
+  h+=card('Netto Gesamt',totalOrigNetto,totalOverNetto,function(v){return Math.round(v).toLocaleString('de-DE')+'€'});
+  h+=card('Wärmepumpen',totalOrigHP,totalOverHP);
+  h+=card('Roh-Contracts',orig.rawCount,over.rawCount,'','vor Filter ≥6000€');
+  h+=card('Nach Filter',orig.filteredCount,over.filteredCount,'','≥6000€ netto');
+  h+=card('Nach Dedup',orig.uniqueCount,over.uniqueCount,'','lead_id+typ');
+  // kWp special card
+  h+='<div class="sum-card"><div class="sum-label">kWp Berechnung</div>';
+  h+='<div class="sum-row"><span class="sum-val orig">'+totalOrigKwp.toFixed(0)+'</span><span class="sum-vs">vs</span><span class="sum-val over">'+totalOverKwpReal.toFixed(0)+'</span></div>';
+  h+='<div class="sum-match close">🔵 netto/2550 vs 🟡 echte kWp</div>';
+  h+='<div style="font-size:10px;color:var(--dim);margin-top:4px">Overview hat echte kWp aus products!</div></div>';
+
+  grid.innerHTML=h;
+}
+
+// ═══════════════════════════════════════════
+// RENDER TABLE
+// ═══════════════════════════════════════════
+function renderTable(origRank,overRank){
+  var wrap=document.getElementById('tblWrap');
+  wrap.style.display='';
+  document.getElementById('legend').style.display='';
+
+  // Index by name
+  var origMap={};origRank.forEach(function(r){origMap[r.n]=r});
+  var overMap={};overRank.forEach(function(r){overMap[r.n]=r});
+  var allNames=new Set();
+  origRank.forEach(function(r){allNames.add(r.n)});
+  overRank.forEach(function(r){allNames.add(r.n)});
+
+  // Merge + sort by original ranking
+  var merged=[];
+  allNames.forEach(function(n){
+    var o=origMap[n]||null;
+    var v=overMap[n]||null;
+    merged.push({name:n, orig:o, over:v, sortKey:o?o.sales:0, sortKey2:o?o.netto:0});
+  });
+  merged.sort(function(a,b){return b.sortKey-a.sortKey||b.sortKey2-a.sortKey2});
+
+  var matchCount=0,diffCount=0;
+
+  function cv(origVal,overVal,fmt){
+    // Compare values, return colored cell pair
+    var ov=origVal||0;var vv=overVal||0;
+    var fov=fmt?fmt(ov):ov;
+    var fvv=fmt?fmt(vv):vv;
+    var match=ov===vv;
+    if(match)matchCount++;else diffCount++;
+    var cls=match?'cell-match':'cell-diff';
+    return '<td class="'+cls+'">'+fov+'</td><td class="'+cls+'">'+fvv+'</td>';
+  }
+
+  var html='<table><thead><tr>';
+  html+='<th>#</th><th>Name</th>';
+  html+='<th class="col-orig">🔵 Sales</th><th class="col-over">🟡 Sales</th>';
+  html+='<th class="col-orig">🔵 kWp</th><th class="col-over">🟡 kWp</th><th class="col-over">🟡 kWp echt</th>';
+  html+='<th class="col-orig">🔵 Netto</th><th class="col-over">🟡 Netto</th>';
+  html+='<th class="col-orig">🔵 HP</th><th class="col-over">🟡 HP</th>';
+  html+='<th class="col-orig">🔵 PV</th><th class="col-over">🟡 PV</th>';
+  html+='<th class="col-orig">🔵 Storno</th><th class="col-over">🟡 Storno</th>';
+  html+='<th class="col-orig">🔵 EL</th><th class="col-over">🟡 EL</th>';
+  html+='<th class="col-orig">🔵 Emp</th><th class="col-over">🟡 Emp</th>';
+  html+='<th class="col-orig">🔵 Sp</th><th class="col-over">🟡 Sp</th>';
+  html+='<th>Status</th>';
+  html+='</tr></thead><tbody>';
+
+  matchCount=0;diffCount=0;
+
+  merged.forEach(function(m,i){
+    var o=m.orig||{sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,hp:0,pv:0};
+    var v=m.over||{sales:0,kwp:0,kwp_real:0,netto:0,storno:0,el:0,emp:0,sp:0,hp:0,pv:0};
+
+    var salesMatch=o.sales===v.sales;
+    var nettoMatch=Math.abs(o.netto-v.netto)<100; // Toleranz 100€
+    var allMatch=salesMatch&&nettoMatch&&o.hp===v.hp&&o.pv===v.pv&&o.storno===v.storno&&o.el===v.el&&o.emp===v.emp;
+
+    var rowStatus=allMatch?'<span style="color:var(--green);font-weight:700">✅</span>':'<span style="color:var(--red);font-weight:700">❌</span>';
+    var onlyOrig=!m.over?'<span style="color:var(--blue);font-size:10px">nur Original</span>':'';
+    var onlyOver=!m.orig?'<span style="color:var(--gold);font-size:10px">nur Overview</span>':'';
+
+    html+='<tr>';
+    html+='<td class="rank-num">'+(i+1)+'</td>';
+    html+='<td class="name">'+m.name+' '+onlyOrig+onlyOver+'</td>';
+
+    // Sales
+    html+='<td style="color:var(--blue);font-weight:700">'+o.sales+'</td>';
+    html+='<td style="color:'+(salesMatch?'var(--green)':'var(--red)')+';font-weight:700">'+v.sales+(salesMatch?' ✓':' ✗')+'</td>';
+
+    // kWp (Schätzung beider Seiten)
+    html+='<td style="color:var(--blue)">'+o.kwp.toFixed(1)+'</td>';
+    html+='<td style="color:var(--gold)">'+v.kwp.toFixed(1)+'</td>';
+    // kWp REAL (nur Overview)
+    html+='<td style="color:var(--cyan);font-weight:600">'+(v.kwp_real||0).toFixed(1)+' <span style="font-size:9px;color:var(--dim)">echt</span></td>';
+
+    // Netto
+    html+='<td style="color:var(--blue)">'+Math.round(o.netto).toLocaleString('de-DE')+'</td>';
+    html+='<td style="color:'+(nettoMatch?'var(--green)':'var(--red)')+'">'+Math.round(v.netto).toLocaleString('de-DE')+(nettoMatch?' ✓':' Δ'+Math.round(v.netto-o.netto).toLocaleString('de-DE'))+'</td>';
+
+    // HP
+    html+='<td style="color:var(--blue)">'+o.hp+'</td>';
+    html+='<td style="color:'+(o.hp===v.hp?'var(--green)':'var(--red)')+'">'+v.hp+'</td>';
+
+    // PV
+    html+='<td style="color:var(--blue)">'+o.pv+'</td>';
+    html+='<td style="color:'+(o.pv===v.pv?'var(--green)':'var(--red)')+'">'+v.pv+'</td>';
+
+    // Storno
+    html+='<td style="color:var(--blue)">'+o.storno+'</td>';
+    html+='<td style="color:'+(o.storno===v.storno?'var(--green)':'var(--red)')+'">'+v.storno+'</td>';
+
+    // EL
+    html+='<td style="color:var(--blue)">'+o.el+'</td>';
+    html+='<td style="color:'+(o.el===v.el?'var(--green)':'var(--red)')+'">'+v.el+'</td>';
+
+    // Emp
+    html+='<td style="color:var(--blue)">'+o.emp+'</td>';
+    html+='<td style="color:'+(o.emp===v.emp?'var(--green)':'var(--red)')+'">'+v.emp+'</td>';
+
+    // Speicher
+    html+='<td style="color:var(--blue)">'+o.sp+'</td>';
+    html+='<td style="color:'+(o.sp===v.sp?'var(--green)':'var(--red)')+'">'+v.sp+'</td>';
+
+    html+='<td>'+rowStatus+'</td>';
+    html+='</tr>';
+  });
+
+  html+='</tbody></table>';
+  document.getElementById('tblBody').innerHTML=html;
+
+  var totalRows=merged.length;
+  var matchRows=merged.filter(function(m){
+    var o=m.orig||{sales:0,netto:0,hp:0,pv:0,storno:0,el:0,emp:0};
+    var v=m.over||{sales:0,netto:0,hp:0,pv:0,storno:0,el:0,emp:0};
+    return o.sales===v.sales&&Math.abs(o.netto-v.netto)<100&&o.hp===v.hp&&o.pv===v.pv&&o.storno===v.storno;
+  }).length;
+
+  document.getElementById('tblInfo').textContent=matchRows+' von '+totalRows+' Vertrieblern stimmen überein ('+(Math.round(matchRows/totalRows*100))+'%)';
+
+  log('Ergebnis: '+matchRows+'/'+totalRows+' Vertriebler identisch ('+Math.round(matchRows/totalRows*100)+'%)','ok');
+  if(matchRows===totalRows){
+    log('🎉 PERFEKTER MATCH — Overview API liefert identische Ranking-Daten!','ok');
+  }else{
+    log('⚠️ Differenzen gefunden — Details in der Tabelle oben','warn');
+    // Show which ones differ
+    merged.forEach(function(m){
+      var o=m.orig||{sales:0,netto:0};
+      var v=m.over||{sales:0,netto:0};
+      if(o.sales!==v.sales)log('  '+m.name+': Sales '+o.sales+' vs '+v.sales,'warn');
+      if(Math.abs(o.netto-v.netto)>=100)log('  '+m.name+': Netto '+Math.round(o.netto)+'€ vs '+Math.round(v.netto)+'€','warn');
+    });
+  }
+}
+
+log('VT-Ranking Vergleich bereit.','info');
+log('⚠️ Read-Only — es werden KEINE Daten geschrieben!','warn');
+log('Logik ist 1:1 aus vt-ranking.html kopiert: Filter ≥6000€, Dedup lead_id+typ, Gruppierung nach ersteller','info');
+</script>
+</body>
+</html>
