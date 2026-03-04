@@ -305,45 +305,17 @@ async function runScoutSync() {
     return { synced, skipped, success: true };
 }
 
-// Geocode scout rows that have address but no lat/lng (server-side, up to 50 per run)
+// Koordinaten aus infas_adressen befüllen (kein Google API nötig)
 async function geocodeScoutRows() {
-    const GKEY = 'AIzaSyB7Y7FgAc4R6GX1V6GjGzm0bSNK5IfBg7o';
-    // Get rows needing geocoding (distinct addresses, limit 50 per run)
-    const r = await fetch(ap('scout_qualifikationen') + 
-        '?select=id,strasse,hausnummer,plz,ort&lat=is.null&strasse=not.is.null&limit=50', 
-        { headers: hd() });
-    if (!r.ok) return;
-    const rows = await r.json();
-    if (!rows.length) return;
-
-    let geocoded = 0;
-    // Group by unique address to minimize API calls
-    const addrMap = {};
-    rows.forEach(row => {
-        const key = `${row.strasse} ${row.hausnummer||''}, ${row.plz} ${row.ort}`.trim();
-        if (!addrMap[key]) addrMap[key] = [];
-        addrMap[key].push(row.id);
+    // Nutzt PostGIS-Funktion fill_scout_coords – matched gegen 23 Mio infas_adressen
+    const r = await fetch(ap('rpc/fill_scout_coords'), {
+        method: 'POST',
+        headers: hd(),
+        body: JSON.stringify({ batch_size: 1000 })
     });
-
-    for (const [addr, ids] of Object.entries(addrMap)) {
-        try {
-            const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${GKEY}`;
-            const gr = await fetch(gUrl);
-            const gd = await gr.json();
-            if (gd.results?.[0]) {
-                const { lat, lng } = gd.results[0].geometry.location;
-                // Update all rows with this address
-                await fetch(ap('scout_qualifikationen') + `?id=in.(${ids.map(id => `"${id}"`).join(',')})`, {
-                    method: 'PATCH',
-                    headers: hd(),
-                    body: JSON.stringify({ lat, lng })
-                });
-                geocoded++;
-            }
-        } catch(e) {}
-        await new Promise(r => setTimeout(r, 50));
-    }
-    console.log(`Geocoded ${geocoded} unique addresses`);
+    if (!r.ok) return;
+    const count = await r.json();
+    if (count > 0) console.log(`Geocoded ${count} scout rows via infas_adressen`);
 }
 
 // ═══ MAIN HANDLER ═══
