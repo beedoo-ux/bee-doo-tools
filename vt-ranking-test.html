@@ -145,9 +145,6 @@ th.col-diff{background:rgba(34,197,94,.04);color:var(--green)}
 var SB_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
 var SB_HD = {apikey:SB_KEY, Authorization:'Bearer '+SB_KEY};
-var LV_BASE = 'https://beedoo.leveto.net/API';
-var LV_USER = 'api@bee-doo.de';
-var LV_PW = 'Patrick123456789!';
 
 function log(m,c){var el=document.getElementById('logEl');var t=new Date().toLocaleTimeString('de-DE');el.innerHTML+='<div class="'+(c||'')+'"><span class="d">['+t+']</span> '+m+'</div>';el.scrollTop=el.scrollHeight}
 function setStatus(html){document.getElementById('status').innerHTML=html}
@@ -168,25 +165,7 @@ function hasSpeicher(ti){
   return false;
 }
 
-// ═══════════════════════════════════════════
-// kWp from products (Torsten's Logik)
-// ═══════════════════════════════════════════
-function calcKwpProducts(products){
-  if(!products||!Array.isArray(products))return 0;
-  var kwp=0;
-  for(var i=0;i<products.length;i++){
-    var w=parseFloat(products[i].watt);
-    var a=parseFloat(products[i].amount);
-    if(w>0&&a>0)kwp+=a*w/1000;
-  }
-  return Math.round(kwp*100)/100;
-}
-
-// Speichererweiterung from products (battery > 0)
-function hasSpeicherProducts(products){
-  if(!products||!Array.isArray(products))return false;
-  return products.some(function(p){return parseFloat(p.battery)>0});
-}
+// kWp + Speicher now calculated server-side in /api/overview-march.js
 
 // ═══════════════════════════════════════════
 // 1. ORIGINAL: Lade aus Supabase (exakt wie vt-ranking.html)
@@ -245,71 +224,34 @@ async function loadOriginal(){
 // 2. OVERVIEW: Lade aus Leveto Overview API
 // ═══════════════════════════════════════════
 async function loadOverview(){
-  // Auth
-  log('🟡 Overview: Auth POST /auth (via Proxy)...','info');
-  var body=new URLSearchParams();
-  body.append('username',LV_USER);
-  body.append('password',LV_PW);
-  var aRes=await fetch('/api/leveto-proxy?path=auth',{
-    method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body:body.toString()
-  });
-  var aData=await aRes.json();
-  if(!aData.token)throw new Error('Auth fehlgeschlagen: '+JSON.stringify(aData));
-  log('🟡 Auth OK ✓','ok');
-
-  // Fetch overview
-  log('🟡 GET /overview (via Proxy)...','info');
+  // Use server-side API route — avoids CORS + filters server-side
+  log('🟡 Overview: Rufe /api/overview-march ab (server-side)...','info');
   var t0=performance.now();
-  var oRes=await fetch('/api/leveto-proxy?path=overview',{headers:{Authorization:'Bearer '+aData.token}});
-  if(!oRes.ok)throw new Error('HTTP '+oRes.status);
-  var oData=await oRes.json();
+  var oRes=await fetch('/api/overview-march?month=2026-03');
+  if(!oRes.ok){
+    var errText=await oRes.text();
+    throw new Error('API Route HTTP '+oRes.status+': '+errText);
+  }
+  var result=await oRes.json();
   var ms=Math.round(performance.now()-t0);
 
-  // Find leads array
-  var leads=[];
-  if(Array.isArray(oData))leads=oData;
-  else{for(var k in oData){if(Array.isArray(oData[k])&&oData[k].length>100){leads=oData[k];break}}}
-  log('🟡 '+leads.length+' Leads geladen in '+ms+'ms','ok');
+  if(result.error)throw new Error(result.error);
 
-  // Extract ALL contracts from March
-  var allContracts=[];
-  leads.forEach(function(lead){
-    var contracts=lead.contracts||[];
-    if(!Array.isArray(contracts))return;
-    contracts.forEach(function(c){
-      var ad=c.accepted_date||c.acceptedDate||'';
-      if(!ad.startsWith('2026-03'))return;
-      allContracts.push({
-        ersteller: c.ersteller||c.berater||lead.berater||'?',
-        berater: c.berater||lead.berater||'?',
-        accepted_date: ad,
-        netto: parseFloat(c.an_netto||c.calculated_realprice_netto||0),
-        storno: c.storno===true||c.storno===1||c.storno==='1'||(c.status_kunde||'')==='Storniert',
-        quelle: (c.quelle||c.source||lead.source||'').toLowerCase(),
-        contract_id: c.id||0,
-        lead_id: lead.id,
-        typeicons: c.typeicons,
-        products: c.products||[],
-        _raw: c
-      });
-    });
-  });
-  log('🟡 '+allContracts.length+' März-Contracts extrahiert','ok');
+  log('🟡 Auth + Overview + Filter in '+ms+'ms (Leveto fetch: '+result.fetchMs+'ms)','ok');
+  log('🟡 '+result.totalLeads+' Leads total, '+result.totalContracts+' Contracts total','d');
+  log('🟡 '+result.filteredContracts+' März-Contracts extrahiert','ok');
 
-  // Log which name field is available
+  var allContracts=result.contracts;
+
+  // Log field check
   if(allContracts.length>0){
     var s=allContracts[0];
-    log('🟡 Felder-Check: ersteller="'+(s._raw.ersteller||'FEHLT')+'", berater="'+(s._raw.berater||'FEHLT')+'"','warn');
-    log('🟡 Netto-Feld: an_netto='+(s._raw.an_netto||'FEHLT')+', calculated_realprice_netto='+(s._raw.calculated_realprice_netto||'FEHLT'),'warn');
-    // Log all contract keys for debugging
-    var cKeys=Object.keys(s._raw).filter(function(k){return k!=='products'}).join(', ');
-    log('🟡 Contract-Keys: '+cKeys,'d');
+    log('🟡 Felder-Check: ersteller="'+(s.ersteller||'FEHLT')+'", berater="'+(s.berater||'FEHLT')+'"','warn');
+    log('🟡 Netto: '+s.netto+', kWp_real: '+s.kwp_real,'d');
   }
 
   // 1. Filter netto >= 6000
-  var a6=allContracts.filter(function(o){return o.netto>=6000});
+  var a6=allContracts.filter(function(o){return(o.netto||0)>=6000});
   log('🟡 '+a6.length+' nach Filter ≥6000€ netto','d');
 
   // 2. Deduplizierung: lead_id + HP/PV, höchste contract_id
@@ -326,25 +268,25 @@ async function loadOverview(){
   // 3. Gruppierung — GLEICHE Logik, aber echte kWp aus products
   var bv={};
   unique.forEach(function(o){
-    // Verwende ersteller wenn vorhanden, sonst berater
     var n=(o.ersteller||o.berater||'?').trim();
     if(!bv[n])bv[n]={sales:0,kwp:0,kwp_real:0,netto:0,storno:0,el:0,emp:0,sp:0,sp_prod:0,hp:0,pv:0};
     var d=bv[n];
     d.sales++;
-    d.kwp+=Math.round(o.netto/2550*10)/10; // gleiche Schätzung wie Original
-    d.kwp_real+=calcKwpProducts(o.products); // ECHTE kWp aus products!
+    d.kwp+=Math.round(o.netto/2550*10)/10;
+    d.kwp_real+=(o.kwp_real||0);
     d.netto+=o.netto;
     if(o.storno)d.storno++;
-    if(o.quelle==='eigenlead')d.el++;
-    if(o.quelle==='empfehlung')d.emp++;
+    var q=(o.quelle||'').toLowerCase();
+    if(q==='eigenlead')d.el++;
+    if(q==='empfehlung')d.emp++;
     if(hasSpeicher(o.typeicons))d.sp++;
-    if(hasSpeicherProducts(o.products))d.sp_prod++; // Speicher aus products
+    if(o.speicher_count>0)d.sp_prod++;
     if(isHP(o.typeicons))d.hp++;else d.pv++;
   });
-  var result=Object.entries(bv).map(function(e){e[1].n=e[0];return e[1]});
-  result.sort(function(a,b){return b.sales-a.sales||b.netto-a.netto});
-  log('🟡 '+result.length+' Vertriebler im Overview-Ranking','ok');
-  return {ranking:result, rawCount:allContracts.length, filteredCount:a6.length, uniqueCount:unique.length, leadCount:leads.length, ms:ms};
+  var ranking=Object.entries(bv).map(function(e){e[1].n=e[0];return e[1]});
+  ranking.sort(function(a,b){return b.sales-a.sales||b.netto-a.netto});
+  log('🟡 '+ranking.length+' Vertriebler im Overview-Ranking','ok');
+  return {ranking:ranking, rawCount:allContracts.length, filteredCount:a6.length, uniqueCount:unique.length, leadCount:result.totalLeads, ms:ms};
 }
 
 // ═══════════════════════════════════════════
