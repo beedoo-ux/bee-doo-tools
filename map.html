@@ -766,7 +766,7 @@ async function loadInfasForView() {
 
   try {
     // Load infas for this bbox — use lat/lng where available, limit 500
-    const url = `${SB_URL}/rest/v1/infas_adressen?select=lat,lng,stn,hnr,ort,status&lat=gte.${b.getSouth().toFixed(4)}&lat=lte.${b.getNorth().toFixed(4)}&lng=gte.${b.getWest().toFixed(4)}&lng=lte.${b.getEast().toFixed(4)}&limit=500`;
+    const url = `${SB_URL}/rest/v1/infas_adressen?select=lat,lng,stn,hnr,ort,status,qualifikation,scout_name,visited_at&lat=gte.${b.getSouth().toFixed(4)}&lat=lte.${b.getNorth().toFixed(4)}&lng=gte.${b.getWest().toFixed(4)}&lng=lte.${b.getEast().toFixed(4)}&order=status.asc&limit=800`;
     const r = await fetch(url, {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
     const data = await r.json();
     infasCache[key] = data;
@@ -777,18 +777,86 @@ async function loadInfasForView() {
   infasLoading = false;
 }
 
+// Qualifikations-Farben
+const QUALI_COLOR = {
+  'appointment': '#F5C500',   // Gold — Termin/Auftrag
+  'followup':    '#f97316',   // Orange — Rückruf
+  'visited':     '#60a5fa',   // Blau — besucht
+  'existing':    '#a78bfa',   // Lila — Bestandskunde
+  'blocked':     '#4b5563',   // Dunkelgrau — gesperrt
+  'open':        '#e5e7eb',   // Hellgrau — offen
+};
+const QUALI_LABEL = {
+  'APPOINTMENT':'🗓 Termin','ORDER_REGISTERED':'📋 Auftrag','FOLLOW_UP':'🔄 Rückruf',
+  'CUSTOMER_NOT_HOME':'🚪 Nicht da','NO_INTEREST':'❌ Kein Interesse',
+  'EXISTING_CUSTOMER':'⚡ Bestandskunde','NOT_MARKETABLE':'🚫 Nicht vermarktbar',
+  'BLACKLISTED':'⛔ Blacklist',
+};
+
 function renderInfas(data) {
   layers.inf.clearLayers();
   const valid = data.filter(a => a.lat && a.lng);
+
+  // Coverage berechnen
+  const total   = valid.length;
+  const visited = valid.filter(a => a.status !== 'open').length;
+  const appts   = valid.filter(a => a.status === 'appointment').length;
+  const pct     = total > 0 ? Math.round(visited/total*100) : 0;
+
+  // Stats-Bar updaten
+  document.getElementById('ln-inf').textContent = total;
+  document.getElementById('n-inf').textContent  = total;
+  const statEl = document.getElementById('infas-stat');
+  if (total > 0) statEl.style.display = 'block';
+
+  // Coverage-Panel einblenden
+  let cvg = document.getElementById('infas-coverage');
+  if (!cvg) {
+    cvg = document.createElement('div');
+    cvg.id = 'infas-coverage';
+    cvg.style.cssText = 'position:absolute;bottom:30px;right:10px;z-index:800;background:rgba(15,17,26,.92);border:1px solid #2a2d3e;border-radius:12px;padding:12px 16px;color:#e2e8f0;font-size:12px;min-width:180px;backdrop-filter:blur(8px)';
+    document.getElementById('map').appendChild(cvg);
+  }
+  cvg.innerHTML = `
+    <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#F5C500">📊 Coverage</div>
+    <div style="margin-bottom:6px">
+      <div style="background:#1a1d2e;border-radius:6px;height:8px;overflow:hidden">
+        <div style="background:#F5C500;height:100%;width:${pct}%;border-radius:6px;transition:width .4s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:3px">
+        <span style="color:#94a3b8">${visited} besucht</span>
+        <span style="color:#F5C500;font-weight:700">${pct}%</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <span style="color:#F5C500">🗓 ${appts} Termine</span>
+      <span style="color:#e5e7eb">📍 ${total - visited} offen</span>
+    </div>
+    <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">
+      ${Object.entries(QUALI_COLOR).filter(([k])=>k!=='open').map(([k,col])=>`
+        <span style="background:${col}22;border:1px solid ${col}55;color:${col};border-radius:4px;padding:1px 6px;font-size:10px">${k}</span>
+      `).join('')}
+    </div>`;
+
+  // Pins rendern
   valid.forEach(a => {
-    const color = a.status === 'visited' ? '#5c6b8a' : '#f97316';
-    const icon = L.divIcon({html:`<div style="width:5px;height:5px;background:${color};border-radius:50%;opacity:.7"></div>`,iconSize:[5,5],iconAnchor:[2.5,2.5],className:''});
-    L.marker([a.lat, a.lng], {icon, zIndexOffset:-200}).addTo(layers.inf)
-      .bindTooltip(`${a.stn} ${a.hnr}, ${a.ort}`, {className:'dtip'});
+    const col  = QUALI_COLOR[a.status] || QUALI_COLOR.open;
+    const size = a.status === 'appointment' ? 8 : a.status === 'open' ? 4 : 6;
+    const opac = a.status === 'open' ? 0.35 : 0.85;
+    const icon = L.divIcon({
+      html: `<div style="width:${size}px;height:${size}px;background:${col};border-radius:50%;opacity:${opac};box-shadow:0 0 ${a.status==='appointment'?'6px '+col:'2px #0004'}"></div>`,
+      iconSize:[size,size], iconAnchor:[size/2,size/2], className:''
+    });
+    const marker = L.marker([a.lat, a.lng], {icon, zIndexOffset: a.status==='appointment'?100:a.status==='open'?-200:0})
+      .addTo(layers.inf);
+
+    // Tooltip
+    const lbl = QUALI_LABEL[a.qualifikation] || '';
+    const tip = a.status === 'open'
+      ? `${a.stn} ${a.hnr}`
+      : `<b>${a.stn} ${a.hnr}</b><br>${lbl}<br><span style="color:#94a3b8;font-size:10px">${a.scout_name||''} · ${a.visited_at ? new Date(a.visited_at).toLocaleDateString('de') : ''}</span>`;
+    marker.bindTooltip(tip, {className:'dtip', sticky:true});
   });
-  document.getElementById('ln-inf').textContent = valid.length;
-  document.getElementById('n-inf').textContent = valid.length;
-  if (valid.length > 0) document.getElementById('infas-stat').style.display = 'block';
 }
 
 map.on('moveend zoomend', () => {
