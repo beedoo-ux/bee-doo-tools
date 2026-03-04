@@ -360,12 +360,27 @@ let allScouterNames = [];
 // SUPABASE
 // ══════════════════════════════════════════════════
 async function sbFetch(params) {
-  const url = `${SB_URL}/rest/v1/${TABLE}?${params}&limit=100000`;
-  const r = await fetch(url, {
-    headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`, Accept: 'application/json' }
-  });
-  if (!r.ok) throw new Error(`Supabase Fehler ${r.status}: ${await r.text()}`);
-  return r.json();
+  // Supabase gibt max 1000 Zeilen zurück – paginieren mit Range-Header
+  const PAGE = 1000;
+  let all = [];
+  let from = 0;
+  while (true) {
+    const url = `${SB_URL}/rest/v1/${TABLE}?${params}`;
+    const r = await fetch(url, {
+      headers: {
+        apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`,
+        Accept: 'application/json',
+        Range: `${from}-${from + PAGE - 1}`,
+        'Range-Unit': 'items'
+      }
+    });
+    if (!r.ok) throw new Error(`Supabase Fehler ${r.status}: ${await r.text()}`);
+    const rows = await r.json();
+    all = all.concat(rows);
+    if (rows.length < PAGE) break; // letzte Seite
+    from += PAGE;
+  }
+  return all;
 }
 
 async function sbUpsert(rows) {
