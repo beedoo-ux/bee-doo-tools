@@ -231,7 +231,7 @@
   <a href="qualifikation.html" id="nav-quali">📊 Qualifikationen</a>
   <a href="zeiterfassung.html" id="nav-zeit">🕐 Zeiterfassung</a>
   <a href="analytics.html" id="nav-ana">⚡ Analytics</a>
-  <a href="qualifikation.html" id="nav-map">🗺️ Karte</a>
+  <a href="?tab=map" id="nav-map">🗺️ Karte</a>
 </div>
 <script>
 (function(){var p=location.pathname.split('/').pop();var map={'scout-hub.html':'nav-hub','qualifikation.html':'nav-quali','zeiterfassung.html':'nav-zeit','analytics.html':'nav-ana'};var el=document.getElementById(map[p]);if(el)el.classList.add('cur');})();
@@ -1027,7 +1027,7 @@ function switchTab(name, el) {
   if (name==='leaderboard') renderLB();
   if (name==='data') renderTable();
   if (name==='settings') updateSettings();
-  if (name==='map') { initMap(); populateMapScouter(); setTimeout(()=>{if(leafMap)leafMap.invalidateSize();},200); }
+  if (name==='map') { initMap(); populateMapScouter(); setTimeout(()=>{if(leafMap)leafMap.invalidateSize();},200); startLiveMap(); }
 }
 
 function setStatus(type, txt) {
@@ -1314,6 +1314,39 @@ function changeDay(delta) {
 
 function setMapStatus(txt) { const el = document.getElementById('mapStatus'); if(el) el.textContent = txt; }
 
+// ── LIVE MAP AUTO-REFRESH ──
+let liveMapInterval = null;
+function startLiveMap() {
+  if (liveMapInterval) clearInterval(liveMapInterval);
+  liveMapInterval = setInterval(async () => {
+    if (!mapScouterData.length || !document.getElementById('tab-map')?.classList.contains('active')) return;
+    const name = document.getElementById('mapScouter').value;
+    if (!name) return;
+    // Only live-refresh for today
+    const today = new Date().toISOString().split('T')[0];
+    const from = document.getElementById('fFrom')?.value;
+    if (from !== today) return;
+    // Fetch new entries since last known
+    const lastTs = mapScouterData.length ? mapScouterData[mapScouterData.length-1].created : today + 'T00:00:00';
+    const params = 'order=created.asc&mitarbeiter_name=eq.' + encodeURIComponent(name) + '&created=gt.' + lastTs;
+    try {
+      const newRows = await sbFetch(params);
+      if (!newRows.length) return;
+      mapScouterData = [...mapScouterData, ...newRows].sort((a,b)=>a.created.localeCompare(b.created));
+      await geocodeAll(newRows);
+      // Add new days to slider
+      const newDays = [...new Set(mapScouterData.map(r=>r.created.split('T')[0]))].sort();
+      if (newDays.length !== mapDays.length) {
+        mapDays = newDays;
+        const slider = document.getElementById('daySlider');
+        if (slider) slider.max = mapDays.length;
+      }
+      renderMap();
+      setMapStatus('🟢 Live · ' + newRows.length + ' neue Einträge · ' + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}));
+    } catch(e) {}
+  }, 60000); // every 60 seconds
+}
+
 function populateMapScouter() {
   const loadedNames = [...new Set(allData.map(r => r.mitarbeiter_name))].sort();
   const sel = document.getElementById('mapScouter');
@@ -1328,6 +1361,12 @@ function populateMapScouter() {
 // ══════════════════════════════════════════════════
 async function init() {
   setQuick('month', document.getElementById('qbtn-month'));
+  // Auto-open tab from URL ?tab=
+  const urlTab = new URLSearchParams(location.search).get('tab');
+  if (urlTab) {
+    const tabEl = [...document.querySelectorAll('.tab')].find(t => (t.getAttribute('onclick')||'').includes("'"+urlTab+"'"));
+    if (tabEl) setTimeout(() => switchTab(urlTab, tabEl), 300);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
