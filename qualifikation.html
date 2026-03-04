@@ -333,6 +333,7 @@ const TABLE    = 'scout_qualifikationen';
 const API_BASE = 'https://api.bee-doo.de/api';
 const API_TOK  = 'tcp_2a71c5e2cff94d04b03eb447ea645a3719f3705c63ffcb44f22e3585fd9f6496';
 const DELAY_MS = 1150; // > 1 sec between API requests
+const BATCH_SIZE = 300; // rows per Supabase upsert
 
 const STATUS = {
   APPOINTMENT:       { label: 'Termin',           color: '#22c55e' },
@@ -783,7 +784,8 @@ async function startDownload() {
     if (rows1.length) { await sbUpsert(rows1); totalSaved += rows1.length; }
     setProg(Math.round(1/lastPage*85)+2, `Seite 1/${lastPage} gespeichert`);
 
-    // Pages 2+
+    // Pages 2+ — batch 300 rows per Supabase upsert
+    let batch = [];
     for (let p = 2; p <= lastPage; p++) {
       await sleep(DELAY_MS);
       let pu = `${API_BASE}/adress_qualifikations?created%5Bafter%5D=${from}&page=${p}`;
@@ -791,11 +793,14 @@ async function startDownload() {
       const rp = await fetch(pu, { headers: { 'X-AUTH-TOKEN': API_TOK, Accept: 'application/ld+json' } });
       if (!rp.ok) throw new Error(`API Seite ${p}: ${rp.status}`);
       const dp = await rp.json();
-      const rowsP = parseApiRows(dp['hydra:member']||[]);
-      if (rowsP.length) { await sbUpsert(rowsP); totalSaved += rowsP.length; }
+      batch.push(...parseApiRows(dp['hydra:member']||[]));
+      // Flush to Supabase every BATCH_SIZE rows or last page
+      if (batch.length >= BATCH_SIZE || p === lastPage) {
+        if (batch.length) { await sbUpsert(batch); totalSaved += batch.length; batch = []; }
+      }
       const pct = Math.round(p/lastPage*85)+2;
       setProg(pct, `Seite ${p}/${lastPage} — ${totalSaved.toLocaleString('de-DE')} gespeichert`);
-      if (p % 10 === 0) dlLog(`Seite ${p}/${lastPage}: ${totalSaved.toLocaleString('de-DE')} Datensätze`, 'inf');
+      if (p % 50 === 0) dlLog(`Seite ${p}/${lastPage}: ${totalSaved.toLocaleString('de-DE')} Datensätze`, 'inf');
     }
 
     setProg(95, 'Aktualisiere Ansicht...');
