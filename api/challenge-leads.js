@@ -54,12 +54,10 @@ export default async function handler(req, res) {
       return imp >= startDate && imp < endDate;
     });
 
-    // 4. Filter Eigenlead + Empfehlung with qualifying status
+    // 4. Filter Eigenlead + Empfehlung (ALL count, no status filter)
     const qualifying = monthLeads.filter(l => {
       const src = (l.quelle || '').trim();
-      const status = (l.leadstatus || '').trim();
-      return (src === 'Eigenlead' || src === 'Empfehlung')
-        && QUALIFYING_STATUSES.includes(status);
+      return src === 'Eigenlead' || src === 'Empfehlung';
     });
 
     // 5. All EL/Emp regardless of status (for reference)
