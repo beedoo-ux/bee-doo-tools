@@ -1,9 +1,9 @@
-// api/challenge-leads.js — Challenge 1000er: Eigenleads + Empfehlungen from Leveto API
-// Returns aggregated lead counts per berater for a given month
+// api/challenge-leads.js — Challenge 1000er: Eigenleads + Empfehlungen
+// NOW USES: Leveto Overview API (single request, all leads)
+// OLD: Leveto Leads API (paginated, 50/page, many requests)
 // Usage: GET /api/challenge-leads?month=2026-03
-//
-// Zähllogik: Leads mit Quelle Eigenlead/Empfehlung + Status "Terminiert" oder "Neuer Lead"
-// Nur createdFrom wird verwendet (kein createdTo) – damit kommen alle Leads des Monats zurück.
+
+export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,12 +17,10 @@ export default async function handler(req, res) {
   }
 
   const LEVETO = 'https://beedoo.leveto.net/API';
-
-  // Statuses that count for the challenge
   const QUALIFYING_STATUSES = ['Terminiert', 'Neuer Lead'];
 
   try {
-    // 1. Authenticate
+    // 1. Auth
     const authResp = await fetch(`${LEVETO}/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -32,122 +30,106 @@ export default async function handler(req, res) {
     if (!authData.token) {
       return res.status(401).json({ error: 'Leveto auth failed', details: authData });
     }
-    const token = authData.token;
-    const authHeader = { 'Authorization': `Bearer ${token}` };
 
-    // 2. Parse month – only startDate needed (createdTo causes Leveto to miss leads)
+    // 2. Fetch Overview (single request, ~2s, all leads)
+    const t0 = Date.now();
+    const ovRes = await fetch(`${LEVETO}/overview`, {
+      headers: { 'Authorization': `Bearer ${authData.token}` }
+    });
+    if (!ovRes.ok) return res.status(ovRes.status).json({ error: `Overview HTTP ${ovRes.status}` });
+    const ovData = await ovRes.json();
+    const fetchMs = Date.now() - t0;
+
+    const leads = Array.isArray(ovData) ? ovData : (ovData.data || []);
+
+    // 3. Filter to target month (using importiert field)
     const [yr, mo] = month.split('-').map(Number);
     const startDate = `${yr}-${String(mo).padStart(2, '0')}-01`;
-
-    // 3. Fetch ALL leads for the month (paginated, only createdFrom)
-    let allLeads = [];
-    let page = 1;
-    let totalPages = 999;
-
-    while (page <= totalPages) {
-      const url = `${LEVETO}/leads?limit=50&createdFrom=${startDate}&page=${page}`;
-      const resp = await fetch(url, { headers: authHeader });
-      const data = await resp.json();
-      totalPages = data.totalpages || 0;
-      const leads = data.leads || [];
-      allLeads = allLeads.concat(leads);
-      page++;
-      if (page > 100) break;
-    }
-
-    // 4. Filter to current month only (createdOn >= startDate and < next month)
     const endMo = mo === 12 ? 1 : mo + 1;
     const endYr = mo === 12 ? yr + 1 : yr;
     const endDate = `${endYr}-${String(endMo).padStart(2, '0')}-01`;
-    const monthLeads = allLeads.filter(l => {
-      const created = (l.createdOn || '').substring(0, 10);
-      return created >= startDate && created < endDate;
+
+    const monthLeads = leads.filter(l => {
+      const imp = (l.importiert || '').substring(0, 10);
+      return imp >= startDate && imp < endDate;
     });
 
-    // 5. Filter Eigenlead + Empfehlung with qualifying status (Terminiert oder Neuer Lead)
+    // 4. Filter Eigenlead + Empfehlung with qualifying status
     const qualifying = monthLeads.filter(l => {
-      const src = (l.source || '').trim();
-      const status = (typeof l.status === 'object' && l.status ? l.status.name : '') || '';
+      const src = (l.quelle || '').trim();
+      const status = (l.leadstatus || '').trim();
       return (src === 'Eigenlead' || src === 'Empfehlung')
-        && QUALIFYING_STATUSES.includes(status.trim());
+        && QUALIFYING_STATUSES.includes(status);
     });
 
-    // 6. Also count all EL/Emp regardless of status (for reference)
+    // 5. All EL/Emp regardless of status (for reference)
     const allElEmp = monthLeads.filter(l => {
-      const src = (l.source || '').trim();
+      const src = (l.quelle || '').trim();
       return src === 'Eigenlead' || src === 'Empfehlung';
     });
 
-    // 7. Manual overrides: Leads ohne Berater
+    // 6. Manual overrides: Leads ohne Berater
     const BERATER_OVERRIDES = {
-      65347: 'Kevin Kraus', // Brigitte Priem
-      65348: 'Kevin Kraus', // Vivien Schmidt
-      65349: 'Kevin Kraus', // Familie Marcinowski
-      65354: 'Kevin Kraus', // Familie Bajrami
-      65355: 'Kevin Kraus', // Gertrud Bank
+      65347: 'Kevin Kraus',
+      65348: 'Kevin Kraus',
+      65349: 'Kevin Kraus',
+      65354: 'Kevin Kraus',
+      65355: 'Kevin Kraus',
     };
 
-    // 8. Group qualifying leads by berater
+    // 7. Group qualifying leads by berater
     const byBerater = {};
     qualifying.forEach(l => {
-      let name = (l.berater || l.responsiblePerson || '').trim();
+      let name = (l.berater || '').trim();
       if (!name && BERATER_OVERRIDES[l.id]) name = BERATER_OVERRIDES[l.id];
       if (!name) name = '(kein Berater)';
       if (!byBerater[name]) byBerater[name] = { el: 0, emp: 0, total: 0 };
-      if ((l.source || '').trim() === 'Eigenlead') byBerater[name].el++;
+      if ((l.quelle || '').trim() === 'Eigenlead') byBerater[name].el++;
       else byBerater[name].emp++;
       byBerater[name].total++;
     });
 
-    // 9. Count all leads per berater (for context)
-    const allByBerater = {};
-    monthLeads.forEach(l => {
-      const name = (l.berater || l.responsiblePerson || '(kein Berater)').trim();
-      allByBerater[name] = (allByBerater[name] || 0) + 1;
-    });
-
-    // 10. Count all sources (for debugging)
+    // 8. Sources breakdown (debugging)
     const sources = {};
     monthLeads.forEach(l => {
-      const s = (l.source || '(leer)').trim();
+      const s = (l.quelle || '(leer)').trim();
       sources[s] = (sources[s] || 0) + 1;
     });
 
-    // 11. Status breakdown for all EL/Emp (for transparency)
+    // 9. Status breakdown for EL/Emp
     const statusBreakdown = {};
     allElEmp.forEach(l => {
-      const st = (typeof l.status === 'object' && l.status ? l.status.name : '') || '(kein Status)';
+      const st = (l.leadstatus || '(kein Status)').trim();
       statusBreakdown[st] = (statusBreakdown[st] || 0) + 1;
     });
 
-    // 12. Recent qualifying leads (for live ticker)
+    // 10. Recent qualifying leads (for live ticker)
     const recentLeads = qualifying
       .map(l => ({
-        name: `${(l.firstName || '').trim()} ${(l.lastName || '').trim()}`.trim() || 'Unbekannt',
-        berater: (l.berater || l.responsiblePerson || '').trim() || BERATER_OVERRIDES[l.id] || '?',
-        source: (l.source || '').trim(),
-        status: (typeof l.status === 'object' && l.status ? l.status.name : '') || '',
-        date: l.createdOn || '',
-        city: (l.city || '').trim()
+        name: `${(l.vorname || '').trim()} ${(l.nachname || '').trim()}`.trim() || 'Unbekannt',
+        berater: (l.berater || '').trim() || BERATER_OVERRIDES[l.id] || '?',
+        source: (l.quelle || '').trim(),
+        status: (l.leadstatus || '').trim(),
+        date: l.importiert || '',
+        city: (l.stadt || '').trim()
       }))
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
       .slice(0, 8);
 
-    // 13. Group by day for daily chart
+    // 11. Group by day for daily chart
     const byDay = {};
     qualifying.forEach(l => {
-      const d = (l.createdOn || '').substring(0, 10);
+      const d = (l.importiert || '').substring(0, 10);
       if (d) byDay[d] = (byDay[d] || 0) + 1;
     });
 
-    // 14. Build response
+    // 12. Build response (same format as before)
     const persons = Object.entries(byBerater)
       .map(([n, v]) => ({
         n,
         el: v.el,
         emp: v.emp,
-        total: v.total,
-        allLeads: allByBerater[n] || 0
+        total: v.total
       }))
       .sort((a, b) => b.total - a.total);
 
@@ -161,11 +143,13 @@ export default async function handler(req, res) {
       statusBreakdown,
       recentLeads,
       byDay,
-      fetchedAt: new Date().toISOString()
+      fetchedAt: new Date().toISOString(),
+      _source: 'overview-api',
+      _fetchMs: fetchMs
     });
 
   } catch (err) {
     console.error('Challenge leads error:', err);
-    return res.status(502).json({ error: 'Failed to fetch from Leveto', details: err.message });
+    return res.status(502).json({ error: 'Failed to fetch from Leveto Overview', details: err.message });
   }
 }
