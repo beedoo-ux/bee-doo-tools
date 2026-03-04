@@ -3,7 +3,9 @@
 // ⚠️ PAUSED 2026-03-04: Switching to Overview API. All data now comes from /api/overview-march.
 // Old Supabase sync is no longer the primary data source for vt-ranking or challenge.
 
-const PAUSED = true; // Set to false to re-enable
+// PAUSED_KEYS: syncs paused because vt-ranking switched to Overview API
+// leveto_appointments + scout_sync are NOT in this list - they power live-ticker & scouting
+const PAUSED_KEYS = ['leveto_sync', 'leveto_contracts', 'lohn_sheet', 'auto_merge'];
 
 const SU = 'https://hqzpemfaljxcysyqssng.supabase.co';
 const SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
@@ -350,9 +352,96 @@ async function geocodeScoutRows() {
     console.log(`Geocoded ${geocoded} unique addresses`);
 }
 
+// Appointments mapper
+function aMap(a) {
+    const vd = d => d && d !== '0000-00-00' && d !== '0000-00-00 00:00:00 00:00:00' ? d.replace(' ', 'T') + (d.includes('+') ? '' : '+00:00') : null;
+    // Derive status from storno_date / closed_date / feedback
+    let status = 'Open';
+    if (a.storno_date && a.storno_date !== '0000-00-00 00:00:00') status = 'Cancelled';
+    else if (a.closed_date && a.closed_date !== '0000-00-00 00:00:00') status = 'Closed';
+    return {
+        leveto_id:           a.id,
+        lead_id:             a.leadID || null,
+        project_id:          a.projectID || null,
+        appointment_type:    a.appointment_type || null,
+        start_date:          vd(a.start_date),
+        end_date:            vd(a.end_date),
+        status,
+        feedback_status:     a.feedback_status || null,
+        feedback_detail:     a.feedback_detail || null,
+        user_created:        (a.user_created || '').trim() || null,
+        user_received:       (a.user_received || '').trim() || null,
+        creation_date:       vd(a.creation_date),
+        closed_date:         vd(a.closed_date),
+        storno_date:         vd(a.storno_date),
+        storno_reason:       a.storno_reason || null,
+        storno_reason_detail:a.storno_reason_detail || null,
+        kunde_vorname:       (a.vorname || '').trim() || null,
+        kunde_nachname:      (a.nachname || '').trim() || null,
+        kunde_plz:           a.plz || null,
+        kunde_stadt:         a.stadt || null,
+        kunde_strasse:       a.strasse || null,
+        kunde_hausnr:        a.hausnummer || null,
+        quelle:              a.quelle || null,
+        termin_text:         a.text || null,
+        id_extern:           a.id_extern || null,
+        sync_aktualisiert_am: new Date().toISOString()
+    };
+}
+
+async function runAppointmentsSync(config, req) {
+    const token = await levetoAuth();
+    const now = new Date();
+
+    // Window: sync appointments in relevant range only (Leveto API ignores date params,
+    // so we fetch all and filter client-side)
+    const windowDaysBack   = config?.days_back   || 14;  // how far back (catch feedback on past appts)
+    const windowDaysFwd    = config?.days_fwd     || 60;  // how far forward
+    const isFullSync       = req?.query?.full === 'true' || now.getUTCHours() === 1; // nightly at 02:00 CET
+
+    const cutoffBack = new Date(now - windowDaysBack * 86400000).toISOString().slice(0, 10);
+    const cutoffFwd  = new Date(now.getTime() + windowDaysFwd * 86400000).toISOString().slice(0, 10);
+
+    // Fetch all (Leveto ignores any date filter - confirmed)
+    const r = await fetch(`${LU}/appointments?limit=99999`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) throw new Error(`Appointments API HTTP ${r.status}`);
+    const d = await r.json();
+    const all = d.data || [];
+
+    // Filter to window unless full sync
+    const filtered = isFullSync ? all : all.filter(a => {
+        if (!a.start_date) return false;
+        const dateStr = a.start_date.slice(0, 10);
+        return dateStr >= cutoffBack && dateStr <= cutoffFwd;
+    });
+
+    if (!filtered.length) return { synced: 0, total: all.length, window: `${cutoffBack}..${cutoffFwd}`, mode: isFullSync ? 'full' : 'window' };
+
+    const rows = filtered.map(aMap);
+
+    // Upsert in batches of 200
+    const bs = 200;
+    let synced = 0;
+    for (let i = 0; i < rows.length; i += bs) {
+        const batch = rows.slice(i, i + bs);
+        const uRes = await fetch(ap('leveto_appointments') + '?on_conflict=leveto_id', {
+            method: 'POST',
+            headers: { ...hd(), Prefer: 'resolution=merge-duplicates,return=minimal' },
+            body: JSON.stringify(batch)
+        });
+        if (uRes.ok) synced += batch.length;
+        else {
+            const errTxt = await uRes.text();
+            throw new Error(`Upsert batch ${i}: ${errTxt.slice(0, 200)}`);
+        }
+    }
+
+    return { synced, total: all.length, window: `${cutoffBack}..${cutoffFwd}`, mode: isFullSync ? 'full' : 'window' };
+}
+
 // ═══ MAIN HANDLER ═══
 export default async function handler(req, res) {
-    if (PAUSED) return res.status(200).json({ status: 'paused', reason: 'Switched to Overview API 2026-03-04' });
+    // Selective pause: skip paused keys unless forced by ?sync=key
     // Verify cron secret or allow manual trigger
     const authHeader = req.headers.authorization;
     if (authHeader !== 'Bearer manual' && req.headers['x-vercel-cron'] !== '1') {
@@ -375,6 +464,7 @@ export default async function handler(req, res) {
             // Skip if not due (unless forced)
             if (forceKey && cfg.sync_key !== forceKey) continue;
             if (!forceKey && !cronMatches(cfg.cron_schedule, now)) continue;
+            if (!forceKey && PAUSED_KEYS.includes(cfg.sync_key)) continue; // paused
 
             const startTime = Date.now();
             let result = {};
@@ -395,6 +485,9 @@ export default async function handler(req, res) {
                         break;
                     case 'scout_sync':
                         result = await runScoutSync();
+                        break;
+                    case 'leveto_appointments':
+                        result = await runAppointmentsSync(cfg.config, req);
                         break;
                     case 'efs_sync':
                         // EFS has its own cron at /api/efs-sync
