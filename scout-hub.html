@@ -30,6 +30,9 @@ header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 28p
 .header-right{display:flex;align-items:center;gap:10px;}
 .live-badge{display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--green-dim);border:1px solid rgba(34,197,94,.2);border-radius:20px;font-size:12px;font-weight:600;color:var(--green);}
 .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+.rbtn{padding:7px 16px;border-radius:7px;font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;background:transparent;color:var(--text3);transition:all .15s;white-space:nowrap;}
+.rbtn:hover{color:var(--text2);}
+.rbtn.on{background:var(--gold);color:#000;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
 .time-display{font-family:'DM Mono',monospace;font-size:13px;color:var(--text2);}
 
@@ -185,6 +188,21 @@ td.mono{font-family:'DM Mono',monospace;font-size:12px;}
     <div class="greeting-date" id="greetDate"></div>
   </div>
 
+  <!-- RANGE SELECTOR -->
+  <div style="display:flex;gap:6px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:3px;display:flex;gap:2px" id="rangeBar">
+      <button class="rbtn on" id="rb-today"  onclick="setRange('today',this)">Heute</button>
+      <button class="rbtn"    id="rb-yest"   onclick="setRange('yesterday',this)">Gestern</button>
+      <button class="rbtn"    id="rb-week"   onclick="setRange('week',this)">Diese Woche</button>
+      <button class="rbtn"    id="rb-month"  onclick="setRange('month',this)">Monat</button>
+    </div>
+    <div style="font-size:13px;font-weight:600;color:var(--text2);font-family:'DM Mono',monospace" id="rangeLbl"></div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <div style="font-size:12px;color:var(--text3)" id="lastRefresh"></div>
+      <button onclick="loadAll()" style="font-size:12px;color:var(--gold);background:none;border:1px solid var(--gold-dim);border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600;font-family:'DM Sans',sans-serif">↻ Aktualisieren</button>
+    </div>
+  </div>
+
   <!-- LIVE KPIs (heute) -->
   <div class="kpi-row" id="kpiRow">
     <div class="kpi" style="--c:var(--green)">
@@ -296,7 +314,7 @@ td.mono{font-family:'DM Mono',monospace;font-size:12px;}
   <!-- TODAY SCOUTER STATUS -->
   <div class="sec">
     <div class="sec-head">
-      <div class="sec-title">👥 Scouter – Heute <span style="font-size:12px;color:var(--text3);font-weight:400" id="todayDateLbl"></span></div>
+      <div class="sec-title">👥 Scouter <span style="font-size:12px;color:var(--text3);font-weight:400" id="todayDateLbl"></span></div>
       <a href="qualifikation.html" class="sec-link">Details →</a>
     </div>
     <div class="today-table">
@@ -384,32 +402,74 @@ async function sbFetch(params) {
 
 const fmt2 = n => String(Math.floor(n)).padStart(2,'0') + ':' + String(Math.round((n%1)*60)).padStart(2,'0');
 
+// ── Range ──
+let curRange = 'today';
+const fmt = d => d.toISOString().split('T')[0];
+
+function setRange(mode, btn) {
+  curRange = mode;
+  document.querySelectorAll('.rbtn').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  loadAll();
+}
+
+function getRangeDates() {
+  const now = new Date();
+  if (curRange === 'today') {
+    const t = fmt(now);
+    return { from: t, to: t, label: 'Heute · ' + now.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit'}) };
+  }
+  if (curRange === 'yesterday') {
+    const y = new Date(now); y.setDate(y.getDate()-1);
+    const t = fmt(y);
+    return { from: t, to: t, label: 'Gestern · ' + y.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit'}) };
+  }
+  if (curRange === 'week') {
+    const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay()+6)%7));
+    return { from: fmt(mon), to: fmt(now), label: 'Diese Woche · ' + mon.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) + ' – ' + now.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) };
+  }
+  if (curRange === 'month') {
+    const ms = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+    return { from: ms, to: fmt(now), label: now.toLocaleDateString('de-DE',{month:'long',year:'numeric'}) };
+  }
+  return { from: fmt(now), to: fmt(now), label: '' };
+}
+
 // ── Load All ──
 async function loadAll() {
-  const today = new Date().toISOString().split('T')[0];
+  const { from, to, label } = getRangeDates();
   const now = new Date();
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
   const thirtyAgo = new Date(now - 30*60*1000).toISOString();
+  const today = fmt(now);
+
+  // Update label
+  const lbl = document.getElementById('rangeLbl');
+  if (lbl) lbl.textContent = label;
+  const lr = document.getElementById('lastRefresh');
+  if (lr) lr.textContent = 'Stand: ' + now.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+
+  // Update today date label in table header
+  const tdl = document.getElementById('todayDateLbl');
+  if (tdl) tdl.textContent = '· ' + new Date(from).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}) + (from !== to ? ' – ' + new Date(to).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '');
 
   try {
-    const [todayData, monthData, recentData] = await Promise.all([
-      sbFetch(`order=created.asc&created=gte.${today}T00:00:00&created=lte.${today}T23:59:59`),
-      sbFetch(`order=created.asc&created=gte.${monthStart}T00:00:00&created=lte.${today}T23:59:59&select=mitarbeiter_name,qualifikation,created`),
+    const [mainData, recentData] = await Promise.all([
+      sbFetch(`order=created.asc&created=gte.${from}T00:00:00&created=lte.${to}T23:59:59`),
       sbFetch(`order=created.desc&created=gte.${thirtyAgo}&select=mitarbeiter_name,qualifikation,created,strasse,hausnummer,ort`)
     ]);
 
-    renderKPIs(todayData);
-    renderTodayTable(todayData);
-    renderAlertFeed(todayData);
+    renderKPIs(mainData, from, to);
+    renderTodayTable(mainData, from !== to);
+    renderAlertFeed(mainData, from !== to);
     renderActivityFeed(recentData);
-    renderMonthBox(monthData, today);
+    renderMonthBox(mainData, today);
   } catch(e) {
     showToast('Fehler: ' + e.message);
   }
 }
 
 // ── KPIs ──
-function renderKPIs(data) {
+function renderKPIs(data, from, to) {
   const byScouter = {};
   data.forEach(r => { if (!byScouter[r.mitarbeiter_name]) byScouter[r.mitarbeiter_name] = []; byScouter[r.mitarbeiter_name].push(r); });
   const activeScouters = Object.keys(byScouter);
@@ -460,7 +520,7 @@ function renderKPIs(data) {
 }
 
 // ── Today Table ──
-function renderTodayTable(data) {
+function renderTodayTable(data, multiDay=false) {
   const byScouter = {};
   data.forEach(r => {
     if (!byScouter[r.mitarbeiter_name]) byScouter[r.mitarbeiter_name] = [];
@@ -506,7 +566,7 @@ function renderTodayTable(data) {
 }
 
 // ── Alert Feed ──
-function renderAlertFeed(data) {
+function renderAlertFeed(data, multiDay=false) {
   const byScouter = {};
   data.forEach(r => {
     if (!byScouter[r.mitarbeiter_name]) byScouter[r.mitarbeiter_name] = [];
@@ -596,7 +656,7 @@ function showToast(msg) {
 }
 
 // Auto-refresh every 2 minutes
-loadAll();
+setRange("today", document.getElementById("rb-today"));
 setInterval(loadAll, 120000);
 </script>
 </body>
