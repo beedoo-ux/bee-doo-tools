@@ -1128,6 +1128,280 @@ async async function mapScouterChanged() {
     document.getElementById('mapLoadingOverlay').style.display = 'none';
   }
 }
+
+// ══════════════════════════════════════════════════
+// MAP VARIABLES
+let leafMap = null, mapScouterData = [], mapDays = [], currentMapDay = null, currentMapMode = 'pins';
+let mapPinLayer = null, mapRouteLayer = null, mapHeatLayer = null;
+const geoCache = {};
+
+const STATUS_COLORS_MAP = {
+  APPOINTMENT:'#22c55e', ORDER_REGISTERED:'#F5C500', FOLLOW_UP:'#3b82f6',
+  NO_INTEREST:'#ef4444', CUSTOMER_NOT_HOME:'#f97316', EXISTING_CUSTOMER:'#a855f7',
+  NOT_MARKETABLE:'#555', NO_ENTRY:'#444', BLACKLISTED:'#333'
+};
+const STATUS_LBL_MAP = {
+  APPOINTMENT:'Termin', ORDER_REGISTERED:'Lead CC', FOLLOW_UP:'Wiedervorlage',
+  NO_INTEREST:'Kein Interesse', CUSTOMER_NOT_HOME:'Nicht erreicht',
+  EXISTING_CUSTOMER:'Bestandskunde', NOT_MARKETABLE:'Nicht vermarktbar',
+  NO_ENTRY:'Kein Eintritt', BLACKLISTED:'Blacklist'
+};
+
+// ── initMap ──
+function initMap() {
+  if (leafMap) return;
+  const el = document.getElementById('theMap');
+  if (!el) return;
+  leafMap = L.map('theMap', { zoomControl: true }).setView([51.9, 8.4], 11);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CartoDB', maxZoom: 19
+  }).addTo(leafMap);
+}
+
+// ── geocodeAll ──
+async function geocodeAll(rows) {
+  const GKEY = 'AIzaSyB7Y7FgAc4R6GX1V6GjGzm0bSNK5IfBg7o';
+  const unique = [...new Set(rows.filter(r=>r.strasse).map(r => `${r.strasse} ${r.hausnummer||''}, ${r.plz||''} ${r.ort||''}`))];
+  let done = 0;
+  for (const addr of unique) {
+    if (geoCache[addr]) { done++; continue; }
+    try {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${GKEY}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.results && data.results[0]) {
+        const loc = data.results[0].geometry.location;
+        geoCache[addr] = { lat: loc.lat, lng: loc.lng };
+      }
+    } catch(e) {}
+    done++;
+    document.getElementById('mapLoadTxt') && (document.getElementById('mapLoadTxt').textContent = `Geocodiere... ${done}/${unique.length}`);
+    await new Promise(r => setTimeout(r, 60));
+  }
+}
+
+// ── renderMap ──
+function renderMap() {
+  if (!leafMap) return;
+  // Clear layers
+  if (mapPinLayer)   { leafMap.removeLayer(mapPinLayer);   mapPinLayer = null; }
+  if (mapRouteLayer) { leafMap.removeLayer(mapRouteLayer); mapRouteLayer = null; }
+  if (mapHeatLayer)  { leafMap.removeLayer(mapHeatLayer);  mapHeatLayer = null; }
+
+  // Filter by day
+  let data = mapScouterData;
+  if (currentMapDay) data = data.filter(r => r.created.startsWith(currentMapDay));
+
+  if (!data.length) return;
+
+  if (currentMapMode === 'pins')  renderPins(data);
+  if (currentMapMode === 'route') renderRoute(data);
+  if (currentMapMode === 'heat')  renderHeat(data);
+  updateMapStats(data);
+}
+
+// ── renderPins ──
+function renderPins(data) {
+  const markers = [];
+  data.forEach((r, i) => {
+    const addr = `${r.strasse} ${r.hausnummer||''}, ${r.plz||''} ${r.ort||''}`;
+    const geo  = geoCache[addr];
+    if (!geo) return;
+    const col  = STATUS_COLORS_MAP[r.qualifikation] || '#555';
+    const lbl  = STATUS_LBL_MAP[r.qualifikation] || r.qualifikation;
+    const isAppt = r.qualifikation === 'APPOINTMENT';
+    const size = isAppt ? 16 : 10;
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${col};border:2px solid #fff;${isAppt?'box-shadow:0 0 8px '+col:''}"></div>`,
+      iconSize: [size, size], iconAnchor: [size/2, size/2]
+    });
+    const t = new Date(r.created).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+    const m = L.marker([geo.lat, geo.lng], { icon })
+      .bindPopup(`<b>${lbl}</b><br>${r.strasse} ${r.hausnummer||''}<br>${r.plz||''} ${r.ort||''}<br>🕐 ${t}`);
+    markers.push(m);
+  });
+  mapPinLayer = L.layerGroup(markers).addTo(leafMap);
+  if (markers.length) {
+    const group = L.featureGroup(markers);
+    leafMap.fitBounds(group.getBounds().pad(0.1));
+  }
+}
+
+// ── renderRoute ──
+function renderRoute(data) {
+  const sorted = [...data].sort((a,b)=>a.created.localeCompare(b.created));
+  const points = [];
+  sorted.forEach(r => {
+    const addr = `${r.strasse} ${r.hausnummer||''}, ${r.plz||''} ${r.ort||''}`;
+    const geo  = geoCache[addr];
+    if (geo) points.push({ lat: geo.lat, lng: geo.lng, q: r.qualifikation });
+  });
+  if (points.length < 2) { renderPins(data); return; }
+
+  // Draw polyline segments colored by status
+  const layers = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const col = points[i].q === 'APPOINTMENT' ? '#22c55e' : points[i].q === 'ORDER_REGISTERED' ? '#F5C500' : 'rgba(255,255,255,0.2)';
+    layers.push(L.polyline([[points[i].lat, points[i].lng],[points[i+1].lat, points[i+1].lng]], { color: col, weight: 3, opacity: 0.8 }));
+  }
+  // Start/end marker
+  const startIcon = L.divIcon({ className:'', html:'<div style="background:#22c55e;color:#000;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">START</div>', iconSize:[40,20] });
+  const endIcon   = L.divIcon({ className:'', html:'<div style="background:#ef4444;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">ENDE</div>', iconSize:[36,20] });
+  layers.push(L.marker([points[0].lat, points[0].lng], { icon: startIcon }));
+  layers.push(L.marker([points[points.length-1].lat, points[points.length-1].lng], { icon: endIcon }));
+
+  mapRouteLayer = L.layerGroup(layers).addTo(leafMap);
+  leafMap.fitBounds(L.polyline(points.map(p=>[p.lat,p.lng])).getBounds().pad(0.1));
+}
+
+// ── renderHeat ──
+function renderHeat(data) {
+  const pts = [];
+  data.forEach(r => {
+    const addr = `${r.strasse} ${r.hausnummer||''}, ${r.plz||''} ${r.ort||''}`;
+    const geo  = geoCache[addr];
+    if (!geo) return;
+    const w = r.qualifikation === 'APPOINTMENT' ? 3 : r.qualifikation === 'ORDER_REGISTERED' ? 2 : 1;
+    pts.push([geo.lat, geo.lng, w]);
+  });
+  if (!pts.length) return;
+  mapHeatLayer = L.heatLayer(pts, {
+    radius: 25, blur: 20, maxZoom: 15,
+    gradient: { 0.2:'#1e40af', 0.5:'#f97316', 0.8:'#ef4444', 1.0:'#F5C500' }
+  }).addTo(leafMap);
+  leafMap.fitBounds(L.latLngBounds(pts.map(p=>[p[0],p[1]])).pad(0.1));
+}
+
+// ── setMapMode ──
+function setMapMode(mode) {
+  currentMapMode = mode;
+  ['btnPins','btnRoute','btnHeat'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('on');
+  });
+  const map = { pins:'btnPins', route:'btnRoute', heat:'btnHeat' };
+  if (document.getElementById(map[mode])) document.getElementById(map[mode]).classList.add('on');
+  renderMap();
+}
+
+// ── setMapDay ──
+function setMapDay(dayOrAll) {
+  if (dayOrAll === 'all') {
+    currentMapDay = null;
+    const sl = document.getElementById('daySlider');
+    if (sl) sl.value = 0;
+    const dl = document.getElementById('dayLabel');
+    if (dl) dl.textContent = 'Alle Tage';
+  } else {
+    currentMapDay = dayOrAll;
+  }
+  renderMap();
+}
+
+// ── onSliderChange ──
+function onSliderChange(val) {
+  const v = parseInt(val);
+  if (v === 0) {
+    setMapDay('all');
+  } else {
+    const day = mapDays[v - 1];
+    if (day) {
+      currentMapDay = day;
+      const dl = document.getElementById('dayLabel');
+      if (dl) dl.textContent = new Date(day).toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});
+      renderMap();
+    }
+  }
+}
+
+// ── changeDay ──
+function changeDay(delta) {
+  const sl = document.getElementById('daySlider');
+  if (!sl) return;
+  const newVal = Math.max(0, Math.min(mapDays.length, parseInt(sl.value) + delta));
+  sl.value = newVal;
+  onSliderChange(newVal);
+}
+
+// ── updateMapStats ──
+function updateMapStats(data) {
+  const geocoded = data.filter(r => geoCache[`${r.strasse} ${r.hausnummer||''}, ${r.plz||''} ${r.ort||''}`]);
+  const appts    = data.filter(r => r.qualifikation === 'APPOINTMENT').length;
+  const leads    = data.filter(r => r.qualifikation === 'ORDER_REGISTERED').length;
+
+  // Estimate distance
+  const sorted = [...geocoded].sort((a,b)=>a.created.localeCompare(b.created));
+  let distM = 0;
+  for (let i = 0; i < sorted.length-1; i++) {
+    const a1 = geoCache[`${sorted[i].strasse} ${sorted[i].hausnummer||''}, ${sorted[i].plz||''} ${sorted[i].ort||''}`];
+    const a2 = geoCache[`${sorted[i+1].strasse} ${sorted[i+1].hausnummer||''}, ${sorted[i+1].plz||''} ${sorted[i+1].ort||''}`];
+    if (a1 && a2) distM += haversine(a1.lat, a1.lng, a2.lat, a2.lng) * 1.25;
+  }
+
+  // Work time
+  let workStr = '–';
+  if (data.length >= 2) {
+    const times = data.map(r => new Date(r.created)).sort((a,b)=>a-b);
+    const durMin = Math.round((times[times.length-1] - times[0]) / 60000);
+    workStr = durMin >= 60 ? `${Math.floor(durMin/60)}h ${durMin%60}m` : `${durMin}m`;
+  }
+
+  const stats = document.getElementById('mapStatBar');
+  if (stats) stats.innerHTML = `
+    <span>📊 <b>${data.length}</b> Quali</span>
+    <span>📍 <b>${geocoded.length}</b> kartiert</span>
+    <span>🎯 <b>${appts}</b> Termine</span>
+    <span>📋 <b>${leads}</b> Leads</span>
+    <span>🚶 <b>${distM > 1000 ? (distM/1000).toFixed(1)+'km' : Math.round(distM)+'m'}</b></span>
+    <span>⏱ <b>${workStr}</b></span>`;
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ── setMapStatus ──
+function setMapStatus(txt) { const el = document.getElementById('mapStatus'); if(el) el.textContent = txt; }
+
+// ── Live Map auto-refresh ──
+let liveMapInterval = null;
+function startLiveMap() {
+  if (liveMapInterval) clearInterval(liveMapInterval);
+  liveMapInterval = setInterval(async () => {
+    const tabMap = document.getElementById('tab-map');
+    if (!tabMap || !tabMap.classList.contains('active')) return;
+    const name = document.getElementById('mapScouter').value;
+    if (!name || !mapScouterData.length) return;
+    const today = new Date().toISOString().split('T')[0];
+    const from  = document.getElementById('fFrom').value;
+    if (from !== today) return;
+    const lastTs = mapScouterData[mapScouterData.length-1].created;
+    try {
+      const newRows = await sbFetch(`order=created.asc&mitarbeiter_name=eq.${encodeURIComponent(name)}&created=gt.${lastTs}`);
+      if (!newRows.length) return;
+      mapScouterData = [...mapScouterData, ...newRows];
+      mapDays = [...new Set(mapScouterData.map(r=>r.created.split('T')[0]))].sort();
+      const sl = document.getElementById('daySlider');
+      if (sl) sl.max = mapDays.length;
+      await geocodeAll(newRows);
+      renderMap();
+      setMapStatus('🟢 Live · ' + newRows.length + ' neu · ' + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}));
+    } catch(e) {}
+  }, 60000);
+}
+
+// ── openAnalytics ──
+function openAnalytics() {
+  const sel = document.getElementById('profSel');
+  const name = sel ? sel.value : '';
+  window.open('analytics.html' + (name ? '?scouter=' + encodeURIComponent(name) : ''), '_blank');
+}
+
 // ══════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════
