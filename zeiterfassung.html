@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zeiterfassung Scouter – bee-doo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold:#F5C500; --gold-dim:rgba(245,197,0,.12); --gold-glow:rgba(245,197,0,.06);
+  --bg:#070708; --bg2:#0f0f10; --bg3:#161617; --bg4:#1d1d1e; --bg5:#242425;
+  --border:rgba(255,255,255,.065); --border2:rgba(255,255,255,.11);
+  --text:#efefef; --text2:#888; --text3:#444;
+  --green:#22c55e; --green-dim:rgba(34,197,94,.12);
+  --red:#ef4444; --red-dim:rgba(239,68,68,.12);
+  --orange:#f97316; --orange-dim:rgba(249,115,22,.12);
+  --blue:#3b82f6; --blue-dim:rgba(59,130,246,.12);
+  --purple:#a855f7;
+  --r:14px; --r2:9px; --r3:6px;
+  --shadow:0 4px 24px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+
+/* ── HEADER ── */
+header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;backdrop-filter:blur(12px);}
+.logo{display:flex;align-items:center;gap:12px;}
+.logo-mark{width:32px;height:32px;background:var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;color:#000;letter-spacing:-.5px;}
+.logo-text{font-size:16px;font-weight:700;letter-spacing:-.3px;}
+.logo-text span{color:var(--gold);}
+.header-nav{display:flex;align-items:center;gap:8px;}
+.nav-btn{padding:7px 14px;border-radius:var(--r3);font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2);transition:all .18s;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}
+.nav-btn:hover{border-color:var(--gold);color:var(--gold);}
+.nav-btn.primary{background:var(--gold);color:#000;border-color:var(--gold);}
+.nav-btn.primary:hover{background:#ffd700;}
+
+/* ── CONTROLS BAR ── */
+.controls{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 28px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.range-btns{display:flex;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:3px;}
+.rbtn{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;background:transparent;color:var(--text3);transition:all .15s;letter-spacing:.2px;}
+.rbtn:hover{color:var(--text2);}
+.rbtn.on{background:var(--gold);color:#000;}
+.ctrl-sep{width:1px;height:24px;background:var(--border);flex-shrink:0;}
+select,input[type=date]{background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:var(--r3);padding:7px 11px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;cursor:pointer;}
+select:focus,input[type=date]:focus{border-color:var(--gold);}
+.status-pill{margin-left:auto;font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;}
+
+/* ── ALERT BANNER ── */
+.alert-bar{background:rgba(239,68,68,.08);border-bottom:1px solid rgba(239,68,68,.2);padding:10px 28px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--red);}
+.alert-bar.hide{display:none;}
+
+/* ── MAIN ── */
+main{padding:24px 28px;max-width:1600px;margin:0 auto;}
+
+/* ── SUMMARY CARDS ── */
+.summary-row{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:24px;}
+.scard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;position:relative;overflow:hidden;transition:border-color .2s;}
+.scard::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--c,var(--border));}
+.scard-val{font-size:28px;font-weight:800;color:var(--text);line-height:1;margin-bottom:4px;}
+.scard-lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);}
+.scard-sub{font-size:11px;color:var(--text3);margin-top:5px;}
+.scard .icon{font-size:22px;margin-bottom:8px;}
+
+/* ── MAIN TABLE ── */
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.section-title{font-size:15px;font-weight:800;letter-spacing:-.3px;}
+.section-sub{font-size:12px;color:var(--text3);}
+
+.tbl-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:24px;}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+table{width:100%;border-collapse:collapse;}
+thead tr{background:var(--bg3);border-bottom:1px solid var(--border2);}
+th{padding:11px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);white-space:nowrap;}
+th.r{text-align:right;}
+tbody tr{border-bottom:1px solid var(--border);transition:background .12s;cursor:pointer;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:var(--bg3);}
+tbody tr.expanded{background:var(--bg3);}
+td{padding:12px 16px;font-size:13px;white-space:nowrap;}
+td.r{text-align:right;}
+td.mono{font-family:'DM Mono',monospace;font-size:12px;}
+
+/* status cells */
+.time-cell{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;}
+.time-late{color:var(--orange);}
+.time-ok{color:var(--green);}
+.time-early{color:var(--red);}
+.time-missing{color:var(--text3);font-style:italic;}
+
+/* alert tags */
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;}
+.tag-red{background:var(--red-dim);color:var(--red);}
+.tag-orange{background:var(--orange-dim);color:var(--orange);}
+.tag-green{background:var(--green-dim);color:var(--green);}
+.tag-blue{background:var(--blue-dim);color:var(--blue);}
+.tag-grey{background:var(--bg4);color:var(--text3);}
+
+/* name cell */
+.name-cell{display:flex;align-items:center;gap:10px;}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text2);flex-shrink:0;border:1px solid var(--border);}
+.name-main{font-weight:600;font-size:13px;}
+.name-id{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;}
+
+/* score bar */
+.score-bar{display:flex;align-items:center;gap:8px;}
+.score-bg{flex:1;height:4px;background:var(--bg5);border-radius:2px;overflow:hidden;min-width:60px;}
+.score-fill{height:100%;border-radius:2px;transition:width .4s ease;}
+
+/* ── EXPANDED ROW ── */
+.detail-row{background:var(--bg3) !important;cursor:default !important;}
+.detail-row:hover{background:var(--bg3) !important;}
+.detail-cell{padding:0 !important;}
+.detail-inner{padding:16px 20px;border-top:1px solid var(--border);}
+.day-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;}
+.day-card{background:var(--bg4);border:1px solid var(--border);border-radius:var(--r3);padding:12px 14px;position:relative;}
+.day-card.missing{opacity:.5;border-style:dashed;}
+.day-card.alert{border-color:rgba(239,68,68,.3);}
+.day-card.good{border-color:rgba(34,197,94,.2);}
+.day-date{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:8px;}
+.day-times{display:flex;justify-content:space-between;margin-bottom:6px;}
+.day-time-item{text-align:center;}
+.day-time-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;}
+.day-time-val{font-size:14px;font-weight:700;font-family:'DM Mono',monospace;color:var(--text);}
+.day-time-val.late{color:var(--orange);}
+.day-time-val.early{color:var(--red);}
+.day-bar{height:3px;background:var(--bg5);border-radius:2px;overflow:hidden;margin-bottom:6px;}
+.day-bar-fill{height:100%;border-radius:2px;background:var(--gold);}
+.day-quali{font-size:11px;color:var(--text3);display:flex;justify-content:space-between;}
+.day-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;}
+
+/* ── CALENDAR HEATMAP ── */
+.cal-section{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:24px;}
+.cal-grid{display:flex;gap:3px;flex-wrap:wrap;}
+.cal-day{width:14px;height:14px;border-radius:3px;cursor:pointer;transition:transform .15s;}
+.cal-day:hover{transform:scale(1.5);z-index:10;}
+
+/* ── ALERTS PANEL ── */
+.alerts-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:24px;}
+.alert-item{display:flex;align-items:flex-start;gap:12px;padding:13px 18px;border-bottom:1px solid var(--border);transition:background .12s;}
+.alert-item:last-child{border-bottom:none;}
+.alert-item:hover{background:var(--bg3);}
+.alert-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.alert-body{flex:1;}
+.alert-title{font-size:13px;font-weight:600;}
+.alert-desc{font-size:12px;color:var(--text2);margin-top:2px;}
+.alert-time{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;white-space:nowrap;}
+
+/* ── EMPTY/LOADING ── */
+.empty{display:flex;flex-direction:column;align-items:center;padding:60px 20px;gap:12px;text-align:center;}
+.empty-icon{font-size:40px;opacity:.3;}
+.empty-txt{font-size:14px;color:var(--text3);}
+.spin{width:20px;height:20px;border:2px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:sp .7s linear infinite;display:inline-block;}
+@keyframes sp{to{transform:rotate(360deg)}}
+.loading-row td{text-align:center;padding:40px;color:var(--text3);}
+
+/* ── TOOLTIP ── */
+[data-tip]{position:relative;}
+[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--bg4);border:1px solid var(--border2);color:var(--text);font-size:11px;padding:5px 9px;border-radius:5px;white-space:nowrap;z-index:999;pointer-events:none;font-family:'DM Sans',sans-serif;}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:20px;right:20px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r2);padding:11px 16px;font-size:13px;box-shadow:var(--shadow);transform:translateY(60px);opacity:0;transition:all .3s;z-index:9999;}
+#toast.show{transform:translateY(0);opacity:1;}
+#toast.err{border-color:var(--red);}
+#toast.ok{border-color:var(--green);}
+
+/* ── RESPONSIVE ── */
+@media(max-width:1200px){.summary-row{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:900px){.summary-row{grid-template-columns:repeat(2,1fr);} header,main,.controls{padding-left:16px;padding-right:16px;}}
+@media(max-width:640px){.summary-row{grid-template-columns:repeat(2,1fr);} .scard-val{font-size:22px;} .logo-text{display:none;} .controls{gap:8px;} th,td{padding:10px 12px;} .day-grid{grid-template-columns:1fr 1fr;}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">b</div>
+    <div class="logo-text">Scouter <span>Zeiterfassung</span></div>
+  </div>
+  <div class="header-nav">
+    <a href="qualifikation.html" class="nav-btn">📊 Qualifikationen</a>
+    <a href="analytics.html" class="nav-btn">⚡ Analytics</a>
+    <button class="nav-btn primary" onclick="exportCSV()">↓ CSV Export</button>
+  </div>
+</header>
+
+<div id="alertBar" class="alert-bar hide"></div>
+
+<div class="controls">
+  <div class="range-btns">
+    <button class="rbtn" id="rb-today" onclick="setRange('today',this)">Heute</button>
+    <button class="rbtn on" id="rb-week" onclick="setRange('week',this)">Woche</button>
+    <button class="rbtn" id="rb-month" onclick="setRange('month',this)">Monat</button>
+    <button class="rbtn" id="rb-custom" onclick="setRange('custom',this)">Eigener</button>
+  </div>
+  <div id="customDates" style="display:none;align-items:center;gap:6px;display:none">
+    <input type="date" id="dateFrom">
+    <span style="font-size:12px;color:var(--text3)">–</span>
+    <input type="date" id="dateTo">
+  </div>
+  <div class="ctrl-sep"></div>
+  <select id="selScouter" onchange="applyFilter()" style="min-width:180px">
+    <option value="">Alle Scouter</option>
+  </select>
+  <select id="selAlert" onchange="applyFilter()">
+    <option value="">Alle anzeigen</option>
+    <option value="late">Spät gestartet (nach 09:00)</option>
+    <option value="early">Früh Feierabend (vor 16:00)</option>
+    <option value="short">Kurzer Tag (unter 5h)</option>
+    <option value="missing">Fehltage</option>
+    <option value="alerts">Nur mit Auffälligkeiten</option>
+  </select>
+  <button class="nav-btn" onclick="loadData()" id="refreshBtn">↻ Laden</button>
+  <span class="status-pill" id="statusPill"></span>
+</div>
+
+<main>
+  <!-- Summary Cards -->
+  <div class="summary-row" id="summaryRow">
+    <div class="scard" style="--c:var(--gold)"><div class="icon">👥</div><div class="scard-val" id="sc-active">–</div><div class="scard-lbl">Aktive Scouter</div><div class="scard-sub" id="sc-active-sub"></div></div>
+    <div class="scard" style="--c:var(--green)"><div class="icon">⏰</div><div class="scard-val" id="sc-avgstart">–</div><div class="scard-lbl">Ø Arbeitsbeginn</div><div class="scard-sub" id="sc-start-sub"></div></div>
+    <div class="scard" style="--c:var(--orange)"><div class="icon">🏁</div><div class="scard-val" id="sc-avgend">–</div><div class="scard-lbl">Ø Feierabend</div><div class="scard-sub" id="sc-end-sub"></div></div>
+    <div class="scard" style="--c:var(--blue)"><div class="icon">⏱</div><div class="scard-val" id="sc-avgdur">–</div><div class="scard-lbl">Ø Arbeitszeit/Tag</div><div class="scard-sub" id="sc-dur-sub"></div></div>
+    <div class="scard" style="--c:var(--red)"><div class="icon">⚠️</div><div class="scard-val" id="sc-alerts">–</div><div class="scard-lbl">Auffälligkeiten</div><div class="scard-sub" id="sc-alerts-sub"></div></div>
+    <div class="scard" style="--c:var(--purple)"><div class="icon">🎯</div><div class="scard-val" id="sc-quali">–</div><div class="scard-lbl">Ø Quali/Tag</div><div class="scard-sub" id="sc-quali-sub"></div></div>
+  </div>
+
+  <!-- Alerts Panel -->
+  <div id="alertsPanel" style="display:none" class="alerts-panel">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;font-weight:800">⚠️ Auffälligkeiten</span>
+      <span id="alertCount" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+    <div id="alertsList"></div>
+  </div>
+
+  <!-- Main Table -->
+  <div class="section-head">
+    <div>
+      <div class="section-title">Arbeitszeiten Übersicht</div>
+      <div class="section-sub" id="tableSubtitle"></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="sortBy" onchange="renderTable()" style="font-size:12px;padding:6px 10px">
+        <option value="name">Name</option>
+        <option value="start">Frühester Start</option>
+        <option value="end">Spätester Feierabend</option>
+        <option value="dur">Längste Arbeitszeit</option>
+        <option value="quali">Meiste Quali</option>
+        <option value="alerts">Meiste Auffälligkeiten</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="tbl-card">
+    <div class="tbl-wrap">
+      <table id="mainTable">
+        <thead>
+          <tr>
+            <th>Scouter</th>
+            <th class="r">Aktive Tage</th>
+            <th>Ø Start</th>
+            <th>Frühester Start</th>
+            <th>Spätester Start</th>
+            <th>Ø Feierabend</th>
+            <th>Frühester Feierabend</th>
+            <th class="r">Ø Dauer</th>
+            <th class="r">Ø Quali/Tag</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr class="loading-row"><td colspan="10"><div class="spin"></div> Lade Daten...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════
+// CONFIG
+// ══════════════════════════════════
+const SB_URL  = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const TABLE   = 'scout_qualifikationen';
+
+// Soll-Zeiten (konfigurierbar)
+const SOLL = { startMax: 9, endMin: 16, minHours: 5 };
+
+let rawData = [], scouterStats = [], filtered = [], expandedRows = new Set();
+let dateFrom = '', dateTo = '';
+
+// ══════════════════════════════════
+// DATE RANGE
+// ══════════════════════════════════
+function setRange(mode, btn) {
+  document.querySelectorAll('.rbtn').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  const now = new Date(), fmt = d => d.toISOString().split('T')[0];
+  const cd = document.getElementById('customDates');
+  cd.style.display = 'none';
+
+  if (mode === 'today') {
+    dateFrom = dateTo = fmt(now);
+  } else if (mode === 'week') {
+    const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay()+6)%7));
+    dateFrom = fmt(mon); dateTo = fmt(now);
+  } else if (mode === 'month') {
+    dateFrom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+    dateTo = fmt(now);
+  } else {
+    cd.style.display = 'flex';
+    return;
+  }
+  document.getElementById('dateFrom').value = dateFrom;
+  document.getElementById('dateTo').value = dateTo;
+  loadData();
+}
+
+// ══════════════════════════════════
+// LOAD
+// ══════════════════════════════════
+async function sbFetch(params) {
+  const PAGE = 1000; let all = [], from = 0;
+  while (true) {
+    const r = await fetch(`${SB_URL}/rest/v1/${TABLE}?${params}`, {
+      headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`, Accept: 'application/json', Range: `${from}-${from+PAGE-1}`, 'Range-Unit': 'items' }
+    });
+    if (!r.ok) throw new Error(`DB ${r.status}`);
+    const rows = await r.json();
+    all = all.concat(rows); if (rows.length < PAGE) break; from += PAGE;
+  }
+  return all;
+}
+
+async function loadData() {
+  const df = document.getElementById('dateFrom').value || dateFrom;
+  const dt = document.getElementById('dateTo').value || dateTo;
+  if (!df) return;
+
+  document.getElementById('refreshBtn').disabled = true;
+  setStatus('Lade...');
+  document.getElementById('tableBody').innerHTML = '<tr class="loading-row"><td colspan="10"><div class="spin" style="width:16px;height:16px;border-width:2px"></div> Lade Daten...</td></tr>';
+
+  try {
+    const params = `order=created.asc&created=gte.${df}T00:00:00&created=lte.${dt}T23:59:59&select=mitarbeiter_name,mitarbeiter_id,qualifikation,created`;
+    rawData = await sbFetch(params);
+    processData();
+    populateScouters();
+    applyFilter();
+    setStatus(`${rawData.length.toLocaleString('de-DE')} Einträge · ${df} – ${dt}`);
+  } catch(e) {
+    toast('Fehler: ' + e.message, 'err');
+    setStatus('Fehler');
+  } finally {
+    document.getElementById('refreshBtn').disabled = false;
+  }
+}
+
+// ══════════════════════════════════
+// PROCESS
+// ══════════════════════════════════
+function processData() {
+  // Group by scouter
+  const byS = {};
+  rawData.forEach(r => {
+    if (!byS[r.mitarbeiter_name]) byS[r.mitarbeiter_name] = { name: r.mitarbeiter_name, id: r.mitarbeiter_id, days: {} };
+    const day = r.created.split('T')[0];
+    if (!byS[r.mitarbeiter_name].days[day]) byS[r.mitarbeiter_name].days[day] = [];
+    byS[r.mitarbeiter_name].days[day].push(r);
+  });
+
+  scouterStats = Object.values(byS).map(s => calcScouterStats(s));
+  scouterStats.sort((a,b) => a.name.localeCompare(b.name));
+}
+
+function calcScouterStats(s) {
+  const days = Object.keys(s.days).sort();
+  const dayStats = days.map(day => calcDayStats(day, s.days[day]));
+
+  const activeDays = dayStats.filter(d => !d.missing);
+  const avgStart   = activeDays.length ? activeDays.reduce((a,d) => a + d.startH, 0) / activeDays.length : null;
+  const avgEnd     = activeDays.length ? activeDays.reduce((a,d) => a + d.endH, 0) / activeDays.length : null;
+  const avgDur     = activeDays.length ? activeDays.reduce((a,d) => a + d.durMin, 0) / activeDays.length : null;
+  const avgQuali   = activeDays.length ? activeDays.reduce((a,d) => a + d.total, 0) / activeDays.length : null;
+
+  const earliestStart = activeDays.length ? Math.min(...activeDays.map(d => d.startH)) : null;
+  const latestStart   = activeDays.length ? Math.max(...activeDays.map(d => d.startH)) : null;
+  const earliestEnd   = activeDays.length ? Math.min(...activeDays.map(d => d.endH)) : null;
+  const latestEnd     = activeDays.length ? Math.max(...activeDays.map(d => d.endH)) : null;
+
+  // Alerts
+  const alerts = [];
+  dayStats.forEach(d => {
+    if (d.missing) return;
+    if (d.startH > SOLL.startMax) alerts.push({ type:'late', day: d.date, val: fmtH(d.startH), sev:'orange' });
+    if (d.endH < SOLL.endMin)     alerts.push({ type:'early', day: d.date, val: fmtH(d.endH), sev:'red' });
+    if (d.durMin < SOLL.minHours * 60) alerts.push({ type:'short', day: d.date, val: fmtMin(d.durMin), sev:'orange' });
+  });
+
+  return { ...s, days: s.days, dayStats, activeDays, avgStart, avgEnd, avgDur, avgQuali, earliestStart, latestStart, earliestEnd, latestEnd, alerts, totalAlerts: alerts.length };
+}
+
+function calcDayStats(date, entries) {
+  if (!entries || !entries.length) return { date, missing: true };
+  const sorted = [...entries].sort((a,b) => a.created.localeCompare(b.created));
+  const start = new Date(sorted[0].created);
+  const end   = new Date(sorted[sorted.length-1].created);
+  const startH = start.getHours() + start.getMinutes()/60;
+  const endH   = end.getHours() + end.getMinutes()/60;
+  const durMin = Math.round((end - start) / 60000);
+
+  const alerts = [];
+  if (startH > SOLL.startMax) alerts.push('late');
+  if (endH < SOLL.endMin)     alerts.push('early');
+  if (durMin < SOLL.minHours * 60) alerts.push('short');
+
+  return { date, missing: false, start, end, startH, endH, durMin, total: entries.length, entries: sorted,
+    appointments: entries.filter(e => e.qualifikation === 'APPOINTMENT').length,
+    leads: entries.filter(e => e.qualifikation === 'ORDER_REGISTERED').length, alerts };
+}
+
+// ══════════════════════════════════
+// FILTER + RENDER
+// ══════════════════════════════════
+function populateScouters() {
+  const names = [...new Set(rawData.map(r => r.mitarbeiter_name))].sort();
+  const sel = document.getElementById('selScouter');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Alle Scouter</option>' +
+    names.map(n => `<option value="${n}"${n===cur?' selected':''}>${n}</option>`).join('');
+}
+
+function applyFilter() {
+  const name  = document.getElementById('selScouter').value;
+  const alert = document.getElementById('selAlert').value;
+  const sort  = document.getElementById('sortBy').value;
+
+  filtered = scouterStats.filter(s => {
+    if (name && s.name !== name) return false;
+    if (alert === 'late')    return s.alerts.some(a => a.type === 'late');
+    if (alert === 'early')   return s.alerts.some(a => a.type === 'early');
+    if (alert === 'short')   return s.alerts.some(a => a.type === 'short');
+    if (alert === 'alerts')  return s.totalAlerts > 0;
+    return true;
+  });
+
+  if (sort === 'start')  filtered.sort((a,b) => (a.avgStart||99) - (b.avgStart||99));
+  if (sort === 'end')    filtered.sort((a,b) => (b.avgEnd||0) - (a.avgEnd||0));
+  if (sort === 'dur')    filtered.sort((a,b) => (b.avgDur||0) - (a.avgDur||0));
+  if (sort === 'quali')  filtered.sort((a,b) => (b.avgQuali||0) - (a.avgQuali||0));
+  if (sort === 'alerts') filtered.sort((a,b) => b.totalAlerts - a.totalAlerts);
+  if (sort === 'name')   filtered.sort((a,b) => a.name.localeCompare(b.name));
+
+  updateSummary();
+  renderTable();
+  renderAlerts();
+  document.getElementById('tableSubtitle').textContent = `${filtered.length} Scouter · ${dateFrom} – ${dateTo}`;
+}
+
+// ══════════════════════════════════
+// SUMMARY
+// ══════════════════════════════════
+function updateSummary() {
+  const active = filtered.filter(s => s.activeDays.length > 0);
+  const starts = active.filter(s => s.avgStart !== null).map(s => s.avgStart);
+  const ends   = active.filter(s => s.avgEnd !== null).map(s => s.avgEnd);
+  const durs   = active.filter(s => s.avgDur !== null).map(s => s.avgDur);
+  const qualis = active.filter(s => s.avgQuali !== null).map(s => s.avgQuali);
+
+  const avgStart = starts.length ? starts.reduce((a,b)=>a+b,0)/starts.length : null;
+  const avgEnd   = ends.length ? ends.reduce((a,b)=>a+b,0)/ends.length : null;
+  const avgDur   = durs.length ? durs.reduce((a,b)=>a+b,0)/durs.length : null;
+  const avgQuali = qualis.length ? qualis.reduce((a,b)=>a+b,0)/qualis.length : null;
+  const totalAlerts = filtered.reduce((a,s)=>a+s.totalAlerts, 0);
+  const lateCount = filtered.reduce((a,s)=>a+s.alerts.filter(al=>al.type==='late').length, 0);
+  const earlyCount = filtered.reduce((a,s)=>a+s.alerts.filter(al=>al.type==='early').length, 0);
+
+  document.getElementById('sc-active').textContent = active.length;
+  document.getElementById('sc-active-sub').textContent = `von ${filtered.length} Scoutern`;
+  document.getElementById('sc-avgstart').textContent = avgStart !== null ? fmtH(avgStart) : '–';
+  document.getElementById('sc-start-sub').textContent = avgStart !== null ? (avgStart > SOLL.startMax ? '⚠️ über 09:00' : '✓ pünktlich') : '';
+  document.getElementById('sc-avgend').textContent = avgEnd !== null ? fmtH(avgEnd) : '–';
+  document.getElementById('sc-end-sub').textContent = avgEnd !== null ? (avgEnd < SOLL.endMin ? '⚠️ vor 16:00' : '✓ regulär') : '';
+  document.getElementById('sc-avgdur').textContent = avgDur !== null ? fmtMin(avgDur) : '–';
+  document.getElementById('sc-dur-sub').textContent = avgDur !== null ? (avgDur < SOLL.minHours*60 ? `⚠️ unter ${SOLL.minHours}h` : `✓ über ${SOLL.minHours}h`) : '';
+  document.getElementById('sc-alerts').textContent = totalAlerts;
+  document.getElementById('sc-alerts-sub').textContent = `${lateCount}× spät · ${earlyCount}× früh`;
+  document.getElementById('sc-quali').textContent = avgQuali !== null ? avgQuali.toFixed(1) : '–';
+  document.getElementById('sc-quali-sub').textContent = 'Qualifikationen Ø';
+
+  // Top-level alert banner
+  const bar = document.getElementById('alertBar');
+  if (totalAlerts > 0) {
+    bar.className = 'alert-bar';
+    bar.innerHTML = `⚠️ <strong>${totalAlerts} Auffälligkeiten</strong> in diesem Zeitraum – ${lateCount}× zu spät gestartet, ${earlyCount}× zu früh Feierabend`;
+  } else {
+    bar.className = 'alert-bar hide';
+  }
+}
+
+// ══════════════════════════════════
+// MAIN TABLE
+// ══════════════════════════════════
+function renderTable() {
+  const maxDur = Math.max(...filtered.map(s => s.avgDur||0), 1);
+  const tbody = document.getElementById('tableBody');
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-txt">Keine Daten gefunden</div></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(s => {
+    const initials = s.name.split(' ').map(p=>p[0]).join('').toUpperCase().slice(0,2);
+    const alertTag = s.totalAlerts > 0
+      ? `<span class="tag tag-red">⚠️ ${s.totalAlerts} Auffällig.</span>`
+      : `<span class="tag tag-green">✓ OK</span>`;
+    const lateTag = s.alerts.filter(a=>a.type==='late').length > 0
+      ? `<span class="tag tag-orange">↑ ${s.alerts.filter(a=>a.type==='late').length}× spät</span>` : '';
+    const earlyTag = s.alerts.filter(a=>a.type==='early').length > 0
+      ? `<span class="tag tag-red">↓ ${s.alerts.filter(a=>a.type==='early').length}× früh</span>` : '';
+
+    const avgStartClass = s.avgStart > SOLL.startMax ? 'time-late' : 'time-ok';
+    const latestStartClass = s.latestStart > SOLL.startMax + 0.5 ? 'time-late' : '';
+    const earliestEndClass = s.earliestEnd < SOLL.endMin - 0.5 ? 'time-early' : '';
+
+    const durPct = s.avgDur ? Math.round(s.avgDur / maxDur * 100) : 0;
+    const durColor = s.avgDur < SOLL.minHours*60 ? 'var(--red)' : s.avgDur < SOLL.minHours*60+60 ? 'var(--orange)' : 'var(--green)';
+
+    return `<tr onclick="toggleExpand('${s.name}')" id="row-${cssId(s.name)}">
+      <td><div class="name-cell">
+        <div class="avatar">${initials}</div>
+        <div><div class="name-main">${s.name}</div><div class="name-id">${s.activeDays.length} Tage aktiv</div></div>
+      </div></td>
+      <td class="r mono" style="font-weight:700">${s.activeDays.length}</td>
+      <td><span class="time-cell ${avgStartClass}">${s.avgStart !== null ? fmtH(s.avgStart) : '<span class="time-missing">–</span>'}</span></td>
+      <td><span class="time-cell ${s.earliestStart < 7 ? 'time-ok' : ''}">${s.earliestStart !== null ? fmtH(s.earliestStart) : '–'}</span></td>
+      <td><span class="time-cell ${latestStartClass}">${s.latestStart !== null ? fmtH(s.latestStart) : '–'}</span></td>
+      <td><span class="time-cell">${s.avgEnd !== null ? fmtH(s.avgEnd) : '–'}</span></td>
+      <td><span class="time-cell ${earliestEndClass}">${s.earliestEnd !== null ? fmtH(s.earliestEnd) : '–'}</span></td>
+      <td class="r"><div class="score-bar"><div class="score-bg"><div class="score-fill" style="width:${durPct}%;background:${durColor}"></div></div><span class="mono" style="color:${durColor}">${s.avgDur !== null ? fmtMin(s.avgDur) : '–'}</span></div></td>
+      <td class="r mono">${s.avgQuali !== null ? s.avgQuali.toFixed(1) : '–'}</td>
+      <td><div style="display:flex;gap:4px;flex-wrap:wrap">${alertTag}${lateTag}${earlyTag}</div></td>
+    </tr>
+    <tr id="detail-${cssId(s.name)}" class="detail-row" style="display:none">
+      <td colspan="10" class="detail-cell">
+        <div class="detail-inner" id="detail-inner-${cssId(s.name)}"></div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleExpand(name) {
+  const id = cssId(name);
+  const detail = document.getElementById(`detail-${id}`);
+  const row    = document.getElementById(`row-${id}`);
+  const s = scouterStats.find(s => s.name === name);
+  if (!s) return;
+
+  if (expandedRows.has(name)) {
+    expandedRows.delete(name);
+    detail.style.display = 'none';
+    row.classList.remove('expanded');
+  } else {
+    expandedRows.add(name);
+    detail.style.display = '';
+    row.classList.add('expanded');
+    renderDetailRow(s, id);
+  }
+}
+
+function renderDetailRow(s, id) {
+  const inner = document.getElementById(`detail-inner-${id}`);
+  const days = Object.keys(s.days).sort();
+  const allDays = getDaysInRange();
+
+  inner.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">
+      Tagesübersicht · ${s.name}
+    </div>
+    <div class="day-grid">${allDays.map(date => {
+      const ds = s.dayStats?.find(d => d.date === date);
+      if (!ds || ds.missing) {
+        const wd = new Date(date).toLocaleDateString('de-DE',{weekday:'short'});
+        const isWeekend = [0,6].includes(new Date(date).getDay());
+        if (isWeekend) return `<div class="day-card missing" style="opacity:.25"><div class="day-date">${wd} ${date.slice(5)}</div><div style="font-size:11px;color:var(--text3)">Wochenende</div></div>`;
+        return `<div class="day-card missing alert"><div class="day-date">${wd} ${date.slice(5)}</div><div style="font-size:11px;color:var(--red)">⚠️ Kein Eintrag</div></div>`;
+      }
+      const wd = new Date(date).toLocaleDateString('de-DE',{weekday:'short'});
+      const isLate = ds.startH > SOLL.startMax;
+      const isEarly = ds.endH < SOLL.endMin;
+      const isShort = ds.durMin < SOLL.minHours * 60;
+      const cls = (isLate||isEarly||isShort) ? 'alert' : 'good';
+      const durPct = Math.min(100, Math.round(ds.durMin / (10*60) * 100));
+      return `<div class="day-card ${cls}">
+        <div class="day-date">${wd} ${date.slice(5)}</div>
+        <div class="day-times">
+          <div class="day-time-item">
+            <div class="day-time-lbl">Start</div>
+            <div class="day-time-val ${isLate?'late':''}">${fmtH(ds.startH)}</div>
+          </div>
+          <div style="font-size:18px;color:var(--text3);padding-top:10px">→</div>
+          <div class="day-time-item">
+            <div class="day-time-lbl">Ende</div>
+            <div class="day-time-val ${isEarly?'early':''}">${fmtH(ds.endH)}</div>
+          </div>
+          <div class="day-time-item">
+            <div class="day-time-lbl">Dauer</div>
+            <div class="day-time-val ${isShort?'early':''}">${fmtMin(ds.durMin)}</div>
+          </div>
+        </div>
+        <div class="day-bar"><div class="day-bar-fill" style="width:${durPct}%"></div></div>
+        <div class="day-quali">
+          <span>📊 ${ds.total} Quali</span>
+          <span>${ds.appointments > 0 ? `🎯 ${ds.appointments} Termine` : ''}</span>
+        </div>
+        <div class="day-tags">
+          ${isLate  ? '<span class="tag tag-orange">Spät gestartet</span>' : ''}
+          ${isEarly ? '<span class="tag tag-red">Früh Feierabend</span>' : ''}
+          ${isShort && !isEarly ? '<span class="tag tag-orange">Kurzer Tag</span>' : ''}
+          ${!isLate&&!isEarly&&!isShort ? '<span class="tag tag-green">✓ OK</span>' : ''}
+        </div>
+      </div>`;
+    }).join('')}
+    </div>`;
+}
+
+function getDaysInRange() {
+  const days = [];
+  const from = new Date(dateFrom || document.getElementById('dateFrom').value);
+  const to   = new Date(dateTo   || document.getElementById('dateTo').value);
+  for (let d = new Date(from); d <= to; d.setDate(d.getDate()+1)) {
+    days.push(d.toISOString().split('T')[0]);
+  }
+  return days;
+}
+
+// ══════════════════════════════════
+// ALERTS PANEL
+// ══════════════════════════════════
+function renderAlerts() {
+  const all = [];
+  filtered.forEach(s => {
+    s.alerts.forEach(a => {
+      all.push({ scouter: s.name, ...a });
+    });
+  });
+
+  const panel = document.getElementById('alertsPanel');
+  if (!all.length) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  document.getElementById('alertCount').textContent = `(${all.length})`;
+
+  const sorted = all.sort((a,b) => b.day.localeCompare(a.day)).slice(0, 20);
+  document.getElementById('alertsList').innerHTML = sorted.map(a => {
+    const icon  = a.type==='late' ? '🕙' : a.type==='early' ? '🏃' : '⏱';
+    const color = a.type==='late' ? 'var(--orange)' : a.type==='early' ? 'var(--red)' : 'var(--orange)';
+    const title = a.type==='late'  ? `Spät gestartet: ${a.val} Uhr`
+                : a.type==='early' ? `Früh Feierabend: ${a.val} Uhr`
+                : `Kurzer Tag: nur ${a.val}`;
+    const desc  = a.type==='late'  ? `Soll-Startzeit: vor ${SOLL.startMax}:00 Uhr`
+                : a.type==='early' ? `Soll-Feierabend: nach ${SOLL.endMin}:00 Uhr`
+                : `Soll-Mindestdauer: ${SOLL.minHours} Stunden`;
+    return `<div class="alert-item" onclick="document.getElementById('selScouter').value='${a.scouter}';applyFilter()">
+      <div class="alert-icon" style="background:${color}22">${icon}</div>
+      <div class="alert-body">
+        <div class="alert-title"><strong>${a.scouter}</strong> – ${title}</div>
+        <div class="alert-desc">${desc}</div>
+      </div>
+      <div class="alert-time">${a.day}</div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════
+// CSV EXPORT
+// ══════════════════════════════════
+function exportCSV() {
+  if (!filtered.length) return;
+  const rows = [['Name','Datum','Start','Ende','Dauer (Min)','Qualifikationen','Termine','Leads CC','Auffälligkeit']];
+  filtered.forEach(s => {
+    const days = getDaysInRange();
+    days.forEach(date => {
+      const ds = s.dayStats?.find(d => d.date === date);
+      if (!ds || ds.missing) {
+        const isWeekend = [0,6].includes(new Date(date).getDay());
+        if (!isWeekend) rows.push([s.name, date, '', '', '', '', '', '', 'Kein Eintrag']);
+        return;
+      }
+      const alerts = [];
+      if (ds.startH > SOLL.startMax) alerts.push('Spät gestartet');
+      if (ds.endH < SOLL.endMin) alerts.push('Früh Feierabend');
+      if (ds.durMin < SOLL.minHours*60) alerts.push('Kurzer Tag');
+      rows.push([s.name, date, fmtH(ds.startH), fmtH(ds.endH), ds.durMin, ds.total, ds.appointments, ds.leads, alerts.join(', ')]);
+    });
+  });
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(';')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `zeiterfassung_${dateFrom}_${dateTo}.csv`;
+  a.click();
+  toast('CSV exportiert ✓', 'ok');
+}
+
+// ══════════════════════════════════
+// UTILS
+// ══════════════════════════════════
+function fmtH(h) {
+  if (h == null) return '–';
+  const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+  return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+}
+function fmtMin(m) {
+  if (m == null || m < 0) return '–';
+  return m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+}
+function cssId(name) { return name.replace(/[^a-z0-9]/gi, '_'); }
+function setStatus(txt) { document.getElementById('statusPill').textContent = txt; }
+
+let toastT;
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show ' + type;
+  clearTimeout(toastT); toastT = setTimeout(() => el.className = '', 3500);
+}
+
+// INIT
+document.addEventListener('DOMContentLoaded', () => {
+  setRange('week', document.getElementById('rb-week'));
+});
+</script>
+</body>
+</html>
