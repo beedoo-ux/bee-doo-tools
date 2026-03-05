@@ -453,6 +453,13 @@ async function sync(silent=false){
     const d=await r.json();
     if(d.ok){
       S.apts=d.data||[];
+      // Deduplicate: same start_date + same user + same nachname = duplicate
+      const seen=new Set();
+      S.apts=S.apts.filter(a=>{
+        const key=`${a.start_date}|${a.user_received}|${a.nachname||''}|${a.vorname||''}`;
+        if(seen.has(key))return false;
+        seen.add(key);return true;
+      });
       computeStats();
       fetchGcalBlocks();
       const t=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
@@ -565,7 +572,9 @@ function renderBody(){
       const rateColor=st.rate>=60?'var(--green)':st.rate>=40?'var(--orange)':'var(--red)';
       const daysCells=days.map(day=>{
         const dayStr=fmt(day);
-        const vapts=S.apts.filter(a=>(a.start_date||'').slice(0,10)===dayStr&&a.user_received===vt&&a.status!=='Cancelled');
+        const vapts=S.apts.filter(a=>(a.start_date||'').slice(0,10)===dayStr&&a.user_received===vt&&a.status!=='Cancelled')
+          .sort((a,b)=>(a.start_date||'').localeCompare(b.start_date||''))
+          .filter((a,i,arr)=>i===0||a.start_date!==arr[i-1].start_date||a.nachname!==arr[i-1].nachname);
         return `<div style="flex:1;min-width:120px;border-right:1px solid var(--border);padding:3px 4px;min-height:var(--row-h);background:${isToday(day)?'rgba(253,225,84,.02)':''};">
           ${vapts.map(a=>{const st2=parseD(a.start_date);const name=[a.vorname,a.nachname].filter(Boolean).join(' ')||a.text||'Blocker';
             return `<div class="apt so" style="position:relative;top:0;left:0;width:100%;margin-bottom:2px;border-left-color:${c};background:${c}18;color:${c};" onclick='showDetailFromApt(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
