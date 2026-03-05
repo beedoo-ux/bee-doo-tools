@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fragebogen Analyse – bee-doo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0d1117; --bg2:#161b22; --bg3:#1c2333; --border:#21262d; --border2:#30363d;
+  --text:#e6edf3; --text2:#7d8590; --text3:#3d444d;
+  --accent:#F5C500; --green:#3fb950; --red:#f85149; --blue:#58a6ff; --orange:#d29922; --purple:#bc8cff;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;}
+.hdr{background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.hdr-left{display:flex;align-items:center;gap:16px;}
+.logo{font-size:15px;font-weight:800;color:var(--accent);}
+.hdr-title{font-size:15px;font-weight:700;}
+.hdr-right{display:flex;align-items:center;gap:10px;}
+.btn{padding:8px 16px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border:1px solid;transition:all .15s;}
+.btn-p{background:var(--accent);border-color:var(--accent);color:#000;}
+.btn-p:hover{filter:brightness(1.1);}
+.btn-s{background:var(--bg3);border-color:var(--border2);color:var(--text2);}
+.btn-s:hover{border-color:var(--accent);color:var(--accent);}
+.btn-d{background:rgba(248,81,73,.15);border-color:rgba(248,81,73,.4);color:var(--red);}
+
+.layout{display:grid;grid-template-columns:320px 1fr;gap:0;min-height:calc(100vh - 57px);}
+@media(max-width:900px){.layout{grid-template-columns:1fr;}}
+
+/* SIDEBAR — Anrufliste */
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);overflow-y:auto;max-height:calc(100vh - 57px);position:sticky;top:57px;}
+.sidebar-hdr{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.sidebar-title{font-size:13px;font-weight:700;color:var(--text2);}
+.refresh-btn{width:28px;height:28px;border-radius:6px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;}
+.refresh-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+.call-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;position:relative;}
+.call-item:hover{background:var(--bg3);}
+.call-item.active{background:var(--bg3);border-left:3px solid var(--accent);}
+.call-time{font-size:10px;color:var(--text3);margin-bottom:3px;}
+.call-phone{font-size:13px;font-weight:700;margin-bottom:2px;}
+.call-name{font-size:12px;color:var(--text2);margin-bottom:5px;}
+.call-badges{display:flex;gap:5px;flex-wrap:wrap;}
+.badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;}
+.badge-done{background:rgba(63,185,80,.15);color:var(--green);}
+.badge-wait{background:rgba(245,197,0,.1);color:var(--accent);}
+.badge-proc{background:rgba(88,166,255,.1);color:var(--blue);}
+.badge-err{background:rgba(248,81,73,.12);color:var(--red);}
+.badge-saved{background:rgba(188,140,255,.15);color:var(--purple);}
+.score-dot{position:absolute;right:12px;top:12px;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;}
+
+/* MAIN — Fragebogen */
+.main{padding:24px;overflow-y:auto;}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;gap:12px;color:var(--text2);}
+.empty-icon{font-size:56px;}
+
+/* Call-Header */
+.call-hdr{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.call-hdr-info h2{font-size:18px;font-weight:800;margin-bottom:4px;}
+.call-hdr-info p{font-size:12px;color:var(--text2);}
+.score-big{text-align:center;}
+.score-circle{width:64px;height:64px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:20px;font-weight:800;margin-bottom:4px;}
+.score-lbl{font-size:10px;font-weight:700;color:var(--text2);}
+
+/* Zusammenfassung */
+.summary-box{background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.2);border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;line-height:1.6;color:var(--text);}
+.summary-box strong{color:var(--blue);}
+
+/* Sections */
+.section{margin-bottom:20px;}
+.section-hdr{font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.section-hdr::after{content:'';flex:1;height:1px;background:var(--border);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+@media(max-width:600px){.grid2,.grid3{grid-template-columns:1fr;}}
+
+/* Fields */
+.field{display:flex;flex-direction:column;gap:4px;}
+.field label{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;}
+.field input,.field select,.field textarea{background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;transition:border-color .15s;width:100%;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);}
+.field input.ai-filled{border-color:rgba(63,185,80,.4);background:rgba(63,185,80,.05);}
+.field select option{background:var(--bg2);}
+.field textarea{resize:vertical;min-height:80px;}
+
+/* Toggles */
+.toggle-row{display:flex;gap:8px;flex-wrap:wrap;}
+.toggle{padding:6px 12px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;}
+.toggle.on-yes{background:rgba(63,185,80,.15);border-color:var(--green);color:var(--green);}
+.toggle.on-no{background:rgba(248,81,73,.12);border-color:var(--red);color:var(--red);}
+
+/* Einwände */
+.einwaende{display:flex;flex-wrap:wrap;gap:6px;}
+.einwand-tag{padding:4px 10px;border-radius:20px;background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:var(--red);font-size:11px;font-weight:600;}
+
+/* Stimmung Bar */
+.stimmung-bar{display:flex;gap:6px;margin-top:4px;}
+.stimmung-opt{flex:1;padding:7px 4px;border-radius:7px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:10px;font-weight:700;cursor:pointer;text-align:center;transition:all .12s;}
+.stimmung-opt.active-sp{background:rgba(63,185,80,.2);border-color:var(--green);color:var(--green);}
+.stimmung-opt.active-p{background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.5);color:var(--green);}
+.stimmung-opt.active-n{background:rgba(245,197,0,.1);border-color:var(--accent);color:var(--accent);}
+.stimmung-opt.active-s{background:rgba(248,81,73,.1);border-color:rgba(248,81,73,.5);color:var(--red);}
+.stimmung-opt.active-sn{background:rgba(248,81,73,.2);border-color:var(--red);color:var(--red);}
+
+/* Actions */
+.actions{display:flex;gap:10px;margin-top:24px;flex-wrap:wrap;}
+
+/* Toast */
+.toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:999;}
+.toast{padding:10px 16px;border-radius:10px;background:var(--bg2);border:1px solid var(--border2);font-size:12px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,.5);animation:toastin .2s ease;}
+.toast.ok{border-color:var(--green);}
+.toast.err{border-color:var(--red);}
+@keyframes toastin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.spin{display:inline-block;width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:rot .7s linear infinite;vertical-align:middle;margin-right:6px;}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+.no-calls{padding:40px 20px;text-align:center;color:var(--text2);font-size:13px;}
+
+/* Transkript Viewer */
+.transcript-box{background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:14px;font-size:12px;line-height:1.8;color:var(--text2);white-space:pre-wrap;max-height:300px;overflow-y:auto;margin-top:8px;}
+.transcript-toggle{font-size:11px;color:var(--blue);cursor:pointer;text-decoration:underline;}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-left">
+    <span class="logo">bee-doo</span>
+    <span class="hdr-title">📞 Anruf-Analyse</span>
+  </div>
+  <div class="hdr-right">
+    <span id="statusBadge" style="font-size:11px;color:var(--text2);"></span>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-hdr">
+      <span class="sidebar-title">Letzte Anrufe</span>
+      <button class="refresh-btn" onclick="loadCalls()" title="Neu laden">↺</button>
+    </div>
+    <div id="callList"><div class="no-calls">Lade Anrufe…</div></div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main" id="main">
+    <div class="empty-state">
+      <div class="empty-icon">🎙️</div>
+      <div style="font-size:16px;font-weight:700;">Anruf auswählen</div>
+      <div style="font-size:13px;">Wähle links einen Anruf aus, um den KI-Fragebogen zu prüfen und zu speichern.</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+const SUPA = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+let currentCall = null;
+
+// ── API ────────────────────────────────────────────────────────────
+async function supa(path, opts={}) {
+  const r = await fetch(`${SUPA}/rest/v1/${path}`, {
+    headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json', ...opts.headers },
+    ...opts
+  });
+  return r.json();
+}
+
+// ── CALLS LADEN ───────────────────────────────────────────────────
+async function loadCalls() {
+  const data = await supa('sipgate_calls?select=*&order=created_at.desc&limit=50');
+  const list = document.getElementById('callList');
+  
+  if (!data || !data.length) {
+    list.innerHTML = '<div class="no-calls">Noch keine Anrufe analysiert.<br><br>Sipgate Webhook muss noch konfiguriert werden.</div>';
+    return;
+  }
+
+  list.innerHTML = data.map(c => {
+    const name = extractName(c.fragebogen);
+    const phone = c.from_number || c.to_number || '–';
+    const time = new Date(c.created_at).toLocaleString('de-DE', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const badge = statusBadge(c.analyse_status);
+    const score = c.stimmung_score;
+    const scoreColor = score >= 7 ? 'var(--green)' : score >= 4 ? 'var(--accent)' : score ? 'var(--red)' : 'var(--border2)';
+    
+    return `<div class="call-item${currentCall?.id===c.id?' active':''}" onclick="openCall('${c.id}')">
+      <div class="call-time">${time} · ${Math.round((c.duration||0)/60)}min</div>
+      <div class="call-phone">${phone}</div>
+      ${name ? `<div class="call-name">${name}</div>` : ''}
+      <div class="call-badges">${badge}${c.gespeichert_by ? '<span class="badge badge-saved">✓ Gespeichert</span>' : ''}</div>
+      ${score ? `<div class="score-dot" style="background:${scoreColor}20;color:${scoreColor}">${score}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function extractName(fb) {
+  if (!fb?.stammdaten) return '';
+  const {vorname,nachname} = fb.stammdaten;
+  return [vorname, nachname].filter(Boolean).join(' ');
+}
+
+function statusBadge(s) {
+  const map = {
+    done: '<span class="badge badge-done">✓ Analysiert</span>',
+    waiting: '<span class="badge badge-wait">⏳ Warte auf Transkript</span>',
+    processing: '<span class="badge badge-proc">🔄 Analysiere…</span>',
+    no_transcript: '<span class="badge badge-err">Kein Transkript</span>',
+    no_text: '<span class="badge badge-err">Kein Text</span>',
+    error: '<span class="badge badge-err">Fehler</span>',
+  };
+  return map[s] || `<span class="badge badge-err">${s}</span>`;
+}
+
+// ── FRAGEBOGEN ÖFFNEN ─────────────────────────────────────────────
+async function openCall(id) {
+  const data = await supa(`sipgate_calls?id=eq.${id}&select=*`);
+  currentCall = data[0];
+  if (!currentCall) return;
+  
+  loadCalls(); // Sidebar neu rendern (active state)
+  renderFragebogen(currentCall);
+}
+
+function scoreColor(s) {
+  if (!s) return 'var(--border2)';
+  if (s >= 8) return 'var(--green)';
+  if (s >= 5) return 'var(--accent)';
+  return 'var(--red)';
+}
+
+function renderFragebogen(call) {
+  const fb = call.fragebogen || {};
+  const st = fb.stammdaten || {};
+  const hh = fb.haushalt || {};
+  const int = fb.interesse || {};
+  const ter = fb.termin || {};
+  const ql = fb.qualitaet || {};
+  const meta = fb.meta || {};
+  
+  const name = [st.vorname, st.nachname].filter(Boolean).join(' ') || call.from_number || 'Unbekannt';
+  const time = new Date(call.created_at).toLocaleString('de-DE');
+  const sc = call.stimmung_score;
+
+  const stimmungOpts = ['sehr positiv','positiv','neutral','skeptisch','negativ'];
+  const stimmungClasses = ['active-sp','active-p','active-n','active-s','active-sn'];
+
+  document.getElementById('main').innerHTML = `
+    <!-- HEADER -->
+    <div class="call-hdr">
+      <div class="call-hdr-info">
+        <h2>${esc(name)}</h2>
+        <p>📞 ${esc(call.from_number||'–')} → ${esc(call.to_number||'–')} · ${time} · ${Math.round((call.duration||0)/60)} Min.</p>
+        ${call.lead_id ? `<p style="color:var(--green);margin-top:4px">✓ Lead #${call.lead_id} gefunden</p>` : '<p style="color:var(--accent);margin-top:4px">⚠ Kein Lead zugeordnet</p>'}
+      </div>
+      <div class="score-big">
+        <div class="score-circle" style="background:${scoreColor(sc)}20;color:${scoreColor(sc)};border:2px solid ${scoreColor(sc)}">
+          ${sc ? sc : '–'}
+        </div>
+        <div class="score-lbl">Kaufbereitschaft</div>
+      </div>
+    </div>
+
+    <!-- ZUSAMMENFASSUNG -->
+    ${meta.zusammenfassung ? `<div class="summary-box"><strong>🤖 KI-Zusammenfassung:</strong> ${esc(meta.zusammenfassung)}</div>` : ''}
+
+    <!-- EINWÄNDE -->
+    ${(ql.einwaende||[]).length ? `<div class="summary-box" style="background:rgba(248,81,73,.06);border-color:rgba(248,81,73,.2)"><strong style="color:var(--red)">⚠ Einwände:</strong> <div class="einwaende" style="margin-top:6px">${(ql.einwaende||[]).map(e=>`<span class="einwand-tag">${esc(e)}</span>`).join('')}</div></div>` : ''}
+
+    <!-- STAMMDATEN -->
+    <div class="section">
+      <div class="section-hdr">👤 Stammdaten</div>
+      <div class="grid2">
+        ${field('Vorname', 'st_vorname', st.vorname)}
+        ${field('Nachname', 'st_nachname', st.nachname)}
+        ${field('Straße', 'st_strasse', st.strasse)}
+        ${field('Hausnummer', 'st_hausnr', st.hausnummer)}
+        ${field('PLZ', 'st_plz', st.plz)}
+        ${field('Stadt', 'st_stadt', st.stadt)}
+        ${field('Telefon', 'st_telefon', st.telefon)}
+        ${field('Mobil', 'st_mobil', st.mobil)}
+        ${field('E-Mail', 'st_email', st.email)}
+      </div>
+    </div>
+
+    <!-- HAUSHALT -->
+    <div class="section">
+      <div class="section-hdr">🏠 Haushalt & Verbrauch</div>
+      <div class="grid3">
+        ${select('Gebäudetyp', 'hh_gebaeude', hh.gebaeude_typ, ['','Einfamilienhaus','Zweifamilienhaus','Mehrfamilienhaus','Reihenhaus','Wohnung'])}
+        ${field('Personen im HH', 'hh_personen', hh.personen_haushalt)}
+        ${field('Dachgröße (m²)', 'hh_dach_m2', hh.dach_groesse_m2)}
+        ${select('Dachausrichtung', 'hh_dach_ausrichtung', hh.dach_ausrichtung, ['','Süd','Ost-West','Ost','West','Süd-Ost','Süd-West','Nord'])}
+        ${field('Stromverbrauch (kWh/J)', 'hh_strom', hh.stromverbrauch_kwh)}
+        ${select('Heizung', 'hh_heizung', hh.heizung_typ, ['','Gas','Öl','Wärmepumpe','Pellets','Fernwärme','Strom','Sonstiges'])}
+      </div>
+      <div style="margin-top:10px">
+        ${toggleField('Eigentümer', 'hh_eigen', hh.eigentuemer)}
+      </div>
+    </div>
+
+    <!-- INTERESSE -->
+    <div class="section">
+      <div class="section-hdr">⚡ Interesse</div>
+      <div class="grid2">
+        ${toggleField('PV-Anlage', 'int_pv', int.pv_anlage)}
+        ${toggleField('Speicher', 'int_sp', int.speicher)}
+        ${toggleField('Wärmepumpe', 'int_wp', int.waermepumpe)}
+        ${toggleField('Wallbox', 'int_wb', int.wallbox)}
+        ${field('Gewünschte kWp', 'int_kwp', int.gwp_kwp_gewuenscht)}
+        ${field('Budget-Vorstellung', 'int_budget', int.budget_vorstellung)}
+      </div>
+    </div>
+
+    <!-- TERMIN -->
+    <div class="section">
+      <div class="section-hdr">📅 Termin</div>
+      <div class="grid2">
+        ${toggleField('Termin vereinbart', 'ter_vereinbart', ter.termin_vereinbart)}
+        ${field('Datum', 'ter_datum', ter.termin_datum, 'date')}
+        ${field('Uhrzeit', 'ter_uhrzeit', ter.termin_uhrzeit, 'time')}
+        ${field('Berater-Wunsch', 'ter_berater', ter.berater_wunsch)}
+      </div>
+      ${field('Notiz zum Termin', 'ter_notiz', ter.termin_notiz)}
+    </div>
+
+    <!-- STIMMUNG -->
+    <div class="section">
+      <div class="section-hdr">🎯 Stimmung & Qualität</div>
+      <div class="field" style="margin-bottom:10px">
+        <label>Stimmung</label>
+        <div class="stimmung-bar">
+          ${stimmungOpts.map((o,i) => `<div class="stimmung-opt ${ql.stimmung===o ? stimmungClasses[i] : ''}" 
+            onclick="setStimmung(this,'${o}','${stimmungClasses[i]}')">${o}</div>`).join('')}
+        </div>
+      </div>
+      <div class="grid2">
+        ${field('Kaufbereitschaft (1-10)', 'ql_score', call.stimmung_score, 'number')}
+        ${field('Abschluss-Wahrsch. (%)', 'ql_abschluss', ql.abschlusswahrscheinlichkeit, 'number')}
+      </div>
+      <div style="margin-top:10px">
+        <div class="field">
+          <label>Notizen / Besonderheiten</label>
+          <textarea id="ql_notizen">${esc(ql.notizen||'')}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRANSKRIPT -->
+    ${(call.transcription_raw || call.note_raw) ? `
+    <div class="section">
+      <div class="section-hdr">📝 Transkript</div>
+      <span class="transcript-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">Transkript anzeigen/verbergen</span>
+      <div class="transcript-box" style="display:none">${esc(call.transcription_raw || call.note_raw)}</div>
+    </div>` : ''}
+
+    <!-- ACTIONS -->
+    <div class="actions">
+      <button class="btn btn-p" onclick="saveFragebogen()">✓ Fragebogen speichern</button>
+      <button class="btn btn-s" onclick="openLead()">Leveto Lead öffnen</button>
+      <button class="btn btn-d" onclick="deleteCall()">Löschen</button>
+    </div>
+    <div style="height:40px;"></div>
+  `;
+}
+
+// ── FIELD HELPERS ─────────────────────────────────────────────────
+function field(label, id, val, type='text') {
+  const filled = val !== null && val !== undefined && val !== '' ? ' ai-filled' : '';
+  return `<div class="field">
+    <label>${label}${filled ? ' ✓' : ''}</label>
+    <input type="${type}" id="${id}" value="${esc(val??'')}">
+  </div>`;
+}
+function select(label, id, val, opts) {
+  const filled = val ? ' ai-filled' : '';
+  return `<div class="field">
+    <label>${label}${filled ? ' ✓' : ''}</label>
+    <select id="${id}" class="${filled}">${opts.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o||'– Bitte wählen –'}</option>`).join('')}</select>
+  </div>`;
+}
+function toggleField(label, id, val) {
+  return `<div class="field">
+    <label>${label}</label>
+    <div class="toggle-row">
+      <button type="button" class="toggle ${val===true?'on-yes':''}" onclick="setToggle('${id}',this,true)">Ja</button>
+      <button type="button" class="toggle ${val===false?'on-no':''}" onclick="setToggle('${id}',this,false)">Nein</button>
+      <button type="button" class="toggle ${val===null||val===undefined?'on-yes':''}" onclick="setToggle('${id}',this,null)">Unbekannt</button>
+      <input type="hidden" id="${id}" value="${val===null||val===undefined?'':val}">
+    </div>
+  </div>`;
+}
+function setToggle(id, btn, val) {
+  document.querySelectorAll(`[onclick*="'${id}'"]`).forEach(b => { b.className='toggle'; });
+  btn.className = 'toggle ' + (val===true?'on-yes':val===false?'on-no':'on-yes');
+  document.getElementById(id).value = val===null ? '' : val;
+}
+function setStimmung(el, val, cls) {
+  el.closest('.stimmung-bar').querySelectorAll('.stimmung-opt').forEach(o => o.className='stimmung-opt');
+  el.className = 'stimmung-opt ' + cls;
+}
+
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function g(id) { const e=document.getElementById(id); return e ? e.value : ''; }
+
+// ── SPEICHERN ─────────────────────────────────────────────────────
+async function saveFragebogen() {
+  if (!currentCall) return;
+
+  const stimmungEl = document.querySelector('.stimmung-opt.active-sp, .stimmung-opt.active-p, .stimmung-opt.active-n, .stimmung-opt.active-s, .stimmung-opt.active-sn');
+  const stimmung = stimmungEl ? stimmungEl.textContent.trim() : '';
+
+  const updated = {
+    analyse_status: 'done',
+    gespeichert_by: localStorage.getItem('cc_agent') || 'Unbekannt',
+    gespeichert_at: new Date().toISOString(),
+    stimmung_score: parseInt(g('ql_score')) || null,
+    abschluss_wahrscheinlichkeit: parseInt(g('ql_abschluss')) || null,
+    fragebogen: {
+      ...currentCall.fragebogen,
+      stammdaten: {
+        vorname:    g('st_vorname'),
+        nachname:   g('st_nachname'),
+        strasse:    g('st_strasse'),
+        hausnummer: g('st_hausnr'),
+        plz:        g('st_plz'),
+        stadt:      g('st_stadt'),
+        telefon:    g('st_telefon'),
+        mobil:      g('st_mobil'),
+        email:      g('st_email'),
+      },
+      haushalt: {
+        gebaeude_typ:       g('hh_gebaeude'),
+        eigentuemer:        g('hh_eigen') === '' ? null : g('hh_eigen') === 'true',
+        personen_haushalt:  parseInt(g('hh_personen')) || null,
+        dach_groesse_m2:    parseFloat(g('hh_dach_m2')) || null,
+        dach_ausrichtung:   g('hh_dach_ausrichtung'),
+        stromverbrauch_kwh: parseFloat(g('hh_strom')) || null,
+        heizung_typ:        g('hh_heizung'),
+      },
+      interesse: {
+        pv_anlage:           g('int_pv') === '' ? null : g('int_pv') === 'true',
+        speicher:            g('int_sp') === '' ? null : g('int_sp') === 'true',
+        waermepumpe:         g('int_wp') === '' ? null : g('int_wp') === 'true',
+        wallbox:             g('int_wb') === '' ? null : g('int_wb') === 'true',
+        gwp_kwp_gewuenscht:  parseFloat(g('int_kwp')) || null,
+        budget_vorstellung:  g('int_budget'),
+      },
+      termin: {
+        termin_vereinbart: g('ter_vereinbart') === '' ? null : g('ter_vereinbart') === 'true',
+        termin_datum:      g('ter_datum'),
+        termin_uhrzeit:    g('ter_uhrzeit'),
+        berater_wunsch:    g('ter_berater'),
+        termin_notiz:      g('ter_notiz'),
+      },
+      qualitaet: {
+        stimmung,
+        stimmung_score:             parseInt(g('ql_score')) || null,
+        abschlusswahrscheinlichkeit: parseInt(g('ql_abschluss')) || null,
+        notizen:                    g('ql_notizen'),
+        einwaende:                  currentCall.fragebogen?.qualitaet?.einwaende || [],
+      }
+    }
+  };
+
+  const r = await fetch(`${SUPA}/rest/v1/sipgate_calls?id=eq.${currentCall.id}`, {
+    method: 'PATCH',
+    headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(updated)
+  });
+
+  if (r.ok) {
+    toast('✓ Fragebogen gespeichert!', 'ok');
+    currentCall = { ...currentCall, ...updated };
+    loadCalls();
+  } else {
+    toast('Fehler beim Speichern', 'err');
+  }
+}
+
+async function deleteCall() {
+  if (!currentCall || !confirm('Diesen Anruf wirklich löschen?')) return;
+  await fetch(`${SUPA}/rest/v1/sipgate_calls?id=eq.${currentCall.id}`, {
+    method: 'DELETE',
+    headers: { apikey: ANON, Authorization: `Bearer ${ANON}` }
+  });
+  currentCall = null;
+  document.getElementById('main').innerHTML = '<div class="empty-state"><div class="empty-icon">🗑️</div><div>Gelöscht</div></div>';
+  loadCalls();
+}
+
+function openLead() {
+  if (currentCall?.lead_id) window.open(`https://beedoo.leveto.net/leads/${currentCall.lead_id}`, '_blank');
+  else toast('Kein Lead zugeordnet', 'err');
+}
+
+function toast(msg, type='ok') {
+  const w = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`; t.textContent = msg;
+  w.appendChild(t); setTimeout(() => t.remove(), 3000);
+}
+
+// ── TEST-MODUS: Demo-Daten wenn keine echten Anrufe ──────────────
+async function checkAndMaybeDemo() {
+  const data = await supa('sipgate_calls?select=id&limit=1');
+  if (!data || !data.length) {
+    document.getElementById('callList').innerHTML = `
+      <div class="no-calls">
+        Noch keine Anrufe.<br><br>
+        <strong style="color:var(--accent)">Setup erforderlich:</strong><br>
+        Sipgate Webhook URL setzen:<br>
+        <code style="font-size:10px;color:var(--blue);word-break:break-all">https://bee-doo-tools.vercel.app/api/sipgate-webhook</code>
+        <br><br>
+        <button class="btn btn-s" style="margin-top:8px;font-size:11px;" onclick="loadDemoCall()">Demo-Anruf laden</button>
+      </div>`;
+  }
+}
+
+function loadDemoCall() {
+  const demoCall = {
+    id: 'demo',
+    call_id: 'demo-001',
+    from_number: '02111234567',
+    to_number: '0211987654',
+    duration: 347,
+    created_at: new Date().toISOString(),
+    analyse_status: 'done',
+    lead_id: null,
+    stimmung_score: 7,
+    transcription_raw: `CC-Agent: Guten Tag, bee-doo Solar, mein Name ist Sandra Müller, wie kann ich Ihnen helfen?\n\nKunde: Ja, guten Tag. Mein Name ist Thomas Berger. Ich habe Ihre Werbung gesehen und interessiere mich für eine Solaranlage.\n\nCC-Agent: Wunderbar! Herr Berger, darf ich fragen, wo Sie wohnen?\n\nKunde: Ja, Musterstraße 42 in Bielefeld, 33602.\n\nCC-Agent: Und ist das ein Eigenheim?\n\nKunde: Ja genau, Einfamilienhaus. Wir sind zu viert, meine Frau und zwei Kinder.\n\nCC-Agent: Wissen Sie ungefähr wie viel Strom Sie im Jahr verbrauchen?\n\nKunde: So ungefähr 5.000 kWh glaube ich.\n\nCC-Agent: Haben Sie Interesse an einem Batteriespeicher?\n\nKunde: Ja, das wäre schon interessant. Was kostet das ungefähr?\n\nCC-Agent: Das hängt von der Anlage ab. Darf ich Ihnen einen Termin mit einem unserer Berater vorschlagen?\n\nKunde: Ja, nächste Woche Mittwoch wäre gut, so gegen 16 Uhr.\n\nCC-Agent: Perfekt, Mittwoch 12. März um 16 Uhr. Ihre Telefonnummer?\n\nKunde: 0176 12345678`,
+    fragebogen: {
+      stammdaten: { vorname:'Thomas', nachname:'Berger', strasse:'Musterstraße', hausnummer:'42', plz:'33602', stadt:'Bielefeld', telefon:'02111234567', mobil:'017612345678', email:'' },
+      haushalt: { gebaeude_typ:'Einfamilienhaus', eigentuemer:true, personen_haushalt:4, dach_groesse_m2:null, dach_ausrichtung:'', stromverbrauch_kwh:5000, heizung_typ:'' },
+      interesse: { pv_anlage:true, speicher:true, waermepumpe:null, wallbox:null, gwp_kwp_gewuenscht:null, budget_vorstellung:'' },
+      termin: { termin_vereinbart:true, termin_datum:'2026-03-12', termin_uhrzeit:'16:00', berater_wunsch:'', termin_notiz:'' },
+      qualitaet: { stimmung:'positiv', stimmung_score:7, abschlusswahrscheinlichkeit:65, einwaende:['Preis unklar'], notizen:'Sehr interessiert, besonders Speicher. Offene Fragen zu Kosten.' },
+      meta: { zusammenfassung:'Thomas Berger aus Bielefeld interessiert sich für PV + Speicher für sein EFH. Verbrauch ca. 5.000 kWh/J. Termin Mi. 12.3. 16:00 vereinbart. Stimmung positiv.', konfidenz:85, fehlende_infos:['Dachgröße','Ausrichtung','Budget'] }
+    }
+  };
+  currentCall = demoCall;
+  document.getElementById('callList').innerHTML = `
+    <div class="call-item active" onclick="">
+      <div class="call-time">Demo · 5min</div>
+      <div class="call-phone">02111234567</div>
+      <div class="call-name">Thomas Berger</div>
+      <div class="call-badges"><span class="badge badge-done">✓ Analysiert</span></div>
+      <div class="score-dot" style="background:rgba(63,185,80,.2);color:var(--green)">7</div>
+    </div>`;
+  renderFragebogen(demoCall);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadCalls();
+  await checkAndMaybeDemo();
+  // Auto-refresh alle 30 Sekunden
+  setInterval(loadCalls, 30000);
+});
+</script>
+</body>
+</html>
