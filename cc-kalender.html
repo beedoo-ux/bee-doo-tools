@@ -87,6 +87,15 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 .apt.conflict{border-color:var(--red)!important;background:rgba(248,81,73,.18)!important;color:var(--red)!important;animation:conflictPulse 2s infinite;}
 @keyframes conflictPulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 8px rgba(248,81,73,.4);}}
 
+/* CAPACITY BAR */
+.capbar{height:4px;border-radius:2px;background:var(--border);overflow:hidden;margin-top:3px;}
+.capfill{height:100%;border-radius:2px;transition:width .3s;}
+.caplbl{font-size:9px;font-weight:700;margin-top:1px;}
+.day-cap{display:flex;align-items:center;gap:4px;padding:2px 0;margin-bottom:2px;border-bottom:1px solid var(--border);min-height:16px;}
+.day-cap-bar{flex:1;height:3px;border-radius:2px;background:var(--border);overflow:hidden;}
+.day-cap-fill{height:100%;border-radius:2px;}
+.day-cap-lbl{font-size:9px;font-weight:700;white-space:nowrap;}
+
 /* CALENDAR */
 .calwrap{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;}
 .calscroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;}
@@ -448,6 +457,19 @@ function plzDist(p1,p2){
   if(d<100) return 15; if(d<500) return 40; if(d<1000) return 80; return 150;
 }
 
+// ── CAPACITY / AUSLASTUNG ────────────────────────────────────────
+// 9–21 Uhr, max 5 Termine à 2h = 100%
+const MAX_APTS=5;
+function calcLoad(vt,dateStr){
+  const apts=S.apts.filter(a=>(a.start_date||'').slice(0,10)===dateStr&&a.user_received===vt&&a.status!=='Cancelled');
+  const count=apts.length;
+  const pct=Math.min(100,Math.round(count/MAX_APTS*100));
+  const free=Math.max(0,MAX_APTS-count);
+  const color=count===0?'var(--green)':count<=2?'var(--green)':count<=4?'var(--orange)':'var(--red)';
+  const barColor=count===0?'var(--green)':count<=2?'var(--green)':count<=4?'var(--orange)':'var(--red)';
+  return {count,pct,free,color,barColor};
+}
+
 // ── VT STATS ──────────────────────────────────────────────────────
 function computeStats(){
   ALL_VTS.forEach(vt=>{
@@ -650,6 +672,7 @@ function renderBody(){
         const vapts=S.apts.filter(a=>(a.start_date||'').slice(0,10)===dayStr&&a.user_received===vt&&a.status!=='Cancelled')
           .sort((a,b)=>(a.start_date||'').localeCompare(b.start_date||''))
           .filter((a,i,arr)=>i===0||a.start_date!==arr[i-1].start_date||a.nachname!==arr[i-1].nachname);
+        const ld=calcLoad(vt,dayStr);
         // Detect conflicts (overlapping times)
         const conflictIdx=new Set();
         vapts.forEach((a,i)=>{
@@ -663,16 +686,25 @@ function renderBody(){
           });
         });
         return `<div style="flex:1;min-width:120px;border-right:1px solid var(--border);padding:3px 4px;min-height:var(--row-h);background:${isToday(day)?'rgba(253,225,84,.02)':''};">
-          ${vapts.map((a,idx)=>{const st2=parseD(a.start_date);const name=[a.vorname,a.nachname].filter(Boolean).join(' ')||a.text||'Blocker';const isConf=conflictIdx.has(idx);
+          <div class="day-cap">
+            <div class="day-cap-bar"><div class="day-cap-fill" style="width:${ld.pct}%;background:${ld.barColor}"></div></div>
+            <div class="day-cap-lbl" style="color:${ld.color}">${ld.free>0?ld.free+'f':'voll'}</div>
+          </div>          ${vapts.map((a,idx)=>{const st2=parseD(a.start_date);const name=[a.vorname,a.nachname].filter(Boolean).join(' ')||a.text||'Blocker';const isConf=conflictIdx.has(idx);
             return `<div class="apt so${isConf?' conflict':''}" style="position:relative;top:0;left:0;width:100%;margin-bottom:2px;border-left-color:${isConf?'var(--red)':c};background:${isConf?'rgba(248,81,73,.18)':c+'18'};color:${isConf?'var(--red)':c};" onclick='showDetailFromApt(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
               <div class="at">${isConf?'⚠ ':''}${esc(fmtT(st2))}</div><div class="an">${esc(name)}</div></div>`;}).join('')}
-          ${vapts.length===0?`<div style="font-size:10px;color:var(--text3);padding:2px;">frei</div>`:''}
+          ${vapts.length===0?`<div style="font-size:10px;color:var(--green);padding:2px;font-weight:600;">✓ ${ld.free} Slots frei</div>`:''}
         </div>`;
       }).join('');
+      // Weekly avg load
+      const weekLoads=days.map(day=>calcLoad(vt,fmt(day)));
+      const avgPct=Math.round(weekLoads.reduce((s,l)=>s+l.pct,0)/7);
+      const totalFree=weekLoads.reduce((s,l)=>s+l.free,0);
+      const avgColor=avgPct<=40?'var(--green)':avgPct<=70?'var(--orange)':'var(--red)';
       html+=`<div class="row">
-        <div class="namecell"><div class="nbar" style="background:${c}"></div><div>
+        <div class="namecell"><div class="nbar" style="background:${c}"></div><div style="flex:1;min-width:0;">
           <div class="nname">${esc(fn)}<br><span style="color:var(--text2);font-weight:500">${esc(ln.join(' '))}</span></div>
-          <span class="nrate" style="background:${rateColor}22;color:${rateColor}">${st.rate||0}% ✓</span>
+          <div class="capbar" style="margin-top:4px;"><div class="capfill" style="width:${avgPct}%;background:${avgColor}"></div></div>
+          <div class="caplbl" style="color:${avgColor}">${avgPct}% · ${totalFree} frei</div>
         </div></div>
         <div class="slotswrap" style="display:flex;width:auto;flex:1;">${daysCells}</div></div>`;
     });
@@ -752,15 +784,16 @@ function renderBody(){
 
       // GCal block badges count
       const gcalBlockCount=(S.gcalBlocks[vt]||[]).filter(b=>(b.start||'').slice(0,10)===ds||b.allDay).length;
+      const load=calcLoad(vt,ds);
 
       html+=`<div class="row" style="min-height:${rowH}px;">
         <div class="namecell" style="min-height:${rowH}px;">
-          <div class="ampel" style="background:${ampelCol};"></div>
           <div class="nbar" style="background:${c};height:${Math.min(rowH-10,60)}px;"></div>
-          <div>
+          <div style="flex:1;min-width:0;">
             <div class="nname">${esc(fn)}<br><span style="color:var(--text2);font-weight:500">${esc(ln.join(' '))}</span></div>
-            ${cnt>0?`<div class="nsub">${cnt} Termin${cnt!==1?'e':''}${numLanes>1?` <span style="color:var(--red)">⚠${numLanes}</span>`:''}</div>`:`<div class="nfree">frei</div>`}
-            <span class="nrate" style="background:${rateColor}22;color:${rateColor}">${st.rate||0}% ✓</span>
+            <div class="nsub" style="color:${load.color}">${load.count}/${MAX_APTS} Termine · ${load.free>0?`<span style="color:var(--green)">${load.free} frei</span>`:'<span style="color:var(--red)">voll</span>'}</div>
+            <div class="capbar"><div class="capfill" style="width:${load.pct}%;background:${load.barColor}"></div></div>
+            <div class="caplbl" style="color:${load.color}">${load.pct}% Auslastung</div>
             ${gcalBlockCount?`<span class="gcalBadge">📅 ${gcalBlockCount}</span>`:''}
           </div>
         </div>
@@ -965,12 +998,19 @@ function renderStats(){
       }
     });
   });
+  // Capacity
+  let totalFree=0,totalMax=0;
+  activeVts.forEach(vt=>{const ld=calcLoad(vt,ds);totalFree+=ld.free;totalMax+=MAX_APTS;});
+  const totalPct=totalMax?Math.round((1-totalFree/totalMax)*100):0;
+  const capColor=totalPct<=40?'var(--green)':totalPct<=70?'var(--orange)':'var(--red)';
   document.getElementById('sbar').innerHTML=`
     <div class="sp"><div class="spd" style="background:var(--accent)"></div><span class="spn">${activeVts.length}</span> <span style="color:var(--text2)">Berater</span></div>
     <div class="sp"><div class="spd" style="background:var(--blue)"></div><span class="spn">${op}</span> <span style="color:var(--text2)">offen</span></div>
     <div class="sp"><div class="spd" style="background:var(--green)"></div><span class="spn">${cl}</span> <span style="color:var(--text2)">abgeschlossen</span></div>
     <div class="sp"><div class="spd" style="background:var(--text3)"></div><span class="spn">${ca}</span> <span style="color:var(--text2)">storniert</span></div>
     <div class="sp"><div class="spd" style="background:var(--text2)"></div><span class="spn">${op+cl+ca}</span> <span style="color:var(--text2)">gesamt</span></div>
+    <div class="sp" style="margin-left:8px;"><div class="spd" style="background:var(--green)"></div><span class="spn" style="color:var(--green)">${totalFree}</span> <span style="color:var(--green)">Slots frei</span></div>
+    <div class="sp"><div class="spd" style="background:${capColor}"></div><span class="spn" style="color:${capColor}">${totalPct}%</span> <span style="color:${capColor}">Auslastung</span></div>
     ${confCount?`<div class="sp"><div class="spd" style="background:var(--red)"></div><span class="spn" style="color:var(--red)">${confCount}</span> <span style="color:var(--red)">Konflikte ⚠</span></div>`:''}`;
 }
 
