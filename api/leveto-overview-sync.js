@@ -111,7 +111,17 @@ function mapContract(c, leadId, leadWorkflows, leadWfHistory, now) {
     auftragsstatus = wfSteps.wf_verkauf_step;
   }
 
-  return {
+  // Ensure all contract rows have same keys for Supabase batch upsert
+  const ALL_KEYS = ['leveto_id','lead_id','dyn_offernum','ersteller','creator_ma_number',
+    'calculated_realprice_netto','calculated_realprice_brutto','creation_date','accepted_date',
+    'pdf_url','typeicons','ist_waermepumpe','products','provision_ausgezahlt_am',
+    'efs_prozent','currentstatus','speichererweiterung','workflows','workflow_history',
+    'kwp','module_anzahl','module_typ','battery_kap',
+    'wf_verkauf_step','wf_verkauf_changed','wf_beedoo_step','wf_beedoo_changed',
+    'wf_dc_step','wf_dc_changed','wf_ac_step','wf_ac_changed',
+    'overview_lead_id','overview_last_update','sync_aktualisiert_am'];
+
+  const raw = {
     leveto_id:                c.id,
     lead_id:                  leadId,
     dyn_offernum:             c.dyn_offernum || null,
@@ -137,6 +147,10 @@ function mapContract(c, leadId, leadWorkflows, leadWfHistory, now) {
     overview_last_update:     now,
     sync_aktualisiert_am:     now,
   };
+  // Normalize: every row must have every key
+  const result = {};
+  for (const k of ALL_KEYS) result[k] = raw[k] !== undefined ? raw[k] : null;
+  return result;
 }
 
 async function sbUpsert(table, rows, conflict, batchSize = 500) {
