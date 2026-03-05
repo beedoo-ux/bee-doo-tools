@@ -6,7 +6,9 @@
 <title>bee-doo · Reporting Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<script src="config.js"></script>
+<script src="config.js">
+function fmtLocal(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
@@ -278,7 +280,7 @@ function processLeads(leads) {
   timeline.forEach(d => {
     const dt = new Date(d.d);
     const wk = new Date(dt.setDate(dt.getDate()-dt.getDay()+1));
-    const key = wk.toISOString().substring(0,10);
+    const key = fmtLocal(wk);
     if(!weeklyMap[key]) weeklyMap[key] = { d: `KW ${Math.ceil((new Date(key).getTime()-new Date(key.substring(0,4)+'-01-01').getTime())/604800000)}`, raw: key, total: 0, term: 0 };
     weeklyMap[key].total += d.total;
     weeklyMap[key].term += d.term;
@@ -374,7 +376,7 @@ function processLeads(leads) {
 function processTermine(termine) {
   const total = termine.length;
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = fmtLocal(now);
 
   // Split past vs future
   let nStattgefunden = 0, nAusgefallen = 0, nZukunft = 0, nHeute = 0;
@@ -576,7 +578,7 @@ function processCashflow(transactions) {
     if (!d) return;
     const dt = new Date(d);
     const wk = new Date(dt.setDate(dt.getDate() - dt.getDay() + 1));
-    const key = wk.toISOString().slice(0, 10);
+    const key = fmtLocal(wk);
     if (!weekMap[key]) weekMap[key] = { d: key, label: fmtDate(key), ein: 0, aus: 0 };
     const b = Math.abs(parseFloat(t.betrag) || 0);
     if (t.soll_haben === 'CRDT') weekMap[key].ein += b;
@@ -692,7 +694,7 @@ function processTeam(auftraege, termine, leads, mitarbeiterList) {
 
   // Termine per person
   const termPerf = {};
-  const today = new Date().toISOString().slice(0, 10);
+  const today = fmtLocal(new Date());
   termine.forEach(t => {
     const name = t.berater || 'Unbekannt';
     if (!termPerf[name]) termPerf[name] = { name, total: 0, stattgef: 0, ausgef: 0 };
@@ -1139,7 +1141,7 @@ function processForecast(auftraege, leads, efsProjekte) {
 function processVergleich(auftraege, leads, termine) {
   const mMap = {};
   const addMonth = (m) => { if (!mMap[m]) mMap[m] = { m, label: monthNames[parseInt(m.slice(5,7))-1] + ' ' + m.slice(2,4), sales: 0, storno: 0, netto: 0, leads: 0, termine: 0, termStattgef: 0 }; };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = fmtLocal(new Date());
 
   auftraege.forEach(a => {
     const m = (a.auftrags_datum || '').slice(0, 7);
