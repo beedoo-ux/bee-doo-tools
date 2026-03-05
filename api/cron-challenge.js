@@ -1,12 +1,12 @@
 // api/cron-challenge.js — Stündlicher Cache-Job für Challenge 1000
 // Vercel Cron: jede Stunde → 0 * * * *
-// Holt Leveto Overview einmal, cached Ergebnisse für aktive Monate in Supabase
+// Liest aus Supabase leveto_leads (bereits via overview-sync aktuell) statt Leveto API direkt
+// → kein Timeout mehr, keine doppelte API-Last
 
-export const config = { maxDuration: 60 };
+export const config = { maxDuration: 30 };
 
 const SU = 'https://hqzpemfaljxcysyqssng.supabase.co';
 const SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
-const LEVETO = 'https://beedoo.leveto.net/API';
 const hd = () => ({ apikey: SK, Authorization: `Bearer ${SK}`, 'Content-Type': 'application/json' });
 
 const BERATER_OVERRIDES = {
@@ -22,6 +22,33 @@ function getActiveMonths() {
   return [curr, prevKey];
 }
 
+async function fetchLeadsFromSupabase(startDate, endDate) {
+  // Only fetch Eigenlead + Empfehlung in the date range — way faster than full overview
+  const allLeads = [];
+  let offset = 0;
+  const limit = 1000;
+
+  while (true) {
+    const params = new URLSearchParams({
+      select: 'leveto_id,vorname,nachname,quelle,berater_name,status_name,leveto_importiert_am,ort',
+      'quelle': 'in.(Eigenlead,Empfehlung)',
+      'leveto_importiert_am': `gte.${startDate}`,
+      order: 'leveto_importiert_am.desc',
+      offset: String(offset),
+      limit: String(limit),
+    });
+
+    const r = await fetch(`${SU}/rest/v1/leveto_leads?${params}`, { headers: hd() });
+    if (!r.ok) throw new Error(`Supabase fetch error: ${r.status}`);
+    const batch = await r.json();
+    allLeads.push(...batch);
+    if (batch.length < limit) break;
+    offset += limit;
+  }
+
+  return allLeads;
+}
+
 function computeChallengeData(leads, month) {
   const [yr, mo] = month.split('-').map(Number);
   const startDate = `${yr}-${String(mo).padStart(2, '0')}-01`;
@@ -29,19 +56,21 @@ function computeChallengeData(leads, month) {
   const endYr = mo === 12 ? yr + 1 : yr;
   const endDate = `${endYr}-${String(endMo).padStart(2, '0')}-01`;
 
-  const monthLeads = leads.filter(l => {
-    const imp = (l.importiert || '').substring(0, 10);
+  const qualifying = leads.filter(l => {
+    const imp = (l.leveto_importiert_am || '').substring(0, 10);
     return imp >= startDate && imp < endDate;
   });
-  const qualifying = monthLeads.filter(l => {
-    const src = (l.quelle || '').trim();
-    return src === 'Eigenlead' || src === 'Empfehlung';
+
+  // Only count Terminiert + Neuer Lead
+  const counted = qualifying.filter(l => {
+    const st = (l.status_name || '').trim();
+    return st === 'Terminiert' || st === 'Neuer Lead';
   });
 
   const byBerater = {};
-  qualifying.forEach(l => {
-    let name = (l.berater || '').trim();
-    if (!name && BERATER_OVERRIDES[l.id]) name = BERATER_OVERRIDES[l.id];
+  counted.forEach(l => {
+    let name = (l.berater_name || '').trim();
+    if (!name && BERATER_OVERRIDES[l.leveto_id]) name = BERATER_OVERRIDES[l.leveto_id];
     if (!name) name = '(kein Berater)';
     if (!byBerater[name]) byBerater[name] = { el: 0, emp: 0, total: 0 };
     if ((l.quelle || '').trim() === 'Eigenlead') byBerater[name].el++;
@@ -49,36 +78,39 @@ function computeChallengeData(leads, month) {
     byBerater[name].total++;
   });
 
-  const sources = {};
-  monthLeads.forEach(l => { const s = (l.quelle || '(leer)').trim(); sources[s] = (sources[s] || 0) + 1; });
-
   const statusBreakdown = {};
-  qualifying.forEach(l => { const st = (l.leadstatus || '(kein Status)').trim(); statusBreakdown[st] = (statusBreakdown[st] || 0) + 1; });
+  qualifying.forEach(l => {
+    const st = (l.status_name || '(kein Status)').trim();
+    statusBreakdown[st] = (statusBreakdown[st] || 0) + 1;
+  });
 
-  const recentLeads = qualifying
+  const recentLeads = counted
     .map(l => ({
       name: `${(l.vorname || '').trim()} ${(l.nachname || '').trim()}`.trim() || 'Unbekannt',
-      berater: (l.berater || '').trim() || BERATER_OVERRIDES[l.id] || '?',
+      berater: (l.berater_name || '').trim() || BERATER_OVERRIDES[l.leveto_id] || '?',
       source: (l.quelle || '').trim(),
-      status: (l.leadstatus || '').trim(),
-      date: l.importiert || '',
-      city: (l.stadt || '').trim()
+      status: (l.status_name || '').trim(),
+      date: l.leveto_importiert_am || '',
+      city: (l.ort || '').trim()
     }))
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     .slice(0, 8);
 
   const byDay = {};
-  qualifying.forEach(l => { const d = (l.importiert || '').substring(0, 10); if (d) byDay[d] = (byDay[d] || 0) + 1; });
+  counted.forEach(l => {
+    const d = (l.leveto_importiert_am || '').substring(0, 10);
+    if (d) byDay[d] = (byDay[d] || 0) + 1;
+  });
 
   const persons = Object.entries(byBerater)
     .map(([n, v]) => ({ n, el: v.el, emp: v.emp, total: v.total }))
     .sort((a, b) => b.total - a.total);
 
   return {
-    month, total: qualifying.length, totalAllElEmp: qualifying.length,
-    allLeadsCount: monthLeads.length, byPerson: persons,
-    sources, statusBreakdown, recentLeads, byDay,
-    fetchedAt: new Date().toISOString(), _source: 'cron',
+    month, total: counted.length, totalAllElEmp: qualifying.length,
+    allLeadsCount: qualifying.length, byPerson: persons,
+    statusBreakdown, recentLeads, byDay,
+    fetchedAt: new Date().toISOString(), _source: 'cron-supabase',
   };
 }
 
@@ -92,7 +124,6 @@ async function writeToCache(month, data) {
     const txt = await resp.text();
     throw new Error(`Supabase write failed: ${resp.status} ${txt}`);
   }
-  return true;
 }
 
 export default async function handler(req, res) {
@@ -101,27 +132,20 @@ export default async function handler(req, res) {
   const results = [];
 
   try {
-    const authResp = await fetch(`${LEVETO}/auth`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'username=api%40bee-doo.de&password=Patrick123456789%21'
-    });
-    const authData = await authResp.json();
-    if (!authData.token) throw new Error('Leveto auth failed');
+    // Calculate date range: prev month start to now
+    const now = new Date();
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const startDate = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01`;
 
-    const ovRes = await fetch(`${LEVETO}/overview`, {
-      headers: { 'Authorization': `Bearer ${authData.token}` }
-    });
-    if (!ovRes.ok) throw new Error(`Overview HTTP ${ovRes.status}`);
-    const ovData = await ovRes.json();
-    const leads = Array.isArray(ovData) ? ovData : (ovData.data || []);
+    // Fetch only Eigenlead+Empfehlung from Supabase (already synced by overview-sync)
+    const leads = await fetchLeadsFromSupabase(startDate);
     const fetchMs = Date.now() - t0;
 
     for (const month of months) {
       const data = computeChallengeData(leads, month);
       data._fetchMs = fetchMs;
       await writeToCache(month, data);
-      results.push({ month, total: data.total, cached: true });
+      results.push({ month, total: data.total, qualifying: data.totalAllElEmp, cached: true });
     }
 
     console.log(`[cron-challenge] OK in ${Date.now() - t0}ms`, results);
