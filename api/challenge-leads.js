@@ -1,13 +1,14 @@
 // api/challenge-leads.js — Challenge 1000er: Eigenleads + Empfehlungen
 // Cache-First: liest aus Supabase challenge_cache (stündlich per Cron befüllt)
-// Fallback: live Leveto-Abfrage wenn Cache fehlt oder zu alt (>2h)
+// Fallback: live Leveto-Abfrage wenn Cache fehlt oder >2h alt
 
 export const config = { maxDuration: 30 };
 
-const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SU = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
 const LEVETO = 'https://beedoo.leveto.net/API';
-const CACHE_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 Stunden
+const hd = () => ({ apikey: SK, Authorization: `Bearer ${SK}`, 'Content-Type': 'application/json' });
+const CACHE_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2h
 
 const BERATER_OVERRIDES = {
   65347: 'Kevin Kraus', 65348: 'Kevin Kraus', 65349: 'Kevin Kraus',
@@ -17,36 +18,27 @@ const BERATER_OVERRIDES = {
 async function readFromCache(month) {
   try {
     const resp = await fetch(
-      `${SUPABASE_URL}/rest/v1/challenge_cache?month=eq.${month}&select=data,cached_at`,
-      { headers: { 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`, 'apikey': SUPABASE_SERVICE_KEY } }
+      `${SU}/rest/v1/challenge_cache?month=eq.${month}&select=data,cached_at`,
+      { headers: hd() }
     );
     if (!resp.ok) return null;
     const rows = await resp.json();
     if (!rows || rows.length === 0) return null;
     const row = rows[0];
     const age = Date.now() - new Date(row.cached_at).getTime();
-    if (age > CACHE_MAX_AGE_MS) return null; // zu alt → live fallback
+    if (age > CACHE_MAX_AGE_MS) return null;
     return row.data;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 async function writeToCache(month, data) {
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/challenge_cache`, {
+    await fetch(`${SU}/rest/v1/challenge_cache`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-        'apikey': SUPABASE_SERVICE_KEY,
-        'Prefer': 'resolution=merge-duplicates',
-      },
+      headers: { ...hd(), 'Prefer': 'resolution=merge-duplicates' },
       body: JSON.stringify({ month, data, cached_at: new Date().toISOString(), source: 'live-fallback' })
     });
-  } catch (e) {
-    console.warn('Cache write failed:', e.message);
-  }
+  } catch (e) { console.warn('Cache write failed:', e.message); }
 }
 
 function computeLive(leads, month) {
@@ -78,7 +70,6 @@ function computeLive(leads, month) {
 
   const sources = {};
   monthLeads.forEach(l => { const s = (l.quelle || '(leer)').trim(); sources[s] = (sources[s] || 0) + 1; });
-
   const statusBreakdown = {};
   qualifying.forEach(l => { const st = (l.leadstatus || '(kein Status)').trim(); statusBreakdown[st] = (statusBreakdown[st] || 0) + 1; });
 
@@ -86,13 +77,10 @@ function computeLive(leads, month) {
     .map(l => ({
       name: `${(l.vorname || '').trim()} ${(l.nachname || '').trim()}`.trim() || 'Unbekannt',
       berater: (l.berater || '').trim() || BERATER_OVERRIDES[l.id] || '?',
-      source: (l.quelle || '').trim(),
-      status: (l.leadstatus || '').trim(),
-      date: l.importiert || '',
-      city: (l.stadt || '').trim()
+      source: (l.quelle || '').trim(), status: (l.leadstatus || '').trim(),
+      date: l.importiert || '', city: (l.stadt || '').trim()
     }))
-    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-    .slice(0, 8);
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 8);
 
   const byDay = {};
   qualifying.forEach(l => { const d = (l.importiert || '').substring(0, 10); if (d) byDay[d] = (byDay[d] || 0) + 1; });
@@ -120,16 +108,17 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing or invalid ?month=YYYY-MM parameter' });
   }
 
-  // 1. Cache lesen
   const t0 = Date.now();
+
+  // 1. Cache lesen
   const cached = await readFromCache(month);
   if (cached) {
-    console.log(`[challenge-leads] Cache HIT für ${month} in ${Date.now() - t0}ms`);
+    console.log(`[challenge-leads] Cache HIT ${month} in ${Date.now() - t0}ms`);
     return res.status(200).json({ ...cached, _servedFromCache: true, _cacheReadMs: Date.now() - t0 });
   }
 
-  // 2. Live-Fallback (Leveto)
-  console.log(`[challenge-leads] Cache MISS für ${month} → live fetch`);
+  // 2. Live-Fallback
+  console.log(`[challenge-leads] Cache MISS ${month} → live fetch`);
   try {
     const authResp = await fetch(`${LEVETO}/auth`, {
       method: 'POST',
@@ -150,9 +139,7 @@ export default async function handler(req, res) {
 
     const result = computeLive(leads, month);
     result._fetchMs = fetchMs;
-
-    // Async in Cache schreiben (kein await - nicht auf Ergebnis warten)
-    writeToCache(month, result);
+    writeToCache(month, result); // async, kein await
 
     return res.status(200).json({ ...result, _servedFromCache: false });
 
