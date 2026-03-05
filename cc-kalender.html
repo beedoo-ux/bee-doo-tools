@@ -315,6 +315,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
     <span class="plzx" id="plzX" onclick="clearPlz()">✕</span>
   </div>
   <button class="bookbtn main" onclick="openModal(null,null,null)">+ Termin buchen</button>
+  <button class="tb" onclick="openBlockModal()" style="background:rgba(248,81,73,.12);border-color:rgba(248,81,73,.3);color:var(--red);">🏖 Abwesenheit</button>
   <div class="sync"><div class="sdot" id="sdot"></div><span id="slbl">–</span></div>
   <div class="ccbadge" onclick="showCCWelcome()" title="Agent wechseln">👤 <span id="ccAgentName">–</span></div>
   <button class="planBtn" onclick="openPlan()">📋 Tagesplan</button>
@@ -444,12 +445,43 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 </div>
 </div>
 
+<!-- BLOCK / ABWESENHEIT MODAL -->
+<div class="mbg" id="blockModal" style="display:none" onclick="if(event.target===this)closeBlockModal()">
+<div class="modal sm">
+  <div class="mtitle">🏖 Abwesenheit eintragen <div class="mx" onclick="closeBlockModal()">✕</div></div>
+  <div style="display:flex;flex-direction:column;gap:10px;padding:4px 0;">
+    <label class="lbl">Berater</label>
+    <select id="blkBerater" class="fin" style="padding:10px;"></select>
+    <label class="lbl">Typ</label>
+    <select id="blkType" class="fin" style="padding:10px;">
+      <option value="Urlaub">🏖 Urlaub</option>
+      <option value="Krank">🤒 Krank</option>
+      <option value="Frei">📅 Frei / Privat</option>
+      <option value="Schulung">📚 Schulung</option>
+    </select>
+    <div style="display:flex;gap:8px;">
+      <div style="flex:1;"><label class="lbl">Von</label><input type="date" id="blkFrom" class="fin" style="padding:10px;"></div>
+      <div style="flex:1;"><label class="lbl">Bis</label><input type="date" id="blkTo" class="fin" style="padding:10px;"></div>
+    </div>
+    <label class="lbl">Notiz (optional)</label>
+    <input id="blkNote" class="fin" placeholder="z.B. bis 15:00 erreichbar" style="padding:10px;">
+  </div>
+  <div id="blockListArea" style="margin-top:12px;"></div>
+  <div class="mbtns" style="margin-top:14px;">
+    <button class="mbtn" onclick="closeBlockModal()">Abbrechen</button>
+    <button class="mbtn p" onclick="submitBlock()">✓ Eintragen</button>
+  </div>
+</div>
+</div>
+
 <div class="tt" id="tt"></div>
 <div class="tfw" id="tfw"></div>
 
 <script>
 const PROXY = '/api/leveto';
 const GCAL_PROXY = '/api/gcal-sync';
+const SB_URL='https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
 const SH=7,EH=21,SPH=2,SLOTS=(EH-SH)*SPH;
 const SYNC_MS=5*60*1000;
 
@@ -458,7 +490,7 @@ const ALL_VTS=["Tayfun Süleymaniye","Andreas Klee","Stefan Hensel","Nino Rimmle
 const COLORS=["#58a6ff","#3fb950","#f97316","#a78bfa","#ec4899","#14b8a6","#FDE154","#06b6d4","#f85149","#84cc16","#8b5cf6","#f59e0b","#10b981","#6366f1","#e11d48","#0ea5e9","#d97706","#059669","#7c3aed","#be185d","#22d3ee","#facc15","#4ade80","#fb923c","#c084fc","#34d399","#60a5fa","#fb7185","#a3e635","#fbbf24"];
 const col=n=>COLORS[ALL_VTS.indexOf(n)%COLORS.length]||"#58a6ff";
 
-let S={apts:[],active:new Set(ALL_VTS),view:'day',off:0,syncing:false,vtStats:{},gcalBlocks:{}};
+let S={apts:[],blocks:[],active:new Set(ALL_VTS),view:'day',off:0,syncing:false,vtStats:{},gcalBlocks:{}};
 let plzFilter='';
 let leadSearchTimer=null;
 let selectedLeadID=null;
@@ -494,13 +526,14 @@ function plzDist(p1,p2){
 const MAX_APTS=5;
 const SKIP_LOAD_RE=/^(wvl\s*telefon|dc\s*nacharbeit|vor\s*ort\s*prüfung.*ac.*)$/i;
 function calcLoad(vt,dateStr){
+  if(isBlocked(vt,dateStr)) return {count:MAX_APTS,pct:100,free:0,color:'var(--red)',barColor:'var(--red)',blocked:true};
   const apts=S.apts.filter(a=>(a.start_date||'').slice(0,10)===dateStr&&a.user_received===vt&&a.status!=='Cancelled'&&!SKIP_LOAD_RE.test(a.appointment_type||''));
   const count=apts.length;
   const pct=Math.min(100,Math.round(count/MAX_APTS*100));
   const free=Math.max(0,MAX_APTS-count);
   const color=count===0?'var(--green)':count<=2?'var(--green)':count<=4?'var(--orange)':'var(--red)';
   const barColor=count===0?'var(--green)':count<=2?'var(--green)':count<=4?'var(--orange)':'var(--red)';
-  return {count,pct,free,color,barColor};
+  return {count,pct,free,color,barColor,blocked:false};
 }
 
 // ── VT STATS ──────────────────────────────────────────────────────
@@ -554,6 +587,7 @@ async function sync(silent=false){
       });
       computeStats();
       fetchGcalBlocks();
+      syncBlocks();
       const t=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
       document.getElementById('sdot').className='sdot';
       document.getElementById('slbl').textContent=t+' Uhr';
@@ -587,6 +621,50 @@ async function fetchGcalBlocks(){
     if(d.ok) S.gcalBlocks=d.blocks||{};
     renderBody();
   }catch(e){/* gcal not configured yet */}
+}
+
+// ── SUPABASE BLOCKS (Urlaub/Krank/Frei) ──────────────────────────
+async function syncBlocks(){
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/cc_blocks?select=*&order=start_date.asc`,{
+      headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}
+    });
+    if(r.ok){S.blocks=await r.json();render();}
+  }catch(e){console.warn('[Blocks] sync failed:',e);}
+}
+
+async function addBlock(berater,startDate,endDate,blockType,note){
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/cc_blocks`,{
+      method:'POST',
+      headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`,'Content-Type':'application/json','Prefer':'return=representation'},
+      body:JSON.stringify({berater,start_date:startDate,end_date:endDate,block_type:blockType||'Urlaub',note:note||'',created_by:ccAgent||'CC-Kalender'})
+    });
+    if(r.ok){toast(`✅ ${blockType||'Urlaub'} für ${berater.split(' ')[0]} eingetragen`,'ok');await syncBlocks();}
+    else{const e=await r.text();toast('❌ Fehler: '+e,'er');}
+  }catch(e){toast('❌ '+e.message,'er');}
+}
+
+async function deleteBlock(id){
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/cc_blocks?id=eq.${id}`,{
+      method:'DELETE',
+      headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}
+    });
+    if(r.ok){toast('🗑 Block gelöscht','ok');await syncBlocks();}
+  }catch(e){toast('❌ '+e.message,'er');}
+}
+
+function getBlocks(vt,dateStr){
+  return S.blocks.filter(b=>{
+    if(b.berater!==vt) return false;
+    const bs=(b.start_date||'').slice(0,10),be=(b.end_date||'').slice(0,10);
+    return dateStr>=bs&&dateStr<=be;
+  });
+}
+
+function isBlocked(vt,dateStr){
+  return getBlocks(vt,dateStr).length>0;
 }
 
 // ── GCAL WRITE: Push single event after Leveto booking ────────────
@@ -704,6 +782,8 @@ function renderBody(){
         html+=`<div class="mc-apt" style="background:${c}15;border-color:${c};color:${c};" title="${esc(a.user_received)}: ${esc(name)}">${esc(t)} ${esc(vn)} · ${esc(name)}</div>`;
       });
       if(dayApts.length>MAX_SHOW) html+=`<div class="mc-more">+${dayApts.length-MAX_SHOW} weitere</div>`;
+      const dayBlocks=S.blocks.filter(b=>{const bs=(b.start_date||'').slice(0,10),be=(b.end_date||'').slice(0,10);return cell.date>=bs&&cell.date<=be;});
+      if(dayBlocks.length) html+=`<div style="font-size:9px;color:var(--red);padding:1px 3px;font-weight:600;">🏖 ${dayBlocks.map(b=>b.berater.split(' ')[0]).join(', ')}</div>`;
       html+='</div>';
     });
     html+='</div>';
@@ -732,14 +812,14 @@ function renderBody(){
             if(as<be&&ae>bs){conflictIdx.add(i);conflictIdx.add(j);}
           });
         });
-        return `<div style="flex:1;min-width:120px;border-right:1px solid var(--border);padding:3px 4px;min-height:var(--row-h);background:${isToday(day)?'rgba(253,225,84,.02)':''};">
-          <div class="day-cap">
+        return `<div style="flex:1;min-width:120px;border-right:1px solid var(--border);padding:3px 4px;min-height:var(--row-h);background:${ld.blocked?'rgba(248,81,73,.08)':isToday(day)?'rgba(253,225,84,.02)':''};">
+          ${ld.blocked?`<div style="font-size:11px;color:var(--red);padding:4px;font-weight:700;text-align:center;">🏖 ${getBlocks(vt,dayStr).map(b=>b.block_type||'Urlaub').join('/')}</div>`:`<div class="day-cap">
             <div class="day-cap-bar"><div class="day-cap-fill" style="width:${ld.pct}%;background:${ld.barColor}"></div></div>
             <div class="day-cap-lbl" style="color:${ld.color}">${ld.free>0?ld.free+'f':'voll'}</div>
           </div>          ${vapts.map((a,idx)=>{const st2=parseD(a.start_date);const name=[a.vorname,a.nachname].filter(Boolean).join(' ')||a.text||'Blocker';const isConf=conflictIdx.has(idx);
-            return `<div class="apt so${isConf?' conflict':''}" style="position:relative;top:0;left:0;width:100%;margin-bottom:2px;border-left-color:${isConf?'var(--red)':c};background:${isConf?'rgba(248,81,73,.18)':c+'18'};color:${isConf?'var(--red)':c};" onclick='showDetailFromApt(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
-              <div class="at">${isConf?'⚠ ':''}${esc(fmtT(st2))}</div><div class="an">${esc(name)}</div></div>`;}).join('')}
-          ${vapts.length===0?`<div style="font-size:10px;color:var(--green);padding:2px;font-weight:600;">✓ ${ld.free} Slots frei</div>`:''}
+            return \`<div class="apt so\${isConf?' conflict':''}" style="position:relative;top:0;left:0;width:100%;margin-bottom:2px;border-left-color:\${isConf?'var(--red)':c};background:\${isConf?'rgba(248,81,73,.18)':c+'18'};color:\${isConf?'var(--red)':c};" onclick='showDetailFromApt(\${JSON.stringify(a).replace(/'/g,"&#39;")})'>
+              <div class="at">\${isConf?'⚠ ':''}\${esc(fmtT(st2))}</div><div class="an">\${esc(name)}</div></div>\`;}).join('')}
+          ${vapts.length===0?\`<div style="font-size:10px;color:var(--green);padding:2px;font-weight:600;">✓ ${ld.free} Slots frei</div>\`:''}`}
         </div>`;
       }).join('');
       // Weekly avg load
@@ -838,7 +918,7 @@ function renderBody(){
           <div class="nbar" style="background:${c};height:${Math.min(rowH-10,60)}px;"></div>
           <div style="flex:1;min-width:0;">
             <div class="nname">${esc(fn)}<br><span style="color:var(--text2);font-weight:500">${esc(ln.join(' '))}</span></div>
-            <div class="nsub" style="color:${load.color}">${load.count}/${MAX_APTS} Termine · ${load.free>0?`<span style="color:var(--green)">${load.free} frei</span>`:'<span style="color:var(--red)">voll</span>'}</div>
+            <div class="nsub" style="color:${load.color}">${load.blocked?`<span style="color:var(--red);font-weight:700">🏖 ${getBlocks(vt,ds).map(b=>b.block_type).join("/")}</span>`:`${load.count}/${MAX_APTS} Termine · ${load.free>0?`<span style="color:var(--green)">${load.free} frei</span>`:"<span style=\"color:var(--red)\">voll</span>"}`}</div>
             <div class="capbar"><div class="capfill" style="width:${load.pct}%;background:${load.barColor}"></div></div>
             <div class="caplbl" style="color:${load.color}">${load.pct}% Auslastung</div>
             ${gcalBlockCount?`<span class="gcalBadge">📅 ${gcalBlockCount}</span>`:''}
@@ -848,6 +928,7 @@ function renderBody(){
           <div class="slotbg">${slotBg}</div>
           ${aBlocks}
           ${renderGcalBlocks(vt,ds,numLanes)}
+          ${isBlocked(vt,ds)?`<div class="blk blk-vac" style="left:0;right:0;top:0;bottom:0;z-index:9;cursor:pointer;" onclick="showBlocksForVt('${esc(vt)}','${ds}')"><div class="blk-lbl" style="font-size:13px;">🏖 ${getBlocks(vt,ds).map(b=>esc(b.block_type||'Urlaub')).join(', ')}${getBlocks(vt,ds)[0]?.note?' – '+esc(getBlocks(vt,ds)[0].note):''}</div></div>`:''}
           ${isToday(d)?`<div class="nowline" style="left:${nowPct()}%;height:${rowH}px;"></div>`:''}
         </div>
       </div>`;
@@ -860,6 +941,7 @@ function renderBody(){
   // ── Slot click → open booking modal ──
   body.querySelectorAll('.sc').forEach(el=>el.addEventListener('click',()=>{
     const {date,slot,vt}=el.dataset;
+    if(isBlocked(vt,date)){toast(`🏖 ${vt.split(' ')[0]} ist an diesem Tag abwesend`,'wa');return;}
     const slotTime=new Date(`${date}T${slot2t(parseInt(slot))}:00`);
     const vtBlocks=S.gcalBlocks[vt]||[];
     const blocked=vtBlocks.some(b=>{
@@ -1058,7 +1140,8 @@ function renderStats(){
     <div class="sp"><div class="spd" style="background:var(--text2)"></div><span class="spn">${op+cl+ca}</span> <span style="color:var(--text2)">gesamt</span></div>
     <div class="sp" style="margin-left:8px;"><div class="spd" style="background:var(--green)"></div><span class="spn" style="color:var(--green)">${totalFree}</span> <span style="color:var(--green)">Slots frei</span></div>
     <div class="sp"><div class="spd" style="background:${capColor}"></div><span class="spn" style="color:${capColor}">${totalPct}%</span> <span style="color:${capColor}">Auslastung</span></div>
-    ${confCount?`<div class="sp"><div class="spd" style="background:var(--red)"></div><span class="spn" style="color:var(--red)">${confCount}</span> <span style="color:var(--red)">Konflikte ⚠</span></div>`:''}`;
+    ${confCount?`<div class="sp"><div class="spd" style="background:var(--red)"></div><span class="spn" style="color:var(--red)">${confCount}</span> <span style="color:var(--red)">Konflikte ⚠</span></div>`:''}
+    ${(()=>{const bc=activeVts.filter(v=>isBlocked(v,ds)).length;return bc?`<div class="sp"><div class="spd" style="background:var(--red)"></div><span class="spn" style="color:var(--red)">${bc}</span> <span style="color:var(--red)">🏖 abwesend</span></div>`:''})()}`;
 }
 
 // ── PLZ FILTER ────────────────────────────────────────────────────
@@ -1191,6 +1274,7 @@ function findSmartSlots(targetPlz, matchedVts, maxResults=20){
     if(dow===0) continue; // Skip Sonntag
 
     matchedVts.forEach(vt=>{
+      if(isBlocked(vt,ds)) return; // Skip blocked days (Urlaub/Krank)
       const dayApts=S.apts.filter(a=>(a.start_date||'').slice(0,10)===ds&&a.user_received===vt&&a.status!=='Cancelled')
         .sort((a,b)=>(a.start_date||'').localeCompare(b.start_date||''));
       const gcBlocks=(S.gcalBlocks[vt]||[]).filter(b=>(b.start||'').slice(0,10)===ds);
@@ -1385,6 +1469,7 @@ function chkAll(){
   const z=document.getElementById('fZt').value;
   const dr=parseInt(document.getElementById('fDr').value)||120;
   if(!b||!d||!z)return;
+  if(isBlocked(b,d)){toast(`🏖 ${b.split(' ')[0]} ist am ${d} abwesend – bitte anderen Tag wählen`,'wa');return;}
   const st=new Date(`${d}T${z}:00`),en=new Date(st.getTime()+dr*60000);
   const conflict=S.apts.some(a=>{
     if(a.user_received!==b||(a.start_date||'').slice(0,10)!==d||a.status==='Cancelled')return false;
@@ -1598,6 +1683,58 @@ function selectAgent(name) {
   document.getElementById('ccAgentName').textContent = name.split(' ')[0];
   document.getElementById('ccWelcome').style.display = 'none';
   toast(`👋 Hallo ${name.split(' ')[0]}!`, 'ok');
+}
+
+// ── BLOCK / ABWESENHEIT MODAL ─────────────────────────────────────
+function openBlockModal(preVt,preDate){
+  const sel=document.getElementById('blkBerater');
+  sel.innerHTML=ALL_VTS.map(v=>`<option value="${esc(v)}"${v===preVt?' selected':''}>${esc(v)}</option>`).join('');
+  const today=fmt(today0());
+  document.getElementById('blkFrom').value=preDate||today;
+  document.getElementById('blkTo').value=preDate||today;
+  document.getElementById('blkNote').value='';
+  document.getElementById('blkType').value='Urlaub';
+  renderBlockList();
+  document.getElementById('blockModal').style.display='flex';
+}
+function closeBlockModal(){document.getElementById('blockModal').style.display='none';}
+
+async function submitBlock(){
+  const b=document.getElementById('blkBerater').value;
+  const t=document.getElementById('blkType').value;
+  const from=document.getElementById('blkFrom').value;
+  const to=document.getElementById('blkTo').value;
+  const note=document.getElementById('blkNote').value;
+  if(!b||!from||!to){toast('Bitte alle Felder ausfüllen','wa');return;}
+  if(from>to){toast('Von-Datum muss vor Bis-Datum liegen','wa');return;}
+  await addBlock(b,from+'T00:00:00+01:00',to+'T23:59:00+01:00',t,note);
+  renderBlockList();
+}
+
+function renderBlockList(){
+  const area=document.getElementById('blockListArea');
+  if(!area)return;
+  const upcoming=S.blocks.filter(b=>(b.end_date||'').slice(0,10)>=fmt(today0())).sort((a,b)=>(a.start_date||'').localeCompare(b.start_date||''));
+  if(!upcoming.length){area.innerHTML='<div style="color:var(--text2);font-size:11px;text-align:center;padding:8px;">Keine aktiven Abwesenheiten</div>';return;}
+  const icons={'Urlaub':'🏖','Krank':'🤒','Frei':'📅','Schulung':'📚'};
+  area.innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;">Aktive Abwesenheiten (${upcoming.length})</div>`+
+    upcoming.slice(0,15).map(b=>{
+      const sd=(b.start_date||'').slice(0,10),ed=(b.end_date||'').slice(0,10);
+      const days=Math.round((new Date(ed)-new Date(sd))/86400000)+1;
+      const icon=icons[b.block_type]||'⛔';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:4px;font-size:12px;">
+        <span>${icon}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(b.berater)}</div>
+          <div style="color:var(--text2);font-size:10px;">${sd===ed?sd:`${sd} → ${ed} (${days}d)`} · ${esc(b.block_type)}${b.note?' · '+esc(b.note):''}</div>
+        </div>
+        <span style="cursor:pointer;color:var(--red);font-size:14px;" onclick="if(confirm('Block löschen?'))deleteBlock('${b.id}')" title="Löschen">🗑</span>
+      </div>`;
+    }).join('');
+}
+
+function showBlocksForVt(vt,dateStr){
+  openBlockModal(vt,dateStr);
 }
 
 // ── KEYBOARD SHORTCUTS ────────────────────────────────────────────
