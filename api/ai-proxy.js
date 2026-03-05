@@ -16,6 +16,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Auth check: allow Vercel cron, manual trigger, or bee-doo frontend
+  const _auth = req.headers.authorization;
+  const _ref = req.headers.referer || req.headers.origin || '';
+  const _isBeedoo = _ref.includes('bee-doo') || _ref.includes('localhost') || _ref.includes('127.0.0.1');
+  const _isCron = req.headers['x-vercel-cron'] === '1';
+  const _isManual = _auth === 'Bearer manual';
+  if (!_isBeedoo && !_isCron && !_isManual) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+
   try {
     const { model, max_tokens, system, messages, stream } = req.body;
 
