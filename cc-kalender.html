@@ -537,11 +537,19 @@ async function sync(silent=false){
       S.apts=S.apts.filter(a=>{
         const txt=[a.text||'',a.vorname||'',a.nachname||'',a.appointment_type||''].join(' ');
         if(BLOCK_RE.test(txt)) return false;
-        // Filter empty entries: no type, no customer name, no text = junk
+        // Filter empty entries: no type, no customer name, no text = potential junk
         const hasType=!!(a.appointment_type||'').trim()&&(a.appointment_type||'').trim()!=='-';
         const hasName=!!(a.vorname||a.nachname);
         const hasText=!!(a.text||'').trim();
-        if(!hasType&&!hasName&&!hasText) return false;
+        if(!hasType&&!hasName&&!hasText){
+          // BUT keep long blocks (>2h) = intentional Blocker/Urlaub/Frei
+          const st=parseD(a.start_date),en=parseD(a.end_date);
+          if(st&&en){
+            const durMin=(en-st)/60000;
+            if(durMin>=120) return true; // Keep as Blocker (Urlaub/Frei)
+          }
+          return false; // Remove short system junk
+        }
         return true;
       });
       computeStats();
