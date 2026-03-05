@@ -117,17 +117,15 @@ function mapContract(c, leadId, leadWorkflows, leadWfHistory, now) {
   const iconStr = Array.isArray(icons) ? icons.join(' ') : (typeof icons === 'string' ? icons : '');
   const istHP = iconStr.includes('fa-fire') || iconStr.includes('HP');
 
-  // auftragsstatus: derive from Verkäuferboard workflow if API returns XXX
-  let auftragsstatus = vd(c.auftragsstatus);
-  if (!auftragsstatus && wfSteps.wf_verkauf_step) {
-    auftragsstatus = wfSteps.wf_verkauf_step;
-  }
+  // auftragsstatus: NOT set by overview sync (always XXX from overview API)
+  // Real currentstatus comes from /api/contracts-status-sync (runs every 30min)
+  // Verkäuferboard step is stored separately in wf_verkauf_step
 
   // Ensure all contract rows have same keys for Supabase batch upsert
   const ALL_KEYS = ['leveto_id','lead_id','dyn_offernum','ersteller','creator_ma_number',
     'calculated_realprice_netto','calculated_realprice_brutto','creation_date','accepted_date',
     'pdf_url','typeicons','ist_waermepumpe','products','provision_ausgezahlt_am',
-    'efs_prozent','currentstatus','speichererweiterung','workflows','workflow_history',
+    'efs_prozent','speichererweiterung','workflows','workflow_history',
     'kwp','module_anzahl','module_typ','battery_kap','hat_speicher','speicher_kwh',
     'wf_verkauf_step','wf_verkauf_changed','wf_beedoo_step','wf_beedoo_changed',
     'wf_dc_step','wf_dc_changed','wf_ac_step','wf_ac_changed',
@@ -149,7 +147,7 @@ function mapContract(c, leadId, leadWorkflows, leadWfHistory, now) {
     products:                 products.length ? products : null,
     provision_ausgezahlt_am:  vd(c.provision_ausgezahlt_am),
     efs_prozent:              c.efs_prozent ? parseFloat(c.efs_prozent) : null,
-    currentstatus:            auftragsstatus,
+    // currentstatus: NOT set here — comes from contracts-status-sync
     speichererweiterung:      vd(c.speichererweiterung),
     workflows:                contractWfs.length ? contractWfs : null,
     workflow_history:         allHistory.length ? allHistory : null,
