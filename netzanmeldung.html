@@ -391,7 +391,7 @@ function Checklist({ items, onChange }) {
   const pct = items.length ? (done / items.length) * 100 : 0;
   const toggle = (id) => {
     onChange(items.map(i => i.id === id
-      ? { ...i, erhalten: !i.erhalten, datum: !i.erhalten ? new Date().toISOString().split("T")[0] : null }
+      ? { ...i, erhalten: !i.erhalten, datum: !i.erhalten ? fmtLocal(new Date()) : null }
       : i
     ));
   };
@@ -564,7 +564,7 @@ function NewForm({ auftraege, onSave, onCancel }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     zaehler_nr: "", netzbetreiber: "", malo_id: "", mastr_nr: "",
-    anmeldung_datum: new Date().toISOString().split("T")[0],
+    anmeldung_datum: fmtLocal(new Date()),
     verantwortlich: "", notizen: "",
     unterlagen: UL_TEMPLATE.map(u => ({...u})),
   });
@@ -734,8 +734,8 @@ function DetailView({ a: initial, onBack, onUpdate }) {
     const hist = [...(a.status_history || []), { status: newS, datum: new Date().toISOString(), notiz: note || STATUS[newS].label }];
     const patch = {
       status: newS, status_history: hist,
-      ...(newS === "genehmigt" && !a.genehmigung_datum ? { genehmigung_datum: new Date().toISOString().split("T")[0] } : {}),
-      ...(newS === "inbetrieb" && !a.inbetriebnahme_datum ? { inbetriebnahme_datum: new Date().toISOString().split("T")[0] } : {}),
+      ...(newS === "genehmigt" && !a.genehmigung_datum ? { genehmigung_datum: fmtLocal(new Date()) } : {}),
+      ...(newS === "inbetrieb" && !a.inbetriebnahme_datum ? { inbetriebnahme_datum: fmtLocal(new Date()) } : {}),
     };
     await db.patch("netzanmeldungen", a.id, patch);
     const upd = { ...a, ...patch };
@@ -1106,6 +1106,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 
 <script>
+
+// ── TIMEZONE FIX: local date helper ──────────────────────────────
+function fmtLocal(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+
 function _esc(s){if(!s)return'';var d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
 </script>
 <!-- bee-doo KI-Modul -->
