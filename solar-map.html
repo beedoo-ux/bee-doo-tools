@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solar Strategie-Karte · bee-doo</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#09090e;--sf:#101018;--card:#17171f;--card2:#1d1d28;
+  --bd:#252538;--bd2:#303048;
+  --gold:#F5C500;--gdim:rgba(245,197,0,.13);
+  --tx:#eeeef5;--tx2:#8888ab;--tx3:#52526a;
+  --gr:#22c55e;--rd:#ef4444;--bl:#60a5fa;--or:#fb923c;--pu:#a78bfa;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--tx);font-family:'DM Sans',system-ui,sans-serif;display:flex;flex-direction:column;}
+
+/* HEADER */
+.hdr{
+  background:var(--sf);border-bottom:1px solid var(--bd);
+  height:52px;padding:0 14px;display:flex;align-items:center;gap:10px;
+  flex-shrink:0;z-index:300;
+}
+.logo{font-size:18px;font-weight:800;color:var(--gold);}
+.sep{width:1px;height:18px;background:var(--bd);}
+.htitle{font-size:13px;font-weight:600;color:var(--tx2);}
+
+/* LAYER TOGGLES */
+.layers{display:flex;gap:6px;margin-left:auto;align-items:center;}
+.ltog{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 12px;border-radius:20px;font-size:11px;font-weight:700;
+  cursor:pointer;border:1.5px solid;transition:all .15s;user-select:none;
+}
+.ltog .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.ltog.off{opacity:.35;filter:grayscale(.8);}
+
+.ltog-visits{border-color:#6366f1;color:#a5b4fc;}
+.ltog-visits.on{background:rgba(99,102,241,.15);}
+.ltog-visits .dot{background:#6366f1;}
+
+.ltog-anlagen{border-color:#22c55e;color:#86efac;}
+.ltog-anlagen.on{background:rgba(34,197,94,.12);}
+.ltog-anlagen .dot{background:#22c55e;}
+
+.ltog-leads{border-color:#F5C500;color:#fde047;}
+.ltog-leads.on{background:rgba(245,197,0,.1);}
+.ltog-leads .dot{background:#F5C500;}
+
+.ltog-heatmap{border-color:#fb923c;color:#fdba74;}
+.ltog-heatmap.on{background:rgba(251,146,60,.1);}
+.ltog-heatmap .dot{background:#fb923c;}
+
+.bk{padding:6px 11px;border-radius:8px;background:var(--card);border:1px solid var(--bd);color:var(--tx2);font-size:12px;cursor:pointer;text-decoration:none;transition:all .15s;}
+.bk:hover{color:var(--tx);border-color:var(--bd2);}
+
+/* MAP */
+.mapw{flex:1;position:relative;overflow:hidden;}
+#map{width:100%;height:100%;}
+
+/* STATS BAR */
+.statsbar{
+  position:absolute;bottom:0;left:0;right:0;z-index:50;
+  background:linear-gradient(to top,rgba(9,9,14,.95) 60%,transparent);
+  padding:12px 16px 14px;
+  display:flex;gap:16px;align-items:flex-end;pointer-events:none;
+}
+.sbar-item{text-align:center;min-width:60px;}
+.sbar-v{font-size:22px;font-weight:800;line-height:1;}
+.sbar-l{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-top:2px;}
+
+/* DETAIL PANEL */
+.panel{
+  position:absolute;top:0;bottom:0;right:0;z-index:100;
+  width:320px;background:var(--sf);border-left:1px solid var(--bd);
+  display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform .3s ease;
+  overflow:hidden;
+}
+.panel.open{transform:translateX(0);}
+.panel-hdr{
+  padding:14px 14px 12px;border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+}
+.panel-title{font-size:14px;font-weight:700;flex:1;}
+.panel-close{
+  width:28px;height:28px;border-radius:7px;background:var(--card);
+  border:1px solid var(--bd);color:var(--tx2);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:16px;
+}
+.panel-body{flex:1;overflow-y:auto;padding:12px 14px;}
+.panel-body::-webkit-scrollbar{width:3px;}
+.panel-body::-webkit-scrollbar-thumb{background:var(--bd);}
+
+/* SECTION */
+.sec{margin-bottom:14px;}
+.slb{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--tx3);margin-bottom:7px;}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.sbox{background:var(--card);border-radius:8px;padding:8px 10px;border:1px solid var(--bd);}
+.sv{font-size:18px;font-weight:800;}
+.sl{font-size:10px;color:var(--tx3);margin-top:2px;}
+
+/* NEIGHBOR LIST */
+.nb-item{
+  display:flex;align-items:center;gap:8px;padding:7px 0;
+  border-bottom:1px solid var(--bd);
+}
+.nb-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.nb-addr{font-size:11px;font-weight:600;flex:1;}
+.nb-dist{font-size:10px;color:var(--tx3);}
+
+/* CONVERSION TABLE */
+.conv-row{
+  display:flex;align-items:center;gap:8px;padding:6px 0;
+  border-bottom:1px solid var(--bd);cursor:pointer;
+}
+.conv-row:hover{opacity:.8;}
+.conv-bar-wrap{width:50px;height:4px;background:var(--bd);border-radius:2px;flex-shrink:0;}
+.conv-bar{height:100%;border-radius:2px;}
+.conv-plz{font-size:11px;font-weight:700;width:44px;flex-shrink:0;}
+.conv-ort{font-size:10px;color:var(--tx3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.conv-pct{font-size:11px;font-weight:800;width:36px;text-align:right;flex-shrink:0;}
+
+/* LOADING OVERLAY */
+.ovl{
+  position:absolute;inset:0;background:rgba(9,9,14,.9);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  z-index:999;gap:12px;backdrop-filter:blur(4px);
+}
+.sp{width:32px;height:32px;border:3px solid var(--bd);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.ot{font-size:12px;color:var(--tx2);text-align:center;}
+.oprog{width:200px;height:3px;background:var(--bd);border-radius:2px;overflow:hidden;}
+.opf{height:100%;background:var(--gold);border-radius:2px;transition:width .3s;}
+
+/* POPUP */
+.leaflet-popup-content-wrapper{background:var(--card)!important;border:1px solid var(--bd)!important;border-radius:12px!important;box-shadow:0 8px 32px rgba(0,0,0,.7)!important;padding:0!important;}
+.leaflet-popup-content{margin:0!important;}
+.leaflet-popup-tip{background:var(--card)!important;}
+.leaflet-popup-close-button{color:var(--tx2)!important;top:8px!important;right:8px!important;}
+.pu{padding:12px 14px;min-width:200px;}
+.pu-head{font-size:14px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:7px;}
+.pu-badge{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;}
+.pu-row{display:flex;gap:8px;margin-top:4px;}
+.pu-l{font-size:10px;color:var(--tx3);width:60px;flex-shrink:0;}
+.pu-v{font-size:11px;font-weight:600;}
+.pu-btn{width:100%;margin-top:10px;padding:8px;border-radius:8px;background:var(--gold);color:#000;border:none;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+.pu-btn2{width:100%;margin-top:5px;padding:7px;border-radius:8px;background:var(--card2);color:var(--tx2);border:1px solid var(--bd);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;}
+
+/* RADIUS CONTROL */
+.rad-ctrl{
+  position:absolute;top:60px;left:10px;z-index:20;
+  background:rgba(16,16,24,.9);border:1px solid var(--bd);
+  border-radius:10px;padding:8px 12px;font-size:11px;
+  backdrop-filter:blur(8px);display:none;
+}
+.rad-ctrl label{color:var(--tx2);font-size:10px;display:block;margin-bottom:5px;}
+.rad-ctrl input{width:120px;accent-color:var(--gold);}
+.rad-ctrl span{color:var(--gold);font-weight:700;margin-left:5px;}
+
+/* PLZ LABEL */
+.plzl{background:transparent;border:none;}
+
+/* RADIUS CIRCLE */
+.nb-radius-circle{pointer-events:none;}
+
+/* INFO BADGE */
+.infobadge{
+  position:absolute;top:10px;left:10px;z-index:20;
+  background:rgba(16,16,24,.9);border:1px solid var(--bd);
+  border-radius:9px;padding:7px 12px;font-size:11px;font-weight:600;
+  color:var(--tx2);pointer-events:none;backdrop-filter:blur(6px);
+}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .ltog span{display:none;}
+  .panel{width:100%;border-left:none;border-top:1px solid var(--bd);bottom:0;top:auto;height:55dvh;transform:translateY(100%);}
+  .panel.open{transform:translateY(0);}
+  .statsbar{flex-wrap:wrap;gap:10px;}
+}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="logo">bee-doo</div>
+  <div class="sep"></div>
+  <div class="htitle">⚡ Solar Strategie-Karte</div>
+  <div class="layers">
+    <div class="ltog ltog-visits on" id="tog-visits" onclick="toggleLayer('visits')">
+      <div class="dot"></div><span>Scout</span>
+    </div>
+    <div class="ltog ltog-anlagen on" id="tog-anlagen" onclick="toggleLayer('anlagen')">
+      <div class="dot"></div><span>Anlagen</span>
+    </div>
+    <div class="ltog ltog-leads on" id="tog-leads" onclick="toggleLayer('leads')">
+      <div class="dot"></div><span>Leads</span>
+    </div>
+    <div class="ltog ltog-heatmap off" id="tog-heatmap" onclick="toggleLayer('heatmap')">
+      <div class="dot"></div><span>Conversion</span>
+    </div>
+  </div>
+  <div style="width:8px"></div>
+  <a href="index.html" class="bk">← Toolbox</a>
+</div>
+
+<div class="mapw">
+  <div id="map"></div>
+
+  <!-- Loading overlay -->
+  <div class="ovl" id="m-ovl">
+    <div class="sp"></div>
+    <div class="ot" id="m-ot">Lade Karte...</div>
+    <div class="oprog"><div class="opf" id="opf" style="width:0%"></div></div>
+  </div>
+
+  <!-- Info badge -->
+  <div class="infobadge" id="infobadge" style="display:none"></div>
+
+  <!-- Radius control -->
+  <div class="rad-ctrl" id="rad-ctrl">
+    <label>Nachbar-Radius</label>
+    <input type="range" min="50" max="500" step="25" value="150" id="rad-range" oninput="document.getElementById('rad-val').textContent=this.value+'m'">
+    <span id="rad-val">150m</span>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="statsbar" id="statsbar">
+    <div class="sbar-item">
+      <div class="sbar-v" id="sb-visits" style="color:#a5b4fc">–</div>
+      <div class="sbar-l" style="color:#6366f1">Scout-Besuche</div>
+    </div>
+    <div class="sbar-item">
+      <div class="sbar-v" id="sb-anlagen" style="color:#86efac">–</div>
+      <div class="sbar-l" style="color:#22c55e">Anlagen</div>
+    </div>
+    <div class="sbar-item">
+      <div class="sbar-v" id="sb-leads" style="color:#fde047">–</div>
+      <div class="sbar-l" style="color:var(--gold)">Leads</div>
+    </div>
+    <div class="sbar-item">
+      <div class="sbar-v" id="sb-kwp" style="color:#86efac">–</div>
+      <div class="sbar-l" style="color:#22c55e">MWp installiert</div>
+    </div>
+    <div style="margin-left:auto;pointer-events:all;">
+      <button onclick="openConvPanel()" style="padding:7px 14px;background:rgba(251,146,60,.15);border:1px solid rgba(251,146,60,.3);border-radius:8px;color:#fdba74;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+        📊 Conversion-Analyse
+      </button>
+    </div>
+  </div>
+
+  <!-- Detail panel -->
+  <div class="panel" id="panel">
+    <div class="panel-hdr">
+      <div class="panel-title" id="panel-title">–</div>
+      <div class="panel-close" onclick="closePanel()">×</div>
+    </div>
+    <div class="panel-body" id="panel-body"></div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+const SB='https://hqzpemfaljxcysyqssng.supabase.co';
+const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
+const Hs={apikey:SK,'Authorization':'Bearer '+SK,'Content-Type':'application/json'};
+
+// Status colors for scout visits
+const VISIT_C={
+  CUSTOMER_NOT_HOME:'#6366f1',
+  NO_INTEREST:'#ef4444',
+  NOT_MARKETABLE:'#64748b',
+  EXISTING_CUSTOMER:'#fb923c',
+  BLACKLISTED:'#1e1b4b',
+  NO_ENTRY:'#94a3b8',
+  FOLLOW_UP:'#F5C500',
+  ORDER_REGISTERED:'#22c55e',
+  APPOINTMENT:'#22c55e',
+};
+const VISIT_L={
+  CUSTOMER_NOT_HOME:'Nicht angetr.',NO_INTEREST:'Kein Interesse',
+  NOT_MARKETABLE:'Nicht relevant',EXISTING_CUSTOMER:'Bestandskunde',
+  BLACKLISTED:'Blacklist',NO_ENTRY:'Kein Zutritt',
+  FOLLOW_UP:'Follow-up',ORDER_REGISTERED:'Auftrag',APPOINTMENT:'Termin',
+};
+
+// ─── MAP INIT ───
+const renderer=L.canvas({padding:0.5});
+const map=L.map('map',{zoomControl:false,preferCanvas:true,renderer}).setView([51.5,7.8],9);
+L.control.zoom({position:'bottomright'}).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'©OSM ©CARTO',maxZoom:20}).addTo(map);
+
+// Layers
+const lVisits=L.layerGroup().addTo(map);
+const lAnlagen=L.layerGroup().addTo(map);
+const lLeads=L.layerGroup().addTo(map);
+const lHeatmap=L.layerGroup();
+const lNachbarn=L.layerGroup().addTo(map);
+const lRadius=L.layerGroup().addTo(map);
+const layerMap={visits:lVisits,anlagen:lAnlagen,leads:lLeads,heatmap:lHeatmap};
+
+// State
+const layerOn={visits:true,anlagen:true,leads:true,heatmap:false};
+let anlagenData=[], convData=[], nbRadiusCircle=null;
+
+// ─── API ───
+async function rpc(fn,body={}){
+  const r=await fetch(SB+'/rest/v1/rpc/'+fn,{method:'POST',headers:Hs,body:JSON.stringify(body)});
+  if(!r.ok)throw new Error(await r.text());
+  return r.json();
+}
+
+// ─── LOADING ───
+function setProgress(pct,txt){
+  document.getElementById('opf').style.width=pct+'%';
+  if(txt)document.getElementById('m-ot').textContent=txt;
+}
+function hideLoader(){document.getElementById('m-ovl').style.display='none';}
+
+// ─── LAYER TOGGLES ───
+function toggleLayer(key){
+  layerOn[key]=!layerOn[key];
+  const tog=document.getElementById('tog-'+key);
+  tog.classList.toggle('on',layerOn[key]);
+  tog.classList.toggle('off',!layerOn[key]);
+  if(layerOn[key]){
+    if(!map.hasLayer(layerMap[key]))map.addLayer(layerMap[key]);
+    if(key==='heatmap'&&convData.length===0)loadHeatmap();
+  } else {
+    map.removeLayer(layerMap[key]);
+  }
+}
+
+// ─── SCOUT VISITS ───
+async function loadVisits(){
+  setProgress(10,'Lade Scout-Besuche (65.000)...');
+  const BATCH=5000,TOTAL=65000;
+  let loaded=0;
+  // Load in batches using the RPC with limit
+  const rows=await rpc('get_scout_visits_map',{p_limit:TOTAL});
+  document.getElementById('sb-visits').textContent=rows.length.toLocaleString('de');
+  
+  setProgress(35,'Rendere Scout-Besuche...');
+  // Batch render
+  const CHUNK=2000;
+  for(let i=0;i<rows.length;i+=CHUNK){
+    const chunk=rows.slice(i,i+CHUNK);
+    chunk.forEach(r=>{
+      const c=VISIT_C[r.status]||'#334155';
+      const isOpen=!r.status;
+      L.circleMarker([r.lat,r.lng],{
+        renderer,radius:3.5,
+        fillColor:c,fillOpacity:.75,
+        color:'transparent',weight:0
+      }).bindPopup(()=>visitPopup(r),{maxWidth:220}).addTo(lVisits);
+    });
+    loaded+=chunk.length;
+    setProgress(35+Math.round(loaded/rows.length*25),`Rendere Scout-Besuche... ${loaded.toLocaleString('de')}`);
+    await new Promise(r=>setTimeout(r,0));
+  }
+}
+
+function visitPopup(r){
+  const c=VISIT_C[r.status]||'#64748b';
+  const l=VISIT_L[r.status]||r.status||'Unbekannt';
+  const d=r.visit_date||'–';
+  return `<div class="pu">
+    <div class="pu-head">
+      <div class="dot" style="width:9px;height:9px;border-radius:50%;background:${c};flex-shrink:0"></div>
+      <span>${r.adresse||'–'}</span>
+      <span class="pu-badge" style="background:${c}22;color:${c}">${l}</span>
+    </div>
+    <div class="pu-row"><div class="pu-l">PLZ / Ort</div><div class="pu-v">${r.plz||''} ${r.ort||''}</div></div>
+    <div class="pu-row"><div class="pu-l">Scout</div><div class="pu-v">${r.scouter||'–'}</div></div>
+    <div class="pu-row"><div class="pu-l">Datum</div><div class="pu-v">${d}</div></div>
+  </div>`;
+}
+
+// ─── ANLAGEN ───
+async function loadAnlagen(){
+  setProgress(60,'Lade installierte Anlagen...');
+  anlagenData=await rpc('get_installed_anlagen');
+  document.getElementById('sb-anlagen').textContent=anlagenData.length;
+  const kwp_sum=anlagenData.reduce((s,r)=>s+Number(r.kwp||0),0);
+  document.getElementById('sb-kwp').textContent=(kwp_sum/1000).toFixed(1)+'MW';
+
+  anlagenData.forEach(r=>{
+    const kwp=Number(r.kwp||4);
+    const radius=6+Math.sqrt(kwp)*3;
+    const marker=L.circleMarker([r.lat,r.lng],{
+      renderer,
+      radius,
+      fillColor:'#22c55e',fillOpacity:.85,
+      color:'#fff',weight:1.5
+    });
+    marker.bindPopup(()=>anlagenPopup(r),{maxWidth:240});
+    marker.on('click',e=>{
+      L.DomEvent.stopPropagation(e);
+      showNachbarn(r);
+    });
+    lAnlagen.addLayer(marker);
+  });
+}
+
+function anlagenPopup(r){
+  const d=r.installed_at?new Date(r.installed_at).toLocaleDateString('de-DE',{month:'2-digit',year:'2-digit'}):'–';
+  return `<div class="pu">
+    <div class="pu-head">⚡ <span>${r.vorname} ${r.nachname}</span></div>
+    <div class="pu-row"><div class="pu-l">Adresse</div><div class="pu-v">${r.strasse||''}, ${r.plz} ${r.ort}</div></div>
+    <div class="pu-row"><div class="pu-l">Anlage</div><div class="pu-v" style="color:#86efac">${r.kwp} kWp${r.bat_kwh?` · ${r.bat_kwh} kWh Speicher`:''}</div></div>
+    <div class="pu-row"><div class="pu-l">Installiert</div><div class="pu-v">${d}</div></div>
+    <button class="pu-btn" onclick="showNachbarnFromBtn(${r.lat},${r.lng},'${(r.strasse||'').replace(/'/g,"\\'")}')">🏠 Nachbarn anzeigen</button>
+  </div>`;
+}
+
+// ─── NACHBARN EFFEKT ───
+async function showNachbarn(anlage){
+  const rad=parseInt(document.getElementById('rad-range').value)||150;
+  lNachbarn.clearLayers();lRadius.clearLayers();
+  
+  // Draw radius circle
+  L.circle([anlage.lat,anlage.lng],{
+    radius:rad,color:'#22c55e',fillColor:'#22c55e',
+    fillOpacity:.08,weight:1.5,dashArray:'6 4',className:'nb-radius-circle'
+  }).addTo(lRadius);
+  
+  document.getElementById('rad-ctrl').style.display='block';
+  openPanel('🏠 Nachbar-Analyse','<div style="display:flex;align-items:center;gap:8px;padding:8px 0"><div class="sp" style="width:20px;height:20px;border-width:2px"></div><span style="font-size:12px;color:var(--tx2)">Lade Nachbarn...</span></div>');
+  
+  try{
+    const rows=await rpc('get_nachbarn',{p_lat:anlage.lat,p_lng:anlage.lng,p_radius_m:rad});
+    renderNachbarn(rows,anlage,rad);
+  }catch(e){console.error(e);}
+}
+
+async function showNachbarnFromBtn(lat,lng,addr){
+  showNachbarn({lat,lng,strasse:addr,vorname:'',nachname:'',plz:'',ort:''});
+}
+
+function renderNachbarn(rows,anlage,rad){
+  lNachbarn.clearLayers();
+  const open=rows.filter(r=>!r.last_quali);
+  const visited=rows.filter(r=>r.last_quali);
+  
+  rows.forEach(r=>{
+    const isOpen=!r.last_quali;
+    const c=isOpen?'#a78bfa':'#475569';
+    L.circleMarker([r.lat,r.lng],{
+      renderer,radius:isOpen?6:4,
+      fillColor:c,fillOpacity:isOpen?.9:.4,
+      color:isOpen?'#fff':'transparent',weight:isOpen?1:0
+    }).bindPopup(`<div class="pu">
+      <div class="pu-head">${r.stn} ${r.hnr}</div>
+      <div class="pu-row"><div class="pu-l">Status</div><div class="pu-v" style="color:${c}">${r.last_quali||'Noch nie besucht'}</div></div>
+      <div class="pu-row"><div class="pu-l">Scout</div><div class="pu-v">${r.last_scout_name||'–'}</div></div>
+      <div class="pu-row"><div class="pu-l">Entfernung</div><div class="pu-v">${r.dist_m}m</div></div>
+    </div>`,{maxWidth:200}).addTo(lNachbarn);
+  });
+
+  // Panel content
+  const anlageStr=anlage.strasse?`${anlage.strasse}, ${anlage.plz}`:'Anlage';
+  openPanel('🏠 Nachbarn · '+rad+'m Radius',`
+    <div class="sec">
+      <div class="slb">Anlage</div>
+      <div style="font-size:12px;font-weight:600;color:var(--gr)">⚡ ${anlageStr}</div>
+    </div>
+    <div class="sec">
+      <div class="slb">Im Radius</div>
+      <div class="sg">
+        <div class="sbox"><div class="sv" style="color:#a78bfa">${open.length}</div><div class="sl">Unbesucht 🎯</div></div>
+        <div class="sbox"><div class="sv" style="color:var(--tx3)">${visited.length}</div><div class="sl">Bereits besucht</div></div>
+        <div class="sbox"><div class="sv" style="color:var(--gold)">${rows.length}</div><div class="sl">Gesamt</div></div>
+        <div class="sbox"><div class="sv" style="color:var(--gr)">${rows.length?Math.round(visited.length/rows.length*100):0}%</div><div class="sl">Abdeckung</div></div>
+      </div>
+    </div>
+    ${open.length?`
+    <div class="sec">
+      <div class="slb">Unbesuchte Nachbarn · Beste zuerst</div>
+      ${open.sort((a,b)=>a.dist_m-b.dist_m).slice(0,20).map(r=>`
+        <div class="nb-item">
+          <div class="nb-dot" style="background:#a78bfa"></div>
+          <div class="nb-addr">${r.stn} ${r.hnr}${r.hnrz||''}</div>
+          <div class="nb-dist">${r.dist_m}m</div>
+        </div>`).join('')}
+    </div>`:'<div style="padding:10px 0;font-size:11px;color:var(--tx3);text-align:center">Alle Nachbarn bereits besucht 👍</div>'}
+    <div style="padding-top:8px">
+      <button class="pu-btn" onclick="exportNachbarn()" style="border-radius:8px;padding:8px">📋 Adressen kopieren</button>
+    </div>
+  `);
+
+  // Store for export
+  window._nachbarnOpen=open;
+  window._nachbarnAnlage=anlage;
+}
+
+function exportNachbarn(){
+  const rows=window._nachbarnOpen||[];
+  if(!rows.length)return;
+  const txt=rows.map((r,i)=>`${i+1}. ${r.stn} ${r.hnr}${r.hnrz||''}`).join('\n');
+  navigator.clipboard.writeText(txt).then(()=>alert(`✓ ${rows.length} Adressen kopiert`));
+}
+
+// ─── LEADS LAYER ───
+async function loadLeads(){
+  setProgress(75,'Lade aktive Leads...');
+  const rows=await rpc('get_leads_map');
+  document.getElementById('sb-leads').textContent=rows.length.toLocaleString('de');
+  
+  rows.forEach(r=>{
+    const icon=L.divIcon({
+      className:'',
+      html:`<div style="background:#F5C500;border:2px solid #000;border-radius:50%;width:8px;height:8px;opacity:.85;box-shadow:0 0 4px rgba(245,197,0,.6)"></div>`,
+      iconSize:[8,8],iconAnchor:[4,4]
+    });
+    L.marker([r.lat,r.lng],{icon})
+     .bindPopup(()=>leadPopup(r),{maxWidth:220})
+     .addTo(lLeads);
+  });
+}
+
+function leadPopup(r){
+  return `<div class="pu">
+    <div class="pu-head">💼 <span>${r.vorname} ${r.nachname}</span></div>
+    <div class="pu-row"><div class="pu-l">Ort</div><div class="pu-v">${r.plz||''} ${r.ort||''}</div></div>
+    <div class="pu-row"><div class="pu-l">Status</div><div class="pu-v" style="color:var(--gold)">${r.status_name||'–'}</div></div>
+    ${r.kwp?`<div class="pu-row"><div class="pu-l">kWp</div><div class="pu-v">${r.kwp}</div></div>`:''}
+    <div class="pu-row"><div class="pu-l">Quelle</div><div class="pu-v">${r.quelle||'–'}</div></div>
+  </div>`;
+}
+
+// ─── CONVERSION HEATMAP ───
+async function loadHeatmap(){
+  if(convData.length)return;
+  convData=await rpc('get_conversion_by_plz');
+  renderHeatmap();
+}
+
+function renderHeatmap(){
+  lHeatmap.clearLayers();
+  const maxPct=Math.max(...convData.map(r=>Number(r.conversion_pct)||0));
+  
+  convData.forEach(r=>{
+    if(!r.center_lat||!r.center_lng)return;
+    const pct=Number(r.conversion_pct)||0;
+    const ratio=maxPct>0?pct/maxPct:0;
+    // Color: red (0) → orange (0.5) → green (1.0)
+    const h=Math.round(ratio*120); // 0=red, 120=green
+    const col=`hsl(${h},85%,50%)`;
+    const visits=Number(r.scout_besuche)||0;
+    const radius=Math.max(800,Math.min(3000,Math.sqrt(visits)*80));
+    
+    L.circle([r.center_lat,r.center_lng],{
+      radius,color:col,fillColor:col,
+      fillOpacity:.35,weight:1.5
+    }).bindPopup(()=>heatmapPopup(r),{maxWidth:220}).addTo(lHeatmap);
+    
+    L.marker([r.center_lat,r.center_lng],{icon:L.divIcon({
+      className:'plzl',
+      html:`<div style="background:rgba(0,0,0,.75);padding:2px 6px;border-radius:4px;font-size:10px;color:${col};font-weight:700">${r.plz}<br><span style="font-size:9px">${pct}%</span></div>`,
+      iconAnchor:[20,12]
+    })}).addTo(lHeatmap);
+  });
+}
+
+function heatmapPopup(r){
+  const pct=Number(r.conversion_pct)||0;
+  const col=pct>10?'#22c55e':pct>3?'#F5C500':'#ef4444';
+  return `<div class="pu">
+    <div class="pu-head">📊 <span>${r.plz} ${r.ort||''}</span></div>
+    <div class="pu-row"><div class="pu-l">Scout-Bes.</div><div class="pu-v">${Number(r.scout_besuche).toLocaleString('de')}</div></div>
+    <div class="pu-row"><div class="pu-l">Termine</div><div class="pu-v">${Number(r.termine).toLocaleString('de')}</div></div>
+    <div class="pu-row"><div class="pu-l">Aufträge</div><div class="pu-v" style="color:var(--gr)">${Number(r.auftraege).toLocaleString('de')}</div></div>
+    <div class="pu-row"><div class="pu-l">Conversion</div><div class="pu-v" style="color:${col};font-size:14px;font-weight:800">${pct}%</div></div>
+    <button class="pu-btn2" onclick="showConvDetail('${r.plz}')">Gebiet erkunden</button>
+  </div>`;
+}
+
+function showConvDetail(plz){
+  window.location.href='gebietsplanung.html?plz='+plz;
+}
+
+// ─── CONVERSION PANEL ───
+function openConvPanel(){
+  if(convData.length===0){
+    if(!layerOn.heatmap)toggleLayer('heatmap');
+    openPanel('📊 Conversion-Analyse','<div style="display:flex;align-items:center;gap:8px;padding:8px 0"><div class="sp" style="width:20px;height:20px;border-width:2px"></div><span style="font-size:12px;color:var(--tx2)">Lade...</span></div>');
+    rpc('get_conversion_by_plz').then(d=>{convData=d;renderHeatmap();buildConvPanel();});
+    return;
+  }
+  buildConvPanel();
+}
+
+function buildConvPanel(){
+  const sorted=[...convData].sort((a,b)=>Number(b.conversion_pct)-Number(a.conversion_pct));
+  const maxPct=Math.max(...sorted.map(r=>Number(r.conversion_pct)||0));
+  openPanel('📊 Conversion-Analyse',`
+    <div class="sec">
+      <div class="slb">Erklärung</div>
+      <div style="font-size:11px;color:var(--tx3);line-height:1.6">Conversion = Aufträge ÷ Scout-Besuche pro PLZ. Nur PLZ mit ≥5 Besuchen.</div>
+    </div>
+    <div class="sec">
+      <div class="slb">${sorted.length} PLZ · Sortiert nach Conversion</div>
+      ${sorted.map(r=>{
+        const pct=Number(r.conversion_pct)||0;
+        const ratio=maxPct>0?pct/maxPct:0;
+        const h=Math.round(ratio*120);
+        const col=`hsl(${h},80%,55%)`;
+        return `<div class="conv-row" onclick="map.setView([${r.center_lat},${r.center_lng}],12);closePanel()">
+          <div class="conv-plz">${r.plz}</div>
+          <div class="conv-ort">${r.ort||''}</div>
+          <div class="conv-bar-wrap"><div class="conv-bar" style="width:${Math.round(ratio*100)}%;background:${col}"></div></div>
+          <div class="conv-pct" style="color:${col}">${pct}%</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `);
+}
+
+// ─── PANEL ───
+function openPanel(title,html){
+  document.getElementById('panel-title').textContent=title;
+  document.getElementById('panel-body').innerHTML=html;
+  document.getElementById('panel').classList.add('open');
+}
+function closePanel(){
+  document.getElementById('panel').classList.remove('open');
+  document.getElementById('rad-ctrl').style.display='none';
+  lNachbarn.clearLayers();lRadius.clearLayers();
+}
+
+// ─── RADIUS LIVE UPDATE ───
+document.getElementById('rad-range').addEventListener('input',function(){
+  document.getElementById('rad-val').textContent=this.value+'m';
+  // Update circle
+  lRadius.clearLayers();
+  if(window._nachbarnAnlage){
+    const a=window._nachbarnAnlage;
+    const rad=parseInt(this.value);
+    L.circle([a.lat,a.lng],{
+      radius:rad,color:'#22c55e',fillColor:'#22c55e',
+      fillOpacity:.08,weight:1.5,dashArray:'6 4'
+    }).addTo(lRadius);
+  }
+});
+document.getElementById('rad-range').addEventListener('change',function(){
+  if(window._nachbarnAnlage)showNachbarn(window._nachbarnAnlage);
+});
+
+// ─── INIT ───
+async function init(){
+  try{
+    await loadVisits();           setProgress(55);
+    await loadAnlagen();          setProgress(80);
+    await loadLeads();            setProgress(95,'Fertig!');
+    setProgress(100);
+    setTimeout(hideLoader,500);
+    document.getElementById('infobadge').style.display='block';
+    document.getElementById('infobadge').textContent='⚡ Klick auf grünen Kreis → Nachbarn anzeigen';
+    setTimeout(()=>document.getElementById('infobadge').style.display='none',5000);
+  }catch(e){
+    console.error(e);
+    document.getElementById('m-ot').textContent='Fehler: '+e.message;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
