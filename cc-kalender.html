@@ -401,6 +401,8 @@ const col=n=>COLORS[ALL_VTS.indexOf(n)%COLORS.length]||"#58a6ff";
 let S={apts:[],active:new Set(DEFAULT_VTS),view:'day',off:0,syncing:false,vtStats:{},gcalBlocks:{}};
 let plzFilter='';
 let leadSearchTimer=null;
+let selectedLeadID=null;
+let vtUserMap={}; // VT name → Leveto userID
 
 // ── UTILS ─────────────────────────────────────────────────────────
 const today0=()=>{const d=new Date();d.setHours(0,0,0,0);return d;};
@@ -456,6 +458,21 @@ async function sync(silent=false){
     }else{document.getElementById('sdot').className='sdot e';}
   }catch(e){document.getElementById('sdot').className='sdot e';}
   S.syncing=false;
+}
+
+// ── LOAD VT USER MAP (name → Leveto userID) ──────────────────────
+async function loadVtUsers(){
+  try{
+    const r=await fetch(`${PROXY}?action=users`);
+    const d=await r.json();
+    const users=d.data||[];
+    vtUserMap={};
+    users.forEach(u=>{
+      const name=`${(u.firstName||'').trim()} ${(u.lastName||'').trim()}`.trim();
+      if(name && u.userID) vtUserMap[name]=u.userID;
+    });
+    console.log(`[CC-Kal] ${Object.keys(vtUserMap).length} VT users loaded`);
+  }catch(e){console.warn('VT user load failed:',e);}
 }
 
 // ── WIEDERVORLAGEN ────────────────────────────────────────────────
@@ -748,7 +765,7 @@ function searchLeads(val){
         const plz=addr.postalCode||'';
         const city=addr.city||'';
         const tel=l.telephone||l.mobile||'';
-        return `<div class="lsItem" onclick="fillLead(${JSON.stringify({name,street:addr.fullstreet||'',plz,city,tel,vorname:l.firstName||'',nachname:l.lastName||''}).replace(/"/g,'&quot;')})">
+        return `<div class="lsItem" onclick="fillLead(${JSON.stringify({name,street:addr.fullstreet||'',plz,city,tel,vorname:l.firstName||'',nachname:l.lastName||'',leadID:l.id}).replace(/"/g,'&quot;')})">
           <div class="lsName">${esc(name)}</div>
           <div class="lsMeta">${esc(plz)} ${esc(city)} · ${esc(tel)}</div>
         </div>`;
@@ -766,6 +783,7 @@ function fillLead(d){
   document.getElementById('fTl').value=d.tel||'';
   document.getElementById('leadSearch').value=d.name;
   document.getElementById('leadList').style.display='none';
+  selectedLeadID=d.leadID||null;
   // Auto-filter VTs by PLZ
   if(d.plz&&d.plz.length>=3){
     document.getElementById('plzIn').value=d.plz.slice(0,3);
@@ -811,6 +829,7 @@ function openModal(dateStr,slot,vtName){
   ALL_VTS.forEach(vt=>{const o=document.createElement('option');o.value=vt;o.textContent=vt;if(vt===vtName)o.selected=true;bs.appendChild(o);});
   document.getElementById('fDt').value=dateStr||fmt(viewDate());
   ['fVn','fNn','fSt','fPo','fTl','fNz','leadSearch'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  selectedLeadID=null;
   document.getElementById('leadList').style.display='none';
   document.getElementById('mst').textContent='';
   document.getElementById('cw').style.display='none';
@@ -903,21 +922,42 @@ async function submitBook(){
   const s0=new Date(`${dt}T${zt}:00`),e0=new Date(s0.getTime()+dr*60000);
   const fmtDt=x=>x.toISOString().replace('T',' ').slice(0,19);
   try{
-    await fetch(PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'book',appointmentData:{
-        start_date:fmtDt(s0),end_date:fmtDt(e0),
-        appointment_type:tp,user_received:b,vorname:vn,nachname:nn,
-        strasse:sm[1]||st,hausnummer:sm[2]||'',plz,stadt,
-        telefon:tl,projectID:1,quelle:'Callcenter',
-        text:nz?`Callcenter – ${ccAgent}\n${nz}`:`Callcenter – ${ccAgent}`,
-        id_extern:'beedoo_cc_'+Date.now()
-      }})
+    // Resolve Leveto userID from VT name
+    const assignedUser=vtUserMap[b]||'';
+    if(!assignedUser){toast('Berater nicht in Leveto gefunden (kein userID)','er');btn.disabled=false;btn.textContent='✓ Termin buchen';return;}
+
+    const title=`${tp} – ${vn} ${nn}`.trim();
+    const desc=nz?`Callcenter – ${ccAgent}\n${nz}`:`Callcenter – ${ccAgent}`;
+
+    // If no leadID from search, warn but still try
+    if(!selectedLeadID){
+      console.warn('[CC-Kal] Kein Lead aus Leveto gewählt – Termin wird ohne leadID gebucht');
+    }
+
+    const bookData={
+      title:title,
+      description:desc,
+      assigned_user:assignedUser,
+      start_date:fmtDt(s0),
+      end_date:fmtDt(e0),
+      leadID:selectedLeadID||'',
+      type:tp,
+    };
+
+    const resp=await fetch(PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'book',appointmentData:bookData})
     });
-    // Optimistic add
+    const result=await resp.json();
+
+    if(result.data?.insertID){
+      toast(`✓ Termin #${result.data.insertID} für ${vn} ${nn} bei ${b} gebucht!`,'ok');
+    }else{
+      toast(`✓ Termin für ${vn} ${nn} bei ${b} gebucht! (${ccAgent})`,'ok');
+    }
+    // Optimistic add to local state
     S.apts.push({id:'l'+Date.now(),start_date:fmtDt(s0),end_date:fmtDt(e0),
       user_received:b,vorname:vn,nachname:nn,plz,stadt,telefon:tl,status:'Open'});
     closeModal();
-    toast(`✓ Termin für ${vn} ${nn} bei ${b} gebucht! (${ccAgent})`,'ok');
     // WhatsApp if phone exists
     if(tl) sendWhatsApp(tl,vn||nn,b,s0);
     render();
@@ -1063,6 +1103,7 @@ async function init(){
   initCC();
   document.getElementById('ltxt').textContent='Lade Leveto-Daten…';
   await sync(false);
+  loadVtUsers(); // Load VT name→userID mapping for Leveto booking
   document.getElementById('loader').style.display='none';
   setInterval(()=>sync(true),SYNC_MS);
   setInterval(()=>{
