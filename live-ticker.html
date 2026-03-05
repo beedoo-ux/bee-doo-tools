@@ -35,7 +35,8 @@ button{font-family:'DM Sans',sans-serif}
 .icon-btn:hover{border-color:var(--gold);color:var(--gold)}
 
 /* KPI */
-.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}
+.kpi-sticky-wrap{position:sticky;top:0;z-index:20;background:rgba(10,10,10,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:8px 0;margin:0 -16px;padding-left:16px;padding-right:16px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;text-align:center}
 .kpi .num{font-size:26px;font-weight:900;line-height:1.1}
 .kpi .lbl{font-size:10px;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
@@ -79,7 +80,7 @@ button{font-family:'DM Sans',sans-serif}
 /* TERMIN CARD */
 .tc{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;display:flex;gap:12px;align-items:flex-start;transition:border-color .2s;position:relative;overflow:hidden}
 .tc::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:10px 0 0 10px}
-.tc.slive{border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.04)}
+.tc.slive{border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.04);animation:liveGlow 2.5s ease-in-out infinite}
 .tc.slive::before{background:var(--green)}
 .tc.sdone{opacity:.6}
 .tc.sdone::before{background:#444}
@@ -163,6 +164,7 @@ button{font-family:'DM Sans',sans-serif}
 .footer{text-align:center;padding:16px 0;font-size:11px;color:var(--text-dim);border-top:1px solid var(--border);margin-top:20px}
 
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+@keyframes liveGlow{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}50%{box-shadow:0 0 20px 6px rgba(34,197,94,.2)}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 @keyframes bounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -323,7 +325,7 @@ function AiAnalyse({ termine, statis, now }) {
 }
 
 /* ── TERMIN CARD ── */
-function TerminCard({ t, nowMin }) {
+function TerminCard({ t, nowMin, scrollTarget }) {
   const bc = beraterColor(t.berater);
   const tb = typeBadge(t.typ);
   const pct = t.slive ? Math.min(100,Math.max(0,((nowMin-t.startMin)/(t.endMin-t.startMin))*100)) : 0;
@@ -337,7 +339,7 @@ function TerminCard({ t, nowMin }) {
   const cls = t.slive?'slive':t.sdone?'sdone':t.sstorno?'sstorno':'snext';
 
   return (
-    <div className={`tc ${cls}`}>
+    <div className={`tc ${cls}${scrollTarget?' scroll-target':''}`}>
       <div className="tc-left">
         <div className="tc-av" style={{background:`${bc}20`,color:bc,border:`1.5px solid ${bc}45`}}>{initials(t.berater)}</div>
         <div className="tc-zeit">{t.startZeit}</div>
@@ -439,6 +441,7 @@ function App() {
   const [now, setNow]         = useState(new Date());
   const [lastSync, setLastSync] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const liveRef = useRef(null);
 
   const today = useMemo(() => new Date().toISOString().slice(0,10), []);
 
@@ -458,6 +461,16 @@ function App() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { const iv=setInterval(load,90000); return ()=>clearInterval(iv); }, [load]);
   useEffect(() => { const iv=setInterval(()=>setNow(new Date()),20000); return ()=>clearInterval(iv); }, []);
+
+  // Auto-scroll to first live (or next) card after data loads
+  useEffect(() => {
+    if (!termine.length) return;
+    const timer = setTimeout(() => {
+      const el = document.querySelector('.scroll-target');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [termine.length]);
 
   const nowMin = now.getHours()*60+now.getMinutes();
 
@@ -540,14 +553,14 @@ function App() {
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="kpi-row">
+      {/* KPIs – sticky */}
+      <div className="kpi-sticky-wrap"><div className="kpi-row">
         <div className="kpi"><div className="num" style={{color:'var(--green)'}}>{liveCnt}</div><div className="lbl">Live</div></div>
         <div className="kpi"><div className="num" style={{color:'var(--orange)'}}>{nextCnt}</div><div className="lbl">Ausstehend</div></div>
         <div className="kpi"><div className="num" style={{color:'var(--blue)'}}>{doneCnt}</div><div className="lbl">Erledigt</div></div>
         <div className="kpi"><div className="num" style={{color:'var(--gold)'}}>{statisToday.length}</div><div className="lbl">Statis heute</div></div>
         <div className="kpi"><div className="num" style={{color:'var(--text-mid)'}}>{berCnt}</div><div className="lbl">Berater</div></div>
-      </div>
+      </div></div>
 
       {/* STATIS BANNER */}
       {statisToday.length>0&&(
@@ -589,7 +602,13 @@ function App() {
                   {nowSlot&&<span className="tl-now-label">● Jetzt</span>}
                 </div>
                 <div className="tl-entries">
-                  {g.items.map(t=><TerminCard key={t.id} t={t} nowMin={nowMin}/>)}
+                  {g.items.map((t,ti,arr)=>{
+                    // Mark as scroll target: first live card, or if no live exists, first next card
+                    const hasAnyLive = termine.some(x=>x.slive);
+                    const isTarget = hasAnyLive ? t.slive && !arr.slice(0,ti).some(x=>x.slive)
+                                                : t.snext && !arr.slice(0,ti).some(x=>x.snext);
+                    return <TerminCard key={t.id} t={t} nowMin={nowMin} scrollTarget={isTarget}/>;
+                  })}
                 </div>
               </div>
             );
