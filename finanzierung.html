@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Finanzierung &amp; Solarrechner – bee-doo GmbH</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Manrope',sans-serif;background:#0a0a0a;color:#fff;-webkit-font-smoothing:antialiased;overflow-x:hidden;line-height:1.5}
+  img{display:block;max-width:100%}
+  a{text-decoration:none;color:inherit}
+  :root{
+    --gold:#F5C500;--gold-d:#d4a900;
+    --card:#141414;--card2:#1a1a1a;
+    --border:rgba(255,255,255,.08);
+    --muted:rgba(255,255,255,.42);--mid:rgba(255,255,255,.68);
+    --green:#22c55e;--red:#ef4444;
+    --ease:cubic-bezier(.4,0,.2,1);--spring:cubic-bezier(.34,1.4,.64,1);
+  }
+
+  /* ── URGENCY BAR ── */
+  .urgency{
+    background:linear-gradient(90deg,#b91c1c,#dc2626);
+    padding:10px clamp(20px,5vw,64px);
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    flex-wrap:wrap;text-align:center;
+    font-size:.78rem;font-weight:700;color:#fff;letter-spacing:.2px;
+  }
+  .urgency strong{color:#fca5a5}
+  .urg-cta{
+    background:#fff;color:#b91c1c;
+    font-size:.72rem;font-weight:800;padding:5px 14px;border-radius:50px;
+    white-space:nowrap;transition:opacity .2s;
+  }
+  .urg-cta:hover{opacity:.85}
+
+  /* ── NAV ── */
+  .nav{
+    position:sticky;top:0;z-index:200;height:62px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 clamp(20px,5vw,64px);
+    background:rgba(10,10,10,.85);
+    backdrop-filter:saturate(180%) blur(22px);
+    border-bottom:1px solid var(--border);
+  }
+  .nav-logo img{height:30px;width:auto}
+  .nav-links{display:flex;align-items:center;gap:26px;list-style:none}
+  .nav-links a{font-size:.80rem;font-weight:500;color:var(--muted);transition:color .2s}
+  .nav-links a:hover{color:#fff}
+  .nav-cta{background:var(--gold);color:#000!important;font-weight:700!important;padding:9px 20px;border-radius:50px;font-size:.80rem!important;transition:background .2s,transform .2s!important}
+  .nav-cta:hover{background:var(--gold-d)!important;transform:translateY(-1px)!important}
+  .nav-burger{display:none;flex-direction:column;gap:5px;cursor:pointer}
+  .nav-burger span{width:22px;height:1.5px;background:#fff;border-radius:2px}
+  .mob-nav{display:none;position:fixed;inset:62px 0 0;background:rgba(10,10,10,.98);backdrop-filter:blur(24px);z-index:199;flex-direction:column;padding:32px clamp(20px,5vw,64px)}
+  .mob-nav.open{display:flex}
+  .mob-nav a{font-size:1.1rem;font-weight:600;color:var(--mid);padding:15px 0;border-bottom:1px solid var(--border)}
+  .mob-cta{margin-top:24px;background:var(--gold);color:#000;text-align:center;padding:18px;border-radius:14px;font-weight:800}
+
+  /* ── HERO ── */
+  .hero{
+    position:relative;padding:96px clamp(20px,6vw,80px) 80px;
+    text-align:center;overflow:hidden;background:#111;
+  }
+  .hero::before{
+    content:'';position:absolute;inset:0;
+    background:radial-gradient(ellipse at 50% -10%,rgba(245,197,0,.10) 0%,transparent 60%);
+  }
+  .tag{display:inline-block;font-size:.66rem;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
+  .h1{font-size:clamp(2.6rem,6vw,5.2rem);font-weight:900;letter-spacing:-2.5px;line-height:1.03;color:#fff;margin-bottom:20px}
+  .h1 em,.h2 em{font-style:normal;color:var(--gold)}
+  .h2{font-size:clamp(1.8rem,3.8vw,3rem);font-weight:900;letter-spacing:-1.5px;line-height:1.07;color:#fff;margin-bottom:18px}
+  .lead{font-size:clamp(.92rem,1.6vw,1.08rem);color:var(--muted);line-height:1.78;max-width:560px;margin:0 auto}
+
+  /* ── QUICK STATS (like Enpal "ab 98 €") ── */
+  .quick-stats{
+    display:flex;align-items:stretch;justify-content:center;
+    gap:0;flex-wrap:wrap;
+    margin:44px auto 0;max-width:860px;
+    background:var(--card);border:1px solid var(--border);border-radius:20px;overflow:hidden;
+  }
+  .qs{
+    flex:1;min-width:160px;padding:28px 24px;text-align:center;
+    border-right:1px solid var(--border);
+  }
+  .qs:last-child{border-right:none}
+  .qs-num{font-size:2rem;font-weight:900;color:var(--gold);letter-spacing:-1.5px;line-height:1}
+  .qs-lbl{font-size:.74rem;color:var(--muted);margin-top:5px;font-weight:500}
+
+  /* ── RECHNER ── */
+  .rechner-wrap{
+    max-width:980px;margin:0 auto;
+    display:grid;grid-template-columns:1fr 1fr;gap:0;
+    background:var(--card);border:1px solid var(--border);border-radius:24px;overflow:hidden;
+    box-shadow:0 40px 100px rgba(0,0,0,.55);
+  }
+  .rechner-left{padding:clamp(28px,4vw,52px);border-right:1px solid var(--border)}
+  .rechner-right{
+    padding:clamp(28px,4vw,52px);
+    background:linear-gradient(135deg,rgba(245,197,0,.07) 0%,transparent 60%);
+    display:flex;flex-direction:column;gap:0;
+  }
+  .r-title{font-size:1rem;font-weight:800;color:#fff;margin-bottom:28px;letter-spacing:-.2px}
+
+  /* SLIDER GROUP */
+  .sl-group{margin-bottom:28px}
+  .sl-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+  .sl-label{font-size:.78rem;font-weight:700;color:var(--mid)}
+  .sl-val{font-size:1.1rem;font-weight:900;color:var(--gold);letter-spacing:-.5px}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;
+    width:100%;height:4px;
+    background:rgba(255,255,255,.12);border-radius:2px;outline:none;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;
+    width:20px;height:20px;border-radius:50%;
+    background:var(--gold);cursor:pointer;
+    box-shadow:0 0 0 4px rgba(245,197,0,.20);
+    transition:box-shadow .2s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 0 7px rgba(245,197,0,.22)}
+
+  /* SELECT ROW */
+  .sel-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:28px}
+  .sel-btn{
+    background:rgba(255,255,255,.06);border:1px solid var(--border);
+    border-radius:12px;padding:12px 10px;text-align:center;cursor:pointer;
+    font-family:inherit;font-size:.82rem;font-weight:600;color:var(--mid);
+    transition:all .2s;
+  }
+  .sel-btn.active{background:rgba(245,197,0,.13);border-color:rgba(245,197,0,.4);color:var(--gold)}
+  .sel-btn:hover:not(.active){border-color:rgba(255,255,255,.2);color:#fff}
+
+  /* RESULT PANEL */
+  .result-hero{
+    background:linear-gradient(135deg,var(--gold) 0%,#e6b800 100%);
+    border-radius:18px;padding:28px;margin-bottom:20px;text-align:center;
+  }
+  .rh-label{font-size:.72rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(0,0,0,.50);margin-bottom:6px}
+  .rh-num{font-size:3.4rem;font-weight:900;color:#000;letter-spacing:-3px;line-height:1}
+  .rh-sub{font-size:.82rem;color:rgba(0,0,0,.55);margin-top:6px}
+
+  .result-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+  .rg-card{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center}
+  .rg-num{font-size:1.5rem;font-weight:900;color:#fff;letter-spacing:-1px;line-height:1}
+  .rg-lbl{font-size:.70rem;color:var(--muted);margin-top:4px}
+  .rg-card.green .rg-num{color:var(--green)}
+  .rg-card.gold .rg-num{color:var(--gold)}
+
+  .amort-bar{margin-bottom:24px}
+  .ab-head{display:flex;justify-content:space-between;margin-bottom:8px;font-size:.76rem;color:var(--muted);font-weight:600}
+  .ab-track{height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden}
+  .ab-fill{height:100%;background:linear-gradient(90deg,var(--gold),#22c55e);border-radius:4px;transition:width .6s var(--ease)}
+
+  .btn-gold{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--gold);color:#000;font-family:inherit;font-size:.96rem;font-weight:800;padding:15px 28px;border-radius:50px;border:none;cursor:pointer;width:100%;transition:background .2s,transform .25s var(--spring),box-shadow .25s}
+  .btn-gold:hover{background:var(--gold-d);transform:translateY(-2px);box-shadow:0 14px 40px rgba(245,197,0,.35)}
+
+  .disclaimer{font-size:.70rem;color:rgba(255,255,255,.22);text-align:center;margin-top:12px;line-height:1.6}
+
+  /* ── PACKAGES (wie Enpal Produktwelt) ── */
+  .packages{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:16px;
+    margin-top:48px;
+  }
+  .pkg{
+    background:var(--card);border:2px solid var(--border);border-radius:22px;
+    padding:36px 28px;position:relative;
+    transition:border-color .3s,transform .3s var(--ease);
+    display:flex;flex-direction:column;
+  }
+  .pkg:hover{border-color:rgba(245,197,0,.30);transform:translateY(-5px)}
+  .pkg.popular{border-color:var(--gold)}
+  .pop-badge{
+    position:absolute;top:-14px;left:50%;transform:translateX(-50%);
+    background:var(--gold);color:#000;font-size:.68rem;font-weight:800;
+    letter-spacing:1.5px;text-transform:uppercase;padding:5px 18px;border-radius:50px;
+    white-space:nowrap;
+  }
+  .pkg-icon{font-size:2.2rem;margin-bottom:18px}
+  .pkg-name{font-size:1.15rem;font-weight:900;color:#fff;margin-bottom:8px;letter-spacing:-.2px}
+  .pkg-desc{font-size:.84rem;color:var(--muted);line-height:1.68;margin-bottom:24px;flex:1}
+  .pkg-price{margin-bottom:24px}
+  .pkg-from{font-size:.70rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+  .pkg-num{font-size:2.4rem;font-weight:900;color:var(--gold);letter-spacing:-2px;line-height:1}
+  .pkg-mo{font-size:.82rem;color:var(--muted);font-weight:600}
+  .pkg-feats{list-style:none;display:flex;flex-direction:column;gap:9px;margin-bottom:28px}
+  .pkg-feats li{font-size:.84rem;color:var(--mid);display:flex;align-items:center;gap:8px}
+  .pkg-feats li::before{content:'✓';color:var(--gold);font-weight:900;font-size:.80rem;flex-shrink:0}
+  .btn-outline{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,.07);color:#fff;font-family:inherit;font-size:.90rem;font-weight:700;padding:13px 24px;border-radius:50px;border:1px solid rgba(255,255,255,.18);cursor:pointer;width:100%;transition:all .2s}
+  .btn-outline:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.35)}
+  .pkg.popular .btn-outline{background:var(--gold);color:#000;border-color:transparent}
+  .pkg.popular .btn-outline:hover{background:var(--gold-d)}
+
+  /* ── URGENCY SECTION (1komma5-style) ── */
+  .urgent-section{
+    background:linear-gradient(135deg,#1a0000 0%,#2d0000 100%);
+    border:1px solid rgba(239,68,68,.20);
+    border-radius:24px;padding:clamp(40px,5vw,64px);
+    display:grid;grid-template-columns:1fr auto;gap:32px;align-items:center;
+  }
+  .us-icon{font-size:2.4rem;margin-bottom:12px}
+  .us-title{font-size:clamp(1.4rem,2.5vw,2rem);font-weight:900;color:#fff;letter-spacing:-1px;margin-bottom:12px}
+  .us-title span{color:#fca5a5}
+  .us-desc{font-size:.90rem;color:rgba(255,255,255,.58);line-height:1.72;max-width:520px}
+  .us-stats{display:flex;gap:28px;margin-top:20px;flex-wrap:wrap}
+  .us-stat-n{font-size:1.6rem;font-weight:900;color:#fca5a5;letter-spacing:-1px;line-height:1}
+  .us-stat-l{font-size:.72rem;color:rgba(255,255,255,.38);margin-top:3px}
+  .btn-red{display:inline-flex;align-items:center;gap:8px;background:#dc2626;color:#fff;font-family:inherit;font-size:.96rem;font-weight:800;padding:16px 30px;border-radius:50px;border:none;cursor:pointer;white-space:nowrap;transition:background .2s,transform .2s,box-shadow .2s}
+  .btn-red:hover{background:#b91c1c;transform:translateY(-2px);box-shadow:0 14px 40px rgba(220,38,38,.35)}
+
+  /* ── WHY BEE-DOO VS ENPAL ── */
+  .compare-table{
+    width:100%;border-collapse:collapse;margin-top:48px;
+    background:var(--card);border-radius:20px;overflow:hidden;
+    border:1px solid var(--border);
+  }
+  .compare-table th{
+    padding:18px 24px;font-size:.70rem;font-weight:700;letter-spacing:2px;
+    text-transform:uppercase;color:var(--muted);text-align:left;
+    background:rgba(255,255,255,.03);border-bottom:1px solid var(--border);
+  }
+  .compare-table th.beedoo{color:var(--gold)}
+  .compare-table td{padding:16px 24px;font-size:.88rem;border-bottom:1px solid var(--border);vertical-align:middle}
+  .compare-table tr:last-child td{border-bottom:none}
+  .compare-table td.feat{color:var(--mid);font-weight:600}
+  .compare-table td.yes{color:var(--green);font-weight:700}
+  .compare-table td.no{color:rgba(255,255,255,.28)}
+  .compare-table td.part{color:rgba(245,197,0,.80);font-weight:600}
+  .chk{color:var(--green);font-size:1rem}
+  .cross{color:rgba(255,255,255,.22);font-size:1rem}
+
+  /* ── FINANZIERUNG STEPS ── */
+  .fin-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:48px}
+  .fstep{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:28px 22px;text-align:center;transition:border-color .3s,transform .3s var(--ease)}
+  .fstep:hover{border-color:rgba(245,197,0,.28);transform:translateY(-4px)}
+  .fstep-num{width:44px;height:44px;border-radius:50%;background:var(--gold);color:#000;font-weight:900;font-size:.95rem;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+  .fstep h4{font-size:.95rem;font-weight:800;color:#fff;margin-bottom:8px;letter-spacing:-.15px}
+  .fstep p{font-size:.82rem;color:var(--muted);line-height:1.68}
+
+  /* ── FAQ MINI ── */
+  .faq-list{display:flex;flex-direction:column;margin-top:40px}
+  .faq-item{border-bottom:1px solid var(--border)}
+  .faq-q{width:100%;background:none;border:none;padding:20px 0;display:flex;justify-content:space-between;align-items:center;gap:18px;font-family:inherit;font-size:.94rem;font-weight:700;color:#fff;text-align:left;cursor:pointer;transition:color .2s}
+  .faq-q:hover{color:var(--gold)}
+  .faq-plus{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:#fff;transition:background .25s,transform .25s;flex-shrink:0}
+  .faq-item.open .faq-plus{background:var(--gold);color:#000;transform:rotate(45deg)}
+  .faq-body{max-height:0;overflow:hidden;transition:max-height .4s var(--ease)}
+  .faq-item.open .faq-body{max-height:200px}
+  .faq-body p{padding-bottom:20px;font-size:.87rem;color:var(--muted);line-height:1.82}
+
+  /* ── CTA ── */
+  .cta-section{
+    position:relative;text-align:center;overflow:hidden;
+  }
+  .cta-bg{position:absolute;inset:0}
+  .cta-bg img{width:100%;height:100%;object-fit:cover;object-position:center 35%}
+  .cta-bg::after{content:'';position:absolute;inset:0;background:rgba(10,10,10,.88)}
+  .cta-in{position:relative;z-index:1;padding:clamp(90px,11vw,140px) clamp(20px,6vw,80px)}
+  .trust{display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap;margin-top:24px}
+  .t-item{display:flex;align-items:center;gap:5px;font-size:.77rem;font-weight:500;color:rgba(255,255,255,.38)}
+  .t-item::before{content:'✓';color:var(--gold);font-weight:800}
+
+  /* ── FOOTER ── */
+  footer{background:#080808;border-top:1px solid var(--border);padding:clamp(60px,7vw,96px) clamp(20px,6vw,80px) 36px}
+  .fg{display:grid;grid-template-columns:2fr 1fr 1fr;gap:48px;padding-bottom:40px;border-bottom:1px solid var(--border)}
+  .fa{font-size:.84rem;color:rgba(255,255,255,.32);line-height:1.72;margin-bottom:18px}
+  .fph{display:inline-flex;align-items:center;gap:7px;font-size:.88rem;font-weight:700;color:var(--gold)}
+  .fc h5{font-size:.62rem;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:rgba(255,255,255,.18);margin-bottom:14px}
+  .fc a{display:block;font-size:.84rem;color:rgba(255,255,255,.42);margin-bottom:10px;transition:color .2s}
+  .fc a:hover{color:#fff}
+  .fb2{padding-top:22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+  .fb2 span{font-size:.75rem;color:rgba(255,255,255,.18)}
+  .fl2{display:flex;gap:18px}
+  .fl2 a{font-size:.75rem;color:rgba(255,255,255,.28);transition:color .2s}
+  .fl2 a:hover{color:rgba(255,255,255,.70)}
+
+  /* UTILS */
+  .s{padding:clamp(72px,9vw,120px) clamp(20px,6vw,80px)}
+  .center{text-align:center}
+  .center .lead{margin:0 auto}
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .70s var(--ease),transform .70s var(--ease)}
+  .reveal.in{opacity:1;transform:none}
+  .d1{transition-delay:.08s}.d2{transition-delay:.16s}.d3{transition-delay:.24s}.d4{transition-delay:.32s}
+
+  @media(max-width:1024px){
+    .rechner-wrap{grid-template-columns:1fr}
+    .rechner-left{border-right:none;border-bottom:1px solid var(--border)}
+    .packages{grid-template-columns:1fr 1fr}
+    .fin-steps{grid-template-columns:1fr 1fr}
+    .urgent-section{grid-template-columns:1fr}
+  }
+  @media(max-width:768px){
+    .nav-links{display:none}.nav-burger{display:flex}
+    .packages{grid-template-columns:1fr}
+    .fin-steps{grid-template-columns:1fr 1fr}
+    .fg{grid-template-columns:1fr}
+    .fb2{flex-direction:column;align-items:flex-start}
+    .compare-table{font-size:.80rem}
+    .compare-table th,.compare-table td{padding:12px 14px}
+    .quick-stats{border-radius:14px}
+    .qs{min-width:140px;padding:20px 16px}
+  }
+  @media(max-width:520px){
+    .fin-steps{grid-template-columns:1fr}
+    .sel-row{grid-template-columns:1fr}
+    .result-grid{grid-template-columns:1fr}
+    .quick-stats{flex-direction:column}
+    .qs{border-right:none;border-bottom:1px solid var(--border)}
+    .qs:last-child{border-bottom:none}
+  }
+  </style>
+</head>
+<body>
+
+<!-- URGENCY BAR -->
+<div class="urgency">
+  <span>&#x26A0;&#xFE0F; <strong>EEG-&Auml;nderung 2026:</strong> Einspeiseverg&uuml;tung sinkt ab Februar &ndash; Jetzt Anlage sichern &amp; bis zu 12.500&nbsp;&euro; mehr holen</span>
+  <a href="https://form.typeform.com/to/zm8WNFqC" class="urg-cta" target="_blank">Jetzt sichern &rarr;</a>
+</div>
+
+<!-- NAV -->
+<header class="nav">
+  <a href="/website-v2.html" class="nav-logo"><img src="https://bee-doo.de/wp-content/uploads/2025/08/Logo-Weiss.png" alt="bee-doo"></a>
+  <ul class="nav-links">
+    <li><a href="/team.html">Team</a></li>
+    <li><a href="/karriere.html">Karriere</a></li>
+    <li><a href="/finanzierung.html" style="color:#fff">Finanzierung</a></li>
+    <li><a href="/referenzen.html">Referenzen</a></li>
+    <li><a href="/faqs.html">FAQs</a></li>
+    <li><a href="https://form.typeform.com/to/zm8WNFqC" class="nav-cta" target="_blank">Kostenlos anfragen</a></li>
+  </ul>
+  <div class="nav-burger" id="burger" onclick="document.getElementById('mob').classList.toggle('open')">
+    <span></span><span></span><span></span>
+  </div>
+</header>
+<div class="mob-nav" id="mob">
+  <a href="/team.html">Team</a><a href="/karriere.html">Karriere</a>
+  <a href="/finanzierung.html">Finanzierung</a><a href="/referenzen.html">Referenzen</a>
+  <a href="/faqs.html">FAQs</a>
+  <a href="https://form.typeform.com/to/zm8WNFqC" class="mob-cta" target="_blank">Kostenlos anfragen &#x2192;</a>
+</div>
+
+<!-- HERO -->
+<section class="hero">
+  <span class="tag">Finanzierung &amp; Solarrechner</span>
+  <h1 class="h1">Was spart<br><em>Ihr Dach?</em></h1>
+  <p class="lead">Berechnen Sie Ihre pers&ouml;nliche Ersparnis in 60 Sekunden &ndash; kostenlos, ohne Anmeldung, ohne Verkaufsdruck.</p>
+  <!-- QUICK STATS -->
+  <div class="quick-stats reveal">
+    <div class="qs"><div class="qs-num">ab 79&nbsp;&euro;</div><div class="qs-lbl">pro Monat Finanzierung</div></div>
+    <div class="qs"><div class="qs-num">0&nbsp;&euro;</div><div class="qs-lbl">Anzahlung m&ouml;glich</div></div>
+    <div class="qs"><div class="qs-num">8&ndash;10 J.</div><div class="qs-lbl">Amortisation</div></div>
+    <div class="qs"><div class="qs-num">30 J.</div><div class="qs-lbl">Modulgarantie</div></div>
+  </div>
+</section>
+
+<!-- RECHNER -->
+<section class="s" style="background:#0a0a0a" id="rechner">
+  <div class="rechner-wrap reveal">
+    <!-- LEFT: EINGABEN -->
+    <div class="rechner-left">
+      <div class="r-title">&#x1F9EE; Ihre Daten eingeben</div>
+
+      <div class="sl-group">
+        <div class="sl-head">
+          <span class="sl-label">Stromverbrauch pro Jahr</span>
+          <span class="sl-val" id="v-verbrauch">4.000 kWh</span>
+        </div>
+        <input type="range" id="sl-verbrauch" min="1500" max="15000" step="500" value="4000" oninput="calc()">
+      </div>
+
+      <div class="sl-group">
+        <div class="sl-head">
+          <span class="sl-label">Aktueller Strompreis</span>
+          <span class="sl-val" id="v-preis">32 ct/kWh</span>
+        </div>
+        <input type="range" id="sl-preis" min="22" max="55" step="1" value="32" oninput="calc()">
+      </div>
+
+      <div class="sl-group">
+        <div class="sl-head">
+          <span class="sl-label">Dachfl&auml;che (S&uuml;d-Ausrichtung)</span>
+          <span class="sl-val" id="v-dach">40 m&sup2;</span>
+        </div>
+        <input type="range" id="sl-dach" min="20" max="120" step="5" value="40" oninput="calc()">
+      </div>
+
+      <div class="r-title" style="margin-top:4px;margin-bottom:16px;font-size:.88rem">Extras</div>
+      <div class="sel-row" id="speicher-row">
+        <button class="sel-btn" id="btn-speicher-n" onclick="setSpeicher(false)">Ohne Speicher</button>
+        <button class="sel-btn active" id="btn-speicher-y" onclick="setSpeicher(true)">Mit Speicher &#x2795;5&nbsp;kWh</button>
+      </div>
+      <div class="sel-row" id="wp-row">
+        <button class="sel-btn active" id="btn-wp-n" onclick="setWP(false)">Nur PV</button>
+        <button class="sel-btn" id="btn-wp-y" onclick="setWP(true)">PV + W&auml;rmepumpe</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: ERGEBNIS -->
+    <div class="rechner-right">
+      <div class="r-title">&#x26A1; Ihre Ersparnis</div>
+
+      <div class="result-hero">
+        <div class="rh-label">Jahresersparnis</div>
+        <div class="rh-num" id="r-ersparnis">1.024&nbsp;&euro;</div>
+        <div class="rh-sub" id="r-sub">Bei 4.000&nbsp;kWh &amp; 32&nbsp;ct/kWh</div>
+      </div>
+
+      <div class="result-grid">
+        <div class="rg-card green">
+          <div class="rg-num" id="r-monat">85&nbsp;&euro;</div>
+          <div class="rg-lbl">Ersparnis/Monat</div>
+        </div>
+        <div class="rg-card gold">
+          <div class="rg-num" id="r-eigen">72&nbsp;%</div>
+          <div class="rg-lbl">Eigenverbrauch</div>
+        </div>
+        <div class="rg-card">
+          <div class="rg-num" id="r-kwp">6,0&nbsp;kWp</div>
+          <div class="rg-lbl">Empfohlene Anlage</div>
+        </div>
+        <div class="rg-card">
+          <div class="rg-num" id="r-co2">2,4&nbsp;t</div>
+          <div class="rg-lbl">CO&sup2; gespart/Jahr</div>
+        </div>
+      </div>
+
+      <div class="amort-bar">
+        <div class="ab-head">
+          <span>Amortisation</span>
+          <span id="r-amort-lbl">9 Jahre</span>
+        </div>
+        <div class="ab-track"><div class="ab-fill" id="r-amort-bar" style="width:45%"></div></div>
+      </div>
+
+      <button class="btn-gold" onclick="window.open('https://form.typeform.com/to/zm8WNFqC','_blank')">
+        Kostenloses Angebot anfordern &#x2192;
+      </button>
+      <p class="disclaimer">&#x2731; Richtwerte. Exakte Berechnung durch unseren Experten kostenlos &amp; unverbindlich.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PAKETE (Enpal-Style) -->
+<section class="s" style="background:#111" id="pakete">
+  <div class="center">
+    <span class="tag">Unsere Pakete</span>
+    <h2 class="h2">Das richtige Paket<br>f&uuml;r <em>jedes Zuhause.</em></h2>
+    <p class="lead">Kein verstecktes Kleingedrucktes. Alle Preise inklusive Montage, Anmeldung und 30&nbsp;J. Garantie.</p>
+  </div>
+  <div class="packages">
+    <!-- STARTER -->
+    <div class="pkg reveal">
+      <div class="pkg-icon">&#x2600;&#xFE0F;</div>
+      <div class="pkg-name">Solar Starter</div>
+      <div class="pkg-desc">Perfekter Einstieg f&uuml;r kleine bis mittlere D&auml;cher. PV-Anlage inkl. Netzanmeldung.</div>
+      <div class="pkg-price">
+        <div class="pkg-from">ab</div>
+        <div class="pkg-num">79&nbsp;<span style="font-size:1.4rem">€</span></div>
+        <div class="pkg-mo">/ Monat &middot; 0&nbsp;&euro; Anzahlung</div>
+      </div>
+      <ul class="pkg-feats">
+        <li>5&ndash;8&nbsp;kWp Solaranlage</li>
+        <li>Premium-Module (30 J. Garantie)</li>
+        <li>Netzanmeldung &amp; F&ouml;rderung</li>
+        <li>Live-Monitoring per App</li>
+        <li>Eigener Meisterbetrieb</li>
+      </ul>
+      <a href="https://form.typeform.com/to/zm8WNFqC" class="btn-outline" target="_blank">Angebot anfordern</a>
+    </div>
+    <!-- POPULAR -->
+    <div class="pkg popular reveal d1">
+      <div class="pop-badge">&#x1F525; Beliebteste Wahl</div>
+      <div class="pkg-icon">&#x26A1;</div>
+      <div class="pkg-name">Solar + Speicher</div>
+      <div class="pkg-desc">PV-Anlage plus Batteriespeicher &ndash; maximaler Eigenverbrauch, minimale Rechnung.</div>
+      <div class="pkg-price">
+        <div class="pkg-from">ab</div>
+        <div class="pkg-num">119&nbsp;<span style="font-size:1.4rem">€</span></div>
+        <div class="pkg-mo">/ Monat &middot; 0&nbsp;&euro; Anzahlung</div>
+      </div>
+      <ul class="pkg-feats">
+        <li>8&ndash;14&nbsp;kWp Solaranlage</li>
+        <li>10&nbsp;kWh Batteriespeicher</li>
+        <li>Bis zu 85&nbsp;% Eigenverbrauch</li>
+        <li>Netzanmeldung &amp; F&ouml;rderung</li>
+        <li>Live-Monitoring per App</li>
+        <li>Eigener Meisterbetrieb</li>
+      </ul>
+      <a href="https://form.typeform.com/to/zm8WNFqC" class="btn-outline" target="_blank">Angebot anfordern</a>
+    </div>
+    <!-- KOMPLETT -->
+    <div class="pkg reveal d2">
+      <div class="pkg-icon">&#x1F3E0;</div>
+      <div class="pkg-name">Komplett-Paket</div>
+      <div class="pkg-desc">PV + Speicher + W&auml;rmepumpe &ndash; komplett fossilfrei. Maximale Unabh&auml;ngigkeit.</div>
+      <div class="pkg-price">
+        <div class="pkg-from">ab</div>
+        <div class="pkg-num">189&nbsp;<span style="font-size:1.4rem">€</span></div>
+        <div class="pkg-mo">/ Monat &middot; 0&nbsp;&euro; Anzahlung</div>
+      </div>
+      <ul class="pkg-feats">
+        <li>10&ndash;20&nbsp;kWp Solaranlage</li>
+        <li>15&nbsp;kWh Batteriespeicher</li>
+        <li>W&auml;rmepumpe inklusive</li>
+        <li>Wallbox-Vorbereitung</li>
+        <li>&Uuml;ber 90&nbsp;% Eigenverbrauch</li>
+        <li>Eigener Meisterbetrieb</li>
+      </ul>
+      <a href="https://form.typeform.com/to/zm8WNFqC" class="btn-outline" target="_blank">Angebot anfordern</a>
+    </div>
+  </div>
+</section>
+
+<!-- URGENCY SECTION (1komma5-Style) -->
+<section class="s" style="background:#0a0a0a">
+  <div class="urgent-section reveal">
+    <div>
+      <div class="us-icon">&#x26A0;&#xFE0F;</div>
+      <div class="us-title">EEG-&Auml;nderung 2026:<br><span>Bis zu 12.500&nbsp;&euro; auf dem Spiel</span></div>
+      <p class="us-desc">Bundeswirtschaftsministerin Reiche plant, die Einspeiseverg&uuml;tung f&uuml;r neue Privatanlagen zu streichen. Wer jetzt investiert, sichert sich noch 7,86&nbsp;ct/kWh &uuml;ber 20&nbsp;Jahre &ndash; das macht bis zu 12.500&nbsp;&euro; Unterschied.</p>
+      <div class="us-stats">
+        <div><div class="us-stat-n">7,86&nbsp;ct</div><div class="us-stat-l">Aktuelle Einspeiseverg&uuml;tung/kWh</div></div>
+        <div><div class="us-stat-n">20 J.</div><div class="us-stat-l">Gef&ouml;rderter Zeitraum</div></div>
+        <div><div class="us-stat-n">12.500&nbsp;&euro;</div><div class="us-stat-l">Max. Verlust bei Warten</div></div>
+      </div>
+    </div>
+    <a href="https://form.typeform.com/to/zm8WNFqC" class="btn-red" target="_blank">Jetzt noch sichern &#x2192;</a>
+  </div>
+</section>
+
+<!-- bee-doo vs. Enpal VERGLEICH -->
+<section class="s" style="background:#111" id="vergleich">
+  <div class="center">
+    <span class="tag">Direktvergleich</span>
+    <h2 class="h2">Warum <em>bee-doo</em>?</h2>
+    <p class="lead">Wir sind kein Konzern aus Berlin. Wir sind Ihr regionaler Meisterbetrieb aus Bielefeld.</p>
+  </div>
+  <div class="reveal" style="overflow-x:auto;margin-top:48px">
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th style="width:40%">Kriterium</th>
+          <th class="beedoo">&#x1F41D; bee-doo</th>
+          <th>Enpal &amp; Co.</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="feat">Eigener Meisterbetrieb</td><td class="yes">&#x2705; Ja &ndash; eigene Teams</td><td class="no">&#x274C; Meist Subunternehmer</td></tr>
+        <tr><td class="feat">Regionaler Ansprechpartner</td><td class="yes">&#x2705; Bielefeld &amp; NRW</td><td class="no">&#x274C; Zentrales Callcenter</td></tr>
+        <tr><td class="feat">0&nbsp;&euro; Anzahlung</td><td class="yes">&#x2705; Ja</td><td class="yes">&#x2705; Ja</td></tr>
+        <tr><td class="feat">30 Jahre Modulgarantie</td><td class="yes">&#x2705; Ja</td><td class="part">&#x26A0; Teilweise</td></tr>
+        <tr><td class="feat">F&ouml;rderung &amp; Netzanmeldung</td><td class="yes">&#x2705; Komplett &uuml;bernommen</td><td class="yes">&#x2705; Ja</td></tr>
+        <tr><td class="feat">Pers&ouml;nliche Vor-Ort-Beratung</td><td class="yes">&#x2705; Immer</td><td class="part">&#x26A0; Haupts&auml;chlich digital</td></tr>
+        <tr><td class="feat">W&auml;rmepumpe &amp; Wallbox</td><td class="yes">&#x2705; Ja</td><td class="yes">&#x2705; Ja</td></tr>
+        <tr><td class="feat">Live-Monitoring App</td><td class="yes">&#x2705; Ja</td><td class="yes">&#x2705; Ja</td></tr>
+        <tr><td class="feat">Antwort innerhalb 24h</td><td class="yes">&#x2705; Garantiert</td><td class="no">&#x274C; Oft l&auml;nger</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- FINANZIERUNG STEPS -->
+<section class="s" style="background:#0a0a0a">
+  <div class="center">
+    <span class="tag">Finanzierung</span>
+    <h2 class="h2">So einfach<br><em>funktioniert's.</em></h2>
+    <p class="lead">Keine Bank, kein Papierkram &ndash; wir k&uuml;mmern uns um alles.</p>
+  </div>
+  <div class="fin-steps">
+    <div class="fstep reveal"><div class="fstep-num">01</div><h4>Anfrage stellen</h4><p>2 Minuten, keine Dokumente n&ouml;tig. Wir melden uns innerhalb von 24 Stunden.</p></div>
+    <div class="fstep reveal d1"><div class="fstep-num">02</div><h4>Angebot &amp; Rechnung</h4><p>Wir erstellen Ihnen eine individuelle Wirtschaftlichkeitsrechnung &ndash; kostenlos.</p></div>
+    <div class="fstep reveal d2"><div class="fstep-num">03</div><h4>Finanzierung w&auml;hlen</h4><p>Kauf, Leasing oder 0&nbsp;&euro;-Finanzierung &ndash; wir finden die beste Option f&uuml;r Sie.</p></div>
+    <div class="fstep reveal d3"><div class="fstep-num">04</div><h4>Montage &amp; Sparen</h4><p>Unsere Meister installieren &ndash; Sie sparen ab dem ersten Monat.</p></div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="s" style="background:#111">
+  <div style="max-width:760px;margin:0 auto">
+    <span class="tag">FAQ Finanzierung</span>
+    <h2 class="h2">H&auml;ufige Fragen<br><em>zur Finanzierung.</em></h2>
+    <div class="faq-list">
+      <div class="faq-item">
+        <button class="faq-q" onclick="faq(this)">Kann ich die Anlage auch kaufen statt finanzieren? <div class="faq-plus">+</div></button>
+        <div class="faq-body"><p>Ja, selbstverst&auml;ndlich. Kauf, Finanzierung oder F&ouml;rderkredit (z.B. KfW) &ndash; wir zeigen Ihnen alle Optionen und rechnen durch, welche f&uuml;r Sie am meisten spart.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="faq(this)">Was passiert mit der Einspeiseverg&uuml;tung? <div class="faq-plus">+</div></button>
+        <div class="faq-body"><p>Strom, den Sie nicht selbst verbrauchen, speisen Sie ins Netz ein &ndash; derzeit 7,86&nbsp;ct/kWh, gesetzlich garantiert f&uuml;r 20 Jahre. Ab Februar 2026 sinkt der Satz &ndash; jetzt investieren lohnt sich daher besonders.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="faq(this)">Gibt es staatliche F&ouml;rderungen? <div class="faq-plus">+</div></button>
+        <div class="faq-body"><p>Ja: KfW-Kredit 270 (Zinsvorteil), NRW-F&ouml;rderprogramme, Mehrwertsteuerbefreiung (0&nbsp;% MwSt. auf PV-Anlagen). Wir &uuml;bernehmen alle Antr&auml;ge vollst&auml;ndig f&uuml;r Sie.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="faq(this)">Ab wann spare ich wirklich Geld? <div class="faq-plus">+</div></button>
+        <div class="faq-body"><p>Mit Finanzierung oft ab dem ersten Monat: Die monatliche Rate ist kleiner als die eingesparte Stromrechnung. Bei Kauf amortisiert sich die Anlage in 8&ndash;10 Jahren &ndash; danach ist jede kWh reiner Gewinn.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="faq(this)">Was, wenn mein Dach nicht perfekt ausgerichtet ist? <div class="faq-plus">+</div></button>
+        <div class="faq-body"><p>Ost-/West-Ausrichtung funktioniert ebenfalls sehr gut &ndash; oft mit nur 10&ndash;15&nbsp;% weniger Ertrag. Wir planen standortgenau mit echten Einstrahlungsdaten und sagen Ihnen ehrlich, ob es sich rechnet.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="cta-section">
+  <div class="cta-bg">
+    <img src="https://bee-doo.de/wp-content/uploads/2025/08/photovoltaik-finanzierung-bielefeld-beratung-scaled.jpg" alt="bee-doo Finanzierungsberatung" loading="lazy">
+  </div>
+  <div class="cta-in">
+    <span class="tag">Kostenlose Beratung</span>
+    <h2 class="h2"><em>Ihre Zahlen.</em><br>Kostenlos berechnet.</h2>
+    <p class="lead center" style="margin:14px auto 44px">Unverbindlich anfragen &ndash; wir rechnen Ihnen durch, was sich f&uuml;r Sie wirklich lohnt. Antwort in 24 Stunden.</p>
+    <a href="https://form.typeform.com/to/zm8WNFqC" class="btn-gold" style="display:inline-flex;width:auto;padding:17px 44px;font-size:1.05rem" target="_blank">
+      Jetzt kostenlos anfragen &#x2192;
+    </a>
+    <div class="trust">
+      <div class="t-item">Kostenlos &amp; unverbindlich</div>
+      <div class="t-item">Antwort in 24 Stunden</div>
+      <div class="t-item">0&nbsp;&euro; Anzahlung m&ouml;glich</div>
+      <div class="t-item">Kein Verkaufsdruck</div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="fg">
+    <div>
+      <img src="https://bee-doo.de/wp-content/uploads/2025/08/Logo-Weiss.png" alt="bee-doo" style="height:28px;margin-bottom:14px">
+      <p class="fa">Photovoltaik vom Solarexperten aus Bielefeld.<br>Am Stadtholz 39 &middot; 33609 Bielefeld</p>
+      <a href="tel:+4908002233664" class="fph">&#x1F4DE; 0800 22 33 664</a>
+    </div>
+    <div class="fc">
+      <h5>Unternehmen</h5>
+      <a href="/team.html">Team</a><a href="/karriere.html">Karriere</a><a href="/referenzen.html">Referenzen</a>
+    </div>
+    <div class="fc">
+      <h5>Kontakt</h5>
+      <a href="/finanzierung.html">Solarrechner</a>
+      <a href="/faqs.html">FAQs</a>
+      <a href="/kontakt.html">Kontakt</a>
+    </div>
+  </div>
+  <div class="fb2">
+    <span>&copy; 2026 bee-doo GmbH &middot; HRB 46243 &middot; USt-ID DE323940446</span>
+    <div class="fl2"><a href="/impressum.html">Impressum</a><a href="/datenschutz.html">Datenschutz</a></div>
+  </div>
+</footer>
+
+<script>
+var hasSpeicher = true, hasWP = false;
+
+function setSpeicher(v){
+  hasSpeicher = v;
+  document.getElementById('btn-speicher-y').classList.toggle('active', v);
+  document.getElementById('btn-speicher-n').classList.toggle('active', !v);
+  calc();
+}
+function setWP(v){
+  hasWP = v;
+  document.getElementById('btn-wp-y').classList.toggle('active', v);
+  document.getElementById('btn-wp-n').classList.toggle('active', !v);
+  calc();
+}
+
+function fmt(n){ return n.toLocaleString('de-DE'); }
+
+function calc(){
+  var verbrauch = parseInt(document.getElementById('sl-verbrauch').value);
+  var preis     = parseInt(document.getElementById('sl-preis').value);
+  var dach      = parseInt(document.getElementById('sl-dach').value);
+
+  document.getElementById('v-verbrauch').textContent = fmt(verbrauch) + ' kWh';
+  document.getElementById('v-preis').textContent     = preis + ' ct/kWh';
+  document.getElementById('v-dach').textContent      = dach + ' m²';
+
+  // kWp: ~6W per m² usable (80% of area)
+  var kwp = Math.round((dach * 0.8 * 6) / 10) * 10 / 10;
+  kwp = Math.min(kwp, 30);
+
+  // Produktion: 950 kWh/kWp in NRW
+  var prod = kwp * 950;
+
+  // Eigenverbrauchsquote
+  var eigenQ = hasSpeicher ? 0.78 : 0.52;
+  if(hasWP) eigenQ = Math.min(eigenQ + 0.08, 0.92);
+  var eigen = Math.min(prod * eigenQ, verbrauch);
+
+  // Einsparung
+  var einsparung = eigen * (preis / 100);
+  // Einspeisung Vergütung
+  var einspeisung = (prod - eigen) * 0.0786;
+  var total = einsparung + einspeisung;
+
+  // Anlagekosten (Richtwert)
+  var kosten = kwp * 1400 + (hasSpeicher ? 6000 : 0) + (hasWP ? 12000 : 0);
+  var amortYears = Math.round(kosten / total);
+  amortYears = Math.max(5, Math.min(amortYears, 15));
+
+  document.getElementById('r-ersparnis').textContent = fmt(Math.round(total)) + ' €';
+  document.getElementById('r-monat').textContent     = fmt(Math.round(total/12)) + ' €';
+  document.getElementById('r-eigen').textContent     = Math.round(eigenQ*100) + ' %';
+  document.getElementById('r-kwp').textContent       = kwp.toFixed(1) + ' kWp';
+  document.getElementById('r-co2').textContent       = (prod * 0.0004).toFixed(1) + ' t';
+  document.getElementById('r-amort-lbl').textContent = amortYears + ' Jahre';
+  document.getElementById('r-amort-bar').style.width = Math.round((1 - (amortYears-5)/10)*100) + '%';
+  document.getElementById('r-sub').textContent       = 'Bei ' + fmt(verbrauch) + ' kWh & ' + preis + ' ct/kWh';
+}
+
+function faq(btn){
+  var item=btn.closest('.faq-item');
+  var open=item.classList.contains('open');
+  document.querySelectorAll('.faq-item').forEach(function(i){i.classList.remove('open')});
+  if(!open) item.classList.add('open');
+}
+
+var obs=new IntersectionObserver(function(e){e.forEach(function(x){if(x.isIntersecting)x.target.classList.add('in')});},{threshold:.07});
+document.querySelectorAll('.reveal').forEach(function(el){obs.observe(el);});
+
+calc();
+</script>
+</body>
+</html>
