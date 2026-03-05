@@ -74,6 +74,8 @@ function computeFromProducts(products) {
     module_anzahl: moduleCount > 0 ? Math.round(moduleCount) : null,
     module_typ: moduleTyp,
     battery_kap: batteryKap > 0 ? batteryKap : null,
+    hat_speicher: batteryKap > 0,
+    speicher_kwh: batteryKap > 0 ? batteryKap : null,
   };
   if (speicherErw) result.speichererweiterung = speicherErw;
   return result;
@@ -126,7 +128,7 @@ function mapContract(c, leadId, leadWorkflows, leadWfHistory, now) {
     'calculated_realprice_netto','calculated_realprice_brutto','creation_date','accepted_date',
     'pdf_url','typeicons','ist_waermepumpe','products','provision_ausgezahlt_am',
     'efs_prozent','currentstatus','speichererweiterung','workflows','workflow_history',
-    'kwp','module_anzahl','module_typ','battery_kap',
+    'kwp','module_anzahl','module_typ','battery_kap','hat_speicher','speicher_kwh',
     'wf_verkauf_step','wf_verkauf_changed','wf_beedoo_step','wf_beedoo_changed',
     'wf_dc_step','wf_dc_changed','wf_ac_step','wf_ac_changed',
     'overview_lead_id','overview_last_update','sync_aktualisiert_am'];
