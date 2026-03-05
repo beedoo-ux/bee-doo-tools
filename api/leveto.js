@@ -44,10 +44,11 @@ export default async function handler(req, res) {
     if (action === "appointments") {
       res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=300");
 
-      const data = await levetoGet("/appointments");
+      // Only fetch Open appointments (2.8s vs 5s for all statuses)
+      const data = await levetoGet("/appointments", { status: "Open" });
       const all = data.data || [];
 
-      // Only today + future — no old appointments needed
+      // Only today + future
       const todayStr = new Date().toISOString().slice(0, 10);
       const filtered = all.filter((a) => (a.start_date || "").slice(0, 10) >= todayStr);
 
