@@ -20,7 +20,10 @@ const GCAL_BASE   = "https://www.googleapis.com/calendar/v3";
 async function getGoogleToken(scopes = ["https://www.googleapis.com/auth/calendar"]) {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const key   = (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
-  if (!email || !key) throw new Error("Missing GOOGLE_SERVICE_ACCOUNT_EMAIL or GOOGLE_PRIVATE_KEY");
+  if (!email || !key) {
+    console.log("[gcal-sync] Skipped: GOOGLE_SERVICE_ACCOUNT_EMAIL or GOOGLE_PRIVATE_KEY not configured");
+    throw new Error("Google Calendar not configured — set env vars to enable");
+  }
 
   const now   = Math.floor(Date.now() / 1000);
   const claim = { iss: email, scope: scopes.join(" "), aud: "https://oauth2.googleapis.com/token", exp: now + 3600, iat: now };
