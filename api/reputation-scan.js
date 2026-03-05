@@ -16,7 +16,6 @@ const ALERT_RECIPIENTS = {
     { id: 'U090PM46HLP', name: 'Dominic Pottmann' },
     { id: 'U09168TR14J', name: 'Patrick Windolph' },
   ],
-  slackChannel: 'C09168UCBU2', // #innendienst
   sms: [
     { number: '+491703822950', name: 'Olaf Schader' },
     { number: '+491736900609', name: 'Patrick Windolph' },
@@ -148,13 +147,7 @@ function parseFindings(raw, query) {
 
 async function sendSlackAlert(finding) {
   if (!SLACK_BOT_TOKEN) return;
-
   const msg = buildSlackMessage(finding);
-
-  // 1. #innendienst
-  await postSlack(ALERT_RECIPIENTS.slackChannel, msg);
-
-  // 2. DMs an Dominic + Patrick Windolph
   for (const recipient of ALERT_RECIPIENTS.slack) {
     await postSlack(recipient.id, msg);
   }
