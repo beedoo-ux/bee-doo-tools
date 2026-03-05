@@ -366,6 +366,42 @@ function App(){
 
   // ── Load ──
   const[lastUpdated,setLastUpdated]=useState(null);
+  const[ovStats,setOvStats]=useState(null);
+
+  // ═══ LEVETO OVERVIEW API ═══
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const LV_BASE='https://beedoo.leveto.net/API';
+        const params=new URLSearchParams({username:'api@bee-doo.de',password:'Patrick123456789!'});
+        const auth=await fetch(`${LV_BASE}/auth`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params.toString()});
+        if(!auth.ok)return;
+        const{token}=await auth.json();
+        const now=new Date();
+        const y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
+        const ov=await fetch(`${LV_BASE}/api/v1/overview?from=${y}-${m}-01&to=${y}-${m}-31`,{headers:{Authorization:`Bearer ${token}`}});
+        if(!ov.ok)return;
+        const d=await ov.json();
+        const contracts=d?.contracts||d?.data||[];
+        // Aggregate: PV only (nicht WP), Netto>=6000
+        const pv=contracts.filter(c=>!c.is_waermepumpe&&(c.auftragswert_netto||0)>=6000&&c.status!=='Storniert');
+        const beraterMap={};
+        pv.forEach(c=>{const b=c.berater||'?';if(!beraterMap[b])beraterMap[b]=0;beraterMap[b]++;});
+        const topBerater=Object.entries(beraterMap).sort((a,b)=>b[1]-a[1])[0];
+        const totalKwp=pv.reduce((s,c)=>s+(parseFloat(c.kwp)||0),0);
+        const eigenleads=pv.filter(c=>c.quelle==='Eigenlead'||c.quelle==='Eigenleads').length;
+        setOvStats({
+          auftraege:pv.length,
+          kwp:totalKwp,
+          topVt:topBerater?`${topBerater[0]} (${topBerater[1]})`:null,
+          eigenleads,
+          eigenleadPct:pv.length>0?Math.round(eigenleads/pv.length*100):0,
+          monat:`${['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][now.getMonth()]} ${y}`,
+        });
+      }catch(e){console.warn('[OV-API]',e);}
+    })();
+  },[]);
+
   const loadData=useCallback(async(forceRefresh=false)=>{
     if(!forceRefresh){try{const cc=sessionStorage.getItem("beedoo_vb_cache");if(cc){const{stg,usr,crd,ts}=JSON.parse(cc);if(Date.now()-ts<60000&&stg?.length>0){setStages(stg);setUsers(usr);setCards(crd);setDbOk(true);setErr("");setLastUpdated(new Date(ts));if(!dashBer&&usr.length){const vb=usr.filter(u=>u.role==="vertrieb");if(vb.length)setDashBer(vb[0].name)}crd.forEach(c=>{if(isStorno(c.stage_key))stornoIds.current.add(c.id)});setLoading(false);return;}}}catch(e){}}
     const[stg,usr,crd]=await Promise.all([sb("bd_stages?order=board,position"),sb("bd_users?order=role,name"),sb("bd_cards_with_age?select=id,board,stage_id,stage_key,stage_label,stage_color,phase,is_provision,is_evu,customer_name,nid,tel,str,plz,ort,kwp,mod_count,typ,zahl,eur,src,berater_name,monteur_name,days_in_stage,next_action,next_action_date,is_today,project_id,notes,ersteller_name,phase_notes&limit=5000&order=days_in_stage.desc")]);
@@ -683,6 +719,25 @@ function App(){
         {montUtil.length>0&&<div style={{display:"flex",gap:2}}>{montUtil.slice(0,4).map(m=><div key={m.name} title={m.name} style={{padding:"2px 6px",borderRadius:4,background:`${BL}10`,border:`1px solid ${BL}20`,fontSize:7,whiteSpace:"nowrap"}}><span style={{fontWeight:700,color:BL}}>{m.active}</span><span style={{color:DM}}>/{m.total}</span> <span style={{color:DM}}>{m.name.split(" ").pop()}</span></div>)}</div>}
         <span style={{fontSize:9,color:DM}}>Ø<span style={{color:mAvg>10?OR:TX,fontWeight:600}}>{mAvg}d</span></span>
         {mStau>0&&<span onClick={()=>setMFilt(p=>p.includes("stau")?p.filter(x=>x!=="stau"):[...p,"stau"])} style={{fontSize:9,color:RD,fontWeight:600,cursor:"pointer",padding:"2px 6px",borderRadius:4,background:mFilt.includes("stau")?`${RD}25`:"transparent"}}>🔴{mStau}</span>}
+      </div>}
+
+      {/* ═══ OV STATS BANNER ═══ */}
+      {ovStats&&<div style={{display:'flex',alignItems:'center',gap:12,padding:'5px 12px',background:`${C1}`,borderBottom:`1px solid ${BD}`,flexWrap:'wrap',flexShrink:0}}>
+        <span style={{fontSize:8,fontWeight:700,color:B,letterSpacing:'1px',textTransform:'uppercase',whiteSpace:'nowrap'}}>📊 {ovStats.monat}</span>
+        <div style={{display:'flex',gap:10,flexWrap:'wrap',flex:1}}>
+          {[
+            {l:'Aufträge',v:ovStats.auftraege,c:GN},
+            {l:'kWp gesamt',v:ovStats.kwp.toFixed(1),c:B},
+            {l:'Eigenleads',v:`${ovStats.eigenleads} (${ovStats.eigenleadPct}%)`,c:PP},
+            ovStats.topVt&&{l:'Top VT',v:ovStats.topVt,c:YL},
+          ].filter(Boolean).map((item,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:5,background:`${item.c}15`,border:`1px solid ${item.c}30`}}>
+              <span style={{fontSize:8,color:DM}}>{item.l}:</span>
+              <span style={{fontSize:9,fontWeight:700,color:item.c,whiteSpace:'nowrap'}}>{item.v}</span>
+            </div>
+          ))}
+        </div>
+        <span style={{fontSize:8,color:DM}}>Live Leveto</span>
       </div>}
 
       {/* ═══ DASHBOARD ═══ */}
