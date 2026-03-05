@@ -443,6 +443,10 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 <div id="app" style="display:none"><div class="loading"><div class="loader"></div><div class="load-text">Lade Daten...</div></div></div>
 
 <script>
+
+// ── TIMEZONE FIX: local date helper ──────────────────────────────
+function fmtLocal(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+
 (function(){
 var SB='https://hqzpemfaljxcysyqssng.supabase.co';
 var AK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
@@ -496,7 +500,7 @@ function getWorkingDays(year,m){
     var end=new Date(year,m,1);
     while(d<end){
         var dow=d.getDay();
-        var iso=d.toISOString().slice(0,10);
+        var iso=fmtLocal(d);
         if(dow>=1&&dow<=5&&!holidays[iso]){
             total++;
             if(d<=today)elapsed++;
@@ -1070,7 +1074,7 @@ async function loadChallengeData(mKey){
     var data=await resp.json();
     if(data.error)throw new Error(data.error+': '+(data.details||''));
     // Compute today's count from byDay
-    var todayKey=new Date().toISOString().slice(0,10);
+    var todayKey=fmtLocal(new Date());
     var byDay=data.byDay||{};
     var todayCount=byDay[todayKey]||byDay[new Date().getDate()]||0;
     var result={
@@ -1294,7 +1298,7 @@ async function loadMarch(){
             kwp_real:c.kwp_real||0
         }});
         var z=[];try{var eR=await fetch(SB+'/rest/v1/efs_projekte?select=efs_id,preismodell&preismodell=eq.Zero',{headers:hd});if(eR.ok)z=await eR.json()}catch(e){}
-        var todayStr=new Date().toISOString().slice(0,10);
+        var todayStr=fmtLocal(new Date());
         todayData={total:0,pv:0,hp:0};
         var a6today=all.filter(function(o){return(parseFloat(o.calculated_realprice_netto)||0)>=6000&&(o.accepted_date||'').slice(0,10)===todayStr});
         var bkT={};a6today.forEach(function(o){var l=o.lead_id;if(!l)return;var k=l+'_'+(isHP(o)?'HP':'PV');var an=o.leveto_id||0;if(!bkT[k]||an>(bkT[k].leveto_id||0))bkT[k]=o});
