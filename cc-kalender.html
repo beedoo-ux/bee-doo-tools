@@ -122,6 +122,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 .sca .an{text-decoration:line-through;text-decoration-color:#555;}
 .sca .at{text-decoration:line-through;}
 .sca .al{text-decoration:line-through;}
+.blk{position:absolute;background:repeating-linear-gradient(45deg,rgba(248,81,73,.08),rgba(248,81,73,.08) 4px,rgba(0,0,0,0) 4px,rgba(0,0,0,0) 10px);border-radius:4px;z-index:4;border:1px dashed rgba(248,81,73,.3);pointer-events:none;}
+.blk-lbl{position:absolute;font-size:9px;font-weight:700;color:rgba(248,81,73,.6);white-space:nowrap;overflow:hidden;padding:2px 4px;width:100%;text-overflow:ellipsis;}
+.blk-vac{background:repeating-linear-gradient(45deg,rgba(210,153,34,.1),rgba(210,153,34,.1) 4px,rgba(0,0,0,0) 4px,rgba(0,0,0,0) 10px);border-color:rgba(210,153,34,.4);}
+.blk-vac .blk-lbl{color:rgba(210,153,34,.8);}
 
 /* NEXT FREE INDICATOR */
 .nextfree{position:absolute;top:2px;font-size:9px;background:rgba(63,185,80,.2);border:1px solid var(--green);color:var(--green);border-radius:3px;padding:1px 4px;z-index:6;pointer-events:none;white-space:nowrap;}
@@ -394,7 +398,7 @@ const ALL_VTS=["Tayfun Süleymaniye","Andreas Klee","Stefan Hensel","Nino Rimmle
 const COLORS=["#58a6ff","#3fb950","#f97316","#a78bfa","#ec4899","#14b8a6","#F5C500","#06b6d4","#f85149","#84cc16","#8b5cf6","#f59e0b","#10b981","#6366f1","#e11d48","#0ea5e9","#d97706","#059669","#7c3aed","#be185d","#22d3ee","#facc15","#4ade80","#fb923c","#c084fc","#34d399","#60a5fa","#fb7185","#a3e635","#fbbf24"];
 const col=n=>COLORS[ALL_VTS.indexOf(n)%COLORS.length]||"#58a6ff";
 
-let S={apts:[],active:new Set(DEFAULT_VTS),view:'day',off:0,syncing:false,vtStats:{}};
+let S={apts:[],active:new Set(DEFAULT_VTS),view:'day',off:0,syncing:false,vtStats:{},gcalBlocks:{}};
 let plzFilter='';
 let leadSearchTimer=null;
 
@@ -443,6 +447,7 @@ async function sync(silent=false){
     if(d.ok){
       S.apts=d.data||[];
       computeStats();
+      fetchGcalBlocks();
       const t=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
       document.getElementById('sdot').className='sdot';
       document.getElementById('slbl').textContent=t+' Uhr';
@@ -472,6 +477,47 @@ async function checkWiedervorlagen(){
       return `<div class="wvItem" onclick="showDetailFromApt(${JSON.stringify(a).replace(/"/g,'&quot;')})" title="${esc(a.user_received)}">${esc(time)} ${esc(name)}</div>`;
     }).join('');
   }
+}
+
+// ── GOOGLE CALENDAR BLOCKS ───────────────────────────────────────
+async function fetchGcalBlocks(){
+  try{
+    const r=await fetch('/api/gcal-sync?action=pull_all_blocks&secret=bee-doo2026');
+    if(!r.ok) return;
+    const d=await r.json();
+    if(d.ok) S.gcalBlocks=d.blocks||{};
+    renderBody(); // re-render to show updated blocks
+  }catch(e){/* gcal not configured yet */}
+}
+
+function renderGcalBlocks(vt, ds, numLanes){
+  const blocks = (S.gcalBlocks[vt]||[]).filter(b=>{
+    const bDate = (b.start||'').slice(0,10);
+    if(b.allDay) return bDate===ds;
+    return (b.start||'').slice(0,10)===ds;
+  });
+  if(!blocks.length) return '';
+  let html='';
+  blocks.forEach(b=>{
+    if(b.allDay){
+      // Full day block — cover entire row
+      const isVac = b.type==='vacation';
+      html+=`<div class="blk${isVac?' blk-vac':''}" style="left:0;right:0;top:0;bottom:0;z-index:8;">
+        <div class="blk-lbl">${isVac?'🏖 ':b.type==='sick'?'🤒 ':'⛔ '}${esc(b.title)}</div>
+      </div>`;
+    } else {
+      const st=new Date(b.start),en=new Date(b.end);
+      const ss=Math.max(0,(st.getHours()-SH)*SPH+Math.floor(st.getMinutes()/30));
+      const es=Math.min(SLOTS,(en.getHours()-SH)*SPH+Math.ceil(en.getMinutes()/30));
+      if(ss>=SLOTS||es<=0) return;
+      const lp=(ss/SLOTS)*100, wp=Math.max(1,((es-ss)/SLOTS)*100);
+      const isVac=b.type==='vacation';
+      html+=`<div class="blk${isVac?' blk-vac':''}" style="left:${lp}%;width:${wp}%;top:0;height:${numLanes*68}px;z-index:8;">
+        <div class="blk-lbl">${isVac?'🏖 ':b.type==='sick'?'🤒 ':'⛔ '}${esc(b.title)}</div>
+      </div>`;
+    }
+  });
+  return html;
 }
 
 // ── RENDER ───────────────────────────────────────────────────────
@@ -596,6 +642,7 @@ function renderBody(){
         <div class="slotswrap" style="height:${rowH}px;">
           <div class="slotbg">${slotBg}</div>
           ${aBlocks}
+          ${renderGcalBlocks(vt,ds,numLanes)}
           ${isToday(d)?`<div class="nowline" style="left:${nowPct()}%;height:${rowH}px;"></div>`:''}
         </div>
       </div>`;
@@ -604,7 +651,19 @@ function renderBody(){
 
   const body=document.getElementById('calbody');
   body.innerHTML=html||`<div style="padding:40px;text-align:center;color:var(--text2)">Keine Berater ausgewählt</div>`;
-  body.querySelectorAll('.sc').forEach(el=>el.addEventListener('click',()=>openModal(el.dataset.date,el.dataset.slot,el.dataset.vt)));
+  body.querySelectorAll('.sc').forEach(el=>el.addEventListener('click',()=>{
+    const {date,slot,vt}=el.dataset;
+    // Check if this slot falls in a gcal block
+    const slotTime=new Date(`${date}T${slot2t(parseInt(slot))}:00`);
+    const vtBlocks=S.gcalBlocks[vt]||[];
+    const blocked=vtBlocks.some(b=>{
+      if(b.allDay&&(b.start||'').slice(0,10)===date) return true;
+      if(!b.allDay){const bs=new Date(b.start),be=new Date(b.end);return slotTime>=bs&&slotTime<be;}
+      return false;
+    });
+    if(blocked){toast(`⛔ ${vt.split(' ')[0]} ist zu dieser Zeit blockiert (Google Kalender)`,'wa');return;}
+    openModal(date,slot,vt);
+  }));
 }
 
 function renderChips(){
