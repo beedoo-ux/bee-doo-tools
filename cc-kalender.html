@@ -398,44 +398,74 @@ function renderBody() {
       const vapts=S.apts.filter(a=>(a.start_date||'').slice(0,10)===dateStr&&a.user_received===vt);
       const cnt=vapts.filter(a=>a.status!=='Cancelled').length;
 
+      // Lane assignment: greedy algorithm
+      const sorted = [...vapts].sort((a,b)=>(a.start_date||'').localeCompare(b.start_date||''));
+      const lanes = []; // lanes[i] = end time of last apt in that lane
+      const aptLane = [];
+      sorted.forEach(a=>{
+        const st=parseD(a.start_date), en=parseD(a.end_date);
+        if(!st||!en){aptLane.push(0);return;}
+        let placed=false;
+        for(let i=0;i<lanes.length;i++){
+          if(st>=lanes[i]){lanes[i]=en;aptLane.push(i);placed=true;break;}
+        }
+        if(!placed){lanes.push(en);aptLane.push(lanes.length-1);}
+      });
+      const numLanes=Math.max(1,lanes.length);
+      const rowH=numLanes*68; // px per lane
+
       let slotBg='';
       for(let s=0;s<SLOTS;s++){
         const nowS=isToday(d)&&isNowSlot(s);
-        slotBg+=`<div class="sc${s%2===1?' half':''}${nowS?' now':''}" data-date="${dateStr}" data-slot="${s}" data-vt="${esc(vt)}"></div>`;
+        slotBg+=`<div class="sc${s%2===1?' half':''}${nowS?' now':''}" style="height:${rowH}px;" data-date="${dateStr}" data-slot="${s}" data-vt="${esc(vt)}"></div>`;
       }
 
       let aBlocks='';
-      vapts.forEach(a=>{
+      sorted.forEach((a,idx)=>{
         const st=parseD(a.start_date), en=parseD(a.end_date);
         if(!st||!en) return;
         const ss=t2slot(st.getHours(),st.getMinutes());
         const es=t2slot(en.getHours(),en.getMinutes());
         if(ss<0||ss>=SLOTS) return;
         const lp=(ss/SLOTS)*100;
-        const wp=Math.max(1.5,((es-ss)/SLOTS)*100);
+        const wp=Math.max(1.5,((Math.min(es,SLOTS)-ss)/SLOTS)*100);
+        const lane=aptLane[idx]||0;
+        const topPx=lane*68+4;
+        const botPx=(numLanes-lane-1)*68+4;
         const sc2=a.status==='Closed'?'sc2':a.status==='Cancelled'?'sca':'so';
         const name=[a.vorname,a.nachname].filter(Boolean).join(' ')||'–';
-        aBlocks+=`<div class="apt ${sc2}" style="left:${lp}%;width:${wp}%;border-left-color:${c};background:${c}1a;color:${c};"
+        aBlocks+=`<div class="apt ${sc2}" style="left:${lp}%;width:${wp}%;top:${topPx}px;bottom:${botPx}px;border-left-color:${c};background:${c}1a;color:${c};"
           data-n="${esc(name)}" data-s="${esc(fmtT(st))}" data-e="${esc(fmtT(en))}" data-v="${esc(vt)}"
           data-pl="${esc(a.plz||'')}" data-ci="${esc(a.stadt||'')}" data-st="${esc(a.status||'')}">
           <div class="at">${esc(fmtT(st))}–${esc(fmtT(en))}</div>
           <div class="an">${esc(name)}</div>
           <div class="al">${esc(a.plz||'')} ${esc(a.stadt||'')}</div>
         </div>`;
+        // Lane separator line
+        if(lane>0){
+          aBlocks+=`<div style="position:absolute;left:0;right:0;top:${lane*68}px;height:1px;background:var(--border2);z-index:3;pointer-events:none;"></div>`;
+        }
       });
 
-      html+=`<div class="row">
-        <div class="namecell">
-          <div class="nbar" style="background:${c}"></div>
+      // Draw lane separator lines
+      let sepLines='';
+      for(let l=1;l<numLanes;l++){
+        sepLines+=`<div style="position:absolute;left:0;right:0;top:${l*68}px;height:1px;background:var(--border2);z-index:3;pointer-events:none;"></div>`;
+      }
+
+      html+=`<div class="row" style="min-height:${rowH}px;">
+        <div class="namecell" style="min-height:${rowH}px;">
+          <div class="nbar" style="background:${c};height:${Math.min(rowH-10,60)}px;"></div>
           <div>
             <div class="nname">${esc(fn)}<br><span style="color:var(--text2);font-weight:500;">${esc(ln.join(' '))}</span></div>
-            ${cnt>0?`<div class="nsub">${cnt} Termin${cnt!==1?'e':''}</div>`:`<div class="nfree">frei</div>`}
+            ${cnt>0?`<div class="nsub">${cnt} Termin${cnt!==1?'e':''}${numLanes>1?` <span style="color:var(--red);font-size:9px;">⚠ ${numLanes} Zeilen</span>`:''}</div>`:`<div class="nfree">frei</div>`}
           </div>
         </div>
-        <div class="slotswrap">
+        <div class="slotswrap" style="height:${rowH}px;">
           <div class="slotbg">${slotBg}</div>
+          ${sepLines}
           ${aBlocks}
-          ${isToday(d)?`<div class="nowline" id="nl_${vt.replace(/ /g,'_')}" style="left:${nowPct()}%"></div>`:''}
+          ${isToday(d)?`<div class="nowline" id="nl_${vt.replace(/ /g,'_')}" style="left:${nowPct()}%;top:0;bottom:0;height:${rowH}px;"></div>`:''}
         </div>
       </div>`;
     });
