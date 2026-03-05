@@ -249,16 +249,53 @@ async function runAutoMerge() {
 
 
 // ═══ SCOUT QUALIFIKATION SYNC (Dennis API → Supabase) ═══
+// Schedule:
+//   5min between 07-23h CET → current day only
+//   23:59 CET daily         → full current day (final sweep)
+//   Sunday                  → current + previous week
+//   Month end               → current + previous month
+// Rate limit: max 1 request/second to Dennis API
 async function runScoutSync() {
     const DENNIS_TOKEN = 'tcp_2a71c5e2cff94d04b03eb447ea645a3719f3705c63ffcb44f22e3585fd9f6496';
     const PAGE_SIZE = 100;
     let synced = 0, skipped = 0, page = 1;
 
-    // Fetch newest synced timestamp from Supabase
-    const latestR = await fetch(ap('scout_qualifikationen') + '?select=synced_at&order=synced_at.desc&limit=1', { headers: hd() });
-    const latestArr = await latestR.json();
-    // Sync everything from last 2 hours to catch any gaps (5min cron + buffer)
-    const sinceDate = new Date(Date.now() - 2 * 3600 * 1000).toISOString().split('T')[0];
+    // Current time in CET (UTC+1, simplified)
+    const nowUtc = new Date();
+    const cetHour = (nowUtc.getUTCHours() + 1) % 24; // rough CET
+    const cetDay = nowUtc.getUTCDay(); // 0=Sun
+    const cetDate = nowUtc.getUTCDate();
+    const cetMonth = nowUtc.getUTCMonth();
+    const cetYear = nowUtc.getUTCFullYear();
+    const daysInMonth = new Date(cetYear, cetMonth + 1, 0).getDate();
+
+    // Determine sync range based on schedule
+    let sinceDate;
+    let syncMode = 'delta'; // delta | daily | weekly | monthly
+
+    if (cetDate === daysInMonth || (cetDate === daysInMonth - 1 && cetHour >= 23)) {
+        // Month end → sync current + previous month
+        const prevMonth = new Date(cetYear, cetMonth - 1, 1);
+        sinceDate = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01`;
+        syncMode = 'monthly';
+    } else if (cetDay === 0) {
+        // Sunday → sync current + previous week (14 days)
+        const twoWeeksAgo = new Date(nowUtc.getTime() - 14 * 86400000);
+        sinceDate = twoWeeksAgo.toISOString().split('T')[0];
+        syncMode = 'weekly';
+    } else if (cetHour === 23) {
+        // 23:xx → full current day final sweep
+        sinceDate = nowUtc.toISOString().split('T')[0];
+        syncMode = 'daily';
+    } else if (cetHour >= 7 && cetHour < 23) {
+        // Normal 5min delta: current day
+        sinceDate = nowUtc.toISOString().split('T')[0];
+        syncMode = 'delta';
+    } else {
+        // Outside 07-23h → skip
+        return { synced: 0, skipped: 0, success: true, mode: 'skipped (night)' };
+    }
+
     const createdAfter = sinceDate + 'T00:00:00%2B01:00';
 
     while (true) {
@@ -302,13 +339,13 @@ async function runScoutSync() {
         const total = data['hydra:totalItems'] || 0;
         if (page * PAGE_SIZE >= total) break;
         page++;
-        await new Promise(r => setTimeout(r, 300)); // rate limit
+        await new Promise(r => setTimeout(r, 1000)); // 1 req/sec rate limit
     }
 
     // Server-side geocoding for rows missing lat/lng
     await geocodeScoutRows();
 
-    return { synced, skipped, success: true };
+    return { synced, skipped, success: true, mode: syncMode, since: sinceDate };
 }
 
 // Geocode scout rows that have address but no lat/lng (server-side, up to 50 per run)
