@@ -283,7 +283,7 @@ LIVE (${live.length}): ${live.map(t=>`${t.berater} bei ${t.kunde} (${t.ort})`).j
 AUSSTEHEND (${next.length}): ${next.slice(0,10).map(t=>`${t.startZeit} ${t.berater}→${t.kunde}`).join('; ')||'–'}
 ERLEDIGT (${done.length}): ${done.slice(0,8).map(t=>`${t.berater}–${t.kunde}${t.feedback?'→'+t.feedback:''}`).join('; ')||'–'}
 STORNO (${storno.length}): ${storno.map(t=>`${t.berater}`).join(', ')||'–'}
-STATIS HEUTE (${statis.length}): ${statis.map(s=>`${s.berater} ${s.wert}`).join('; ')||'–'}
+STATIS HEUTE (${statis.length}): ${statis.map(s=>`${s.berater} → ${s.kunde} (${s.feedback})`).join('; ')||'–'}
 Berater: ${[...new Set(termine.map(t=>t.berater))].join(', ')}`;
 }
 
@@ -434,7 +434,6 @@ function Chat({ termine, statis, now, onClose }) {
 /* ── MAIN APP ── */
 function App() {
   const [raw, setRaw]         = useState([]);
-  const [statis, setStatis]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [now, setNow]         = useState(new Date());
@@ -446,28 +445,11 @@ function App() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      // Build OR filter for allowed types
       const typeParam = ALLOWED_TYPES.map(t=>`appointment_type.eq.${encodeURIComponent(t)}`).join(',');
       const data = await supaGet(
         `leveto_appointments?start_date=gte.${today}T00:00:00&start_date=lt.${today}T23:59:59&or=(${typeParam})&select=*&limit=300&order=start_date.asc`
       );
       setRaw(data);
-
-      // Statis: auftraege letzte 7 Tage
-      const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate()-7);
-      const wStr = weekAgo.toISOString().slice(0,10);
-      const auRaw = await supaGet(
-        `auftraege?datum_angenommen=gte.${wStr}&storniert=is.false&select=auftrag_nr,kundenberater_name,kunde_name,datum_angenommen,an_wert_netto,ist_waermepumpe&order=datum_angenommen.desc&limit=100`
-      );
-      setStatis(auRaw.map(r=>({
-        berater: r.kundenberater_name||'?',
-        kunde:   r.kunde_name||'?',
-        datum:   r.datum_angenommen,
-        wert:    r.an_wert_netto ? Math.round(r.an_wert_netto).toLocaleString('de-DE')+'€' : '–',
-        isWP:    r.ist_waermepumpe,
-        isToday: r.datum_angenommen===today,
-      })));
-
       setLastSync(new Date());
       setLoading(false);
     } catch(e) { setError(e.message); setLoading(false); }
@@ -508,7 +490,19 @@ function App() {
     };
   }), [raw, nowMin]);
 
-  const statisToday = useMemo(() => statis.filter(s=>s.isToday), [statis]);
+  // Statis direkt aus Terminen: feedback_status enthält 'Abschluss'
+  const statisToday = useMemo(() => termine
+    .filter(t => {
+      const fb = (t.feedback||'').toLowerCase();
+      return fb.includes('abschluss') || fb.includes('unterschrieben') || fb.includes('verkauft');
+    })
+    .map(t => ({
+      berater: t.berater,
+      kunde:   t.kunde,
+      ort:     t.ort,
+      zeit:    t.startZeit,
+      feedback:t.feedback,
+    })), [termine]);
 
   // Group by start time
   const groups = useMemo(() => {
@@ -563,8 +557,8 @@ function App() {
             {statisToday.map((s,i)=>(
               <div key={i} className="statis-card">
                 <div className="sc-name">{s.berater}</div>
-                <div className="sc-kunde">{s.kunde}</div>
-                <div className="sc-wert">{s.wert}{s.isWP?' · 🌡️':''}</div>
+                <div className="sc-kunde">{s.kunde}{s.ort?' · '+s.ort:''}</div>
+                <div className="sc-wert">✅ {s.feedback} · {s.zeit} Uhr</div>
               </div>
             ))}
           </div>
