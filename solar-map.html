@@ -54,6 +54,9 @@ body{background:var(--bg);color:var(--tx);font-family:'DM Sans',system-ui,sans-s
 .ltog-heatmap{border-color:#fb923c;color:#fdba74;}
 .ltog-heatmap.on{background:rgba(251,146,60,.1);}
 .ltog-heatmap .dot{background:#fb923c;}
+.ltog-mastr{border-color:#818cf8;color:#a5b4fc;}
+.ltog-mastr.on{background:rgba(129,140,248,.1);}
+.ltog-mastr .dot{background:#818cf8;}
 
 .bk{padding:6px 11px;border-radius:8px;background:var(--card);border:1px solid var(--bd);color:var(--tx2);font-size:12px;cursor:pointer;text-decoration:none;transition:all .15s;}
 .bk:hover{color:var(--tx);border-color:var(--bd2);}
@@ -204,6 +207,9 @@ body{background:var(--bg);color:var(--tx);font-family:'DM Sans',system-ui,sans-s
     <div class="ltog ltog-heatmap off" id="tog-heatmap" onclick="toggleLayer('heatmap')">
       <div class="dot"></div><span>Conversion</span>
     </div>
+    <div class="ltog ltog-mastr off" id="tog-mastr" onclick="toggleLayer('mastr')">
+      <div class="dot"></div><span>MaStR Solar</span>
+    </div>
   </div>
   <div style="width:8px"></div>
   <a href="index.html" class="bk">← Toolbox</a>
@@ -301,13 +307,14 @@ const lVisits=L.layerGroup().addTo(map);
 const lAnlagen=L.layerGroup().addTo(map);
 const lLeads=L.layerGroup().addTo(map);
 const lHeatmap=L.layerGroup();
+const lMastr=L.layerGroup();
 const lNachbarn=L.layerGroup().addTo(map);
 const lRadius=L.layerGroup().addTo(map);
-const layerMap={visits:lVisits,anlagen:lAnlagen,leads:lLeads,heatmap:lHeatmap};
+const layerMap={visits:lVisits,anlagen:lAnlagen,leads:lLeads,heatmap:lHeatmap,mastr:lMastr};
 
 // State
-const layerOn={visits:true,anlagen:true,leads:true,heatmap:false};
-let anlagenData=[], convData=[], nbRadiusCircle=null;
+const layerOn={visits:true,anlagen:true,leads:true,heatmap:false,mastr:false};
+let anlagenData=[], convData=[], mastrData=[], nbRadiusCircle=null;
 
 // ─── API ───
 async function rpc(fn,body={}){
@@ -332,6 +339,7 @@ function toggleLayer(key){
   if(layerOn[key]){
     if(!map.hasLayer(layerMap[key]))map.addLayer(layerMap[key]);
     if(key==='heatmap'&&convData.length===0)loadHeatmap();
+    if(key==='mastr'&&mastrData.length===0)loadMastr();
   } else {
     map.removeLayer(layerMap[key]);
   }
@@ -584,6 +592,74 @@ function heatmapPopup(r){
 
 function showConvDetail(plz){
   window.location.href='gebietsplanung.html?plz='+plz;
+}
+
+// ─── MASTR SOLAR LAYER ───
+async function loadMastr(){
+  if(mastrData.length)return;
+  const tog=document.getElementById('tog-mastr');
+  if(tog)tog.innerHTML='<div class="dot"></div><span>Lädt…</span>';
+  try{
+    const r=await fetch(SB+'/rest/v1/mastr_solar_plz?select=plz,ort,anlagen_gesamt,anlagen_residential,kwp_gesamt,kwp_residential,saettigung_pct,neueste_anlage,center_lat,center_lng&order=anlagen_residential.desc',
+      {headers:{...Hs,'Prefer':'count=none'}});
+    mastrData=await r.json();
+  }catch(e){console.error('MaStR load error',e);}
+  if(tog)tog.innerHTML='<div class="dot"></div><span>MaStR Solar</span>';
+  renderMastr();
+}
+
+function renderMastr(){
+  lMastr.clearLayers();
+  if(!mastrData.length)return;
+  const maxRes=Math.max(...mastrData.map(r=>Number(r.anlagen_residential)||0));
+  const maxSaett=Math.max(...mastrData.map(r=>Number(r.saettigung_pct)||0));
+
+  mastrData.forEach(r=>{
+    if(!r.center_lat||!r.center_lng)return;
+    const n=Number(r.anlagen_residential)||0;
+    if(n===0)return;
+    const saett=Number(r.saettigung_pct)||0;
+
+    // Farbe: blau (wenig Sättigung = Potenzial) → gelb → rot (gesättigt)
+    // Für Vertrieb: ROT = hohe Sättigung = schwieriger Markt
+    const ratio=maxSaett>0?saett/maxSaett:0;
+    let col;
+    if(ratio<0.33)       col=`hsl(220,80%,60%)`; // blau = niedriger Marktanteil = viel Potenzial
+    else if(ratio<0.66)  col=`hsl(45,90%,55%)`;  // gelb = mittel
+    else                 col=`hsl(0,80%,55%)`;    // rot = hohe Sättigung
+
+    const radius=Math.max(600,Math.min(5000,Math.sqrt(n)*150));
+    const kwp=Number(r.kwp_residential)||0;
+
+    L.circle([r.center_lat,r.center_lng],{
+      radius,color:col,fillColor:col,fillOpacity:.25,weight:1.5
+    }).bindPopup(mastrPopup(r,col),{maxWidth:240}).addTo(lMastr);
+
+    // Label nur bei größeren Kreisen (>800 Anlagen)
+    if(n>800){
+      L.marker([r.center_lat,r.center_lng],{icon:L.divIcon({
+        className:'',
+        html:`<div style="background:rgba(0,0,0,.8);padding:2px 5px;border-radius:4px;font-size:9px;color:${col};font-weight:700;white-space:nowrap">${r.plz}<br><span style="color:#fff">${n} Anl.</span></div>`,
+        iconAnchor:[18,10]
+      })}).addTo(lMastr);
+    }
+  });
+}
+
+function mastrPopup(r,col){
+  const n=Number(r.anlagen_residential)||0;
+  const kwp=(Number(r.kwp_residential)||0).toFixed(0);
+  const saett=Number(r.saettigung_pct)||0;
+  const neueste=r.neueste_anlage?r.neueste_anlage.slice(0,7):'–';
+  const potenz=saett<3?'⭐ Hohe Potenzial':saett<8?'🔸 Mittleres Potenzial':'🔴 Gesättigter Markt';
+  return `<div class="pu">
+    <div class="pu-head">⚡ <span>${r.plz} ${r.ort||''}</span></div>
+    <div class="pu-row"><div class="pu-l">Installiert (EFH)</div><div class="pu-v" style="color:${col};font-weight:700">${n.toLocaleString('de')}</div></div>
+    <div class="pu-row"><div class="pu-l">Leistung ges.</div><div class="pu-v">${Number(kwp).toLocaleString('de')} kWp</div></div>
+    <div class="pu-row"><div class="pu-l">Sättigungsrate</div><div class="pu-v" style="color:${col}">${saett}%</div></div>
+    <div class="pu-row"><div class="pu-l">Neueste Anlage</div><div class="pu-v">${neueste}</div></div>
+    <div style="margin-top:6px;padding:4px 8px;background:rgba(255,255,255,.07);border-radius:6px;font-size:11px;text-align:center">${potenz}</div>
+  </div>`;
 }
 
 // ─── CONVERSION PANEL ───
