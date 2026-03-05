@@ -49,6 +49,7 @@ function computeFromProducts(products) {
   if (!prods.length) return {};
 
   let kwp = 0, moduleCount = 0, moduleTyp = null, batteryKap = 0;
+  let speicherErw = null;
 
   for (const p of prods) {
     const watt = parseFloat(p.watt) || 0;
@@ -59,14 +60,23 @@ function computeFromProducts(products) {
       if (!moduleTyp && p.productname) moduleTyp = p.productname;
     }
     if (p.battery) batteryKap += parseFloat(p.battery) || 0;
+
+    // Detect Speichererweiterung: product name contains "Erweiterung"
+    const name = (p.productname || '').toLowerCase();
+    if (name.includes('erweiterung') || name.includes('speichererweiterung')) {
+      const mult = Math.round(parseFloat(p.amount) || 1);
+      speicherErw = mult > 1 ? `${mult} X ${p.productname}` : p.productname;
+    }
   }
 
-  return {
+  const result = {
     kwp: kwp > 0 ? Math.round(kwp * 100) / 100 : null,
     module_anzahl: moduleCount > 0 ? Math.round(moduleCount) : null,
     module_typ: moduleTyp,
     battery_kap: batteryKap > 0 ? batteryKap : null,
   };
+  if (speicherErw) result.speichererweiterung = speicherErw;
+  return result;
 }
 
 function extractWfSteps(workflows, contractId) {
