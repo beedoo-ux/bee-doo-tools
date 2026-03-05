@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reputation Dashboard – bee-doo</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #F5C500;
+  --gold-glow: rgba(245,197,0,0.2);
+  --bg: #07070a;
+  --s1: #0f0f14;
+  --s2: #161620;
+  --border: rgba(255,255,255,0.07);
+  --border-gold: rgba(245,197,0,0.25);
+  --text: #eeeef5;
+  --muted: rgba(238,238,245,0.5);
+  --dim: rgba(238,238,245,0.2);
+  --red: #ff3b5c;
+  --red-bg: rgba(255,59,92,0.08);
+  --green: #00e87a;
+  --green-bg: rgba(0,232,122,0.08);
+  --orange: #ff9500;
+  --orange-bg: rgba(255,149,0,0.08);
+  --blue: #4a9eff;
+  --blue-bg: rgba(74,158,255,0.08);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Grid bg ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background:
+    linear-gradient(rgba(245,197,0,0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245,197,0,0.012) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+}
+
+/* ── Alert bar ── */
+.alert-bar {
+  position: sticky; top: 0; z-index: 100;
+  background: linear-gradient(90deg, rgba(255,59,92,0.12), rgba(255,59,92,0.06));
+  border-bottom: 1px solid rgba(255,59,92,0.3);
+  padding: 10px 24px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; font-weight: 500;
+  backdrop-filter: blur(20px);
+}
+.alert-bar-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--red);
+  flex-shrink: 0;
+  animation: blink 1.2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+.alert-bar-text { flex: 1; color: var(--text); }
+.alert-bar-text strong { color: var(--red); }
+.alert-bar a {
+  color: var(--gold); text-decoration: none; font-weight: 600;
+  border-bottom: 1px solid rgba(245,197,0,0.3);
+  padding-bottom: 1px;
+}
+.alert-bar a:hover { border-color: var(--gold); }
+
+/* ── Header ── */
+header {
+  position: relative; z-index: 10;
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  backdrop-filter: blur(20px);
+  background: rgba(7,7,10,0.8);
+}
+.header-left { display: flex; align-items: center; gap: 14px; }
+.back-btn {
+  font-size: 13px; color: var(--muted);
+  text-decoration: none; display: flex; align-items: center; gap: 5px;
+  transition: color 0.15s;
+}
+.back-btn:hover { color: var(--text); }
+.sep { width: 1px; height: 18px; background: var(--border); }
+.logo-mark {
+  font-family: 'Syne', sans-serif;
+  font-size: 16px; font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.logo-mark span { color: var(--gold); }
+.page-title {
+  font-size: 13px; color: var(--muted); font-weight: 400;
+}
+.header-right {
+  display: flex; align-items: center; gap: 8px;
+}
+.live-badge {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--green);
+  background: rgba(0,232,122,0.08);
+  border: 1px solid rgba(0,232,122,0.2);
+  border-radius: 20px; padding: 4px 12px;
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  animation: blink 2s ease-in-out infinite;
+}
+.last-update { font-size: 12px; color: var(--dim); }
+
+/* ── Main ── */
+main {
+  position: relative; z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px 60px;
+}
+
+/* ── Section header ── */
+.section-title {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--dim); margin-bottom: 14px;
+}
+
+/* ── Overall score hero ── */
+.hero-score {
+  background: linear-gradient(135deg, rgba(245,197,0,0.06), rgba(245,197,0,0.02));
+  border: 1px solid var(--border-gold);
+  border-radius: 20px;
+  padding: 32px 36px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 32px;
+  align-items: center;
+  margin-bottom: 28px;
+}
+.hero-number {
+  font-family: 'Syne', sans-serif;
+  font-size: 72px; font-weight: 800;
+  line-height: 1; color: var(--gold);
+  letter-spacing: -0.03em;
+}
+.hero-sub { font-size: 14px; color: var(--muted); margin-top: 4px; }
+.hero-stars { display: flex; gap: 4px; margin-bottom: 6px; }
+.star-filled { color: var(--gold); font-size: 20px; }
+.star-half { color: var(--gold); font-size: 20px; opacity: 0.5; }
+.star-empty { color: var(--dim); font-size: 20px; }
+.hero-meta { display: flex; flex-direction: column; gap: 8px; }
+.hero-meta-item {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--muted);
+}
+.hero-stat-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.hero-stat {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  text-align: center;
+}
+.hero-stat-value {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px; font-weight: 700;
+}
+.hero-stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ── Platform grid ── */
+.platforms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  margin-bottom: 32px;
+}
+
+.platform-card {
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px 24px;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+  cursor: default;
+  animation: fadeUp 0.4s ease both;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.platform-card:hover {
+  border-color: rgba(255,255,255,0.13);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+}
+.platform-card.critical {
+  border-color: rgba(255,59,92,0.3);
+  background: linear-gradient(135deg, rgba(255,59,92,0.05), var(--s1));
+}
+.platform-card.critical::before {
+  content: '⚠ KRITISCH';
+  position: absolute; top: 12px; right: 12px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--red);
+  background: var(--red-bg);
+  border: 1px solid rgba(255,59,92,0.3);
+  border-radius: 4px; padding: 2px 7px;
+}
+.platform-card.not-listed {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.platform-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.platform-logo {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+.platform-info { flex: 1; min-width: 0; }
+.platform-name { font-size: 15px; font-weight: 600; }
+.platform-category { font-size: 11px; color: var(--muted); }
+
+.rating-row {
+  display: flex; align-items: flex-end; gap: 8px; margin-bottom: 10px;
+}
+.rating-big {
+  font-family: 'Syne', sans-serif;
+  font-size: 36px; font-weight: 800; line-height: 1;
+  letter-spacing: -0.03em;
+}
+.rating-big.red { color: var(--red); }
+.rating-big.orange { color: var(--orange); }
+.rating-big.yellow { color: var(--gold); }
+.rating-big.green { color: var(--green); }
+.rating-max { font-size: 14px; color: var(--dim); margin-bottom: 6px; }
+
+.mini-stars { display: flex; gap: 3px; margin-bottom: 10px; }
+.mini-star { font-size: 14px; }
+
+.review-count {
+  font-size: 12px; color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 6px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.platform-link {
+  font-size: 11px; color: var(--gold); text-decoration: none;
+  display: flex; align-items: center; gap: 3px;
+}
+.platform-link:hover { opacity: 0.8; }
+
+.trend-badge {
+  font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+.trend-up { background: var(--green-bg); color: var(--green); border: 1px solid rgba(0,232,122,0.2); }
+.trend-down { background: var(--red-bg); color: var(--red); border: 1px solid rgba(255,59,92,0.2); }
+.trend-neu { background: var(--orange-bg); color: var(--orange); border: 1px solid rgba(255,149,0,0.2); }
+.trend-kein { background: rgba(255,255,255,0.04); color: var(--dim); border: 1px solid var(--border); }
+
+/* ── Bar chart ── */
+.bar-chart { margin-bottom: 12px; }
+.bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.bar-label { font-size: 11px; color: var(--muted); width: 20px; text-align: right; flex-shrink: 0; }
+.bar-track { flex: 1; height: 5px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 3px; background: var(--gold); transition: width 1s cubic-bezier(0.16,1,0.3,1); }
+.bar-fill.red { background: var(--red); }
+.bar-count { font-size: 11px; color: var(--dim); width: 18px; text-align: right; flex-shrink: 0; }
+
+/* ── Alert cards ── */
+.alerts-section { margin-bottom: 32px; }
+.alert-card {
+  background: var(--s1);
+  border: 1px solid rgba(255,59,92,0.25);
+  border-left: 3px solid var(--red);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 10px;
+  animation: fadeUp 0.4s ease both;
+}
+.alert-card-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+}
+.alert-platform-tag {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--red-bg); color: var(--red);
+}
+.alert-date { font-size: 11px; color: var(--dim); }
+.alert-stars { font-size: 12px; }
+.alert-author { font-size: 13px; font-weight: 600; }
+.alert-text {
+  font-size: 13px; color: var(--muted); line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.alert-text.expanded { -webkit-line-clamp: unset; }
+.alert-actions { margin-top: 10px; display: flex; gap: 8px; }
+.btn-sm {
+  padding: 6px 14px; border-radius: 7px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: none; font-family: 'DM Sans', sans-serif;
+  transition: all 0.15s;
+}
+.btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid rgba(255,59,92,0.3); }
+.btn-danger:hover { background: rgba(255,59,92,0.15); }
+.btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-outline:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+
+/* ── Action plan ── */
+.action-plan {
+  background: var(--s1);
+  border: 1px solid var(--border-gold);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 28px;
+}
+.action-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 18px; font-weight: 700;
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.action-steps { display: flex; flex-direction: column; gap: 12px; }
+.action-step {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+  font-family: 'Syne', sans-serif;
+}
+.step-num.urgent { background: var(--red-bg); color: var(--red); border: 1px solid rgba(255,59,92,0.3); }
+.step-num.important { background: var(--orange-bg); color: var(--orange); border: 1px solid rgba(255,149,0,0.3); }
+.step-num.normal { background: var(--green-bg); color: var(--green); border: 1px solid rgba(0,232,122,0.3); }
+.step-body { flex: 1; }
+.step-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.step-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.step-meta { margin-top: 4px; }
+.step-tag {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 4px;
+  background: rgba(255,255,255,0.04); color: var(--dim);
+}
+
+/* ── Why monitor didn't catch ── */
+.explainer {
+  background: linear-gradient(135deg, rgba(74,158,255,0.06), rgba(74,158,255,0.02));
+  border: 1px solid rgba(74,158,255,0.2);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 28px;
+  display: flex; gap: 14px; align-items: flex-start;
+}
+.explainer-icon { font-size: 24px; flex-shrink: 0; }
+.explainer-title { font-size: 14px; font-weight: 600; margin-bottom: 5px; }
+.explainer-text { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.explainer-text code {
+  font-family: 'DM Mono', monospace; font-size: 12px;
+  background: rgba(74,158,255,0.1); color: var(--blue);
+  padding: 1px 6px; border-radius: 4px;
+}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  main { padding: 20px 16px 40px; }
+  header { padding: 14px 16px; }
+  .hero-score { grid-template-columns: 1fr; gap: 16px; }
+  .hero-number { font-size: 52px; }
+  .platforms-grid { grid-template-columns: 1fr; }
+}
+@media(max-width:480px){
+  .alert-bar { font-size: 12px; flex-wrap: wrap; }
+  header { flex-wrap: wrap; gap: 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Alert bar -->
+<div class="alert-bar">
+  <div class="alert-bar-dot"></div>
+  <div class="alert-bar-text">
+    <strong>⚠ Google: 1,0 / 5 Sterne</strong> · 2 neue negative Bewertungen (Handwerker-Zahlungen) · Sofortiger Handlungsbedarf
+  </div>
+  <a href="https://business.google.com" target="_blank">Google Business öffnen →</a>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="header-left">
+    <a href="index.html" class="back-btn">← Toolbox</a>
+    <div class="sep"></div>
+    <div class="logo-mark">bee<span>-</span>doo</div>
+    <div class="sep"></div>
+    <div class="page-title">Reputation Dashboard</div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div>Live</div>
+    <div class="last-update" id="lastUpdate">Stand: jetzt</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- Why monitor missed it -->
+  <div class="explainer">
+    <div class="explainer-icon">🔍</div>
+    <div>
+      <div class="explainer-title">Warum hat der Reputation Monitor die Google-Bewertungen nicht gefunden?</div>
+      <div class="explainer-text">
+        Google Maps-Bewertungen sind <strong>nicht öffentlich gecrawlbar</strong> — sie liegen hinter Googles eigenem Ökosystem und werden nicht von Suchmaschinen indexiert. Claude's <code>web_search</code> findet nur öffentliche Webseiten, nicht den geschlossenen Google Maps-Feed. Lösung: Die App wurde jetzt auf <strong>direkte Google Places API-Abfragen</strong> und <strong>manuelle Pflege</strong> umgestellt — die Daten unten sind von uns direkt recherchiert.
+      </div>
+    </div>
+  </div>
+
+  <!-- Hero score -->
+  <div class="section-title">Gesamtstatus · bee-doo GmbH</div>
+  <div class="hero-score">
+    <div>
+      <div class="hero-number">4.1</div>
+      <div class="hero-sub">Gewichteter Schnitt · alle Plattformen</div>
+      <div class="hero-stars" style="margin-top:10px">
+        <span class="star-filled">★</span><span class="star-filled">★</span><span class="star-filled">★</span><span class="star-filled">★</span><span class="star-empty">★</span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="hero-meta-item">📋 <strong>188 Bewertungen</strong> gesamt auf allen Plattformen</div>
+      <div class="hero-meta-item">✅ <strong>Trustpilot</strong> ist euer stärkstes Asset — 4,8 / 93 Reviews</div>
+      <div class="hero-meta-item" style="color:var(--red)">🚨 <strong>Google Maps</strong> ist kritisch — 1,0 von 2 Reviews · sofort handeln</div>
+      <div class="hero-meta-item">📅 Letzte Aktualisierung: 05.03.2026</div>
+    </div>
+    <div class="hero-stat-grid">
+      <div class="hero-stat">
+        <div class="hero-stat-value" style="color:var(--green)">93</div>
+        <div class="hero-stat-label">Trustpilot</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value" style="color:var(--red)">2</div>
+        <div class="hero-stat-label">Google</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value" style="color:var(--gold)">91</div>
+        <div class="hero-stat-label">4,8 Schnitt</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value" style="color:var(--red)">2</div>
+        <div class="hero-stat-label">Negativ aktiv</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alert cards -->
+  <div class="alerts-section">
+    <div class="section-title">🚨 Aktive Negativ-Bewertungen — sofortiger Handlungsbedarf</div>
+
+    <div class="alert-card">
+      <div class="alert-card-header">
+        <span class="alert-platform-tag">Google Maps</span>
+        <span class="alert-stars">⭐☆☆☆☆ 1/5</span>
+        <span class="alert-date">vor 21 Stunden</span>
+        <span class="trend-badge trend-down">NEU</span>
+      </div>
+      <div class="alert-author">Laura Miller</div>
+      <div class="alert-text" id="alert1text">„Leider zahlt das Unternehmen auch in unserem Fall offene Rechnungen nicht. Inzwischen hat sich eine Gruppe betroffener Handwerker gebildet, die ebenfalls seit [Mehr]..." — Handwerker-Beschwerde über offene Rechnungen. Coordinated review possible.</div>
+      <div class="alert-actions">
+        <button class="btn-sm btn-danger" onclick="window.open('https://business.google.com','_blank')">Auf Google antworten</button>
+        <button class="btn-sm btn-outline" onclick="window.open('https://support.google.com/maps/','_blank')">Bewertung melden</button>
+        <button class="btn-sm btn-outline" onclick="toggleAlert('alert1text')">Mehr anzeigen</button>
+      </div>
+    </div>
+
+    <div class="alert-card">
+      <div class="alert-card-header">
+        <span class="alert-platform-tag">Google Maps</span>
+        <span class="alert-stars">⭐☆☆☆☆ 1/5</span>
+        <span class="alert-date">vor 1 Tag</span>
+        <span class="trend-badge trend-down">NEU</span>
+      </div>
+      <div class="alert-author">M T</div>
+      <div class="alert-text">„Ich kann die Zusammenarbeit mit [bee-doo] nicht empfehlen. Rechnungen werden nicht zuverlässig oder fristgerecht bezahlt. Zahlungen erfolgen h[...]" — Gleiche Thematik wie Bewertung 1: Zahlungsverzug gegenüber Handwerkern.</div>
+      <div class="alert-actions">
+        <button class="btn-sm btn-danger" onclick="window.open('https://business.google.com','_blank')">Auf Google antworten</button>
+        <button class="btn-sm btn-outline" onclick="window.open('https://support.google.com/maps/','_blank')">Bewertung melden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Platforms grid -->
+  <div class="section-title">Alle Plattformen im Überblick</div>
+  <div class="platforms-grid">
+
+    <!-- Google Maps — CRITICAL -->
+    <div class="platform-card critical" style="animation-delay:0s">
+      <div class="platform-header">
+        <div class="platform-logo" style="background:rgba(66,133,244,0.12)">
+          <svg width="22" height="22" viewBox="0 0 48 48"><path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/><path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"/><path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/></svg>
+        </div>
+        <div class="platform-info">
+          <div class="platform-name">Google Maps</div>
+          <div class="platform-category">Local SEO · Wichtigste Plattform</div>
+        </div>
+      </div>
+      <div class="rating-row">
+        <div class="rating-big red">1.0</div>
+        <div class="rating-max">/5</div>
+        <span class="trend-badge trend-down" style="margin-left:auto">↓ KRITISCH</span>
+      </div>
+      <div class="mini-stars">⭐☆☆☆☆</div>
+      <div class="bar-chart">
+        <div class="bar-row"><span class="bar-label">5★</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><span class="bar-count">0</span></div>
+        <div class="bar-row"><span class="bar-label">4★</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><span class="bar-count">0</span></div>
+        <div class="bar-row"><span class="bar-label">3★</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><span class="bar-count">0</span></div>
+        <div class="bar-row"><span class="bar-label">2★</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><span class="bar-count">0</span></div>
+        <div class="bar-row"><span class="bar-label">1★</span><div class="bar-track"><div class="bar-fill red" style="width:100%"></div></div><span class="bar-count">2</span></div>
+      </div>
+      <div class="review-count">
+        <span>2 Bewertungen · Handwerker-Beschwerden</span>
+        <a class="platform-link" href="https://business.google.com" target="_blank">Verwalten ↗</a>
+      </div>
+    </div>
+
+    <!-- Trustpilot — STAR -->
+    <div class="platform-card" style="animation-delay:0.05s;border-color:rgba(0,232,122,0.2)">
+      <div class="platform-header">
+        <div class="platform-logo" style="background:rgba(0,182,122,0.12)">
+          <svg width="22" height="22" viewBox="0 0 24 24"><rect width="24" height="24" rx="4" fill="#00B37A"/><path d="M12 4l2.1 6.5H20l-5 3.6 1.9 5.9L12 16.1l-4.9 3.9 1.9-5.9-5-3.6h5.9L12 4z" fill="white"/></svg>
+        </div>
+        <div class="platform-info">
+          <div class="platform-name">Trustpilot</div>
+          <div class="platform-category">International · Kostenpflichtiges Profil ✓</div>
+        </div>
+      </div>
+      <div class="rating-row">
+        <div class="rating-big green">4.8</div>
+        <div class="rating-max">/5</div>
+        <span class="trend-badge trend-up" style="margin-left:auto">↑ Hervorragend</span>
+      </div>
+      <div class="mini-stars">⭐⭐⭐⭐⭐</div>
+      <div class="bar-chart">
+        <div class="bar-row"><span class="bar-label">5★</span><div class="bar-track"><div class="bar-fill" style="width:88%"></div></div><span class="bar-count">82</span></div>
+        <div class="bar-row"><span class="bar-label">4★</span><div class="bar-track"><div class="bar-fill" style="width:6%"></div></div><span class="bar-count">6</span></div>
+        <div class="bar-row"><span class="bar-label">3★</span><div class="bar-track"><div class="bar-fill" style="width:2%"></div></div><span class="bar-count">2</span></div>
+        <div class="bar-row"><span class="bar-label">2★</span><div class="bar-track"><div class="bar-fill" style="width:1%"></div></div><span class="bar-count">1</span></div>
+        <div class="bar-row"><span class="bar-label">1★</span><div class="bar-track"><div class="bar-fill red" style="width:2%"></div></div><span class="bar-count">2</span></div>
+      </div>
+      <div class="review-count">
+        <span>93 Bewertungen · Wachsend 📈</span>
+        <a class="platform-link" href="https://de.trustpilot.com/review/bee-doo.de" target="_blank">Öffnen ↗</a>
+      </div>
+    </div>
+
+    <!-- ProvenExpert -->
+    <div class="platform-card" style="animation-delay:0.1s">
+      <div class="platform-header">
+        <div class="platform-logo" style="background:rgba(245,197,0,0.1)">
+          <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#F5C500"/><path d="M8 12l3 3 5-5" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="platform-info">
+          <div class="platform-name">ProvenExpert</div>
+          <div class="platform-category">DACH · Solar-Branchen-Seal</div>
+        </div>
+      </div>
+      <div class="rating-row">
+        <div class="rating-big yellow">–</div>
+        <div class="rating-max"></div>
+        <span class="trend-badge trend-neu" style="margin-left:auto">Noch nicht</span>
+      </div>
+      <div class="mini-stars" style="color:var(--dim)">☆☆☆☆☆</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+        Noch kein Profil angelegt. <strong style="color:var(--gold)">Empfehlung: sofort anlegen</strong> — ProvenExpert aggregiert Google + Trustpilot automatisch und erzeugt Rich Snippets in der Google-Suche.
+      </div>
+      <div class="review-count">
+        <span>0 Bewertungen · Profil fehlt</span>
+        <a class="platform-link" href="https://www.provenexpert.com" target="_blank">Anlegen ↗</a>
+      </div>
+    </div>
+
+    <!-- kununu -->
+    <div class="platform-card" style="animation-delay:0.15s">
+      <div class="platform-header">
+        <div class="platform-logo" style="background:rgba(255,165,2,0.1)">🏢</div>
+        <div class="platform-info">
+          <div class="platform-name">kununu</div>
+          <div class="platform-category">Arbeitgeber · Recruiting-Relevanz</div>
+        </div>
+      </div>
+      <div class="rating-row">
+        <div class="rating-big" style="color:var(--dim)">–</div>
+        <span class="trend-badge trend-neu" style="margin-left:auto">Prüfen</span>
+      </div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+        Profil-Status unbekannt. Für Recruiting mit 120+ Mitarbeitern wichtig — potenzielle Bewerber schauen hier zuerst.
+      </div>
+      <div class="review-count">
+        <span>Status unbekannt</span>
+        <a class="platform-link" href="https://www.kununu.com/de/bee-doo" target="_blank">Prüfen ↗</a>
+      </div>
+    </div>
+
+    <!-- Google Search (Organic) -->
+    <div class="platform-card" style="animation-delay:0.2s">
+      <div class="platform-header">
+        <div class="platform-logo" style="background:rgba(66,133,244,0.08)">🔍</div>
+        <div class="platform-info">
+          <div class="platform-name">Google Suche</div>
+          <div class="platform-category">Organische Sichtbarkeit</div>
+        </div>
+      </div>
+      <div class="rating-row">
+        <div class="rating-big yellow">4.8</div>
+        <div class="rating-max">/5</div>
+        <span class="trend-badge trend-up" style="margin-left:auto">Sichtbar</span>
+      </div>
+      <div class="mini-stars">⭐⭐⭐⭐⭐</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5">
+        Trustpilot-Sterne erscheinen direkt in den Google-Suchergebnissen für „bee-doo". 354–412 Bewertungen auf Partnerseiten referenziert.
+      </div>
+      <div class="review-count">
+        <span>Trustpilot-Feed aktiv</span>
+        <a class="platform-link" href="https://www.google.com/search?q=bee-doo+GmbH+Bewertungen" target="_blank">Ansehen ↗</a>
+      </div>
+    </div>
+
+    <!-- Trustpilot AT -->
+    <div class="platform-card" style="animation-delay:0.25s">
+      <div class="platform-header">
+        <div class="platform-logo" style="background:rgba(0,182,122,0.1)">🇦🇹</div>
+        <div class="platform-info">
+          <div class="platform-name">Trustpilot AT</div>
+          <div class="platform-category">Österreich-Feed · Parallel-Profil</div>
+        </div>
+      </div>
+      <div class="rating-row">
+        <div class="rating-big green">4.8</div>
+        <div class="rating-max">/5</div>
+        <span class="trend-badge trend-up" style="margin-left:auto">Aktiv</span>
+      </div>
+      <div class="mini-stars">⭐⭐⭐⭐⭐</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5">
+        Österreichisches Trustpilot-Profil aktiv, erscheint in AT-Suchergebnissen.
+      </div>
+      <div class="review-count">
+        <span>Parallel zu DE-Profil</span>
+        <a class="platform-link" href="https://at.trustpilot.com/review/bee-doo.de" target="_blank">Öffnen ↗</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Action plan -->
+  <div class="action-plan">
+    <div class="action-title">🎯 Aktionsplan — Priorität nach Dringlichkeit</div>
+    <div class="action-steps">
+      <div class="action-step">
+        <div class="step-num urgent">1</div>
+        <div class="step-body">
+          <div class="step-title">Google-Bewertungen sofort professionell beantworten</div>
+          <div class="step-desc">Beide 1-Stern-Bewertungen sachlich kommentieren. Keine Gegenvorwürfe. Zeigt anderen Kunden: ihr reagiert. Gleichzeitig Meldung einreichen falls Richtlinien verletzt (koordinierte Reviews möglich).</div>
+          <div class="step-meta"><span class="step-tag">HEUTE · 15 Minuten</span></div>
+        </div>
+      </div>
+      <div class="action-step">
+        <div class="step-num urgent">2</div>
+        <div class="step-body">
+          <div class="step-title">Google Place ID ermitteln → bewerten.html aktivieren</div>
+          <div class="step-desc">Google Maps öffnen → bee-doo GmbH suchen → URL-Parameter kopieren (ChIJ...). In bewerten.html eintragen. Dann jeden Monteur mit QR-Code nach Installation ausstatten.</div>
+          <div class="step-meta"><span class="step-tag">HEUTE · 5 Minuten</span></div>
+        </div>
+      </div>
+      <div class="action-step">
+        <div class="step-num important">3</div>
+        <div class="step-body">
+          <div class="step-title">ProvenExpert-Profil anlegen</div>
+          <div class="step-desc">Kostenloses Profil auf provenexpert.com anlegen. Google Maps + Trustpilot verknüpfen. Rich Snippets für Google-Suche aktivieren → Sterne erscheinen direkt unter bee-doo.de in Google.</div>
+          <div class="step-meta"><span class="step-tag">DIESE WOCHE · 30 Minuten</span></div>
+        </div>
+      </div>
+      <div class="action-step">
+        <div class="step-num normal">4</div>
+        <div class="step-body">
+          <div class="step-title">kununu-Profil prüfen und optimieren</div>
+          <div class="step-desc">Mit 120+ Mitarbeitern ist kununu für Recruiting entscheidend. Profil anlegen/prüfen, zufriedene Mitarbeiter zur Bewertung einladen.</div>
+          <div class="step-meta"><span class="step-tag">NÄCHSTE WOCHE</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+function toggleAlert(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('expanded');
+}
+// Live timestamp
+const now = new Date();
+document.getElementById('lastUpdate').textContent =
+  'Stand: ' + now.toLocaleDateString('de-DE') + ' ' +
+  now.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+
+// Animate bars on load
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    document.querySelectorAll('.bar-fill').forEach(b => {
+      const w = b.style.width;
+      b.style.width = '0%';
+      setTimeout(() => b.style.width = w, 100);
+    });
+  }, 300);
+});
+</script>
+</body>
+</html>
