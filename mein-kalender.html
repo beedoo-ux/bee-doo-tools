@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="bee-doo Termine">
+<meta name="theme-color" content="#0d1117">
+<title>Meine Termine – bee-doo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0d1117; --bg2:#161b22; --bg3:#1c2333;
+  --border:#21262d; --border2:#30363d;
+  --text:#e6edf3; --text2:#7d8590; --text3:#3d444d;
+  --accent:#F5C500; --green:#3fb950; --red:#f85149; --blue:#58a6ff; --orange:#d29922;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html,body { height:100%; background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; overscroll-behavior:none; }
+body { display:flex; flex-direction:column; padding-top:var(--safe-top); }
+
+/* HEADER */
+.hdr {
+  background:var(--bg2); border-bottom:1px solid var(--border);
+  padding:12px 16px 10px; flex-shrink:0;
+  display:flex; flex-direction:column; gap:8px;
+}
+.hdr-top { display:flex; align-items:center; justify-content:space-between; }
+.logo { font-size:13px; font-weight:800; color:var(--accent); }
+.logo span { color:var(--text2); font-weight:500; }
+.sync-row { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text2); }
+.sdot { width:6px; height:6px; border-radius:50%; background:var(--green); }
+.sdot.s { background:var(--accent); animation:blink 1s infinite; }
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+.vt-name { font-size:22px; font-weight:800; line-height:1.2; }
+.vt-sub { font-size:12px; color:var(--text2); }
+
+/* DATE NAV */
+.date-nav {
+  display:flex; align-items:center; gap:8px;
+  background:var(--bg3); border:1px solid var(--border2); border-radius:10px; padding:8px 12px;
+}
+.date-nav-btn { width:32px; height:32px; border-radius:8px; background:var(--bg2); border:1px solid var(--border2); color:var(--text2); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.date-nav-btn:active { background:var(--border2); }
+.date-label { flex:1; text-align:center; font-size:14px; font-weight:700; }
+.today-btn { font-size:11px; font-weight:700; color:var(--accent); cursor:pointer; padding:4px 8px; border-radius:6px; background:rgba(245,197,0,.1); border:1px solid rgba(245,197,0,.3); flex-shrink:0; }
+
+/* STATS STRIP */
+.stats {
+  display:flex; gap:0; background:var(--bg2); border-bottom:1px solid var(--border); flex-shrink:0;
+}
+.stat { flex:1; padding:8px 4px; text-align:center; border-right:1px solid var(--border); }
+.stat:last-child { border-right:none; }
+.stat-n { font-size:20px; font-weight:800; }
+.stat-l { font-size:10px; color:var(--text2); font-weight:600; }
+
+/* SCROLLABLE BODY */
+.scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px 12px calc(16px + var(--safe-bot)); }
+.scroll::-webkit-scrollbar { display:none; }
+
+/* DAY SECTION */
+.day-hdr {
+  font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.5px;
+  padding:8px 4px 5px; display:flex; align-items:center; justify-content:space-between;
+}
+.day-hdr span { background:var(--accent); color:#000; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px; }
+
+/* APT CARD */
+.apt-card {
+  background:var(--bg2); border:1px solid var(--border2); border-radius:12px;
+  padding:14px; margin-bottom:8px; border-left:4px solid; cursor:pointer;
+  transition:transform .1s, box-shadow .1s; position:relative; overflow:hidden;
+}
+.apt-card:active { transform:scale(.98); }
+.apt-card.open { border-left-color:var(--blue); }
+.apt-card.closed { border-left-color:var(--green); }
+.apt-card.cancelled { border-left-color:#333; opacity:.5; }
+.apt-card.cancelled .apt-name { text-decoration:line-through; }
+
+.apt-time { font-size:12px; font-weight:800; color:var(--text2); margin-bottom:4px; display:flex; align-items:center; gap:6px; }
+.apt-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; }
+.badge-open { background:rgba(88,166,255,.15); color:var(--blue); }
+.badge-closed { background:rgba(63,185,80,.15); color:var(--green); }
+.badge-cancelled { background:rgba(110,118,129,.12); color:#6e7681; }
+.apt-name { font-size:17px; font-weight:800; margin-bottom:3px; }
+.apt-addr { font-size:12px; color:var(--text2); margin-bottom:8px; }
+.apt-actions { display:flex; gap:8px; }
+.apt-btn { flex:1; padding:8px; border-radius:8px; border:1px solid var(--border2); background:var(--bg3); color:var(--text2); font-family:inherit; font-size:12px; font-weight:600; cursor:pointer; text-align:center; text-decoration:none; display:block; }
+.apt-btn:active { background:var(--border2); }
+.apt-btn.primary { background:rgba(245,197,0,.12); color:var(--accent); border-color:rgba(245,197,0,.3); }
+
+/* EMPTY */
+.empty { text-align:center; padding:40px 20px; color:var(--text2); }
+.empty-icon { font-size:48px; margin-bottom:12px; }
+.empty-title { font-size:16px; font-weight:700; margin-bottom:6px; color:var(--text); }
+.empty-sub { font-size:13px; }
+
+/* WEEK VIEW */
+.week-day { margin-bottom:16px; }
+
+/* NOW LINE */
+.now-marker {
+  display:flex; align-items:center; gap:8px; margin-bottom:4px; margin-top:-2px;
+}
+.now-dot { width:10px; height:10px; border-radius:50%; background:var(--red); flex-shrink:0; }
+.now-line2 { flex:1; height:2px; background:var(--red); opacity:.6; border-radius:1px; }
+.now-time { font-size:10px; font-weight:700; color:var(--red); }
+
+/* LOADER */
+.loader { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; z-index:999; }
+.spin { width:34px; height:34px; border:3px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:rot .8s linear infinite; }
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* MODAL */
+.mbg { position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:200; display:flex; align-items:flex-end; justify-content:center; backdrop-filter:blur(4px); }
+.sheet {
+  background:var(--bg2); border:1px solid var(--border2); border-radius:20px 20px 0 0;
+  width:100%; max-width:600px; padding:20px 20px calc(20px + var(--safe-bot));
+  max-height:90vh; overflow-y:auto;
+}
+.sheet-handle { width:36px; height:4px; border-radius:2px; background:var(--border2); margin:0 auto 16px; }
+.sheet-title { font-size:18px; font-weight:800; margin-bottom:16px; }
+.sheet-row { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border); }
+.sheet-row:last-child { border-bottom:none; }
+.sheet-icon { font-size:20px; width:36px; text-align:center; flex-shrink:0; }
+.sheet-label { font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; }
+.sheet-val { font-size:14px; font-weight:600; }
+.sheet-link { color:var(--accent); font-size:16px; font-weight:700; text-decoration:none; }
+.sheet-close { width:100%; padding:14px; border-radius:12px; background:var(--bg3); border:1px solid var(--border2); color:var(--text2); font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; margin-top:12px; }
+
+/* TABS */
+.tabs { display:flex; background:var(--bg2); border-bottom:1px solid var(--border); flex-shrink:0; }
+.tab { flex:1; padding:10px; text-align:center; font-size:12px; font-weight:700; color:var(--text2); cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; }
+.tab.on { color:var(--accent); border-bottom-color:var(--accent); }
+
+/* TOAST */
+.toast-wrap { position:fixed; top:calc(var(--safe-top) + 60px); left:50%; transform:translateX(-50%); z-index:999; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.toast { background:var(--bg2); border:1px solid var(--border2); border-radius:20px; padding:8px 16px; font-size:12px; font-weight:600; white-space:nowrap; box-shadow:0 4px 24px rgba(0,0,0,.5); animation:sup .2s ease; }
+.toast.ok { border-color:var(--green); }
+@keyframes sup{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<div class="loader" id="loader">
+  <div style="font-size:22px;font-weight:800;color:var(--accent)">bee-doo</div>
+  <div class="spin"></div>
+  <div style="font-size:12px;color:var(--text2)">Lade Termine…</div>
+</div>
+
+<div class="hdr">
+  <div class="hdr-top">
+    <div class="logo">bee-doo <span>Meine Termine</span></div>
+    <div class="sync-row"><div class="sdot" id="sdot"></div><span id="slbl">–</span></div>
+  </div>
+  <div>
+    <div class="vt-name" id="vtName">–</div>
+    <div class="vt-sub" id="vtSub">–</div>
+  </div>
+  <div class="date-nav">
+    <button class="date-nav-btn" onclick="chDay(-1)">◀</button>
+    <div class="date-label" id="dateLbl">–</div>
+    <button class="date-nav-btn" onclick="chDay(1)">▶</button>
+    <div class="today-btn" onclick="goToday()">Heute</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab on" id="tabDay" onclick="setView('day')">Tag</div>
+  <div class="tab" id="tabWeek" onclick="setView('week')">Woche</div>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="scroll" id="scroll"></div>
+
+<!-- DETAIL SHEET -->
+<div class="mbg" id="sheet" style="display:none" onclick="if(event.target===this)closeSheet()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="sheetTitle">–</div>
+    <div id="sheetBody"></div>
+    <button class="sheet-close" onclick="closeSheet()">Schließen</button>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+const PROXY = '/api/leveto';
+const SYNC_MS = 3 * 60 * 1000;
+
+// VT from URL param
+const params = new URLSearchParams(location.search);
+const VT_NAME = decodeURIComponent(params.get('vt') || '');
+
+let S = { apts:[], off:0, view:'day', syncing:false };
+
+const today0 = () => { const d=new Date(); d.setHours(0,0,0,0); return d; };
+const viewDate = () => { const d=today0(); d.setDate(d.getDate()+S.off); return d; };
+const fmt = d => d.toISOString().slice(0,10);
+const parseD = s => s ? new Date(s.replace(' ','T')) : null;
+const fmtT = d => d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '';
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const isToday = d => fmt(d) === fmt(today0());
+const DN = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+const MN = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+const fmtLong = d => `${DN[d.getDay()]}, ${d.getDate()}. ${MN[d.getMonth()]}`;
+
+function chDay(n) { S.off+=n; render(); }
+function goToday() { S.off=0; render(); }
+function setView(v) {
+  S.view=v;
+  document.getElementById('tabDay').classList.toggle('on',v==='day');
+  document.getElementById('tabWeek').classList.toggle('on',v==='week');
+  render();
+}
+
+async function sync() {
+  if(S.syncing) return;
+  S.syncing = true;
+  document.getElementById('sdot').className='sdot s';
+  try {
+    const r = await fetch(`${PROXY}?action=appointments`);
+    const d = await r.json();
+    if(d.ok) {
+      S.apts = (d.data||[]).filter(a => a.user_received === VT_NAME);
+      const t = new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+      document.getElementById('sdot').className='sdot';
+      document.getElementById('slbl').textContent = t+' Uhr';
+      render();
+    }
+  } catch(e) { document.getElementById('sdot').className='sdot e'; }
+  S.syncing = false;
+}
+
+function render() {
+  const d = viewDate();
+  document.getElementById('dateLbl').textContent = fmtLong(d) + ' ' + d.getFullYear();
+
+  if(S.view === 'week') renderWeek();
+  else renderDay(d);
+}
+
+function renderDay(d) {
+  const ds = fmt(d);
+  const apts = S.apts.filter(a => (a.start_date||'').slice(0,10)===ds)
+    .sort((a,b)=>(a.start_date||'').localeCompare(b.start_date||''));
+  
+  const now = new Date();
+  const open = apts.filter(a=>a.status!=='Cancelled').length;
+  const done = apts.filter(a=>a.status==='Closed').length;
+  const canc = apts.filter(a=>a.status==='Cancelled').length;
+  
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="stat-n" style="color:var(--blue)">${open}</div><div class="stat-l">Offen</div></div>
+    <div class="stat"><div class="stat-n" style="color:var(--green)">${done}</div><div class="stat-l">Done</div></div>
+    <div class="stat"><div class="stat-n" style="color:var(--text3)">${canc}</div><div class="stat-l">Storno</div></div>
+    <div class="stat"><div class="stat-n">${apts.length}</div><div class="stat-l">Gesamt</div></div>`;
+
+  if(!apts.length) {
+    document.getElementById('scroll').innerHTML = `<div class="empty">
+      <div class="empty-icon">🌴</div>
+      <div class="empty-title">Kein Termin heute</div>
+      <div class="empty-sub">Genieß den freien Tag!</div>
+    </div>`;
+    return;
+  }
+
+  let html = '';
+  let nowInserted = false;
+  
+  apts.forEach((a,i) => {
+    const st = parseD(a.start_date), en = parseD(a.end_date);
+    // Insert "now" marker
+    if(isToday(d) && !nowInserted && st && st > now) {
+      nowInserted = true;
+      html += `<div class="now-marker">
+        <div class="now-dot"></div>
+        <div class="now-time">${fmtT(now)} Jetzt</div>
+        <div class="now-line2"></div>
+      </div>`;
+    }
+    html += buildCard(a, st, en);
+  });
+
+  document.getElementById('scroll').innerHTML = html;
+  attachCardEvents();
+}
+
+function renderWeek() {
+  const base = viewDate();
+  const mon = new Date(base); mon.setDate(base.getDate() - base.getDay() + 1);
+  const days = Array.from({length:7},(_,i)=>{ const x=new Date(mon); x.setDate(mon.getDate()+i); return x; });
+  
+  let totalOpen=0, totalDone=0;
+  let html = '';
+  
+  days.forEach(d => {
+    const ds = fmt(d);
+    const apts = S.apts.filter(a=>(a.start_date||'').slice(0,10)===ds).sort((a,b)=>(a.start_date||'').localeCompare(b.start_date||''));
+    const open = apts.filter(a=>a.status!=='Cancelled').length;
+    const done = apts.filter(a=>a.status==='Closed').length;
+    totalOpen+=open; totalDone+=done;
+    if(!apts.length) return;
+    html += `<div class="week-day">
+      <div class="day-hdr">${DN[d.getDay()]}, ${d.getDate()}. ${MN[d.getMonth()]}${isToday(d)?'<span>Heute</span>':''}</div>
+      ${apts.map(a=>buildCard(a,parseD(a.start_date),parseD(a.end_date))).join('')}
+    </div>`;
+  });
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="stat-n" style="color:var(--blue)">${totalOpen}</div><div class="stat-l">Offen KW</div></div>
+    <div class="stat"><div class="stat-n" style="color:var(--green)">${totalDone}</div><div class="stat-l">Done KW</div></div>
+    <div class="stat"><div class="stat-n">${totalOpen+totalDone}</div><div class="stat-l">Gesamt KW</div></div>`;
+
+  document.getElementById('scroll').innerHTML = html || `<div class="empty"><div class="empty-icon">📅</div><div class="empty-title">Keine Termine diese Woche</div></div>`;
+  attachCardEvents();
+}
+
+function buildCard(a, st, en) {
+  const name = [a.vorname,a.nachname].filter(Boolean).join(' ') || '–';
+  const sc = a.status==='Closed'?'closed':a.status==='Cancelled'?'cancelled':'open';
+  const badge = a.status==='Closed'?'<span class="apt-badge badge-closed">✓ Abgeschlossen</span>':
+                a.status==='Cancelled'?'<span class="apt-badge badge-cancelled">Storniert</span>':
+                '<span class="apt-badge badge-open">Offen</span>';
+  const addr = [a.strasse, a.hausnummer].filter(Boolean).join(' ');
+  const addrLine = [addr, [a.plz,a.stadt].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const mapsUrl = addrLine ? `https://maps.apple.com/?q=${encodeURIComponent(addrLine)}` : '';
+  const aJson = JSON.stringify(a).replace(/"/g,'&quot;');
+  
+  return `<div class="apt-card ${sc}" data-apt="${aJson}">
+    <div class="apt-time">${esc(fmtT(st))}–${esc(fmtT(en))} Uhr ${badge}</div>
+    <div class="apt-name">${esc(name)}</div>
+    ${addrLine?`<div class="apt-addr">📍 ${esc(addrLine)}</div>`:''}
+    <div class="apt-actions">
+      ${a.telefon?`<a class="apt-btn" href="tel:${esc(a.telefon)}">📞 Anrufen</a>`:''}
+      ${mapsUrl?`<a class="apt-btn" href="${mapsUrl}" target="_blank">🗺 Navigation</a>`:''}
+      <div class="apt-btn primary" data-open="${aJson}">Details</div>
+    </div>
+  </div>`;
+}
+
+function attachCardEvents() {
+  document.querySelectorAll('[data-open]').forEach(el => {
+    el.onclick = (e) => { e.stopPropagation(); openSheet(JSON.parse(el.dataset.open)); };
+  });
+}
+
+function openSheet(a) {
+  const st = parseD(a.start_date), en = parseD(a.end_date);
+  const name = [a.vorname,a.nachname].filter(Boolean).join(' ') || '–';
+  const addr = [a.strasse,a.hausnummer].filter(Boolean).join(' ');
+  const fullAddr = [addr,[a.plz,a.stadt].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const mapsUrl = fullAddr ? `https://maps.apple.com/?q=${encodeURIComponent(fullAddr)}` : '';
+  const wazUrl = fullAddr ? `https://waze.com/ul?q=${encodeURIComponent(fullAddr)}` : '';
+  
+  document.getElementById('sheetTitle').textContent = name;
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="sheet-row">
+      <div class="sheet-icon">🕐</div>
+      <div><div class="sheet-label">Termin</div><div class="sheet-val">${esc(fmtT(st))} – ${esc(fmtT(en))} Uhr</div></div>
+    </div>
+    ${fullAddr?`<div class="sheet-row">
+      <div class="sheet-icon">📍</div>
+      <div style="flex:1"><div class="sheet-label">Adresse</div><div class="sheet-val">${esc(fullAddr)}</div></div>
+    </div>`:''}
+    ${a.telefon?`<div class="sheet-row">
+      <div class="sheet-icon">📞</div>
+      <div><div class="sheet-label">Telefon</div><a class="sheet-link" href="tel:${esc(a.telefon)}">${esc(a.telefon)}</a></div>
+    </div>`:''}
+    ${a.text?`<div class="sheet-row">
+      <div class="sheet-icon">📝</div>
+      <div><div class="sheet-label">Notiz</div><div class="sheet-val" style="font-size:13px;color:var(--text2);line-height:1.5">${esc(a.text)}</div></div>
+    </div>`:''}
+    ${fullAddr?`<div style="display:flex;gap:8px;margin-top:12px;">
+      <a class="apt-btn" href="${mapsUrl}" target="_blank" style="flex:1;padding:12px;text-align:center;border-radius:10px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);font-family:inherit;font-size:13px;font-weight:600;text-decoration:none;">🍎 Apple Maps</a>
+      <a class="apt-btn" href="${wazUrl}" target="_blank" style="flex:1;padding:12px;text-align:center;border-radius:10px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);font-family:inherit;font-size:13px;font-weight:600;text-decoration:none;">🗺 Waze</a>
+      <a class="apt-btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddr)}" target="_blank" style="flex:1;padding:12px;text-align:center;border-radius:10px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);font-family:inherit;font-size:13px;font-weight:600;text-decoration:none;">🌐 Google</a>
+    </div>`:''}`;
+  document.getElementById('sheet').style.display='flex';
+}
+function closeSheet() { document.getElementById('sheet').style.display='none'; }
+
+function toast(msg) {
+  const w=document.getElementById('toastWrap');
+  const t=document.createElement('div'); t.className='toast ok'; t.textContent=msg;
+  w.appendChild(t); setTimeout(()=>t.remove(),3000);
+}
+
+async function init() {
+  if(!VT_NAME) {
+    document.getElementById('loader').style.display='none';
+    document.getElementById('vtName').textContent='Kein Berater';
+    document.getElementById('vtSub').textContent='?vt=Name in der URL angeben';
+    return;
+  }
+  document.getElementById('vtName').textContent = VT_NAME.split(' ')[0];
+  document.getElementById('vtSub').textContent = VT_NAME.split(' ').slice(1).join(' ');
+  await sync();
+  document.getElementById('loader').style.display='none';
+  setInterval(sync, SYNC_MS);
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
