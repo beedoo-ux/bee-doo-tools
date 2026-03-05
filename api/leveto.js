@@ -32,16 +32,6 @@ async function levetoGet(path, params = {}) {
   return res.json();
 }
 
-async function levetoPost(path, body) {
-  const token = await getLeveloToken();
-  const res = await fetch(`${LEVETO_BASE}${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return res.json();
-}
-
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -51,28 +41,19 @@ export default async function handler(req, res) {
   const { action } = req.method === "GET" ? req.query : (req.body || {});
 
   try {
-    // GET appointments for a date range
     if (action === "appointments") {
-      // Cache at Vercel edge for 2 min, allow stale for 5 min while revalidating
       res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=300");
 
       const data = await levetoGet("/appointments");
       const all = data.data || [];
 
-      // Filter: only future + recent (last 7 days)
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 7);
-      const cutoffStr = cutoff.toISOString().slice(0, 10);
-
-      const filtered = all.filter((a) => {
-        const d = (a.start_date || "").slice(0, 10);
-        return d >= cutoffStr;
-      });
+      // Only today + future — no old appointments needed
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const filtered = all.filter((a) => (a.start_date || "").slice(0, 10) >= todayStr);
 
       return res.json({ ok: true, data: filtered, total: filtered.length });
     }
 
-    // GET active VT users
     if (action === "users") {
       res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=1200");
       const data = await levetoGet("/users", { limit: 500 });
@@ -90,7 +71,6 @@ export default async function handler(req, res) {
       return res.json({ ok: true, data: users });
     }
 
-    // GET lead search
     if (action === "leads") {
       const { search, plz } = req.query;
       const params = { limit: 20 };
@@ -100,7 +80,6 @@ export default async function handler(req, res) {
       return res.json({ ok: true, data: data.leads || [], total: data.totalrecords || 0 });
     }
 
-    // POST book appointment → Leveto POST /app (x-www-form-urlencoded)
     if (action === "book" && req.method === "POST") {
       const { appointmentData } = req.body;
       const token = await getLeveloToken();
