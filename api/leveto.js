@@ -53,6 +53,9 @@ export default async function handler(req, res) {
   try {
     // GET appointments for a date range
     if (action === "appointments") {
+      // Cache at Vercel edge for 2 min, allow stale for 5 min while revalidating
+      res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=300");
+
       const data = await levetoGet("/appointments");
       const all = data.data || [];
 
@@ -71,6 +74,7 @@ export default async function handler(req, res) {
 
     // GET active VT users
     if (action === "users") {
+      res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=1200");
       const data = await levetoGet("/users", { limit: 500 });
       const users = (data.data || []).filter(
         (u) =>
