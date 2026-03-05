@@ -53,6 +53,14 @@ async function sendWhatsApp(to, message) {
 }
 
 export default async function handler(req, res) {
+  // Auth: cron or manual only (sends WhatsApp!)
+  const _auth = req.headers.authorization;
+  const _isCron = req.headers['x-vercel-cron'] === '1';
+  const _isManual = _auth === 'Bearer manual';
+  if (!_isCron && !_isManual) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   // Allow manual trigger via GET with ?secret=bee-doo2026
   if (req.method === 'GET') {
     const { secret } = req.query;
