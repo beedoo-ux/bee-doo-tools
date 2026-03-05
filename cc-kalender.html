@@ -486,7 +486,7 @@ const SH=7,EH=21,SPH=2,SLOTS=(EH-SH)*SPH;
 const SYNC_MS=5*60*1000;
 
 const DEFAULT_VTS=["Tayfun Süleymaniye","Andreas Klee","Stefan Hensel","Nino Rimmler","Gino Ulitzka","Miguel Schader","Fabian Hindenberg","Patrick Kalinowski","Maxim Horten","Marco Bringmann","Philipp-Torben Hannigk","Pascal Schallenberg"];
-const ALL_VTS=["Tayfun Süleymaniye","Andreas Klee","Stefan Hensel","Nino Rimmler","Gino Ulitzka","Miguel Schader","Fabian Hindenberg","Patrick Kalinowski","Maxim Horten","Marco Bringmann","Philipp-Torben Hannigk","Pascal Schallenberg","Martin Bott","Dimitri van Eeuwen","Klaus Vollmer","Kadir Danyildiz","Martin Bott (Fachberater)","Farshad Nourouzi","Pascal Meier","Bernd Krahwinkel","Jannis Pfeiffer","Lukas Kirschner","Hartmut Seitz","Janik Voß","Maximilian Koch","Richard Winzent","Kevin Kraus","Frank Reddig","Daniel Saweljew","Fabian Goede"];
+let ALL_VTS=["Tayfun Süleymaniye","Andreas Klee","Stefan Hensel","Nino Rimmler","Gino Ulitzka","Miguel Schader","Fabian Hindenberg","Patrick Kalinowski","Maxim Horten","Marco Bringmann","Philipp-Torben Hannigk","Pascal Schallenberg","Martin Bott","Dimitri van Eeuwen","Klaus Vollmer","Kadir Danyildiz","Martin Bott (Fachberater)","Farshad Nourouzi","Pascal Meier","Bernd Krahwinkel","Jannis Pfeiffer","Lukas Kirschner","Hartmut Seitz","Janik Voß","Maximilian Koch","Richard Winzent","Kevin Kraus","Frank Reddig","Daniel Saweljew","Fabian Goede"];
 const COLORS=["#58a6ff","#3fb950","#f97316","#a78bfa","#ec4899","#14b8a6","#FDE154","#06b6d4","#f85149","#84cc16","#8b5cf6","#f59e0b","#10b981","#6366f1","#e11d48","#0ea5e9","#d97706","#059669","#7c3aed","#be185d","#22d3ee","#facc15","#4ade80","#fb923c","#c084fc","#34d399","#60a5fa","#fb7185","#a3e635","#fbbf24"];
 const col=n=>COLORS[ALL_VTS.indexOf(n)%COLORS.length]||"#58a6ff";
 
@@ -585,6 +585,12 @@ async function sync(silent=false){
         }
         return true;
       });
+      // Dynamic VT list: rebuild from real data + preserve order of known VTs
+      const vtSet=new Set(S.apts.map(a=>a.user_received).filter(v=>v&&v.trim()));
+      const knownOrder=ALL_VTS.filter(v=>vtSet.has(v));
+      const newVTs=[...vtSet].filter(v=>!ALL_VTS.includes(v)).sort();
+      ALL_VTS.splice(0,ALL_VTS.length,...knownOrder,...newVTs);
+      newVTs.forEach(v=>S.active.add(v));
       computeStats();
       fetchGcalBlocks();
       const t=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
