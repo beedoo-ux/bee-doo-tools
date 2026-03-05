@@ -96,11 +96,28 @@ export default async function handler(req, res) {
       return res.json({ ok: true, data: data.leads || [], total: data.totalrecords || 0 });
     }
 
-    // POST book appointment
+    // POST book appointment → Leveto POST /app (x-www-form-urlencoded)
     if (action === "book" && req.method === "POST") {
       const { appointmentData } = req.body;
-      // POST to Leveto /appointment
-      const result = await levetoPost("/appointment", appointmentData);
+      const token = await getLeveloToken();
+      const formBody = new URLSearchParams({
+        title: appointmentData.title || `Termin ${appointmentData.vorname||''} ${appointmentData.nachname||''}`.trim(),
+        description: appointmentData.description || appointmentData.text || '',
+        assigned_user: String(appointmentData.assigned_user || ''),
+        start_date: appointmentData.start_date || '',
+        end_date: appointmentData.end_date || '',
+        leadID: String(appointmentData.leadID || ''),
+        type: appointmentData.type || appointmentData.appointment_type || 'Termin vor ORT',
+      }).toString();
+      const r2 = await fetch(`${LEVETO_BASE}/app`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: formBody,
+      });
+      const result = await r2.json();
       return res.json({ ok: true, data: result });
     }
 
