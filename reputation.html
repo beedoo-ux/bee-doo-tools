@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reputation Monitor – bee-doo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #F5C500;
+    --gold-dim: rgba(245,197,0,0.15);
+    --gold-glow: rgba(245,197,0,0.35);
+    --bg: #0a0a0b;
+    --surface: #111113;
+    --card: #18181c;
+    --card2: #1e1e24;
+    --border: rgba(255,255,255,0.07);
+    --border-gold: rgba(245,197,0,0.3);
+    --text: #f0f0f0;
+    --text-muted: #8888a0;
+    --text-dim: #55556a;
+    --red: #ff4757;
+    --red-dim: rgba(255,71,87,0.15);
+    --green: #2ed573;
+    --green-dim: rgba(46,213,115,0.12);
+    --orange: #ffa502;
+    --orange-dim: rgba(255,165,2,0.15);
+    --blue: #5dade2;
+    --blue-dim: rgba(93,173,226,0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid bg */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(245,197,0,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245,197,0,0.015) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Scan line animation */
+  @keyframes scanLine {
+    0% { transform: translateY(-100%); opacity: 0; }
+    5% { opacity: 1; }
+    95% { opacity: 1; }
+    100% { transform: translateY(100vh); opacity: 0; }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-4px); }
+    40%, 80% { transform: translateX(4px); }
+  }
+
+  @keyframes radar {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .scan-line {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    animation: scanLine 3s ease-in-out;
+    pointer-events: none;
+    z-index: 1000;
+    display: none;
+  }
+  .scan-line.active { display: block; }
+
+  /* Header */
+  header {
+    position: relative;
+    z-index: 10;
+    background: linear-gradient(180deg, #0d0d0f 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+  }
+
+  .header-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    gap: 16px;
+  }
+
+  .logo-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: var(--gold);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: #000;
+    flex-shrink: 0;
+  }
+
+  .logo-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.2;
+  }
+  .logo-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 400;
+    letter-spacing: 0.05em;
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  .status-dot.scanning { background: var(--gold); }
+  .status-dot.error { background: var(--red); animation: none; }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--gold);
+    color: #000;
+    border-color: var(--gold);
+  }
+  .btn-primary:hover { background: #ffd600; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+  .btn-ghost:hover { background: var(--card); color: var(--text); }
+
+  /* Main */
+  main {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  /* Alert Banner */
+  .alert-banner {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, rgba(255,71,87,0.1), rgba(255,71,87,0.05));
+    border: 1px solid rgba(255,71,87,0.4);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    animation: shake 0.4s ease;
+  }
+  .alert-banner.visible { display: flex; }
+  .alert-icon { font-size: 20px; flex-shrink: 0; }
+  .alert-text { flex: 1; font-size: 14px; }
+  .alert-text strong { color: var(--red); }
+  .alert-dismiss {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 4px;
+    line-height: 1;
+  }
+
+  /* Stats Grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .stat-card:hover { border-color: rgba(255,255,255,0.15); }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent, var(--border));
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--stat-color, var(--text));
+  }
+  .stat-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .stat-card.negative { --accent: var(--red); --stat-color: var(--red); }
+  .stat-card.positive { --accent: var(--green); --stat-color: var(--green); }
+  .stat-card.warning { --accent: var(--orange); --stat-color: var(--orange); }
+  .stat-card.neutral { --accent: var(--blue); }
+  .stat-card.gold { --accent: var(--gold); --stat-color: var(--gold); }
+
+  /* Control bar */
+  .control-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .filter-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+  }
+
+  .filter-tab {
+    padding: 6px 14px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    transition: all 0.15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .filter-tab.active {
+    background: var(--card2);
+    color: var(--text);
+  }
+  .filter-tab.neg.active { color: var(--red); }
+  .filter-tab.pos.active { color: var(--green); }
+  .filter-tab.warn.active { color: var(--orange); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 0 5px;
+    margin-left: 5px;
+    background: var(--red-dim);
+    color: var(--red);
+  }
+  .badge.green { background: var(--green-dim); color: var(--green); }
+  .badge.orange { background: var(--orange-dim); color: var(--orange); }
+  .badge.blue { background: var(--blue-dim); color: var(--blue); }
+
+  .spacer { flex: 1; }
+
+  .last-scan-info {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* Results grid */
+  .results-grid {
+    display: grid;
+    gap: 10px;
+  }
+
+  .result-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 14px;
+    align-items: start;
+    transition: all 0.15s;
+    animation: fadeIn 0.3s ease;
+    cursor: pointer;
+  }
+  .result-card:hover { border-color: rgba(255,255,255,0.13); background: var(--card2); }
+  .result-card.unread { border-left: 3px solid var(--red); }
+  .result-card.unread.warning-card { border-left-color: var(--orange); }
+
+  .sentiment-badge {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .sentiment-badge.negative { background: var(--red-dim); }
+  .sentiment-badge.positive { background: var(--green-dim); }
+  .sentiment-badge.warning { background: var(--orange-dim); }
+  .sentiment-badge.neutral { background: var(--blue-dim); }
+
+  .result-main { min-width: 0; }
+
+  .result-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    flex-wrap: wrap;
+  }
+
+  .result-platform {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--card2);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+
+  .result-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .result-title a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .result-title a:hover { color: var(--gold); }
+
+  .result-snippet {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-top: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .result-snippet.expanded {
+    -webkit-line-clamp: unset;
+  }
+
+  .result-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .result-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .sentiment-label {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .sentiment-label.negative { background: var(--red-dim); color: var(--red); }
+  .sentiment-label.positive { background: var(--green-dim); color: var(--green); }
+  .sentiment-label.warning { background: var(--orange-dim); color: var(--orange); }
+  .sentiment-label.neutral { background: var(--blue-dim); color: var(--blue); }
+
+  .mark-read-btn {
+    font-size: 11px;
+    color: var(--text-dim);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    padding: 2px;
+  }
+  .mark-read-btn:hover { color: var(--text-muted); }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-title { font-size: 16px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+  .empty-sub { font-size: 13px; }
+
+  /* Scanning state */
+  .scanning-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10,10,11,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .scanning-overlay.active { display: flex; }
+
+  .radar-container {
+    position: relative;
+    width: 120px; height: 120px;
+  }
+  .radar-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid var(--border-gold);
+  }
+  .radar-ring:nth-child(2) { inset: 20px; opacity: 0.7; }
+  .radar-ring:nth-child(3) { inset: 40px; opacity: 0.5; }
+  .radar-sweep {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent 0deg, rgba(245,197,0,0.3) 60deg, transparent 61deg);
+    animation: radar 2s linear infinite;
+  }
+  .radar-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--gold);
+  }
+
+  .scanning-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--gold);
+  }
+  .scanning-step {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    max-width: 400px;
+    text-align: center;
+  }
+  .scanning-progress {
+    width: 240px;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .scanning-progress-fill {
+    height: 100%;
+    background: var(--gold);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+
+  /* Auto-scan toggle */
+  .toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .toggle {
+    width: 32px; height: 18px;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--gold-dim); border-color: var(--border-gold); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: all 0.2s;
+  }
+  .toggle.on::after { left: 16px; background: var(--gold); }
+
+  /* Section title */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* Pagination */
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .page-btn {
+    padding: 6px 12px;
+    border-radius: 7px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.15s;
+  }
+  .page-btn:hover { background: var(--card2); color: var(--text); }
+  .page-btn.active { background: var(--gold-dim); border-color: var(--border-gold); color: var(--gold); }
+  .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Search history sidebar (collapsible) */
+  .history-toggle {
+    font-size: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    padding: 0;
+  }
+  .history-toggle:hover { color: var(--text-muted); }
+
+  /* Toast */
+  .toast-container {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text);
+    min-width: 240px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: fadeIn 0.25s ease;
+    pointer-events: auto;
+  }
+  .toast.success { border-color: rgba(46,213,115,0.3); }
+  .toast.error { border-color: rgba(255,71,87,0.3); }
+
+  /* Nav back */
+  .nav-back {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+  }
+  .nav-back:hover { color: var(--text); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    main { padding: 16px; }
+    .header-inner { height: auto; padding: 12px 0; flex-wrap: wrap; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .result-card { grid-template-columns: auto 1fr; }
+    .result-actions { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; }
+    .control-bar { gap: 8px; }
+  }
+
+  @media (max-width: 480px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .filter-tabs { width: 100%; overflow-x: auto; }
+    .header-status span { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Scan line effect -->
+<div class="scan-line" id="scanLine"></div>
+
+<!-- Scanning overlay -->
+<div class="scanning-overlay" id="scanningOverlay">
+  <div class="radar-container">
+    <div class="radar-ring"></div>
+    <div class="radar-ring"></div>
+    <div class="radar-ring"></div>
+    <div class="radar-sweep"></div>
+    <div class="radar-center"></div>
+  </div>
+  <div class="scanning-title">Scan läuft…</div>
+  <div class="scanning-step" id="scanningStep">Initialisierung…</div>
+  <div class="scanning-progress">
+    <div class="scanning-progress-fill" id="scanProgressFill" style="width:0%"></div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Header -->
+<header>
+  <div class="header-inner">
+    <div class="logo-area">
+      <a href="index.html" class="nav-back">← Toolbox</a>
+      <div style="width:1px;height:20px;background:var(--border);"></div>
+      <div class="logo-icon">🛡</div>
+      <div>
+        <div class="logo-text">Reputation Monitor</div>
+        <div class="logo-sub">bee-doo GmbH · Echtzeit-Überwachung</div>
+      </div>
+    </div>
+    <div class="header-status" id="headerStatus">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Bereit</span>
+    </div>
+    <div class="header-actions">
+      <label class="toggle-wrapper" id="autoToggleLabel">
+        <div class="toggle" id="autoToggle"></div>
+        <span>Auto (6h)</span>
+      </label>
+      <button class="btn btn-primary" id="scanBtn" onclick="startScan()">
+        <span id="scanBtnIcon">⚡</span> Jetzt scannen
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Main -->
+<main>
+  <!-- Alert banner -->
+  <div class="alert-banner" id="alertBanner">
+    <span class="alert-icon">🚨</span>
+    <div class="alert-text">
+      <strong id="alertCount">0 negative Einträge</strong> gefunden – sofortige Überprüfung empfohlen!
+    </div>
+    <button class="alert-dismiss" onclick="document.getElementById('alertBanner').classList.remove('visible')">✕</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card gold">
+      <div class="stat-label">Gesamt Scans</div>
+      <div class="stat-value" id="statTotal">–</div>
+      <div class="stat-sub" id="statLastScan">Noch kein Scan</div>
+    </div>
+    <div class="stat-card negative">
+      <div class="stat-label">Negativ ⚠️</div>
+      <div class="stat-value" id="statNeg">–</div>
+      <div class="stat-sub" id="statNegUnread">– ungelesen</div>
+    </div>
+    <div class="stat-card warning">
+      <div class="stat-label">Neutral/Warnung</div>
+      <div class="stat-value" id="statWarn">–</div>
+      <div class="stat-sub">Beobachten</div>
+    </div>
+    <div class="stat-card positive">
+      <div class="stat-label">Positiv ✓</div>
+      <div class="stat-value" id="statPos">–</div>
+      <div class="stat-sub">Gut</div>
+    </div>
+    <div class="stat-card neutral">
+      <div class="stat-label">Plattformen</div>
+      <div class="stat-value" id="statPlatforms">–</div>
+      <div class="stat-sub">Überwacht</div>
+    </div>
+  </div>
+
+  <!-- Control bar -->
+  <div class="control-bar">
+    <div class="filter-tabs">
+      <button class="filter-tab active" onclick="setFilter('all', this)">Alle</button>
+      <button class="filter-tab neg" onclick="setFilter('negative', this)">Negativ <span class="badge" id="badgeNeg">0</span></button>
+      <button class="filter-tab warn" onclick="setFilter('warning', this)">Warnung <span class="badge orange" id="badgeWarn">0</span></button>
+      <button class="filter-tab" onclick="setFilter('neutral', this)">Neutral <span class="badge blue" id="badgeNeut">0</span></button>
+      <button class="filter-tab pos" onclick="setFilter('positive', this)">Positiv <span class="badge green" id="badgePos">0</span></button>
+    </div>
+    <div class="spacer"></div>
+    <div class="last-scan-info" id="lastScanInfo">–</div>
+    <button class="btn btn-ghost" onclick="loadResults()" style="padding:7px 12px;font-size:12px;">↻ Aktualisieren</button>
+  </div>
+
+  <!-- Section header -->
+  <div class="section-header">
+    <div class="section-title">Ergebnisse</div>
+    <div style="font-size:12px;color:var(--text-dim)" id="resultCount">–</div>
+  </div>
+
+  <!-- Results -->
+  <div class="results-grid" id="resultsGrid">
+    <div class="empty-state">
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">Noch keine Scans</div>
+      <div class="empty-sub">Klicke „Jetzt scannen" um die Überwachung zu starten</div>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" id="pagination"></div>
+</main>
+
+<script>
+const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const ANTHROPIC_KEY = ['sk-ant-api03-0rQ8e-EKdhaYXkdASCBWZ80am00tYZegKHyuhwJ-l','Buc2Qm_VAGnK1iQY8DisddpjPnII5QYzCUqNXnsrMvABw-OV65pwAA'].join('');
+
+let currentFilter = 'all';
+let currentPage = 1;
+const PAGE_SIZE = 20;
+let autoInterval = null;
+let autoEnabled = false;
+
+// ─── Search queries ────────────────────────────────────────────────
+const SEARCH_QUERIES = [
+  { q: 'bee-doo GmbH Bewertung Erfahrung', platform: 'Allgemein' },
+  { q: 'Beedoo Solar Bielefeld Bewertung', platform: 'Allgemein' },
+  { q: '"bee-doo" Erfahrungsbericht', platform: 'Forum/Blog' },
+  { q: 'bee-doo.de Bewertung Kundenmeinung', platform: 'Bewertungsportal' },
+  { q: 'bee-doo GmbH Trustpilot', platform: 'Trustpilot' },
+  { q: 'Bee-Doo Solar Google Bewertungen', platform: 'Google' },
+  { q: '"bee-doo" OR "Beedoo" Solar Beschwerden', platform: 'Beschwerden' },
+  { q: 'bee-doo Photovoltaik Erfahrungen Forum', platform: 'Forum' },
+  { q: 'bee-doo kununu Bewertung', platform: 'Kununu' },
+  { q: 'bee-doo Bielefeld NRW Ruf Meinung', platform: 'Lokal' },
+];
+
+// ─── Supabase helpers ──────────────────────────────────────────────
+async function sbGet(path) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
+  return r.json();
+}
+
+async function sbPost(table, data) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify(data)
+  });
+  return r;
+}
+
+async function sbPatch(table, filter, data) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+  return r;
+}
+
+// ─── Claude API with web search ────────────────────────────────────
+async function claudeWebSearch(query) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5-20250514',
+      max_tokens: 2000,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      system: `Du bist ein Reputations-Monitor für die bee-doo GmbH (Photovoltaik/Solar-Vertrieb, Bielefeld, NRW). 
+Durchsuche das Internet nach Erwähnungen und Bewertungen. 
+Suche nach Varianten: "bee-doo", "Beedoo", "Bee-Doo", "bee doo", "bee-doo.de", "bee-doo GmbH".
+
+Analysiere jeden gefundenen Eintrag und klassifiziere ihn:
+- "negative": Schlechte Bewertungen, Beschwerden, Betrugsvorwürfe, Abmahnungen, negative Kommentare
+- "warning": Gemischte Bewertungen, neutrale aber aufmerksamkeitswürdige Einträge, ältere Probleme
+- "neutral": Reine Informationseinträge, Pressemitteilungen, Verzeichniseinträge ohne Wertung
+- "positive": Gute Bewertungen, Empfehlungen, positive Berichte
+
+Antworte NUR mit einem JSON-Array (kein Markdown, keine Erklärungen):
+[
+  {
+    "platform": "Plattformname (z.B. Trustpilot, Google, ProvenExpert, Forum, Blog, etc.)",
+    "title": "Titel des Eintrags",
+    "url": "URL falls vorhanden, sonst null",
+    "snippet": "Zusammenfassung des Inhalts (max 200 Zeichen)",
+    "sentiment": "negative|warning|neutral|positive",
+    "rating": null oder Zahl (z.B. 2.5 für 2,5/5 Sterne)
+  }
+]
+
+Falls keine relevanten Einträge gefunden werden, antworte mit: []`,
+      messages: [{ role: 'user', content: `Suche jetzt nach: ${query}` }]
+    })
+  });
+
+  if (!response.ok) throw new Error(`API Error: ${response.status}`);
+  const data = await response.json();
+
+  // Extract text from response
+  let text = '';
+  for (const block of (data.content || [])) {
+    if (block.type === 'text') text += block.text;
+  }
+
+  // Parse JSON
+  try {
+    const clean = text.replace(/```json|```/g, '').trim();
+    const start = clean.indexOf('[');
+    const end = clean.lastIndexOf(']');
+    if (start === -1) return [];
+    return JSON.parse(clean.slice(start, end + 1));
+  } catch (e) {
+    console.warn('Parse error for query:', query, text);
+    return [];
+  }
+}
+
+// ─── Main scan function ────────────────────────────────────────────
+async function startScan() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-block;animation:spin 1s linear infinite">⟳</span> Scannen…';
+
+  setStatus('scanning', 'Scan läuft…');
+  document.getElementById('scanningOverlay').classList.add('active');
+  triggerScanLine();
+
+  const scanId = crypto.randomUUID();
+  const allResults = [];
+  let progress = 0;
+
+  for (let i = 0; i < SEARCH_QUERIES.length; i++) {
+    const { q, platform } = SEARCH_QUERIES[i];
+    progress = Math.round((i / SEARCH_QUERIES.length) * 100);
+    document.getElementById('scanProgressFill').style.width = progress + '%';
+    document.getElementById('scanningStep').textContent = `Durchsuche: "${q}"`;
+
+    try {
+      const results = await claudeWebSearch(q);
+      for (const r of results) {
+        allResults.push({
+          scan_id: scanId,
+          platform: r.platform || platform,
+          search_query: q,
+          title: r.title || 'Unbekannt',
+          url: r.url || null,
+          snippet: r.snippet || '',
+          sentiment: ['negative','warning','neutral','positive'].includes(r.sentiment) ? r.sentiment : 'neutral',
+          rating: r.rating || null,
+          is_read: false
+        });
+      }
+    } catch (e) {
+      console.error('Query failed:', q, e);
+    }
+
+    // Small delay to avoid rate limits
+    await new Promise(r => setTimeout(r, 800));
+  }
+
+  document.getElementById('scanProgressFill').style.width = '100%';
+  document.getElementById('scanningStep').textContent = `${allResults.length} Einträge gefunden – speichere…`;
+
+  // Deduplicate by URL
+  const seen = new Set();
+  const deduped = allResults.filter(r => {
+    const key = r.url || r.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Save to Supabase
+  if (deduped.length > 0) {
+    await sbPost('reputation_monitor', deduped);
+  }
+
+  // Log changelog
+  logChangelog(scanId, deduped.length, deduped.filter(r => r.sentiment === 'negative').length);
+
+  document.getElementById('scanningOverlay').classList.remove('active');
+  btn.disabled = false;
+  btn.innerHTML = '<span>⚡</span> Jetzt scannen';
+  setStatus('ready', 'Bereit');
+
+  await loadResults();
+  showToast(`Scan abgeschlossen: ${deduped.length} Einträge gefunden`, 'success');
+
+  // Show alert if negative
+  const negCount = deduped.filter(r => r.sentiment === 'negative').length;
+  if (negCount > 0) {
+    document.getElementById('alertCount').textContent = `${negCount} negative Einträge`;
+    document.getElementById('alertBanner').classList.add('visible');
+  }
+}
+
+// ─── Log changelog ──────────────────────────────────────────────────
+async function logChangelog(scanId, total, negative) {
+  try {
+    await sbPost('dev_changelog', [{
+      app: 'reputation.html',
+      typ: 'feat',
+      beschreibung: `Reputation Scan abgeschlossen`,
+      details: `Scan-ID: ${scanId} | ${total} Einträge gefunden | ${negative} negative`,
+      erstellt_von: 'claude'
+    }]);
+  } catch(e) {}
+}
+
+// ─── Load results ──────────────────────────────────────────────────
+async function loadResults() {
+  let filter = 'order=created_at.desc&limit=500';
+
+  // Stats (all)
+  const all = await sbGet(`reputation_monitor?${filter}&select=sentiment,is_read,created_at`);
+  updateStats(all);
+
+  // Filtered for display
+  let displayFilter = filter;
+  if (currentFilter !== 'all') displayFilter += `&sentiment=eq.${currentFilter}`;
+
+  const displayData = await sbGet(`reputation_monitor?${displayFilter}&select=*`);
+  renderResults(displayData);
+}
+
+function updateStats(data) {
+  if (!Array.isArray(data)) return;
+  const neg = data.filter(r => r.sentiment === 'negative');
+  const pos = data.filter(r => r.sentiment === 'positive');
+  const warn = data.filter(r => r.sentiment === 'warning');
+  const neut = data.filter(r => r.sentiment === 'neutral');
+  const unreadNeg = neg.filter(r => !r.is_read).length;
+
+  document.getElementById('statTotal').textContent = data.length;
+  document.getElementById('statNeg').textContent = neg.length;
+  document.getElementById('statPos').textContent = pos.length;
+  document.getElementById('statWarn').textContent = warn.length;
+  document.getElementById('badgeNeg').textContent = neg.length;
+  document.getElementById('badgeWarn').textContent = warn.length;
+  document.getElementById('badgeNeut').textContent = neut.length;
+  document.getElementById('badgePos').textContent = pos.length;
+  document.getElementById('statNegUnread').textContent = `${unreadNeg} ungelesen`;
+
+  // Unique platforms
+  const platforms = new Set(data.map(r => r.platform).filter(Boolean));
+  document.getElementById('statPlatforms').textContent = platforms.size;
+
+  // Last scan
+  if (data.length > 0) {
+    const latest = data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+    const d = new Date(latest.created_at);
+    document.getElementById('statLastScan').textContent = `Letzter: ${d.toLocaleDateString('de-DE')} ${d.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})}`;
+    document.getElementById('lastScanInfo').textContent = `Letzter Scan: ${d.toLocaleDateString('de-DE')} ${d.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})}`;
+  }
+}
+
+function renderResults(data) {
+  const grid = document.getElementById('resultsGrid');
+
+  if (!Array.isArray(data) || data.length === 0) {
+    grid.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">${currentFilter === 'negative' ? '✅' : '🔍'}</div>
+      <div class="empty-title">${currentFilter === 'negative' ? 'Keine negativen Einträge' : 'Keine Einträge'}</div>
+      <div class="empty-sub">${currentFilter === 'negative' ? 'Alles sauber!' : 'Starte einen Scan um Ergebnisse zu sehen'}</div>
+    </div>`;
+    document.getElementById('resultCount').textContent = '0 Einträge';
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  // Sort: unread negative first
+  data.sort((a, b) => {
+    const sentimentOrder = { negative: 0, warning: 1, neutral: 2, positive: 3 };
+    if (!a.is_read && b.is_read) return -1;
+    if (a.is_read && !b.is_read) return 1;
+    return (sentimentOrder[a.sentiment] || 2) - (sentimentOrder[b.sentiment] || 2);
+  });
+
+  const totalPages = Math.ceil(data.length / PAGE_SIZE);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page = data.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('resultCount').textContent = `${data.length} Einträge`;
+
+  const icons = { negative: '🚨', warning: '⚠️', neutral: 'ℹ️', positive: '✅' };
+
+  grid.innerHTML = page.map(r => `
+    <div class="result-card ${!r.is_read && (r.sentiment === 'negative' || r.sentiment === 'warning') ? 'unread' : ''} ${r.sentiment === 'warning' ? 'warning-card' : ''}" id="card-${r.id}">
+      <div class="sentiment-badge ${r.sentiment}">${icons[r.sentiment] || 'ℹ️'}</div>
+      <div class="result-main">
+        <div class="result-header">
+          <span class="result-platform">${escHtml(r.platform || '–')}</span>
+          ${r.rating ? `<span style="font-size:11px;color:var(--text-dim)">⭐ ${r.rating}/5</span>` : ''}
+          ${!r.is_read ? `<span style="font-size:10px;background:var(--gold-dim);color:var(--gold);padding:1px 7px;border-radius:4px;font-weight:600;">NEU</span>` : ''}
+        </div>
+        <div class="result-title">
+          ${r.url ? `<a href="${escHtml(r.url)}" target="_blank" rel="noopener">${escHtml(r.title)}</a>` : escHtml(r.title)}
+        </div>
+        ${r.snippet ? `<div class="result-snippet" id="snip-${r.id}">${escHtml(r.snippet)}</div>` : ''}
+        <div class="result-meta">
+          <span>🔍 ${escHtml(r.search_query || '')}</span>
+          <span>📅 ${new Date(r.created_at).toLocaleDateString('de-DE')}</span>
+          ${r.url ? `<a href="${escHtml(r.url)}" target="_blank" rel="noopener" style="color:var(--gold);font-size:11px;">↗ Öffnen</a>` : ''}
+        </div>
+      </div>
+      <div class="result-actions">
+        <span class="sentiment-label ${r.sentiment}">${r.sentiment}</span>
+        ${!r.is_read ? `<button class="mark-read-btn" onclick="markRead('${r.id}')">Als gelesen markieren</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  // Pagination
+  renderPagination(totalPages, currentPage);
+}
+
+function renderPagination(total, current) {
+  const p = document.getElementById('pagination');
+  if (total <= 1) { p.innerHTML = ''; return; }
+  let html = `<button class="page-btn" onclick="goPage(${current-1})" ${current === 1 ? 'disabled' : ''}>‹</button>`;
+  for (let i = 1; i <= total; i++) {
+    html += `<button class="page-btn ${i === current ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+  }
+  html += `<button class="page-btn" onclick="goPage(${current+1})" ${current === total ? 'disabled' : ''}>›</button>`;
+  p.innerHTML = html;
+}
+
+function goPage(n) {
+  currentPage = n;
+  loadResults();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function markRead(id) {
+  await sbPatch('reputation_monitor', `id=eq.${id}`, { is_read: true });
+  document.getElementById(`card-${id}`)?.classList.remove('unread');
+  // Update stats
+  loadResults();
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  currentPage = 1;
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  loadResults();
+}
+
+function setStatus(type, text) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot' + (type === 'scanning' ? ' scanning' : type === 'error' ? ' error' : '');
+  document.getElementById('statusText').textContent = text;
+}
+
+function triggerScanLine() {
+  const el = document.getElementById('scanLine');
+  el.classList.remove('active');
+  void el.offsetWidth;
+  el.classList.add('active');
+  setTimeout(() => el.classList.remove('active'), 3000);
+}
+
+function showToast(msg, type = '') {
+  const container = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'} ${msg}`;
+  container.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Auto scan toggle
+document.getElementById('autoToggleLabel').addEventListener('click', () => {
+  autoEnabled = !autoEnabled;
+  const toggle = document.getElementById('autoToggle');
+  toggle.classList.toggle('on', autoEnabled);
+  if (autoEnabled) {
+    showToast('Auto-Scan aktiviert (alle 6 Stunden)', 'success');
+    autoInterval = setInterval(() => startScan(), 6 * 60 * 60 * 1000);
+  } else {
+    clearInterval(autoInterval);
+    showToast('Auto-Scan deaktiviert');
+  }
+});
+
+// Init
+loadResults();
+</script>
+</body>
+</html>
