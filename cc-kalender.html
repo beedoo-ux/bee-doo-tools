@@ -71,6 +71,20 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 .spn{font-weight:700;}
 
 
+/* MONTH VIEW */
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);flex:1;}
+.month-hdr{background:var(--bg2);padding:6px;text-align:center;font-size:11px;font-weight:700;color:var(--text2);}
+.month-cell{background:var(--bg);padding:4px;min-height:100px;overflow-y:auto;cursor:pointer;transition:background .1s;}
+.month-cell:hover{background:var(--bg2);}
+.month-cell.other{opacity:.35;}
+.month-cell.today{background:rgba(253,225,84,.04);box-shadow:inset 0 0 0 1px var(--accent);}
+.mc-day{font-size:12px;font-weight:800;margin-bottom:3px;color:var(--text2);}
+.month-cell.today .mc-day{color:var(--accent);}
+.mc-apt{font-size:9px;padding:2px 4px;border-radius:4px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border-left:2px solid;}
+.mc-apt:hover{filter:brightness(1.3);}
+.mc-more{font-size:9px;color:var(--text3);font-weight:700;padding:1px 4px;cursor:pointer;}
+.mc-more:hover{color:var(--text);}
+
 /* CALENDAR */
 .calwrap{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;}
 .calscroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;}
@@ -258,6 +272,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
   <div class="vtabs">
     <div class="vtab on" id="vtDay" onclick="setView('day')">Tag</div>
     <div class="vtab" id="vtWeek" onclick="setView('week')">Woche</div>
+    <div class="vtab" id="vtMonth" onclick="setView('month')">Monat</div>
   </div>
   <div class="vd"></div>
   <div class="plzbox">
@@ -534,20 +549,32 @@ function renderGcalBlocks(vt, ds, numLanes){
 }
 
 // ── RENDER ─────────────────────────────────────────────────────────
-function setView(v){S.view=v;document.getElementById('vtDay').classList.toggle('on',v==='day');document.getElementById('vtWeek').classList.toggle('on',v==='week');render();}
-function chDay(d){S.off+=d;render();}
+function setView(v){S.view=v;document.getElementById('vtDay').classList.toggle('on',v==='day');document.getElementById('vtWeek').classList.toggle('on',v==='week');document.getElementById('vtMonth').classList.toggle('on',v==='month');render();}
+function chDay(d){
+  if(S.view==='month'){const vd=viewDate();vd.setMonth(vd.getMonth()+d);S.off=Math.round((vd-today0())/(86400000));}
+  else if(S.view==='week'){S.off+=d*7;}
+  else{S.off+=d;}
+  render();
+}
 function goToday(){S.off=0;render();}
 function render(){renderChips();renderHeader();renderBody();renderStats();}
 
 function renderHeader(){
   const d=viewDate();
-  if(S.view==='week'){
+  const calhead=document.querySelector('.calhead');
+  if(S.view==='month'){
+    const MN=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+    document.getElementById('dl').textContent=`${MN[d.getMonth()]} ${d.getFullYear()}`;
+    calhead.style.display='none';
+  }else if(S.view==='week'){
+    calhead.style.display='flex';
     const ws=new Date(d);ws.setDate(d.getDate()-d.getDay()+1);
     const days=Array.from({length:7},(_,i)=>{const x=new Date(ws);x.setDate(ws.getDate()+i);return x;});
     const MN=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
     document.getElementById('dl').textContent=`${days[0].getDate()}. – ${days[6].getDate()}. ${MN[days[6].getMonth()]} ${days[6].getFullYear()}`;
     document.getElementById('hslots').innerHTML=days.map(day=>`<div class="hslot" style="flex:1;min-width:120px;font-size:12px;${isToday(day)?'color:var(--accent);':''}">${['So','Mo','Di','Mi','Do','Fr','Sa'][day.getDay()]} ${day.getDate()}.</div>`).join('');
   }else{
+    calhead.style.display='flex';
     document.getElementById('dl').textContent=fmtLong(d);
     let h='';
     for(let s=0;s<SLOTS;s++){
@@ -563,7 +590,47 @@ function renderBody(){
   const active=ALL_VTS.filter(v=>S.active.has(v));
   let html='';
 
-  if(S.view==='week'){
+  if(S.view==='month'){
+    // Month calendar grid
+    const y=d.getFullYear(),m=d.getMonth();
+    const first=new Date(y,m,1);
+    const last=new Date(y,m+1,0);
+    // Start on Monday (1=Mo)
+    let startDay=(first.getDay()+6)%7; // 0=Mo
+    const totalDays=last.getDate();
+    const cells=[];
+    // Padding from previous month
+    const prevLast=new Date(y,m,0).getDate();
+    for(let i=startDay-1;i>=0;i--) cells.push({day:prevLast-i,date:fmt(new Date(y,m-1,prevLast-i)),other:true});
+    // Current month days
+    for(let i=1;i<=totalDays;i++) cells.push({day:i,date:fmt(new Date(y,m,i)),other:false});
+    // Padding to fill last row
+    let nextD=1;
+    while(cells.length%7!==0) cells.push({day:nextD,date:fmt(new Date(y,m+1,nextD++)),other:true});
+
+    const DN=['Mo','Di','Mi','Do','Fr','Sa','So'];
+    html='<div class="month-grid">';
+    DN.forEach(dn=>html+=`<div class="month-hdr">${dn}</div>`);
+    const todayStr=fmt(today0());
+    const MAX_SHOW=4;
+    cells.forEach(cell=>{
+      const isT=cell.date===todayStr;
+      const dayApts=S.apts.filter(a=>(a.start_date||'').slice(0,10)===cell.date&&active.includes(a.user_received)&&a.status!=='Cancelled')
+        .sort((a,b)=>(a.start_date||'').localeCompare(b.start_date||''));
+      html+=`<div class="month-cell${cell.other?' other':''}${isT?' today':''}" onclick="S.off=Math.round((new Date('${cell.date}T00:00:00')-today0())/86400000);setView('day')">
+        <div class="mc-day">${cell.day}</div>`;
+      dayApts.slice(0,MAX_SHOW).forEach(a=>{
+        const c=col(a.user_received);
+        const t=(a.start_date||'').slice(11,16);
+        const name=[a.vorname,a.nachname].filter(Boolean).join(' ')||a.text||'Blocker';
+        const vn=a.user_received?a.user_received.split(' ')[0]:'';
+        html+=`<div class="mc-apt" style="background:${c}15;border-color:${c};color:${c};" title="${esc(a.user_received)}: ${esc(name)}">${esc(t)} ${esc(vn)} · ${esc(name)}</div>`;
+      });
+      if(dayApts.length>MAX_SHOW) html+=`<div class="mc-more">+${dayApts.length-MAX_SHOW} weitere</div>`;
+      html+='</div>';
+    });
+    html+='</div>';
+  } else if(S.view==='week'){
     const ws=new Date(d);ws.setDate(d.getDate()-d.getDay()+1);
     const days=Array.from({length:7},(_,i)=>{const x=new Date(ws);x.setDate(ws.getDate()+i);return x;});
     active.forEach(vt=>{
