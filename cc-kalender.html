@@ -587,7 +587,6 @@ async function sync(silent=false){
       });
       computeStats();
       fetchGcalBlocks();
-      syncBlocks();
       const t=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
       document.getElementById('sdot').className='sdot';
       document.getElementById('slbl').textContent=t+' Uhr';
@@ -618,9 +617,8 @@ async function fetchGcalBlocks(){
     const r=await fetch(`${GCAL_PROXY}?action=pull_all_blocks&secret=bee-doo2026`);
     if(!r.ok) return;
     const d=await r.json();
-    if(d.ok) S.gcalBlocks=d.blocks||{};
-    renderBody();
-  }catch(e){/* gcal not configured yet */}
+    if(d.ok){S.gcalBlocks=d.blocks||{};renderBody();}
+  }catch(e){/* gcal not configured */}
 }
 
 // ── SUPABASE BLOCKS (Urlaub/Krank/Frei) ──────────────────────────
@@ -1752,8 +1750,8 @@ document.addEventListener('keydown',e=>{
 // ── INIT ──────────────────────────────────────────────────────────
 async function init(){
   initCC();
-  document.getElementById('ltxt').textContent='Lade Leveto-Daten…';
-  await sync(false);
+  document.getElementById('ltxt').textContent='Lade Daten…';
+  await Promise.all([sync(false), syncBlocks()]);
   loadVtUsers();
   document.getElementById('loader').style.display='none';
   // Auto-scroll to current time (slightly before now line)
@@ -1761,7 +1759,7 @@ async function init(){
     const cs=document.getElementById('calscroll');
     if(cs){const pct=Math.max(0,nowPct()-10)/100;cs.scrollLeft=pct*cs.scrollWidth;}
   },100);
-  setInterval(()=>sync(true),SYNC_MS);
+  setInterval(()=>{sync(true);syncBlocks();},SYNC_MS);
   setInterval(()=>{
     document.querySelectorAll('.nowline').forEach(el=>el.style.left=nowPct()+'%');
   },60000);
