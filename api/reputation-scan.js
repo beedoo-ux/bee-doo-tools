@@ -4,8 +4,8 @@
 // → Slack DM + #innendienst + SMS via Twilio
 
 const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || '';
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_FROM = process.env.TWILIO_SMS_FROM;
@@ -146,6 +146,7 @@ function parseFindings(raw, query) {
 // ── Slack Alert ────────────────────────────────────────────────────────────
 
 async function sendSlackAlert(finding) {
+  if (!SLACK_BOT_TOKEN) { console.log('[reputation-scan] Slack skipped (no token)'); return; }
   if (!SLACK_BOT_TOKEN) return;
   const msg = buildSlackMessage(finding);
   for (const recipient of ALERT_RECIPIENTS.slack) {
@@ -180,6 +181,7 @@ async function postSlack(channel, text) {
 // ── SMS Alert via Twilio ───────────────────────────────────────────────────
 
 async function sendSmsAlert(finding) {
+  if (!TWILIO_SID || !TWILIO_TOKEN) { console.log('[reputation-scan] SMS skipped (no Twilio config)'); return; }
   if (!TWILIO_TOKEN || ALERT_RECIPIENTS.sms.length === 0) return;
 
   const text = `🚨 bee-doo Alarm: Neue ${finding.rating}/5 Bewertung auf ${finding.platform} von "${finding.author}". Bitte prüfen: https://business.google.com`;
