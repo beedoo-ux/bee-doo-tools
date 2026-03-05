@@ -279,7 +279,7 @@ body::before{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%
 @keyframes bounceDown{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
 
 /* Projection */
-.rank-proj{font-size:10px;font-weight:600;color:var(--dim);margin-top:1px;font-style:italic}
+.rank-proj{font-size:10px;font-weight:600;color:var(--dim);margin-top:1px;font-style:italic}.rank-termine{font-size:10px;color:#60a5fa;margin-top:2px;font-weight:600}
 .kpi-proj{font-size:10px;font-weight:600;color:var(--dim);margin-top:2px;font-style:italic}
 
 /* Entry animations — top3 drop, rest slide */
@@ -547,7 +547,7 @@ function getRanking(){
     if(month==='2026-03')return marchData||[];
     // Gesamt
     var m={};
-    function addTo(src){src.forEach(function(d){if(!m[d.n])m[d.n]={sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,zero:0,hp:0,pv:0};var x=m[d.n];x.sales+=d.sales;x.kwp+=d.kwp;x.netto+=d.netto;x.storno+=d.storno;x.el+=d.el;x.emp+=d.emp;x.sp+=d.sp;x.zero+=d.zero;x.hp+=d.hp;x.pv+=d.pv})}
+    function addTo(src){src.forEach(function(d){if(!m[d.n])m[d.n]={sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,zero:0,hp:0,pv:0,termine:0};var x=m[d.n];x.sales+=d.sales;x.kwp+=d.kwp;x.netto+=d.netto;x.storno+=d.storno;x.el+=d.el;x.emp+=d.emp;x.sp+=d.sp;x.zero+=d.zero;x.hp+=d.hp;x.pv+=d.pv;x.termine+=(d.termine||0)})}
     addTo(JAN);addTo(FEB);if(marchData)addTo(marchData);
     return Object.entries(m).map(function(e){var v=e[1];v.n=e[0];return v});
 }
@@ -921,7 +921,7 @@ function render(){
                 +rateHTML
                 +'<div class="rank-bar"><div class="rank-bar-fill" style="width:'+bp+'%;background:'+bg+'"></div></div>'
             +'</div>'
-            +'<div class="rank-right"><div class="rank-sales">'+v+'</div><div class="rank-vol">'+sb+'</div>'+projHTML+'</div>'
+            +'<div class="rank-right"><div class="rank-sales">'+v+'</div><div class="rank-vol">'+sb+'</div>'+projHTML+(d.termine>0?'<div class="rank-termine">📅 '+d.termine+' Termine</div>':'')+'</div>'
         +'</div>';
     });
 
@@ -1265,7 +1265,7 @@ function computeMarch(orders,zeros){
     var u=Object.values(bk),bv={};
     u.forEach(function(o){
         var n=(o.berater||o.ersteller||'?').trim();
-        if(!bv[n])bv[n]={sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,zero:0,hp:0,pv:0};
+        if(!bv[n])bv[n]={sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,zero:0,hp:0,pv:0,termine:0};
         var d=bv[n];d.sales++;d.kwp+=o.kwp_real>0?Math.round(o.kwp_real*10)/10:Math.round((parseFloat(o.calculated_realprice_netto)||0)/2550*10)/10;d.netto+=parseFloat(o.calculated_realprice_netto)||0;
         if(o.status_kunde==='Storniert')d.storno++;
         var q=(o.quelle||'').toLowerCase();
@@ -1303,7 +1303,19 @@ async function loadMarch(){
         var a6today=all.filter(function(o){return(parseFloat(o.calculated_realprice_netto)||0)>=6000&&(o.accepted_date||'').slice(0,10)===todayStr});
         var bkT={};a6today.forEach(function(o){var l=o.lead_id;if(!l)return;var k=l+'_'+(isHP(o)?'HP':'PV');var an=o.leveto_id||0;if(!bkT[k]||an>(bkT[k].leveto_id||0))bkT[k]=o});
         Object.values(bkT).forEach(function(o){todayData.total++;if(isHP(o))todayData.hp++;else todayData.pv++;});
-        marchData=computeMarch(all,z);marchLoaded=true;render();
+        marchData=computeMarch(all,z);
+        // Fetch appointment counts per VT for current month from Supabase
+        try{
+            var mStart='2026-03-01';
+            var apR=await fetch(SB+'/rest/v1/leveto_appointments?select=user_received&start_date=gte.'+mStart+'T00:00:00&status=neq.Cancelled&status=neq.null',{headers:hd});
+            if(apR.ok){
+                var apData=await apR.json();
+                var tMap={};
+                apData.forEach(function(a){if(a.user_received){tMap[a.user_received]=(tMap[a.user_received]||0)+1;}});
+                marchData.forEach(function(d){d.termine=tMap[d.n]||0;});
+            }
+        }catch(e){console.warn('Termine fetch failed:',e);}
+        marchLoaded=true;render();
     }catch(err){document.getElementById('app').innerHTML='<div class="loading"><div class="load-text" style="color:var(--red)">Fehler: '+err.message+'</div></div>'}
 }
 
