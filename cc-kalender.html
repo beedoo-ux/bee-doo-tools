@@ -177,6 +177,13 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-s
     <div class="vtab" id="vtWeek" onclick="setView('week')">Woche</div>
   </div>
   <div class="sync"><div class="sdot" id="sdot"></div><span id="slabel">–</span></div>
+  <div style="display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:4px 10px;">
+    <span style="font-size:11px;color:var(--text3);font-weight:700;">PLZ</span>
+    <input id="plzInput" type="text" maxlength="5" placeholder="z.B. 33609"
+      style="background:none;border:none;outline:none;color:var(--text);font-family:inherit;font-size:13px;font-weight:600;width:70px;"
+      oninput="filterByPlz(this.value)" />
+    <span id="plzClear" onclick="clearPlz()" style="cursor:pointer;color:var(--text3);font-size:14px;display:none;">✕</span>
+  </div>
   <button class="bookbtn" onclick="openModal(null,null,null)">+ Termin buchen</button>
 </div>
 
@@ -245,6 +252,14 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-s
     <button class="mbtn p" id="subBtn" onclick="submitBook()">✓ Termin buchen</button>
   </div>
   <div class="mst" id="mst"></div>
+</div>
+</div>
+
+<!-- CUSTOMER DETAIL MODAL -->
+<div class="mbg" id="detailModal" style="display:none" onclick="if(event.target===this)closeDetail()">
+<div class="modal" style="max-width:400px;">
+  <div class="mtitle" id="detailTitle">Kundendaten <div class="mx" onclick="closeDetail()">✕</div></div>
+  <div id="detailBody"></div>
 </div>
 </div>
 
@@ -437,9 +452,12 @@ function renderBody() {
         const botPx=(numLanes-lane-1)*68+4;
         const sc2=a.status==='Closed'?'sc2':a.status==='Cancelled'?'sca':'so';
         const name=[a.vorname,a.nachname].filter(Boolean).join(' ')||'–';
+        const addr = [a.strasse, a.hausnummer].filter(Boolean).join(' ');
         aBlocks+=`<div class="apt ${sc2}" style="left:${lp}%;width:${wp}%;top:${topPx}px;bottom:${botPx}px;border-left-color:${c};background:${c}1a;color:${c};"
           data-n="${esc(name)}" data-s="${esc(fmtT(st))}" data-e="${esc(fmtT(en))}" data-v="${esc(vt)}"
-          data-pl="${esc(a.plz||'')}" data-ci="${esc(a.stadt||'')}" data-st="${esc(a.status||'')}">
+          data-pl="${esc(a.plz||'')}" data-ci="${esc(a.stadt||'')}" data-st="${esc(a.status||'')}"
+          data-addr="${esc(addr)}" data-ph="${esc(a.telefon||a.phone||'')}" data-tx="${esc(a.text||'')}"
+          onclick="showDetail(this.dataset)">
           <div class="at">${esc(fmtT(st))}–${esc(fmtT(en))}</div>
           <div class="an">${esc(name)}</div>
           <div class="al">${esc(a.plz||'')} ${esc(a.stadt||'')}</div>
@@ -483,6 +501,7 @@ function renderBody() {
     el.addEventListener('mousemove', moveTT);
     el.addEventListener('mouseleave', hideTT);
   });
+  // clicks handled via inline onclick on apt blocks
   body.querySelectorAll('.sc').forEach(el=>{
     el.addEventListener('click', ()=>openModal(el.dataset.date, el.dataset.slot, el.dataset.vt));
   });
@@ -626,6 +645,117 @@ function toast(msg,type='ok'){
   t.className=`tf ${type}`; t.textContent=msg;
   w.appendChild(t); setTimeout(()=>t.remove(),4000);
 }
+
+// ── PLZ FILTER ────────────────────────────────────────────────────
+let plzFilter = '';
+
+function filterByPlz(val) {
+  plzFilter = val.trim();
+  document.getElementById('plzClear').style.display = plzFilter ? 'block' : 'none';
+  
+  if (!plzFilter || plzFilter.length < 2) {
+    // Reset to default
+    S.active = new Set(DEFAULT_VTS);
+    render();
+    return;
+  }
+  
+  // Build PLZ→VT map from appointment history
+  const vtPlzCount = {};
+  S.apts.forEach(a => {
+    const vt = a.user_received;
+    const plz = (a.plz || '').trim();
+    if (!vt || !plz || plz.length < 4) return;
+    if (!vtPlzCount[vt]) vtPlzCount[vt] = {};
+    const key = plz.slice(0, plzFilter.length);
+    vtPlzCount[vt][key] = (vtPlzCount[vt][key] || 0) + 1;
+  });
+  
+  // Find VTs that have appointments in this PLZ prefix
+  const prefix = plzFilter;
+  const matching = ALL_VTS.filter(vt => {
+    const counts = vtPlzCount[vt] || {};
+    return Object.keys(counts).some(k => k.startsWith(prefix) || prefix.startsWith(k));
+  });
+  
+  if (matching.length > 0) {
+    S.active = new Set(matching);
+    showPlzInfo(matching.length, prefix);
+  } else {
+    // No history → show all, warn
+    S.active = new Set(DEFAULT_VTS);
+    showPlzInfo(0, prefix);
+  }
+  render();
+}
+
+function showPlzInfo(count, prefix) {
+  const el = document.getElementById('plzInput');
+  el.style.color = count > 0 ? 'var(--green)' : 'var(--red)';
+}
+
+function clearPlz() {
+  document.getElementById('plzInput').value = '';
+  document.getElementById('plzInput').style.color = 'var(--text)';
+  document.getElementById('plzClear').style.display = 'none';
+  plzFilter = '';
+  S.active = new Set(DEFAULT_VTS);
+  render();
+}
+
+// ── CUSTOMER DETAIL ───────────────────────────────────────────────
+function showDetail(aptData) {
+  const d = aptData;
+  const statusColor = d.st === 'Closed' ? 'var(--green)' : d.st === 'Cancelled' ? 'var(--text2)' : 'var(--blue)';
+  const statusLabel = d.st === 'Closed' ? 'Abgeschlossen' : d.st === 'Cancelled' ? 'Storniert' : 'Offen';
+  
+  document.getElementById('detailTitle').innerHTML = `
+    <span>${esc(d.n) || 'Kunde'}</span>
+    <div class="mx" onclick="closeDetail()">✕</div>`;
+  
+  document.getElementById('detailBody').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg3);border-radius:8px;border:1px solid var(--border2);">
+        <div style="width:8px;height:8px;border-radius:50%;background:${statusColor};flex-shrink:0;"></div>
+        <span style="font-size:12px;font-weight:700;color:${statusColor};">${statusLabel}</span>
+        ${d.st==='Cancelled'?'<span style="font-size:11px;color:var(--text2);">— Termin wurde storniert</span>':''}
+      </div>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px;">
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Berater</div>
+          <div style="font-size:13px;font-weight:700;color:${col(d.v)};">${esc(d.v)}</div>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px;">
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Zeit</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);">${esc(d.s)}${d.e?'–'+esc(d.e):''}</div>
+        </div>
+      </div>
+      
+      ${d.pl ? `
+      <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px;">
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">📍 Adresse</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);">${esc(d.addr||'')}</div>
+        <div style="font-size:13px;color:var(--text2);">${esc(d.pl)} ${esc(d.ci)}</div>
+      </div>` : ''}
+      
+      ${d.ph ? `
+      <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px;">
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">📞 Telefon</div>
+        <a href="tel:${esc(d.ph)}" style="font-size:14px;font-weight:700;color:var(--accent);text-decoration:none;">${esc(d.ph)}</a>
+      </div>` : ''}
+      
+      ${d.tx ? `
+      <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px;">
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">📝 Notiz</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.5;">${esc(d.tx)}</div>
+      </div>` : ''}
+    </div>
+  `;
+  document.getElementById('detailModal').style.display = 'flex';
+}
+
+function closeDetail() { document.getElementById('detailModal').style.display = 'none'; }
 
 async function init(){
   document.getElementById('ltxt').textContent='Lade Leveto-Daten…';
