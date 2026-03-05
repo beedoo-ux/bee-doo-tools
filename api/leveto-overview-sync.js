@@ -1,24 +1,28 @@
 // api/leveto-overview-sync.js
-// Syncs ALL leads from Leveto Overview API → leveto_leads (Supabase)
-// Single fast request replaces the old paginated /leads API
-// Cron: every 15 minutes
+// Syncs leads + contracts + workflows + workflow_history from Leveto Overview API → Supabase
+// Cron: every 15 minutes (delta via last_update param)
 
 const SU = 'https://hqzpemfaljxcysyqssng.supabase.co';
 const SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
 const LU = 'https://beedoo.leveto.net/API';
 
-export const config = { maxDuration: 60 };
+export const config = { maxDuration: 120 };
 
 const hd = () => ({ apikey: SK, Authorization: `Bearer ${SK}`, 'Content-Type': 'application/json' });
 
 function vd(d) {
-  if (!d || d === '0000-00-00' || d === '0000-00-00 00:00:00' || d === 'XXX' || d === 'None') return null;
+  if (!d || d === '0000-00-00' || d === '0000-00-00 00:00:00' || d === 'XXX' || d === 'None' || d === 'null') return null;
   return d;
 }
 
+function safeJson(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') { try { return JSON.parse(val); } catch { return []; } }
+  return [];
+}
+
 function mapLead(l, now) {
-  // Overview API fields → leveto_leads schema
-  // NOTE: overview has fewer fields than /leads — we preserve existing values for missing fields
   return {
     leveto_id:              l.id,
     id_extern:              l.id_extern || null,
@@ -33,11 +37,126 @@ function mapLead(l, now) {
     status_name:            l.leadstatus || null,
     mvpp_id:                l.mvp_id || null,
     mvpp_name:              l.mvp_nummer || null,
+    metrify:                l.metrify || null,
     leveto_importiert_am:   vd(l.importiert),
-    // importiert = actual creation date (createdOn is always 0000-00-00 for imported leads)
     leveto_erstellt_am:     vd(l.importiert),
     sync_aktualisiert_am:   now,
   };
+}
+
+function computeFromProducts(products) {
+  const prods = safeJson(products);
+  if (!prods.length) return {};
+
+  let kwp = 0, moduleCount = 0, moduleTyp = null, batteryKap = 0;
+
+  for (const p of prods) {
+    const watt = parseFloat(p.watt) || 0;
+    const amount = parseFloat(p.amount) || 0;
+    if (watt > 0 && amount > 0) {
+      kwp += (watt * amount) / 1000;
+      moduleCount += amount;
+      if (!moduleTyp && p.productname) moduleTyp = p.productname;
+    }
+    if (p.battery) batteryKap += parseFloat(p.battery) || 0;
+  }
+
+  return {
+    kwp: kwp > 0 ? Math.round(kwp * 100) / 100 : null,
+    module_anzahl: moduleCount > 0 ? Math.round(moduleCount) : null,
+    module_typ: moduleTyp,
+    battery_kap: batteryKap > 0 ? batteryKap : null,
+  };
+}
+
+function extractWfSteps(workflows, contractId) {
+  const wfs = safeJson(workflows);
+  const result = {};
+  for (const w of wfs) {
+    if (w.offerID !== contractId) continue;
+    const name = (w.workflow || '').toLowerCase().replace(/[^a-z]/g, '');
+    const step = (w.current_step || '').replace(/<br\s*\/?>/gi, ' ').trim();
+    const changed = vd(w.step_changed);
+    if (name.includes('verkauf') || name.includes('verkäufer')) {
+      result.wf_verkauf_step = step; result.wf_verkauf_changed = changed;
+    } else if (name === 'beedoo' || name.includes('beedoo')) {
+      result.wf_beedoo_step = step; result.wf_beedoo_changed = changed;
+    } else if (name.includes('dc')) {
+      result.wf_dc_step = step; result.wf_dc_changed = changed;
+    } else if (name.includes('ac')) {
+      result.wf_ac_step = step; result.wf_ac_changed = changed;
+    }
+  }
+  return result;
+}
+
+function mapContract(c, leadId, leadWorkflows, leadWfHistory, now) {
+  const products = safeJson(c.products);
+  const computed = computeFromProducts(products);
+  const allWfs = safeJson(leadWorkflows);
+  const wfSteps = extractWfSteps(allWfs, c.id);
+
+  // Filter workflows relevant to this contract
+  const contractWfs = allWfs.filter(w => w.offerID === c.id);
+  const allHistory = safeJson(leadWfHistory);
+
+  // Determine ist_waermepumpe from typeicons
+  const icons = c.typeicons;
+  const iconStr = Array.isArray(icons) ? icons.join(' ') : (typeof icons === 'string' ? icons : '');
+  const istHP = iconStr.includes('fa-fire') || iconStr.includes('HP');
+
+  // auftragsstatus: derive from Verkäuferboard workflow if API returns XXX
+  let auftragsstatus = vd(c.auftragsstatus);
+  if (!auftragsstatus && wfSteps.wf_verkauf_step) {
+    auftragsstatus = wfSteps.wf_verkauf_step;
+  }
+
+  return {
+    leveto_id:                c.id,
+    lead_id:                  leadId,
+    dyn_offernum:             c.dyn_offernum || null,
+    ersteller:                c.creator || null,
+    creator_ma_number:        c.creator_ma_number || null,
+    calculated_realprice_netto:  c.an_netto || null,
+    calculated_realprice_brutto: c.an_brutto || null,
+    creation_date:            vd(c.creation_date),
+    accepted_date:            vd(c.accepted_date),
+    pdf_url:                  c.pdf_url || null,
+    typeicons:                c.typeicons ? (Array.isArray(c.typeicons) ? c.typeicons : [c.typeicons]) : null,
+    ist_waermepumpe:          istHP,
+    products:                 products.length ? products : null,
+    provision_ausgezahlt_am:  vd(c.provision_ausgezahlt_am),
+    efs_prozent:              c.efs_prozent ? parseFloat(c.efs_prozent) : null,
+    currentstatus:            auftragsstatus,
+    speichererweiterung:      vd(c.speichererweiterung),
+    workflows:                contractWfs.length ? contractWfs : null,
+    workflow_history:         allHistory.length ? allHistory : null,
+    ...computed,
+    ...wfSteps,
+    overview_lead_id:         leadId,
+    overview_last_update:     now,
+    sync_aktualisiert_am:     now,
+  };
+}
+
+async function sbUpsert(table, rows, conflict, batchSize = 500) {
+  let ok = 0, err = 0;
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize);
+    const r = await fetch(`${SU}/rest/v1/${table}?on_conflict=${conflict}`, {
+      method: 'POST',
+      headers: { ...hd(), Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(batch)
+    });
+    if (r.ok) { ok += batch.length; }
+    else {
+      err++;
+      const t = await r.text();
+      console.error(`${table} batch ${i} error:`, t.slice(0, 200));
+    }
+    if (i + batchSize < rows.length) await new Promise(r => setTimeout(r, 50));
+  }
+  return { ok, err };
 }
 
 export default async function handler(req, res) {
@@ -50,9 +169,10 @@ export default async function handler(req, res) {
   }
 
   const t0 = Date.now();
+  const mode = req.query.mode || 'delta'; // delta (default) or full
 
   try {
-    // 1. Auth with Leveto
+    // 1. Auth
     const authR = await fetch(`${LU}/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -61,60 +181,121 @@ export default async function handler(req, res) {
     const authD = await authR.json();
     if (!authD.token) throw new Error('Leveto auth failed: ' + JSON.stringify(authD));
 
-    // 2. Fetch Overview — single request, all 53k+ leads
-    const ovR = await fetch(`${LU}/overview`, {
-      headers: { Authorization: `Bearer ${authD.token}` }
-    });
-    if (!ovR.ok) throw new Error(`Overview HTTP ${ovR.status}`);
-    const ovD = await ovR.json();
-
-    // 3. Extract leads array
-    const leads = Array.isArray(ovD) ? ovD : (ovD.data || []);
-    if (!leads.length) return res.status(200).json({ ok: true, synced: 0, msg: 'No leads in overview' });
-
-    const now = new Date().toISOString();
-    const rows = leads.map(l => mapLead(l, now));
-
-    // 4. Upsert in batches of 500
-    let synced = 0;
-    let errors = 0;
-    const BS = 500;
-
-    for (let i = 0; i < rows.length; i += BS) {
-      const batch = rows.slice(i, i + BS);
-      const r = await fetch(`${SU}/rest/v1/leveto_leads?on_conflict=leveto_id`, {
-        method: 'POST',
-        headers: { ...hd(), Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify(batch)
+    // 2. Get last sync timestamp for delta mode
+    let lastUpdate = null;
+    if (mode === 'delta') {
+      const stateR = await fetch(`${SU}/rest/v1/leveto_sync_state?sync_type=eq.overview_delta&select=last_update&limit=1`, {
+        headers: hd()
       });
-      if (r.ok || r.status === 200 || r.status === 201) {
-        synced += batch.length;
-      } else {
-        errors++;
-        const errText = await r.text();
-        console.error(`Batch ${i}–${i+BS} error:`, errText.slice(0, 200));
+      const stateD = await stateR.json();
+      if (stateD?.[0]?.last_update) {
+        lastUpdate = stateD[0].last_update.replace('T', ' ').replace(/\+.*/, '');
       }
-
-      // Small pause between batches to avoid overloading Supabase
-      if (i + BS < rows.length) await new Promise(r => setTimeout(r, 100));
     }
 
-    // 5. Update sync_configs record
-    await fetch(`${SU}/rest/v1/sync_configs?sync_key=eq.leveto_overview_sync`, {
+    // 3. Fetch Overview (paginated for delta, or full)
+    let allLeads = [];
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+      let url = `${LU}/overview?limit=200&page=${page}`;
+      if (lastUpdate) url += `&last_update=${encodeURIComponent(lastUpdate)}`;
+
+      const ovR = await fetch(url, { headers: { Authorization: `Bearer ${authD.token}` } });
+      if (!ovR.ok) throw new Error(`Overview HTTP ${ovR.status} on page ${page}`);
+      const ovD = await ovR.json();
+
+      const leads = ovD.data || [];
+      allLeads.push(...leads);
+      totalPages = ovD.totalpages || 1;
+      page++;
+
+      if (page <= totalPages) await new Promise(r => setTimeout(r, 100));
+    } while (page <= totalPages);
+
+    if (!allLeads.length) {
+      return res.status(200).json({ ok: true, synced: 0, contracts: 0, msg: 'No updates' });
+    }
+
+    const now = new Date().toISOString();
+
+    // 4. Map leads
+    const leadRows = allLeads.map(l => mapLead(l, now));
+
+    // 5. Map contracts + compute derived fields
+    const contractRows = [];
+    const wfHistoryRows = [];
+
+    for (const lead of allLeads) {
+      const contracts = safeJson(lead.contracts);
+      const leadWfs = lead.workflows;
+      const leadWfH = lead.workflow_history;
+
+      for (const c of contracts) {
+        if (!c.id) continue;
+        contractRows.push(mapContract(c, lead.id, leadWfs, leadWfH, now));
+
+        // Parse workflow_history into individual rows
+        const history = safeJson(leadWfH);
+        for (const h of history) {
+          if (!h.date || !h.change) continue;
+          // Parse "BoardName: StepA > StepB"
+          const match = h.change.match(/^([^:]+):\s*(.+?)\s*>\s*(.+)$/);
+          wfHistoryRows.push({
+            lead_id: lead.id,
+            contract_id: c.id,
+            datum: h.date,
+            board_name: match ? match[1].trim() : null,
+            von_step: match ? match[2].trim() : null,
+            nach_step: match ? match[3].trim() : h.change,
+            change_raw: h.change,
+          });
+        }
+      }
+    }
+
+    // 6. Upsert all
+    const leadResult = await sbUpsert('leveto_leads', leadRows, 'leveto_id');
+    const contractResult = contractRows.length
+      ? await sbUpsert('leveto_contracts', contractRows, 'leveto_id')
+      : { ok: 0, err: 0 };
+
+    // Workflow history: deduplicate by lead_id + contract_id + datum + change_raw
+    // Use smaller batches and skip if too many
+    let wfhResult = { ok: 0, err: 0 };
+    if (wfHistoryRows.length > 0 && wfHistoryRows.length < 5000) {
+      wfhResult = await sbUpsert('leveto_workflow_history', wfHistoryRows, 'lead_id,contract_id,datum,change_raw');
+    }
+
+    // 7. Update sync state
+    await fetch(`${SU}/rest/v1/leveto_sync_state?sync_type=eq.overview_delta`, {
       method: 'PATCH',
       headers: hd(),
       body: JSON.stringify({
-        last_sync_at: now,
-        last_sync_result: { synced, total: leads.length, errors, duration_ms: Date.now() - t0, success: true },
-        updated_at: now
+        last_update: now,
+        last_run: now,
+        total_synced: leadResult.ok,
+        status: 'done',
+        details: JSON.stringify({
+          leads: leadResult.ok,
+          contracts: contractResult.ok,
+          wf_history: wfhResult.ok,
+          errors: leadResult.err + contractResult.err,
+          duration_ms: Date.now() - t0,
+          mode,
+          pages_fetched: page - 1
+        })
       })
     });
 
     return res.status(200).json({
       ok: true,
-      synced,
-      total: leads.length,
-      errors,
+      leads: leadResult.ok,
+      contracts: contractResult.ok,
+      wf_history: wfhResult.ok,
+      errors: leadResult.err + contractResult.err + wfhResult.err,
+      pages: page - 1,
       duration_ms: Date.now() - t0
     });
 
