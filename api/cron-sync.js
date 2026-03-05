@@ -408,6 +408,7 @@ function aMap(a) {
         feedback_detail:     a.feedback_detail || null,
         user_created:        (a.user_created || '').trim() || null,
         user_received:       (a.user_received || '').trim() || null,
+        user_received_id:    a.user_receivedID || null,
         creation_date:       vd(a.creation_date),
         closed_date:         vd(a.closed_date),
         storno_date:         vd(a.storno_date),
