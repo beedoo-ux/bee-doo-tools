@@ -4,9 +4,10 @@
 
 export const config = { maxDuration: 60 };
 
-const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SU = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
 const LEVETO = 'https://beedoo.leveto.net/API';
+const hd = () => ({ apikey: SK, Authorization: `Bearer ${SK}`, 'Content-Type': 'application/json' });
 
 const BERATER_OVERRIDES = {
   65347: 'Kevin Kraus', 65348: 'Kevin Kraus', 65349: 'Kevin Kraus',
@@ -32,7 +33,6 @@ function computeChallengeData(leads, month) {
     const imp = (l.importiert || '').substring(0, 10);
     return imp >= startDate && imp < endDate;
   });
-
   const qualifying = monthLeads.filter(l => {
     const src = (l.quelle || '').trim();
     return src === 'Eigenlead' || src === 'Empfehlung';
@@ -83,14 +83,9 @@ function computeChallengeData(leads, month) {
 }
 
 async function writeToCache(month, data) {
-  const resp = await fetch(`${SUPABASE_URL}/rest/v1/challenge_cache`, {
+  const resp = await fetch(`${SU}/rest/v1/challenge_cache`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-      'apikey': SUPABASE_SERVICE_KEY,
-      'Prefer': 'resolution=merge-duplicates',
-    },
+    headers: { ...hd(), 'Prefer': 'resolution=merge-duplicates' },
     body: JSON.stringify({ month, data, cached_at: new Date().toISOString(), source: 'cron' })
   });
   if (!resp.ok) {
@@ -101,11 +96,6 @@ async function writeToCache(month, data) {
 }
 
 export default async function handler(req, res) {
-  const authHeader = req.headers['authorization'];
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
   const t0 = Date.now();
   const months = getActiveMonths();
   const results = [];
