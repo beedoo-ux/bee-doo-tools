@@ -500,11 +500,17 @@ async function sync(silent=false){
         if(seen.has(key))return false;
         seen.add(key);return true;
       });
-      // Filter out AC/DC Montage entries
-      const BLOCK_RE=/\b(montage|dc\s*montage|ac\s*montage|ac\s*nacharbeit)\b/i;
+      // Filter out non-customer entries
+      const BLOCK_RE=/\b(montage|dc\s*montage|ac\s*montage|ac\s*nacharbeit|dc\s*nacharbeit|vor\s*ort\s*prüfung)\b/i;
       S.apts=S.apts.filter(a=>{
         const txt=[a.text||'',a.vorname||'',a.nachname||'',a.appointment_type||''].join(' ');
-        return !BLOCK_RE.test(txt);
+        if(BLOCK_RE.test(txt)) return false;
+        // Filter empty entries: no type, no customer name, no text = junk
+        const hasType=!!(a.appointment_type||'').trim()&&(a.appointment_type||'').trim()!=='-';
+        const hasName=!!(a.vorname||a.nachname);
+        const hasText=!!(a.text||'').trim();
+        if(!hasType&&!hasName&&!hasText) return false;
+        return true;
       });
       computeStats();
       fetchGcalBlocks();
