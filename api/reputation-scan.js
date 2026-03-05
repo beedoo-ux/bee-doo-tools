@@ -195,7 +195,10 @@ async function sendSmsAlert(finding) {
 }
 
 async function sendTwilioSms(to, body) {
-  const credentials = Buffer.from(`${TWILIO_SID}:${TWILIO_TOKEN}`).toString('base64');
+  // Twilio unterstützt API Key Auth: API_KEY_SID:API_KEY_SECRET
+  const sid = process.env.TWILIO_API_KEY_SID || TWILIO_SID;
+  const secret = process.env.TWILIO_AUTH_TOKEN;
+  const credentials = Buffer.from(`${sid}:${secret}`).toString('base64');
   const params = new URLSearchParams({ To: to, From: TWILIO_FROM, Body: body });
 
   const response = await fetch(
