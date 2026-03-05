@@ -96,6 +96,27 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 .day-cap-fill{height:100%;border-radius:2px;}
 .day-cap-lbl{font-size:9px;font-weight:700;white-space:nowrap;}
 
+/* SMART BOOKING PANEL */
+.sbp{background:var(--bg2);border-top:2px solid var(--accent);padding:0;flex-shrink:0;display:none;max-height:45vh;overflow-y:auto;}
+.sbp.show{display:block;}
+.sbp-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 6px;position:sticky;top:0;background:var(--bg2);z-index:5;}
+.sbp-title{font-size:13px;font-weight:800;color:var(--accent);}
+.sbp-sub{font-size:11px;color:var(--text2);}
+.sbp-close{cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px;border-radius:4px;}
+.sbp-close:hover{background:var(--bg3);color:var(--text);}
+.sbp-grid{display:flex;flex-direction:column;gap:3px;padding:6px 14px 14px;}
+.sbp-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;}
+.sbp-row:hover{border-color:var(--accent);background:rgba(253,225,84,.06);transform:translateX(2px);}
+.sbp-row.top{border-color:var(--green);background:rgba(63,185,80,.06);}
+.sbp-score{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;}
+.sbp-info{flex:1;min-width:0;}
+.sbp-date{font-size:12px;font-weight:700;}
+.sbp-time{font-size:11px;color:var(--text2);}
+.sbp-vt{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;flex-shrink:0;}
+.sbp-reason{font-size:9px;color:var(--text2);margin-top:2px;}
+.sbp-tag{font-size:9px;padding:1px 6px;border-radius:4px;font-weight:700;}
+.sbp-tags{display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;}
+
 /* CALENDAR */
 .calwrap{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;}
 .calscroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;}
@@ -307,6 +328,15 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 <div class="sbar" id="sbar"></div>
 
 
+
+<!-- SMART BOOKING PANEL -->
+<div class="sbp" id="sbp">
+  <div class="sbp-head">
+    <div><div class="sbp-title" id="sbpTitle">🎯 Smart Slots</div><div class="sbp-sub" id="sbpSub"></div></div>
+    <div class="sbp-close" onclick="closeSbp()">✕</div>
+  </div>
+  <div class="sbp-grid" id="sbpGrid"></div>
+</div>
 
 <!-- CALENDAR -->
 <div class="calwrap">
@@ -1042,10 +1072,14 @@ function filterPlz(val){
     S.active=new Set(match);
     document.getElementById('plzIn').style.color='var(--green)';
     toast(`📍 ${match.length} Berater für PLZ ${plzFilter}`,'ok');
+    // Trigger smart panel when 3+ digits
+    if(plzFilter.length>=3) showSmartPanel(plzFilter,match);
+    else closeSbp();
   }else{
     S.active=new Set(ALL_VTS);
     document.getElementById('plzIn').style.color='var(--red)';
     toast(`Keine Berater für PLZ ${plzFilter}`,'wa');
+    closeSbp();
   }
   render();
 }
@@ -1053,7 +1087,7 @@ function clearPlz(){
   document.getElementById('plzIn').value='';
   document.getElementById('plzIn').style.color='var(--text)';
   document.getElementById('plzX').style.display='none';
-  plzFilter='';S.active=new Set(ALL_VTS);render();
+  plzFilter='';S.active=new Set(ALL_VTS);closeSbp();render();
 }
 
 // ── LEAD SEARCH ───────────────────────────────────────────────────
@@ -1131,7 +1165,167 @@ function findNextFree(vtName, fromDate, durationMin=120){
   return results;
 }
 
-// ── MODAL ─────────────────────────────────────────────────────────
+// ── SMART PLZ BOOKING ────────────────────────────────────────────
+// Finds best free 2h slots across matched Berater for next 14 days
+// Scores by PLZ proximity to neighboring appointments (drive optimization)
+function findSmartSlots(targetPlz, matchedVts, maxResults=20){
+  const dur=4; // 2h = 4 half-hour slots
+  const results=[];
+  const today=today0();
+  const DN=['So','Mo','Di','Mi','Do','Fr','Sa'];
+
+  for(let dayOff=0;dayOff<14;dayOff++){
+    const d=new Date(today);d.setDate(d.getDate()+dayOff);
+    const ds=fmt(d);
+    const dow=d.getDay();
+    if(dow===0) continue; // Skip Sonntag
+
+    matchedVts.forEach(vt=>{
+      const dayApts=S.apts.filter(a=>(a.start_date||'').slice(0,10)===ds&&a.user_received===vt&&a.status!=='Cancelled')
+        .sort((a,b)=>(a.start_date||'').localeCompare(b.start_date||''));
+      const gcBlocks=(S.gcalBlocks[vt]||[]).filter(b=>(b.start||'').slice(0,10)===ds);
+
+      // Check capacity
+      const loadCount=dayApts.filter(a=>!SKIP_LOAD_RE.test(a.appointment_type||'')).length;
+      if(loadCount>=MAX_APTS) return; // Day full
+
+      // Scan for free 2h windows (09:00 = slot 4, 19:00 = slot 24 for end)
+      const startSlot=t2slot(9,0);
+      const endSlot=t2slot(19,0); // Latest start for 2h ending at 21:00
+
+      for(let s=startSlot;s<=endSlot;s++){
+        const slotEnd=s+dur;
+        // Check overlaps with appointments
+        const overlap=dayApts.some(a=>{
+          const st=parseD(a.start_date),en=parseD(a.end_date);
+          if(!st||!en)return false;
+          return t2slot(st.getHours(),st.getMinutes())<slotEnd&&t2slot(en.getHours(),en.getMinutes())>s;
+        });
+        if(overlap) continue;
+        // Check gcal blocks
+        const blocked=gcBlocks.some(b=>{
+          if(b.allDay) return true;
+          const bs=new Date(b.start),be=new Date(b.end);
+          return t2slot(bs.getHours(),bs.getMinutes())<slotEnd&&t2slot(be.getHours(),be.getMinutes())>s;
+        });
+        if(blocked) continue;
+
+        // ── SCORE CALCULATION ──
+        let score=50; // Base score
+        const tags=[];
+        const slotStartMin=s*30+SH*60;
+        const slotEndMin=slotEnd*30+SH*60;
+
+        // Find previous appointment (ends before this slot)
+        const prevApt=[...dayApts].reverse().find(a=>{
+          const en=parseD(a.end_date);
+          return en&&(en.getHours()*60+en.getMinutes())<=slotStartMin;
+        });
+        // Find next appointment (starts after this slot)
+        const nextApt=dayApts.find(a=>{
+          const st=parseD(a.start_date);
+          return st&&(st.getHours()*60+st.getMinutes())>=slotEndMin;
+        });
+
+        // Score by PLZ proximity to prev apt
+        if(prevApt&&prevApt.plz){
+          const dist=plzDist(targetPlz,prevApt.plz);
+          if(dist<=15){score+=35;tags.push({t:'Vortermin nah',c:'var(--green)'});}
+          else if(dist<=40){score+=20;tags.push({t:'Vortermin ~'+dist+'km',c:'var(--green)'});}
+          else if(dist<=80){score+=5;tags.push({t:'Vortermin ~'+dist+'km',c:'var(--orange)'});}
+          else{score-=10;tags.push({t:'Vortermin weit ('+dist+'km)',c:'var(--red)'});}
+          // Check enough drive time
+          const prevEnd=parseD(prevApt.end_date);
+          if(prevEnd){
+            const gapMin=slotStartMin-(prevEnd.getHours()*60+prevEnd.getMinutes());
+            const neededMin=Math.max(15,Math.round(dist/60*60)); // ~60km/h
+            if(gapMin>=neededMin){score+=5;}
+            else{score-=15;tags.push({t:'⚠ Fahrzeit knapp',c:'var(--red)'});}
+          }
+        } else if(!prevApt){
+          score+=10; // First slot of day = good (fresh start)
+          tags.push({t:'Erster Termin',c:'var(--blue)'});
+        }
+
+        // Score by PLZ proximity to next apt
+        if(nextApt&&nextApt.plz){
+          const dist=plzDist(targetPlz,nextApt.plz);
+          if(dist<=15){score+=25;tags.push({t:'Folgetermin nah',c:'var(--green)'});}
+          else if(dist<=40){score+=10;tags.push({t:'Folgetermin ~'+dist+'km',c:'var(--green)'});}
+          else if(dist<=80){score+=0;}
+          else{score-=5;}
+        }
+
+        // Saturday slight malus
+        if(dow===6){score-=5;tags.push({t:'Samstag',c:'var(--text2)'});}
+
+        // Today/tomorrow bonus (sooner = better for CC)
+        if(dayOff===0){score+=15;tags.push({t:'Heute',c:'var(--accent)'});}
+        else if(dayOff===1){score+=10;tags.push({t:'Morgen',c:'var(--accent)'});}
+        else if(dayOff<=3){score+=5;}
+
+        // Morning preference (9-12)
+        const startH=Math.floor(slotStartMin/60);
+        if(startH>=9&&startH<=11) score+=5;
+
+        const dayLabel=dayOff===0?'Heute':dayOff===1?'Morgen':`${DN[dow]}, ${d.getDate()}.${d.getMonth()+1}.`;
+
+        results.push({
+          vt,date:ds,slot:s,score:Math.max(0,Math.min(100,score)),
+          dayLabel,time:`${slot2t(s)}–${slot2t(slotEnd)}`,
+          tags,loadCount,dayOff
+        });
+
+        s+=dur-1; // Skip past this slot
+      }
+    });
+  }
+
+  // Sort by score descending, then by date
+  results.sort((a,b)=>b.score-a.score||(a.date+a.time).localeCompare(b.date+b.time));
+  return results.slice(0,maxResults);
+}
+
+function showSmartPanel(plz,matchedVts){
+  const slots=findSmartSlots(plz,matchedVts);
+  const panel=document.getElementById('sbp');
+  const grid=document.getElementById('sbpGrid');
+  document.getElementById('sbpTitle').textContent=`🎯 Smart Slots für PLZ ${plz}`;
+  document.getElementById('sbpSub').textContent=`${matchedVts.length} Berater · ${slots.length} Optionen · nächste 14 Tage`;
+
+  if(!slots.length){
+    grid.innerHTML='<div style="padding:14px;color:var(--text2);text-align:center;">Keine freien Slots gefunden</div>';
+    panel.classList.add('show');
+    return;
+  }
+
+  grid.innerHTML=slots.map((sl,i)=>{
+    const c=col(sl.vt);
+    const scoreCol=sl.score>=70?'var(--green)':sl.score>=45?'var(--orange)':'var(--red)';
+    const scoreBg=sl.score>=70?'rgba(63,185,80,.15)':sl.score>=45?'rgba(210,153,34,.15)':'rgba(248,81,73,.15)';
+    const [fn]=sl.vt.split(' ');
+    return `<div class="sbp-row${i<3?' top':''}" onclick="bookSmartSlot('${sl.date}',${sl.slot},'${esc(sl.vt)}')">
+      <div class="sbp-score" style="background:${scoreBg};color:${scoreCol}">${sl.score}</div>
+      <div class="sbp-info">
+        <div class="sbp-date">${esc(sl.dayLabel)} <span style="color:var(--text2);font-weight:400">${esc(sl.time)}</span></div>
+        <div class="sbp-tags">${sl.tags.map(t=>`<span class="sbp-tag" style="background:${t.c}22;color:${t.c}">${esc(t.t)}</span>`).join('')}</div>
+      </div>
+      <div class="sbp-vt" style="background:${c}18;color:${c};border:1px solid ${c}44;">${esc(fn)}</div>
+    </div>`;
+  }).join('');
+
+  panel.classList.add('show');
+}
+
+function closeSbp(){document.getElementById('sbp').classList.remove('show');}
+
+function bookSmartSlot(date,slot,vt){
+  closeSbp();
+  // Pre-fill PLZ in modal
+  const plz=document.getElementById('plzIn').value.trim();
+  openModal(date,slot,vt);
+  if(plz) document.getElementById('fPo').value=plz+' ';
+}
 function openModal(dateStr,slot,vtName){
   const zs=document.getElementById('fZt');zs.innerHTML='';
   for(let s=0;s<SLOTS;s++){const o=document.createElement('option');o.value=slot2t(s);o.textContent=slot2t(s);if(slot!==null&&parseInt(slot)===s)o.selected=true;zs.appendChild(o);}
