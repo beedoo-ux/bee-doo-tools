@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Solar Check · bee-doo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#09090e; --sf:#101018; --card:#151520; --card2:#1a1a28;
+  --bd:#222236; --bd2:#2d2d44;
+  --gold:#F5C500; --gdim:rgba(245,197,0,.12);
+  --tx:#eeeef5; --tx2:#9999b5; --tx3:#5a5a78;
+  --gr:#22c55e; --rd:#ef4444; --bl:#60a5fa; --or:#fb923c; --pu:#a78bfa;
+  --font:'DM Sans',system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{height:100%;scroll-behavior:smooth;}
+body{font-family:var(--font);background:var(--bg);color:var(--tx);min-height:100vh;}
+
+/* ─── HEADER ─── */
+.hdr{background:var(--sf);border-bottom:1px solid var(--bd);padding:12px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:50;}
+.logo{font-size:17px;font-weight:800;color:var(--gold);}
+.sep{width:1px;height:16px;background:var(--bd);}
+.htitle{font-size:13px;font-weight:600;color:var(--tx2);}
+.hbtn{margin-left:auto;padding:6px 12px;border-radius:8px;background:var(--card);border:1px solid var(--bd);color:var(--tx2);font-size:12px;cursor:pointer;text-decoration:none;font-family:var(--font);}
+.hbtn:hover{color:var(--tx);border-color:var(--bd2);}
+.api-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px;}
+.api-dot.ok{background:var(--gr);}
+.api-dot.err{background:var(--rd);}
+.api-dot.pending{background:var(--or);animation:pulse 1.5s ease infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+/* ─── MAIN ─── */
+.main{max-width:800px;margin:0 auto;padding:16px;}
+
+/* ─── SEARCH ─── */
+.search-wrap{position:relative;margin-bottom:20px;}
+.search-box{display:flex;gap:0;background:var(--card);border:1.5px solid var(--bd);border-radius:14px;overflow:hidden;transition:border-color .2s;}
+.search-box:focus-within{border-color:var(--gold);}
+.search-icon{display:flex;align-items:center;padding:0 14px;color:var(--tx3);font-size:18px;}
+.search-input{flex:1;background:none;border:none;color:var(--tx);font-size:15px;font-family:var(--font);padding:14px 0;outline:none;font-weight:500;}
+.search-input::placeholder{color:var(--tx3);}
+.search-btn{background:var(--gold);border:none;color:#000;font-weight:700;font-size:13px;padding:0 20px;cursor:pointer;font-family:var(--font);transition:opacity .15s;}
+.search-btn:hover{opacity:.85;}
+.search-btn:disabled{opacity:.4;cursor:not-allowed;}
+.search-suggestions{position:absolute;top:100%;left:0;right:0;z-index:40;background:var(--card2);border:1px solid var(--bd);border-radius:12px;margin-top:4px;overflow:hidden;display:none;max-height:240px;overflow-y:auto;}
+.search-suggestions.show{display:block;}
+.sug-item{padding:11px 16px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--bd);transition:background .1s;display:flex;align-items:center;gap:10px;}
+.sug-item:last-child{border-bottom:none;}
+.sug-item:hover,.sug-item.active{background:var(--gdim);}
+.sug-icon{color:var(--tx3);font-size:16px;flex-shrink:0;}
+.sug-main{font-weight:600;color:var(--tx);}
+.sug-sub{font-size:11px;color:var(--tx3);margin-top:1px;}
+
+/* ─── INFO BANNER ─── */
+.info-banner{background:rgba(245,197,0,.06);border:1px solid rgba(245,197,0,.15);border-radius:12px;padding:14px 16px;margin-bottom:20px;display:flex;gap:12px;align-items:flex-start;}
+.info-banner .icon{font-size:20px;flex-shrink:0;margin-top:1px;}
+.info-banner .text{font-size:12px;color:var(--tx2);line-height:1.6;}
+.info-banner .text strong{color:var(--gold);font-weight:700;}
+
+/* ─── LOADING ─── */
+.loading{text-align:center;padding:60px 20px;display:none;}
+.loading.show{display:block;}
+.spinner{width:44px;height:44px;border:3px solid var(--bd);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 20px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.load-step{font-size:13px;color:var(--tx2);margin-bottom:6px;transition:color .3s;}
+.load-step.active{color:var(--gold);font-weight:600;}
+.load-step.done{color:var(--gr);}
+
+/* ─── RESULT ─── */
+.result{display:none;}
+.result.show{display:block;}
+
+/* Score Hero */
+.score-hero{background:linear-gradient(135deg,var(--card) 0%,var(--card2) 100%);border:1px solid var(--bd);border-radius:18px;padding:24px;text-align:center;margin-bottom:16px;position:relative;overflow:hidden;}
+.score-hero::before{content:'';position:absolute;top:-60px;right:-60px;width:160px;height:160px;background:radial-gradient(circle,rgba(245,197,0,.08) 0%,transparent 70%);pointer-events:none;}
+.building-name{font-size:13px;color:var(--tx2);margin-bottom:12px;font-weight:500;}
+.score-ring{width:130px;height:130px;margin:0 auto 16px;position:relative;}
+.score-ring svg{transform:rotate(-90deg);}
+.score-num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.score-val{font-size:42px;font-weight:900;line-height:1;}
+.score-lbl{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:1.5px;margin-top:4px;font-weight:700;}
+.score-verdict{font-size:16px;font-weight:800;margin-bottom:4px;}
+.score-desc{font-size:12px;color:var(--tx2);max-width:280px;margin:0 auto;}
+
+/* Grid Cards */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 16px;}
+.card-icon{font-size:22px;margin-bottom:8px;}
+.card-val{font-size:24px;font-weight:800;line-height:1.1;}
+.card-lbl{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.8px;margin-top:4px;font-weight:600;}
+.card-sub{font-size:11px;color:var(--tx2);margin-top:4px;}
+
+/* Section */
+.sec{margin-bottom:16px;}
+.sec-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--tx3);margin-bottom:10px;padding:0 2px;}
+
+/* Roof Segments */
+.seg-item{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--card);border:1px solid var(--bd);border-radius:12px;margin-bottom:6px;}
+.seg-dir{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;flex-shrink:0;}
+.seg-info{flex:1;}
+.seg-name{font-size:13px;font-weight:700;}
+.seg-detail{font-size:11px;color:var(--tx2);margin-top:2px;}
+.seg-bar-wrap{width:80px;height:5px;background:var(--bd);border-radius:3px;flex-shrink:0;}
+.seg-bar{height:100%;border-radius:3px;transition:width .5s ease;}
+
+/* Panel Config */
+.cfg-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--bd);}
+.cfg-row:last-child{border:none;}
+.cfg-icon{font-size:16px;width:24px;text-align:center;flex-shrink:0;}
+.cfg-lbl{font-size:12px;color:var(--tx2);flex:1;}
+.cfg-val{font-size:13px;font-weight:700;text-align:right;}
+
+/* Actions */
+.actions{display:flex;gap:8px;margin-top:20px;margin-bottom:24px;}
+.act-btn{flex:1;padding:14px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);border:none;transition:opacity .15s;text-align:center;}
+.act-btn:hover{opacity:.85;}
+.act-primary{background:var(--gold);color:#000;}
+.act-secondary{background:var(--card);color:var(--tx);border:1px solid var(--bd);}
+
+/* Map */
+.map-wrap{height:200px;border-radius:14px;overflow:hidden;border:1px solid var(--bd);margin-bottom:16px;}
+#minimap{width:100%;height:100%;}
+
+/* Error */
+.error-box{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:16px;text-align:center;display:none;margin-bottom:16px;}
+.error-box.show{display:block;}
+.error-box .e-icon{font-size:28px;margin-bottom:8px;}
+.error-box .e-title{font-size:14px;font-weight:700;color:var(--rd);margin-bottom:4px;}
+.error-box .e-msg{font-size:12px;color:var(--tx2);}
+
+/* Quality Badge */
+.q-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+.q-high{background:rgba(34,197,94,.12);color:#86efac;}
+.q-medium{background:rgba(251,146,60,.12);color:#fdba74;}
+
+/* Responsive */
+@media(max-width:600px){
+  .grid3{grid-template-columns:1fr 1fr;} 
+  .card-val{font-size:20px;}
+  .actions{flex-direction:column;}
+  .score-ring{width:110px;height:110px;}
+  .score-val{font-size:36px;}
+}
+
+/* Scroll */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="logo">bee-doo</div>
+  <div class="sep"></div>
+  <div class="htitle">☀️ Solar Check</div>
+  <span id="apiStatus" style="font-size:11px;color:var(--tx3);display:flex;align-items:center;gap:4px;margin-left:8px;">
+    <span class="api-dot pending"></span>
+    <span id="apiStatusText">Prüfe API...</span>
+  </span>
+  <a href="index.html" class="hbtn">← Toolbox</a>
+</div>
+
+<div class="main">
+
+  <!-- Search -->
+  <div class="search-wrap" id="searchWrap">
+    <div class="search-box">
+      <div class="search-icon">📍</div>
+      <input type="text" class="search-input" id="searchInput" placeholder="Adresse eingeben..." autocomplete="off">
+      <button class="search-btn" id="searchBtn" disabled>Prüfen</button>
+    </div>
+    <div class="search-suggestions" id="suggestions"></div>
+  </div>
+
+  <!-- Info Banner -->
+  <div class="info-banner" id="infoBanner">
+    <div class="icon">☀️</div>
+    <div class="text">
+      <strong>Google Solar API</strong> analysiert das Dach per Satellit: Fläche, Neigung, Ausrichtung, Verschattung und geschätzten Jahresertrag. Perfekt für das Erstgespräch mit dem Kunden – zeigt sofort, ob sich PV lohnt.
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" id="loadingBox">
+    <div class="spinner"></div>
+    <div class="load-step" id="step1">📍 Adresse wird aufgelöst...</div>
+    <div class="load-step" id="step2">🛰️ Satellitendaten werden geladen...</div>
+    <div class="load-step" id="step3">📐 Dachsegmente werden analysiert...</div>
+    <div class="load-step" id="step4">⚡ Solarpotenzial wird berechnet...</div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="errorBox">
+    <div class="e-icon">🏚️</div>
+    <div class="e-title" id="errorTitle">Gebäude nicht gefunden</div>
+    <div class="e-msg" id="errorMsg">Google hat für diese Adresse keine Gebäudedaten. Bitte prüfe die Adresse oder versuche eine naheliegende Hausnummer.</div>
+  </div>
+
+  <!-- Result -->
+  <div class="result" id="resultBox">
+
+    <!-- Mini Map -->
+    <div class="map-wrap" id="mapWrap" style="display:none;">
+      <div id="minimap"></div>
+    </div>
+
+    <!-- Score Hero -->
+    <div class="score-hero">
+      <div class="building-name" id="buildingName">–</div>
+      <div class="score-ring">
+        <svg viewBox="0 0 120 120" width="100%" height="100%">
+          <circle cx="60" cy="60" r="52" fill="none" stroke="var(--bd)" stroke-width="8"/>
+          <circle cx="60" cy="60" r="52" fill="none" stroke="var(--gold)" stroke-width="8"
+            stroke-dasharray="327" stroke-dashoffset="327" stroke-linecap="round" id="scoreCircle"/>
+        </svg>
+        <div class="score-num">
+          <div class="score-val" id="scoreVal">–</div>
+          <div class="score-lbl">Solar Score</div>
+        </div>
+      </div>
+      <div class="score-verdict" id="scoreVerdict">–</div>
+      <div class="score-desc" id="scoreDesc">–</div>
+      <div style="margin-top:12px;">
+        <span class="q-badge" id="qualityBadge">–</span>
+      </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="sec">
+      <div class="sec-hdr">Wichtigste Kennzahlen</div>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-icon">⚡</div>
+          <div class="card-val" id="mMaxKwp" style="color:var(--gold)">–</div>
+          <div class="card-lbl">Max. kWp</div>
+          <div class="card-sub" id="mPanelCount">– Module</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🔋</div>
+          <div class="card-val" id="mYearKwh" style="color:var(--gr)">–</div>
+          <div class="card-lbl">kWh / Jahr</div>
+          <div class="card-sub" id="mYearSaving">geschätzter Ertrag</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">📐</div>
+          <div class="card-val" id="mRoofArea">–</div>
+          <div class="card-lbl">m² Dachfläche</div>
+          <div class="card-sub" id="mUsableArea">– m² nutzbar</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🌤️</div>
+          <div class="card-val" id="mSunHours">–</div>
+          <div class="card-lbl">Sonnenstunden/J.</div>
+          <div class="card-sub" id="mCO2">– kg CO₂ gespart</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Roof Segments -->
+    <div class="sec">
+      <div class="sec-hdr">Dachsegmente</div>
+      <div id="segmentsList"></div>
+    </div>
+
+    <!-- Empfohlene Konfiguration -->
+    <div class="sec">
+      <div class="sec-hdr">Empfohlene Konfiguration</div>
+      <div class="card" id="configCard" style="padding:4px 16px;"></div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="act-btn act-primary" onclick="shareResult()">📤 An Kunden senden</button>
+      <button class="act-btn act-secondary" onclick="copyResult()">📋 Kopieren</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ─── CONFIG ───
+const GOOGLE_KEY = 'AIzaSyB7Y7FgAc4R6GX1V6GjGzm0bSNK5IfBg7o';
+const SB_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+let selectedLat = null, selectedLng = null, selectedAddress = '';
+let currentResult = null;
+let minimap = null, minimapMarker = null;
+let debounceTimer = null;
+
+// ─── INIT ───
+document.addEventListener('DOMContentLoaded', () => {
+  checkApiStatus();
+  setupSearch();
+});
+
+// ─── API STATUS CHECK ───
+async function checkApiStatus() {
+  const dot = document.querySelector('#apiStatus .api-dot');
+  const txt = document.getElementById('apiStatusText');
+  try {
+    // Quick test with known coords (Bielefeld center)
+    const r = await fetch(`https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=52.0302&location.longitude=8.5325&requiredQuality=MEDIUM&key=${GOOGLE_KEY}`);
+    if (r.ok || r.status === 404) {
+      // 404 = no building found but API works
+      dot.className = 'api-dot ok';
+      txt.textContent = 'API aktiv';
+    } else if (r.status === 403) {
+      dot.className = 'api-dot err';
+      txt.textContent = 'API nicht aktiviert';
+      txt.title = 'Solar API muss in Google Cloud Console aktiviert werden';
+    } else {
+      dot.className = 'api-dot err';
+      txt.textContent = 'Fehler ' + r.status;
+    }
+  } catch (e) {
+    dot.className = 'api-dot err';
+    txt.textContent = 'Offline';
+  }
+}
+
+// ─── SEARCH / AUTOCOMPLETE ───
+function setupSearch() {
+  const input = document.getElementById('searchInput');
+  const btn = document.getElementById('searchBtn');
+  const sugBox = document.getElementById('suggestions');
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const q = input.value.trim();
+    if (q.length < 3) { sugBox.classList.remove('show'); return; }
+    debounceTimer = setTimeout(() => autocomplete(q), 300);
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && selectedLat) {
+      e.preventDefault();
+      runSolarCheck();
+    }
+  });
+
+  btn.addEventListener('click', () => { if (selectedLat) runSolarCheck(); });
+
+  // Close suggestions on outside click
+  document.addEventListener('click', e => {
+    if (!document.getElementById('searchWrap').contains(e.target)) {
+      sugBox.classList.remove('show');
+    }
+  });
+}
+
+async function autocomplete(query) {
+  const sugBox = document.getElementById('suggestions');
+  try {
+    // Use Google Geocoding as fallback-friendly autocomplete
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&components=country:DE&key=${GOOGLE_KEY}&language=de`;
+    const r = await fetch(url);
+    const data = await r.json();
+    if (!data.results || !data.results.length) { sugBox.classList.remove('show'); return; }
+
+    sugBox.innerHTML = data.results.slice(0, 5).map((r, i) => {
+      const parts = r.formatted_address.split(',');
+      const main = parts[0] || '';
+      const sub = parts.slice(1).join(',').trim();
+      return `<div class="sug-item" data-lat="${r.geometry.location.lat}" data-lng="${r.geometry.location.lng}" data-addr="${r.formatted_address}" onclick="selectSuggestion(this)">
+        <div class="sug-icon">🏠</div>
+        <div><div class="sug-main">${main}</div><div class="sug-sub">${sub}</div></div>
+      </div>`;
+    }).join('');
+    sugBox.classList.add('show');
+  } catch (e) {
+    console.error('Autocomplete error:', e);
+  }
+}
+
+function selectSuggestion(el) {
+  selectedLat = parseFloat(el.dataset.lat);
+  selectedLng = parseFloat(el.dataset.lng);
+  selectedAddress = el.dataset.addr;
+  document.getElementById('searchInput').value = selectedAddress;
+  document.getElementById('suggestions').classList.remove('show');
+  document.getElementById('searchBtn').disabled = false;
+  // Auto-run
+  runSolarCheck();
+}
+
+// ─── SOLAR CHECK ───
+async function runSolarCheck() {
+  if (!selectedLat || !selectedLng) return;
+
+  // Hide previous
+  hide('infoBanner'); hide('errorBox'); hide('resultBox');
+  show('loadingBox');
+
+  setStep(1);
+  await delay(400);
+
+  setStep(2);
+  try {
+    const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${selectedLat}&location.longitude=${selectedLng}&requiredQuality=MEDIUM&key=${GOOGLE_KEY}`;
+    const r = await fetch(url);
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      if (r.status === 404 || (err.error && err.error.code === 404)) {
+        showError('Gebäude nicht gefunden', 'Google hat für diese Adresse keine Solardaten. Das Gebäude liegt möglicherweise außerhalb der Abdeckung.');
+      } else if (r.status === 403) {
+        showError('API nicht aktiviert', 'Die Google Solar API muss erst in der Google Cloud Console aktiviert werden. Gehe zu console.cloud.google.com → APIs & Dienste → Solar API aktivieren.');
+      } else {
+        showError('API-Fehler', `Statuscode ${r.status}: ${err.error?.message || 'Unbekannter Fehler'}`);
+      }
+      return;
+    }
+
+    setStep(3);
+    await delay(300);
+    const data = await r.json();
+    currentResult = data;
+
+    setStep(4);
+    await delay(400);
+
+    renderResult(data);
+
+    // Cache in Supabase (fire and forget)
+    cacheResult(data);
+
+  } catch (e) {
+    console.error('Solar API error:', e);
+    showError('Verbindungsfehler', 'Konnte keine Verbindung zur Google Solar API herstellen. Bitte prüfe deine Internetverbindung.');
+  }
+}
+
+// ─── RENDER RESULT ───
+function renderResult(data) {
+  hide('loadingBox');
+  show('resultBox');
+
+  const sp = data.solarPotential || {};
+  const segments = sp.roofSegmentStats || [];
+  const configs = sp.solarPanelConfigs || [];
+  const bestConfig = configs.length ? configs[configs.length - 1] : null; // max panels
+  // Recommended config: ~80% of max for sweet spot
+  const recIdx = Math.min(Math.floor(configs.length * 0.75), configs.length - 1);
+  const recConfig = configs[recIdx] || bestConfig;
+
+  // Building info
+  const name = selectedAddress || data.name || '–';
+  document.getElementById('buildingName').textContent = name;
+
+  // Quality badge
+  const qual = data.imageryQuality || 'MEDIUM';
+  const qBadge = document.getElementById('qualityBadge');
+  qBadge.textContent = qual === 'HIGH' ? '🛰️ Hochauflösend' : '🛰️ Mittel';
+  qBadge.className = 'q-badge ' + (qual === 'HIGH' ? 'q-high' : 'q-medium');
+
+  // Solar Score (0-100 based on sunshine hours and usable area)
+  const maxSun = sp.maxSunshineHoursPerYear || 0;
+  const totalArea = sp.wholeRoofStats?.areaMeters2 || 0;
+  const maxPanels = sp.maxArrayPanelsCount || 0;
+  const panelArea = (sp.panelWidthMeters || 1.045) * (sp.panelHeightMeters || 1.879);
+  const usableArea = maxPanels * panelArea;
+  const usableRatio = totalArea > 0 ? usableArea / totalArea : 0;
+  const sunScore = Math.min(maxSun / 1400, 1); // 1400h is excellent for DE
+  const areaScore = Math.min(usableRatio / 0.6, 1); // 60%+ usable is great
+  const solarScore = Math.round((sunScore * 0.6 + areaScore * 0.4) * 100);
+
+  // Animate score circle
+  const circle = document.getElementById('scoreCircle');
+  const circumference = 2 * Math.PI * 52;
+  const offset = circumference - (solarScore / 100) * circumference;
+  const scoreColor = solarScore >= 70 ? 'var(--gr)' : solarScore >= 40 ? 'var(--gold)' : 'var(--rd)';
+  circle.style.stroke = scoreColor;
+  setTimeout(() => { circle.style.transition = 'stroke-dashoffset 1.2s ease'; circle.setAttribute('stroke-dashoffset', offset); }, 100);
+
+  document.getElementById('scoreVal').textContent = solarScore;
+  document.getElementById('scoreVal').style.color = scoreColor;
+
+  // Verdict
+  const verdicts = [
+    [80, '🏆 Hervorragendes Dach!', 'Optimale Bedingungen für eine PV-Anlage. Sehr gute Sonneneinstrahlung und viel nutzbare Fläche.'],
+    [60, '✅ Gut geeignet', 'Solide Voraussetzungen für eine rentable PV-Anlage. Gute Sonnenverhältnisse.'],
+    [40, '⚠️ Bedingt geeignet', 'Es gibt Einschränkungen durch Verschattung oder begrenzte Fläche. Eine genaue Vor-Ort-Prüfung wird empfohlen.'],
+    [0,  '❌ Eingeschränkt', 'Die Dachfläche zeigt signifikante Einschränkungen. Ein Vor-Ort-Check ist erforderlich.']
+  ];
+  const v = verdicts.find(v => solarScore >= v[0]);
+  document.getElementById('scoreVerdict').textContent = v[1];
+  document.getElementById('scoreDesc').textContent = v[2];
+
+  // Key Metrics
+  const maxKwp = ((sp.maxArrayPanelsCount || 0) * (sp.panelCapacityWatts || 400) / 1000).toFixed(1);
+  document.getElementById('mMaxKwp').textContent = maxKwp;
+  document.getElementById('mPanelCount').textContent = `${sp.maxArrayPanelsCount || 0} Module à ${sp.panelCapacityWatts || 400}W`;
+
+  const yearKwh = Math.round(bestConfig?.yearlyEnergyDcKwh * 0.85 || 0); // 85% DC→AC derate
+  document.getElementById('mYearKwh').textContent = yearKwh.toLocaleString('de');
+  document.getElementById('mYearSaving').textContent = `≈ ${(yearKwh * 0.30 / 100).toFixed(0).toLocaleString('de')}€/Jahr bei 30ct/kWh`;
+
+  document.getElementById('mRoofArea').textContent = Math.round(totalArea);
+  document.getElementById('mUsableArea').textContent = `${Math.round(usableArea)} m² nutzbar (${Math.round(usableRatio*100)}%)`;
+
+  document.getElementById('mSunHours').textContent = Math.round(maxSun).toLocaleString('de');
+  const co2 = Math.round(yearKwh * 0.4); // ~400g CO2/kWh German grid mix
+  document.getElementById('mCO2').textContent = `${co2.toLocaleString('de')} kg CO₂/Jahr`;
+
+  // Roof Segments
+  renderSegments(segments, sp);
+
+  // Config Card
+  renderConfig(recConfig, sp);
+
+  // Mini Map
+  renderMap(data);
+}
+
+function renderSegments(segments, sp) {
+  const container = document.getElementById('segmentsList');
+  const maxFlux = Math.max(...segments.map(s => s.stats?.sunshineQuantiles?.[10] || 0), 1);
+
+  const dirNames = azimuth => {
+    if (azimuth >= 337.5 || azimuth < 22.5) return { name: 'Nord', short: 'N', color: '#60a5fa' };
+    if (azimuth < 67.5) return { name: 'Nordost', short: 'NO', color: '#818cf8' };
+    if (azimuth < 112.5) return { name: 'Ost', short: 'O', color: '#a78bfa' };
+    if (azimuth < 157.5) return { name: 'Südost', short: 'SO', color: '#22c55e' };
+    if (azimuth < 202.5) return { name: 'Süd', short: 'S', color: '#F5C500' };
+    if (azimuth < 247.5) return { name: 'Südwest', short: 'SW', color: '#fb923c' };
+    if (azimuth < 292.5) return { name: 'West', short: 'W', color: '#f87171' };
+    return { name: 'Nordwest', short: 'NW', color: '#38bdf8' };
+  };
+
+  container.innerHTML = segments.map((seg, i) => {
+    const dir = dirNames(seg.azimuthDegrees || 0);
+    const area = Math.round(seg.stats?.areaMeters2 || 0);
+    const pitch = Math.round(seg.pitchDegrees || 0);
+    const sunH = Math.round(seg.stats?.sunshineQuantiles?.[10] || 0);
+    const pct = Math.round((sunH / maxFlux) * 100);
+
+    return `<div class="seg-item">
+      <div class="seg-dir" style="background:${dir.color}22;color:${dir.color}">${dir.short}</div>
+      <div class="seg-info">
+        <div class="seg-name">${dir.name} · ${area} m²</div>
+        <div class="seg-detail">${pitch}° Neigung · ${sunH}h Sonne/Jahr</div>
+      </div>
+      <div class="seg-bar-wrap"><div class="seg-bar" style="width:${pct}%;background:${dir.color}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderConfig(cfg, sp) {
+  if (!cfg) { document.getElementById('configCard').innerHTML = '<p style="padding:12px;color:var(--tx3);font-size:12px">Keine Konfiguration verfügbar</p>'; return; }
+
+  const panels = cfg.panelsCount || 0;
+  const kwp = (panels * (sp.panelCapacityWatts || 400) / 1000).toFixed(1);
+  const yearKwh = Math.round((cfg.yearlyEnergyDcKwh || 0) * 0.85);
+  const segs = cfg.roofSegmentSummaries || [];
+
+  document.getElementById('configCard').innerHTML = `
+    <div class="cfg-row"><div class="cfg-icon">⬛</div><div class="cfg-lbl">Anzahl Module</div><div class="cfg-val">${panels} Stück</div></div>
+    <div class="cfg-row"><div class="cfg-icon">⚡</div><div class="cfg-lbl">Anlagenleistung</div><div class="cfg-val" style="color:var(--gold)">${kwp} kWp</div></div>
+    <div class="cfg-row"><div class="cfg-icon">🔋</div><div class="cfg-lbl">Jahresertrag (AC)</div><div class="cfg-val" style="color:var(--gr)">${yearKwh.toLocaleString('de')} kWh</div></div>
+    <div class="cfg-row"><div class="cfg-icon">💰</div><div class="cfg-lbl">Ersparnis/Jahr</div><div class="cfg-val">≈ ${Math.round(yearKwh * 0.30)}€</div></div>
+    <div class="cfg-row"><div class="cfg-icon">🏠</div><div class="cfg-lbl">Belegte Segmente</div><div class="cfg-val">${segs.length}</div></div>
+    <div class="cfg-row"><div class="cfg-icon">📏</div><div class="cfg-lbl">Modulgröße</div><div class="cfg-val">${((sp.panelWidthMeters||1.045)*100).toFixed(0)}×${((sp.panelHeightMeters||1.879)*100).toFixed(0)} cm</div></div>
+  `;
+}
+
+function renderMap(data) {
+  const lat = data.center?.latitude || selectedLat;
+  const lng = data.center?.longitude || selectedLng;
+  if (!lat || !lng) return;
+
+  document.getElementById('mapWrap').style.display = 'block';
+
+  // Load Leaflet dynamically if not loaded
+  if (typeof L === 'undefined') {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => initMap(lat, lng, data);
+    document.head.appendChild(script);
+  } else {
+    initMap(lat, lng, data);
+  }
+}
+
+function initMap(lat, lng, data) {
+  if (minimap) minimap.remove();
+  minimap = L.map('minimap', { zoomControl: false, attributionControl: false }).setView([lat, lng], 18);
+  L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 22 }).addTo(minimap);
+
+  // Building outline from bounding box
+  const bb = data.boundingBox;
+  if (bb) {
+    const bounds = [[bb.sw.latitude, bb.sw.longitude], [bb.ne.latitude, bb.ne.longitude]];
+    L.rectangle(bounds, { color: '#F5C500', weight: 2, fillColor: '#F5C500', fillOpacity: 0.15, dashArray: '6 3' }).addTo(minimap);
+  }
+
+  L.circleMarker([lat, lng], { radius: 6, fillColor: '#F5C500', fillOpacity: 1, color: '#000', weight: 2 }).addTo(minimap);
+}
+
+// ─── CACHE IN SUPABASE ───
+async function cacheResult(data) {
+  try {
+    const row = {
+      lat: selectedLat,
+      lng: selectedLng,
+      address: selectedAddress,
+      max_kwp: ((data.solarPotential?.maxArrayPanelsCount || 0) * (data.solarPotential?.panelCapacityWatts || 400) / 1000),
+      max_panels: data.solarPotential?.maxArrayPanelsCount || 0,
+      roof_area_m2: Math.round(data.solarPotential?.wholeRoofStats?.areaMeters2 || 0),
+      sunshine_hours: Math.round(data.solarPotential?.maxSunshineHoursPerYear || 0),
+      imagery_quality: data.imageryQuality || 'MEDIUM',
+      raw_json: JSON.stringify(data)
+    };
+    await fetch(`${SB_URL}/rest/v1/solar_checks`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row)
+    });
+  } catch (e) { console.warn('Cache failed:', e); }
+}
+
+// ─── SHARE / COPY ───
+function shareResult() {
+  if (!currentResult) return;
+  const sp = currentResult.solarPotential || {};
+  const maxKwp = ((sp.maxArrayPanelsCount || 0) * (sp.panelCapacityWatts || 400) / 1000).toFixed(1);
+  const configs = sp.solarPanelConfigs || [];
+  const best = configs.length ? configs[configs.length - 1] : null;
+  const yearKwh = Math.round((best?.yearlyEnergyDcKwh || 0) * 0.85);
+
+  const text = `☀️ *Solar Check – ${selectedAddress}*
+
+📐 Dachfläche: ${Math.round(sp.wholeRoofStats?.areaMeters2 || 0)} m²
+⚡ Max. Leistung: ${maxKwp} kWp (${sp.maxArrayPanelsCount || 0} Module)
+🔋 Jahresertrag: ~${yearKwh.toLocaleString('de')} kWh
+🌤️ Sonnenstunden: ${Math.round(sp.maxSunshineHoursPerYear || 0)}h/Jahr
+🌍 CO₂-Ersparnis: ~${Math.round(yearKwh * 0.4).toLocaleString('de')} kg/Jahr
+
+Analysiert mit Google Solar API & bee-doo`;
+
+  if (navigator.share) {
+    navigator.share({ title: 'Solar Check', text }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(text).then(() => alert('✓ In Zwischenablage kopiert!'));
+  }
+}
+
+function copyResult() {
+  if (!currentResult) return;
+  const sp = currentResult.solarPotential || {};
+  const maxKwp = ((sp.maxArrayPanelsCount || 0) * (sp.panelCapacityWatts || 400) / 1000).toFixed(1);
+  const configs = sp.solarPanelConfigs || [];
+  const best = configs.length ? configs[configs.length - 1] : null;
+  const yearKwh = Math.round((best?.yearlyEnergyDcKwh || 0) * 0.85);
+
+  const text = `Solar Check: ${selectedAddress} | ${maxKwp} kWp | ${yearKwh} kWh/Jahr | ${Math.round(sp.wholeRoofStats?.areaMeters2 || 0)} m² Dach | ${Math.round(sp.maxSunshineHoursPerYear || 0)}h Sonne`;
+  navigator.clipboard.writeText(text).then(() => alert('✓ Kopiert!'));
+}
+
+// ─── HELPERS ───
+function show(id) { document.getElementById(id).classList.add('show'); document.getElementById(id).style.display = ''; }
+function hide(id) { document.getElementById(id).classList.remove('show'); document.getElementById(id).style.display = 'none'; }
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function showError(title, msg) {
+  hide('loadingBox');
+  const box = document.getElementById('errorBox');
+  document.getElementById('errorTitle').textContent = title;
+  document.getElementById('errorMsg').textContent = msg;
+  box.style.display = 'block';
+  box.classList.add('show');
+}
+
+function setStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('step' + i);
+    el.classList.remove('active', 'done');
+    if (i < n) el.classList.add('done');
+    if (i === n) el.classList.add('active');
+  }
+}
+</script>
+</body>
+</html>
