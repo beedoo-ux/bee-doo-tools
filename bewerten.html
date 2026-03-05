@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo – Ihre Erfahrung zählt</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #F5C500;
+  --gold2: #FFD740;
+  --gold-glow: rgba(245,197,0,0.4);
+  --bg: #080809;
+  --ink: #f5f4f0;
+  --ink-dim: rgba(245,244,240,0.5);
+  --ink-faint: rgba(245,244,240,0.15);
+  --card-bg: rgba(255,255,255,0.04);
+  --card-border: rgba(255,255,255,0.08);
+  --radius: 20px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-x: hidden;
+  padding: 24px 16px;
+}
+
+/* ── Particle canvas ── */
+#particles { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+/* ── Ambient glow ── */
+.glow-orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+}
+.glow-orb-1 {
+  width: 500px; height: 500px;
+  background: rgba(245,197,0,0.07);
+  top: -100px; left: -100px;
+  animation: drift1 18s ease-in-out infinite alternate;
+}
+.glow-orb-2 {
+  width: 400px; height: 400px;
+  background: rgba(245,197,0,0.04);
+  bottom: -80px; right: -80px;
+  animation: drift2 22s ease-in-out infinite alternate;
+}
+
+@keyframes drift1 {
+  to { transform: translate(80px, 60px) scale(1.1); }
+}
+@keyframes drift2 {
+  to { transform: translate(-60px, -40px) scale(0.9); }
+}
+
+/* ── Wrapper ── */
+.wrapper {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 540px;
+}
+
+/* ── Card ── */
+.card {
+  background: rgba(14,14,16,0.92);
+  border: 1px solid var(--card-border);
+  border-radius: 28px;
+  padding: 48px 40px;
+  backdrop-filter: blur(40px);
+  box-shadow:
+    0 0 0 1px rgba(245,197,0,0.06),
+    0 40px 80px rgba(0,0,0,0.6),
+    0 1px 0 rgba(255,255,255,0.05) inset;
+}
+
+/* ── Steps ── */
+.step { display: none; animation: stepIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both; }
+.step.active { display: block; }
+
+@keyframes stepIn {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Logo ── */
+.logo-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 36px;
+}
+.logo-hex {
+  width: 44px; height: 44px;
+  background: var(--gold);
+  clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  animation: hexPulse 3s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes hexPulse {
+  0%,100% { filter: drop-shadow(0 0 8px rgba(245,197,0,0.4)); }
+  50%      { filter: drop-shadow(0 0 20px rgba(245,197,0,0.8)); }
+}
+.logo-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.logo-name span { color: var(--gold); }
+
+/* ── Divider ── */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--card-border), transparent);
+  margin: 0 -40px 36px;
+}
+
+/* ── Typography ── */
+.headline {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(26px, 5vw, 34px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.subline {
+  font-size: 15px;
+  color: var(--ink-dim);
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 40px;
+}
+
+/* ── Star Rating ── */
+.stars-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 48px;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1);
+  position: relative;
+}
+.star-btn:hover { transform: scale(1.3) translateY(-4px); }
+.star-btn:active { transform: scale(0.95); }
+
+.star-svg {
+  width: 52px; height: 52px;
+  transition: all 0.2s ease;
+  filter: drop-shadow(0 0 0px rgba(245,197,0,0));
+}
+.star-svg path {
+  fill: var(--ink-faint);
+  stroke: none;
+  transition: fill 0.2s ease;
+}
+.star-btn.lit .star-svg path {
+  fill: var(--gold);
+}
+.star-btn.lit .star-svg {
+  filter: drop-shadow(0 0 10px rgba(245,197,0,0.6));
+}
+
+.star-label {
+  display: block;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-dim);
+  margin-top: 4px;
+  min-height: 18px;
+  transition: all 0.2s;
+}
+
+.stars-hint {
+  text-align: center;
+  font-size: 14px;
+  color: var(--ink-faint);
+  margin-top: -32px;
+  margin-bottom: 32px;
+  transition: opacity 0.3s;
+}
+
+/* ── Platform buttons ── */
+.platforms {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.platform-btn {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  border-radius: 14px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+.platform-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--hover-color, rgba(255,255,255,0.04));
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.platform-btn:hover::before { opacity: 1; }
+.platform-btn:hover {
+  border-color: var(--accent-color, rgba(255,255,255,0.2));
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.platform-btn:active { transform: translateY(0); }
+
+.platform-btn.google   { --accent-color: rgba(66,133,244,0.4); --hover-color: rgba(66,133,244,0.06); }
+.platform-btn.trustp   { --accent-color: rgba(0,182,122,0.4);  --hover-color: rgba(0,182,122,0.06); }
+.platform-btn.proven   { --accent-color: rgba(245,197,0,0.4);  --hover-color: rgba(245,197,0,0.06); }
+
+.platform-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.platform-icon.google { background: rgba(66,133,244,0.12); }
+.platform-icon.trustp { background: rgba(0,182,122,0.12); }
+.platform-icon.proven { background: rgba(245,197,0,0.12); }
+
+.platform-text { flex: 1; text-align: left; }
+.platform-name { font-weight: 600; font-size: 15px; }
+.platform-desc { font-size: 12px; color: var(--ink-dim); margin-top: 2px; }
+
+.platform-arrow {
+  font-size: 18px;
+  color: var(--ink-faint);
+  transition: transform 0.2s, color 0.2s;
+}
+.platform-btn:hover .platform-arrow {
+  transform: translateX(4px);
+  color: var(--ink);
+}
+
+/* ── Negative feedback form ── */
+.feedback-form { display: flex; flex-direction: column; gap: 14px; }
+
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 5px;
+  display: block;
+}
+
+.form-input, .form-textarea {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  color: var(--ink);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  resize: none;
+}
+.form-input::placeholder, .form-textarea::placeholder { color: var(--ink-faint); }
+.form-input:focus, .form-textarea:focus {
+  border-color: rgba(245,197,0,0.4);
+  box-shadow: 0 0 0 3px rgba(245,197,0,0.08);
+}
+.form-textarea { min-height: 100px; }
+
+/* ── Primary button ── */
+.btn-primary {
+  width: 100%;
+  padding: 16px;
+  background: var(--gold);
+  color: #000;
+  border: none;
+  border-radius: 14px;
+  font-family: 'Syne', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+}
+.btn-primary:hover {
+  background: var(--gold2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(245,197,0,0.35);
+}
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ── Back link ── */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  padding: 0;
+  margin-bottom: 28px;
+  transition: color 0.15s;
+}
+.back-link:hover { color: var(--ink); }
+
+/* ── Thank you ── */
+.checkmark-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+.checkmark-circle {
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  background: rgba(245,197,0,0.1);
+  border: 2px solid rgba(245,197,0,0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 40px;
+  animation: popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both 0.1s;
+}
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.4); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Stars selected display ── */
+.selected-stars {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+.mini-star { font-size: 20px; }
+
+/* ── Footer note ── */
+.footer-note {
+  margin-top: 28px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-faint);
+  line-height: 1.5;
+}
+
+/* ── Progress dots ── */
+.progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 32px;
+}
+.prog-dot {
+  width: 6px; height: 6px;
+  border-radius: 3px;
+  background: var(--ink-faint);
+  transition: all 0.3s ease;
+}
+.prog-dot.active {
+  width: 24px;
+  background: var(--gold);
+}
+.prog-dot.done { background: rgba(245,197,0,0.4); }
+
+/* ── Shine hint for negative ── */
+.care-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(245,197,0,0.06);
+  border: 1px solid rgba(245,197,0,0.15);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin-bottom: 24px;
+}
+.care-badge-icon { font-size: 20px; flex-shrink: 0; }
+
+/* ── Loading spinner ── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block;
+  width: 18px; height: 18px;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-top-color: #000;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 540px) {
+  .card { padding: 36px 24px; border-radius: 24px; }
+  .divider { margin: 0 -24px 28px; }
+  .star-svg { width: 44px; height: 44px; }
+  .stars-row { gap: 8px; }
+}
+@media (max-width: 380px) {
+  .star-svg { width: 38px; height: 38px; }
+  .headline { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+<div class="glow-orb glow-orb-1"></div>
+<div class="glow-orb glow-orb-2"></div>
+
+<div class="wrapper">
+  <div class="card">
+
+    <!-- ══ STEP 1: Star Rating ══ -->
+    <div class="step active" id="step1">
+      <div class="logo-row">
+        <div class="logo-hex">🐝</div>
+        <div class="logo-name">bee<span>-</span>doo</div>
+      </div>
+      <div class="divider"></div>
+
+      <div class="progress">
+        <div class="prog-dot active" id="dot1"></div>
+        <div class="prog-dot" id="dot2"></div>
+        <div class="prog-dot" id="dot3"></div>
+      </div>
+
+      <div class="headline">Wie war Ihre<br>Erfahrung mit uns?</div>
+      <div class="subline">Ihre Meinung hilft uns und anderen Kunden, die richtige Entscheidung zu treffen.</div>
+
+      <div class="stars-row" id="starsRow">
+        <button class="star-btn" data-val="1" onclick="selectStar(1)">
+          <svg class="star-svg" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        </button>
+        <button class="star-btn" data-val="2" onclick="selectStar(2)">
+          <svg class="star-svg" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        </button>
+        <button class="star-btn" data-val="3" onclick="selectStar(3)">
+          <svg class="star-svg" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        </button>
+        <button class="star-btn" data-val="4" onclick="selectStar(4)">
+          <svg class="star-svg" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        </button>
+        <button class="star-btn" data-val="5" onclick="selectStar(5)">
+          <svg class="star-svg" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        </button>
+      </div>
+
+      <p class="stars-hint" id="starsHint">Wählen Sie Ihre Bewertung</p>
+
+      <div class="footer-note">
+        🔒 100% sicher · Ihre Daten werden nicht weitergegeben
+      </div>
+    </div>
+
+    <!-- ══ STEP 2A: Positive → Platform choice ══ -->
+    <div class="step" id="step2pos">
+      <button class="back-link" onclick="goBack()">← Zurück</button>
+
+      <div class="progress">
+        <div class="prog-dot done"></div>
+        <div class="prog-dot active"></div>
+        <div class="prog-dot" id="dot3b"></div>
+      </div>
+
+      <div class="selected-stars" id="selectedStarsPos"></div>
+
+      <div class="headline">Danke! 🎉<br>Wo möchten Sie<br>bewerten?</div>
+      <div class="subline">Wählen Sie Ihre bevorzugte Plattform — jede Bewertung hilft uns enorm.</div>
+
+      <div class="platforms">
+        <a class="platform-btn google" id="googleBtn" href="#" target="_blank" rel="noopener" onclick="trackClick('google')">
+          <div class="platform-icon google">
+            <svg width="22" height="22" viewBox="0 0 48 48">
+              <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+              <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+              <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"/>
+              <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
+            </svg>
+          </div>
+          <div class="platform-text">
+            <div class="platform-name">Google Maps</div>
+            <div class="platform-desc">Sichtbar bei Google-Suche · Größte Reichweite</div>
+          </div>
+          <div class="platform-arrow">→</div>
+        </a>
+
+        <a class="platform-btn trustp" href="https://de.trustpilot.com/review/bee-doo.de" target="_blank" rel="noopener" onclick="trackClick('trustpilot')">
+          <div class="platform-icon trustp">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <rect width="24" height="24" rx="4" fill="#00B37A"/>
+              <path d="M12 4l2.1 6.5H20l-5 3.6 1.9 5.9L12 16.1l-4.9 3.9 1.9-5.9-5-3.6h5.9L12 4z" fill="white"/>
+            </svg>
+          </div>
+          <div class="platform-text">
+            <div class="platform-name">Trustpilot</div>
+            <div class="platform-desc">Internationales Vertrauens-Portal · Verifiziert</div>
+          </div>
+          <div class="platform-arrow">→</div>
+        </a>
+
+        <a class="platform-btn proven" id="provenBtn" href="https://www.provenexpert.com/bee-doo-gmbh/" target="_blank" rel="noopener" onclick="trackClick('provenexpert')">
+          <div class="platform-icon proven">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" fill="#F5C500"/>
+              <path d="M8 12l3 3 5-5" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="platform-text">
+            <div class="platform-name">ProvenExpert</div>
+            <div class="platform-desc">Deutsches Qualitätsportal · Solar-Branchen-Seal</div>
+          </div>
+          <div class="platform-arrow">→</div>
+        </a>
+      </div>
+
+      <div class="footer-note">
+        🐝 Jede Bewertung dauert nur 2 Minuten — und macht einen riesigen Unterschied.
+      </div>
+    </div>
+
+    <!-- ══ STEP 2B: Negative → Private feedback ══ -->
+    <div class="step" id="step2neg">
+      <button class="back-link" onclick="goBack()">← Zurück</button>
+
+      <div class="progress">
+        <div class="prog-dot done"></div>
+        <div class="prog-dot active"></div>
+        <div class="prog-dot"></div>
+      </div>
+
+      <div class="selected-stars" id="selectedStarsNeg"></div>
+
+      <div class="headline">Das tut uns leid.</div>
+      <div class="subline">Sagen Sie uns was passiert ist — wir melden uns persönlich bei Ihnen.</div>
+
+      <div class="care-badge">
+        <span class="care-badge-icon">💬</span>
+        <span>Ihr Feedback geht direkt an die Geschäftsleitung. Wir nehmen das ernst.</span>
+      </div>
+
+      <div class="feedback-form">
+        <div>
+          <label class="form-label">Ihr Name (optional)</label>
+          <input class="form-input" type="text" id="fbName" placeholder="Max Mustermann">
+        </div>
+        <div>
+          <label class="form-label">Was ist passiert?</label>
+          <textarea class="form-textarea" id="fbMessage" placeholder="Bitte beschreiben Sie Ihre Erfahrung…"></textarea>
+        </div>
+        <div>
+          <label class="form-label">Telefon / E-Mail (optional)</label>
+          <input class="form-input" type="text" id="fbContact" placeholder="Damit wir uns bei Ihnen melden können">
+        </div>
+        <button class="btn-primary" onclick="submitFeedback()" id="fbSubmitBtn">
+          Feedback absenden
+        </button>
+      </div>
+
+      <div class="footer-note">
+        Ihr Feedback bleibt vertraulich und wird nicht öffentlich geteilt.
+      </div>
+    </div>
+
+    <!-- ══ STEP 3: Thank you ══ -->
+    <div class="step" id="step3">
+      <div class="checkmark-wrap">
+        <div class="checkmark-circle" id="thankIcon">⭐</div>
+      </div>
+
+      <div class="progress">
+        <div class="prog-dot done"></div>
+        <div class="prog-dot done"></div>
+        <div class="prog-dot active"></div>
+      </div>
+
+      <div class="headline" id="thankHeadline">Vielen Dank!</div>
+      <div class="subline" id="thankSubline">Sie helfen uns, bee-doo jeden Tag besser zu machen.</div>
+
+      <div class="footer-note" style="margin-top:0">
+        🐝 Das bee-doo Team · Bielefeld, NRW
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+// Google place ID placeholder — update once you find your Place ID
+const GOOGLE_REVIEW_URL = 'https://search.google.com/local/writereview?placeid=PLACE_ID_EINFUEGEN';
+
+let selectedStars = 0;
+let source = new URLSearchParams(location.search).get('src') || 'direct';
+
+// Set google review URL
+document.getElementById('googleBtn').href = GOOGLE_REVIEW_URL;
+
+// ── Particles ──────────────────────────────────────────────────────
+const canvas = document.getElementById('particles');
+const ctx = canvas.getContext('2d');
+let W, H, particles = [];
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+for (let i = 0; i < 60; i++) {
+  particles.push({
+    x: Math.random() * 1920,
+    y: Math.random() * 1080,
+    r: Math.random() * 1.5 + 0.3,
+    vx: (Math.random() - 0.5) * 0.25,
+    vy: (Math.random() - 0.5) * 0.25,
+    a: Math.random() * 0.4 + 0.1,
+    gold: Math.random() > 0.7
+  });
+}
+
+function drawParticles() {
+  ctx.clearRect(0, 0, W, H);
+  for (const p of particles) {
+    ctx.beginPath();
+    ctx.arc(p.x % W, p.y % H, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.gold
+      ? `rgba(245,197,0,${p.a})`
+      : `rgba(255,255,255,${p.a * 0.4})`;
+    ctx.fill();
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0) p.x += W; if (p.x > W) p.x -= W;
+    if (p.y < 0) p.y += H; if (p.y > H) p.y -= H;
+  }
+  requestAnimationFrame(drawParticles);
+}
+drawParticles();
+
+// ── Star logic ─────────────────────────────────────────────────────
+const starLabels = ['', 'Sehr schlecht', 'Schlecht', 'Okay', 'Gut', 'Ausgezeichnet!'];
+
+function selectStar(n) {
+  selectedStars = n;
+  document.querySelectorAll('.star-btn').forEach((btn, i) => {
+    btn.classList.toggle('lit', i < n);
+    // Bounce animation
+    if (i < n) {
+      btn.style.animation = 'none';
+      void btn.offsetWidth;
+      btn.style.animation = `starBounce 0.3s cubic-bezier(0.34,1.56,0.64,1) ${i * 40}ms both`;
+    }
+  });
+
+  const hint = document.getElementById('starsHint');
+  hint.textContent = starLabels[n] || '';
+  hint.style.color = n >= 4 ? 'rgba(245,197,0,0.9)' : n >= 3 ? 'rgba(245,244,240,0.6)' : 'rgba(255,100,100,0.8)';
+
+  // Auto-advance after short delay
+  setTimeout(() => advance(n), 400);
+}
+
+// Add bounce keyframe dynamically
+const styleSheet = document.createElement('style');
+styleSheet.textContent = `@keyframes starBounce { from { transform: scale(0.7) translateY(6px); } to { transform: scale(1); } }`;
+document.head.appendChild(styleSheet);
+
+function advance(n) {
+  const starsHtml = Array(5).fill(0).map((_, i) =>
+    `<span class="mini-star">${i < n ? '⭐' : '☆'}</span>`
+  ).join('');
+
+  if (n >= 4) {
+    document.getElementById('selectedStarsPos').innerHTML = starsHtml;
+    showStep('step2pos');
+    setDots(2);
+  } else {
+    document.getElementById('selectedStarsNeg').innerHTML = starsHtml;
+    showStep('step2neg');
+    setDots(2);
+  }
+}
+
+function goBack() {
+  showStep('step1');
+  setDots(1);
+}
+
+function showStep(id) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setDots(step) {
+  const dots = ['dot1','dot2','dot3'];
+  dots.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('active','done');
+    if (i + 1 < step) el.classList.add('done');
+    else if (i + 1 === step) el.classList.add('active');
+  });
+}
+
+// ── Track clicks ───────────────────────────────────────────────────
+function trackClick(platform) {
+  fetch(`${SUPABASE_URL}/rest/v1/review_feedback`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify({
+      stars: selectedStars,
+      source: platform,
+      message: 'Weiterleitung zu ' + platform
+    })
+  }).catch(() => {});
+
+  // Show thank you after a moment
+  setTimeout(() => {
+    showThankYou(true);
+  }, 2000);
+}
+
+// ── Submit negative feedback ───────────────────────────────────────
+async function submitFeedback() {
+  const btn = document.getElementById('fbSubmitBtn');
+  const msg = document.getElementById('fbMessage').value.trim();
+  if (!msg) {
+    document.getElementById('fbMessage').style.borderColor = 'rgba(255,100,100,0.5)';
+    document.getElementById('fbMessage').focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Wird gesendet…';
+
+  const name    = document.getElementById('fbName').value.trim();
+  const contact = document.getElementById('fbContact').value.trim();
+  const fullMsg = contact ? `${msg}\n\nKontakt: ${contact}` : msg;
+
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/review_feedback`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        stars: selectedStars,
+        name: name || null,
+        message: fullMsg,
+        source: source
+      })
+    });
+  } catch (e) {}
+
+  showThankYou(false);
+}
+
+// ── Thank you ──────────────────────────────────────────────────────
+function showThankYou(positive) {
+  const icon = document.getElementById('thankIcon');
+  const headline = document.getElementById('thankHeadline');
+  const subline = document.getElementById('thankSubline');
+
+  if (positive) {
+    icon.textContent = '🌟';
+    headline.textContent = 'Danke für Ihre Bewertung!';
+    subline.textContent = 'Sie helfen anderen Kunden, eine gute Entscheidung zu treffen — und uns, noch besser zu werden.';
+  } else {
+    icon.textContent = '🤝';
+    headline.textContent = 'Danke für Ihr Feedback!';
+    subline.textContent = 'Wir nehmen Ihre Rückmeldung sehr ernst und melden uns so schnell wie möglich persönlich bei Ihnen.';
+  }
+
+  showStep('step3');
+  setDots(3);
+
+  // Confetti for positive
+  if (positive) setTimeout(launchConfetti, 200);
+}
+
+// ── Mini confetti ──────────────────────────────────────────────────
+function launchConfetti() {
+  const colors = ['#F5C500','#FFD740','#fff','#FFB800','rgba(245,197,0,0.6)'];
+  for (let i = 0; i < 80; i++) {
+    const el = document.createElement('div');
+    const size = Math.random() * 8 + 4;
+    el.style.cssText = `
+      position:fixed;
+      top:${40 + Math.random()*20}%;
+      left:${30 + Math.random()*40}%;
+      width:${size}px;
+      height:${size}px;
+      background:${colors[Math.floor(Math.random()*colors.length)]};
+      border-radius:${Math.random()>0.5?'50%':'2px'};
+      pointer-events:none;
+      z-index:9999;
+      animation: confettiFly ${0.8+Math.random()*1.2}s ease-out ${Math.random()*0.4}s both;
+      transform-origin: center;
+    `;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2500);
+  }
+}
+
+const confettiStyle = document.createElement('style');
+confettiStyle.textContent = `@keyframes confettiFly {
+  0%   { transform: translate(0,0) rotate(0deg) scale(1); opacity:1; }
+  100% { transform: translate(${Math.random()>0.5?'':'-'}${60+Math.random()*80}px, ${80+Math.random()*120}px) rotate(${360+Math.random()*360}deg) scale(0); opacity:0; }
+}`;
+document.head.appendChild(confettiStyle);
+
+// ── Hover stars ────────────────────────────────────────────────────
+document.querySelectorAll('.star-btn').forEach(btn => {
+  btn.addEventListener('mouseenter', () => {
+    const val = parseInt(btn.dataset.val);
+    if (selectedStars > 0) return;
+    document.querySelectorAll('.star-btn').forEach((b, i) => {
+      b.classList.toggle('lit', i < val);
+    });
+    document.getElementById('starsHint').textContent = starLabels[val];
+  });
+  btn.addEventListener('mouseleave', () => {
+    if (selectedStars > 0) return;
+    document.querySelectorAll('.star-btn').forEach(b => b.classList.remove('lit'));
+    document.getElementById('starsHint').textContent = 'Wählen Sie Ihre Bewertung';
+    document.getElementById('starsHint').style.color = '';
+  });
+});
+</script>
+</body>
+</html>
