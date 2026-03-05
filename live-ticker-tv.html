@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920">
+<title>bee-doo Live-Ticker TV</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080808;--card:#161616;--card2:#1c1c1c;
+  --gold:#F5C500;--gold-dim:rgba(245,197,0,.15);
+  --green:#22c55e;--green-dim:rgba(34,197,94,.12);
+  --red:#ef4444;--red-dim:rgba(239,68,68,.12);
+  --orange:#f59e0b;--orange-dim:rgba(245,158,11,.12);
+  --blue:#3b82f6;--blue-dim:rgba(59,130,246,.12);
+  --purple:#a855f7;--purple-dim:rgba(168,85,247,.12);
+  --text:#f2f2f2;--text-dim:#666;--text-mid:#999;
+  --border:#202020;--border2:#2a2a2a;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);cursor:none}
+body.cursor-visible{cursor:default}
+button{font-family:'DM Sans',sans-serif}
+
+/* ── LAYOUT ── */
+.tv-root{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* ── TOP BAR ── */
+.topbar{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:14px 32px 12px;border-bottom:1px solid var(--border);background:rgba(8,8,8,.95);backdrop-filter:blur(12px)}
+.tb-left{display:flex;align-items:center;gap:14px}
+.live-dot{width:11px;height:11px;background:var(--red);border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0}
+.tb-title{font-size:22px;font-weight:900;letter-spacing:-.4px}
+.tb-date{font-size:16px;color:var(--text-mid);font-weight:500}
+.tb-right{display:flex;align-items:center;gap:20px}
+.clock{font-family:monospace;font-size:28px;font-weight:900;color:var(--gold);letter-spacing:1px}
+.sync-badge{font-size:12px;color:var(--text-dim)}
+
+/* ── KPI ROW ── */
+.kpi-row{flex-shrink:0;display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:12px 32px;border-bottom:1px solid var(--border);background:var(--bg)}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 16px;text-align:center}
+.kpi .num{font-size:38px;font-weight:900;line-height:1}
+.kpi .lbl{font-size:11px;color:var(--text-dim);margin-top:4px;text-transform:uppercase;letter-spacing:.6px}
+
+/* ── STATIS STRIP ── */
+.statis-strip{flex-shrink:0;display:flex;align-items:center;gap:0;padding:0 32px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,rgba(245,197,0,.06),transparent);overflow:hidden;min-height:0;transition:max-height .4s ease}
+.statis-strip.has-statis{max-height:80px;padding:10px 32px}
+.statis-strip:not(.has-statis){max-height:0;padding:0 32px}
+.statis-label{font-size:13px;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;margin-right:16px;flex-shrink:0}
+.statis-items{display:flex;gap:10px;flex-wrap:nowrap;overflow:hidden}
+.statis-chip{background:rgba(245,197,0,.1);border:1px solid rgba(245,197,0,.25);border-radius:10px;padding:6px 14px;white-space:nowrap;flex-shrink:0}
+.statis-chip .sc-berater{font-size:14px;font-weight:800;color:var(--text)}
+.statis-chip .sc-info{font-size:12px;color:var(--gold);margin-top:1px}
+
+/* ── AI STRIP ── */
+.ai-strip{flex-shrink:0;padding:10px 32px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,rgba(168,85,247,.05),transparent);display:flex;align-items:center;gap:12px;min-height:52px}
+.ai-strip-icon{width:28px;height:28px;background:linear-gradient(135deg,var(--purple),var(--blue));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.ai-strip-text{font-size:14px;color:#ccc;line-height:1.5;flex:1}
+.ai-strip-loader{display:flex;gap:4px;align-items:center}
+.ai-strip-loader span{width:5px;height:5px;background:var(--purple);border-radius:50%;animation:bounce .9s infinite}
+.ai-strip-loader span:nth-child(2){animation-delay:.15s}
+.ai-strip-loader span:nth-child(3){animation-delay:.3s}
+.ai-btn{background:transparent;border:1px solid rgba(168,85,247,.3);color:var(--purple);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0;transition:all .2s}
+.ai-btn:hover{background:var(--purple-dim)}
+
+/* ── TIMELINE SCROLL AREA ── */
+.tl-area{flex:1;overflow-y:auto;padding:16px 32px 32px;scroll-behavior:smooth}
+.tl-area::-webkit-scrollbar{width:4px}
+.tl-area::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* 2-COLUMN GRID */
+.tl-header{display:flex;align-items:center;gap:10px;padding:0 0 12px;font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);margin-bottom:8px}
+.tl-count{background:var(--card);border:1px solid var(--border);padding:2px 10px;border-radius:10px;font-size:12px;color:var(--text)}
+.tl-group{margin-bottom:6px}
+.tl-time-row{display:flex;align-items:center;padding:10px 0 6px;position:sticky;top:0;z-index:5;background:var(--bg)}
+.tl-time{font-family:monospace;font-size:14px;font-weight:800;color:var(--text-dim);width:56px;flex-shrink:0}
+.tl-line{flex:1;height:1px;background:var(--border)}
+.tl-now-label{font-size:11px;color:var(--green);font-weight:800;margin-left:10px;background:var(--green-dim);padding:2px 10px;border-radius:8px}
+.tl-entries{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-left:56px;margin-bottom:6px}
+
+/* ── TERMIN CARD – TV ── */
+.tc{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;gap:14px;align-items:flex-start;position:relative;overflow:hidden;transition:border-color .3s}
+.tc::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:14px 0 0 14px}
+.tc.slive{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.05);animation:liveGlow 2.5s ease-in-out infinite}
+.tc.slive::before{background:var(--green)}
+.tc.sdone{opacity:.5}
+.tc.sdone::before{background:#333}
+.tc.sstorno{opacity:.35}
+.tc.sstorno::before{background:var(--red)}
+.tc.snext::before{background:#2a2a2a}
+
+.tc-av{width:44px;height:44px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;flex-shrink:0}
+.tc-body{flex:1;min-width:0}
+.tc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px}
+.tc-berater{font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tc-badges{display:flex;gap:5px;flex-wrap:nowrap;flex-shrink:0;align-items:center}
+.tc-kunde{font-size:18px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.tc-ort{font-size:13px;color:var(--text-mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+.tc-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:7px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-live{background:var(--green-dim);color:var(--green)}
+.b-next{background:var(--orange-dim);color:var(--orange)}
+.b-done{background:var(--blue-dim);color:var(--blue)}
+.b-storno{background:var(--red-dim);color:var(--red)}
+.b-pv{background:rgba(59,130,246,.12);color:#60a5fa}
+.b-scout-type{background:rgba(168,85,247,.12);color:#c084fc}
+.b-folge{background:rgba(245,158,11,.12);color:#fbbf24}
+.b-erst{background:rgba(34,197,94,.12);color:#4ade80}
+.b-scout-info{background:rgba(168,85,247,.1);color:#c084fc}
+.b-quelle{background:rgba(255,255,255,.06);color:var(--text-dim)}
+.b-feedback{background:rgba(245,197,0,.12);color:var(--gold)}
+.b-verkauft{background:rgba(34,197,94,.15);color:var(--green);font-weight:900}
+
+.prog-bar{height:3px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden}
+.prog-fill{height:100%;border-radius:2px;transition:width 10s linear}
+.remaining{font-size:11px;margin-top:4px;font-weight:700}
+
+.loading-tv{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.7)}}
+@keyframes liveGlow{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}50%{box-shadow:0 0 24px 8px rgba(34,197,94,.22)}}
+@keyframes bounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cursor-tv{display:inline-block;width:2px;height:14px;background:var(--purple);margin-left:2px;animation:blink 1s infinite;vertical-align:middle}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.5/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+const SUPA_URL = 'https://hqzpemfaljxcysyqssng.supabase.co/rest/v1';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+const CLAUDE_KEY = 'sk-ant-api03-0rQ8e-EKdhaYXkdASCBWZ80am00tYZegKHyuhwJ-l'+'Buc2Qm_VAGnK1iQY8DisddpjPnII5QYzCUqNXnsrMvABw-OV65pwAA';
+
+const ALLOWED_TYPES = [
+  'Termin vor Ort PV','Folgetermin vor Ort','Termin vor Ort ( SCOUT )',
+  'Vor Ort Termin','Ersttermin','Termin vor Ort EP'
+];
+
+async function supaGet(path) {
+  const r = await fetch(`${SUPA_URL}/${path}`,{headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`}});
+  if(!r.ok) throw new Error(`DB ${r.status}`);
+  return r.json();
+}
+
+const COLOR_CACHE = {};
+function beraterColor(name) {
+  if(!name) return '#666';
+  if(COLOR_CACHE[name]) return COLOR_CACHE[name];
+  let h=0; for(let i=0;i<name.length;i++) h=name.charCodeAt(i)+((h<<5)-h);
+  COLOR_CACHE[name]=`hsl(${(Math.abs(h)%300+30)},65%,62%)`;
+  return COLOR_CACHE[name];
+}
+function initials(name){
+  if(!name) return '?';
+  const p=name.trim().split(' ');
+  return p.length>=2?(p[0][0]+p[p.length-1][0]).toUpperCase():name.slice(0,2).toUpperCase();
+}
+function typeBadge(t){
+  if(t==='Termin vor Ort PV')          return{cls:'b-pv',lbl:'PV'};
+  if(t==='Folgetermin vor Ort')         return{cls:'b-folge',lbl:'Folge'};
+  if(t==='Termin vor Ort ( SCOUT )')    return{cls:'b-scout-type',lbl:'Scout'};
+  if(t==='Termin vor Ort EP')           return{cls:'b-pv',lbl:'EP'};
+  if(t==='Ersttermin')                  return{cls:'b-erst',lbl:'Erst'};
+  return{cls:'b-quelle',lbl:t||'?'};
+}
+
+async function claudeStream(sys,messages,onChunk,onDone,onError){
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':CLAUDE_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:350,stream:true,system:sys,messages})
+    });
+    if(!r.ok) throw new Error(`Claude ${r.status}`);
+    const reader=r.body.getReader();const dec=new TextDecoder();let buf='';
+    while(true){
+      const{value,done}=await reader.read();if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      const lines=buf.split('\n');buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: '))continue;
+        const d=line.slice(6).trim();if(d==='[DONE]')continue;
+        try{const p=JSON.parse(d);if(p.type==='content_block_delta'&&p.delta?.text)onChunk(p.delta.text);}catch(e){}
+      }
+    }
+    onDone();
+  }catch(e){onError(e.message);}
+}
+
+function buildCtx(termine,statis,now){
+  const f=d=>d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+  const live=termine.filter(t=>t.slive),next=termine.filter(t=>t.snext),done=termine.filter(t=>t.sdone);
+  return `bee-doo Solar NRW – ${now.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} ${f(now)}\nLIVE(${live.length}):${live.map(t=>`${t.berater}→${t.kunde}`).join(';')||'–'}\nNÄCHSTE(${next.length}):${next.slice(0,8).map(t=>`${t.startZeit} ${t.berater}`).join(';')||'–'}\nSTATIS(${statis.length}):${statis.map(s=>`${s.berater}→${s.feedback}`).join(';')||'–'}`;
+}
+
+/* ── AI STRIP ── */
+function AiStrip({termine,statis,now}){
+  const[txt,setTxt]=useState('');const[busy,setBusy]=useState(false);const[fin,setFin]=useState(false);
+  const run=useCallback(()=>{
+    if(!termine.length)return;
+    setTxt('');setFin(false);setBusy(true);
+    claudeStream(
+      'Vertriebsassistent bee-doo Solar NRW. 2-3 Sätze Tagesanalyse, direkt und motivierend. Kein Titel.',
+      [{role:'user',content:buildCtx(termine,statis,now)}],
+      c=>{setTxt(p=>p+c);setBusy(false);},
+      ()=>setFin(true),
+      e=>{setTxt(`⚠️ ${e}`);setBusy(false);setFin(true);}
+    );
+  },[termine,statis,now]);
+  useEffect(()=>{if(termine.length>0)run();},[termine.length]);
+  return(
+    <div className="ai-strip">
+      <div className="ai-strip-icon">✨</div>
+      <div className="ai-strip-text">
+        {busy&&!txt?<div className="ai-strip-loader"><span/><span/><span/>&nbsp;Analysiere...</div>
+          :<>{txt}{!fin&&txt&&<span className="cursor-tv"/>}</>}
+      </div>
+      <button className="ai-btn" onClick={run} disabled={busy&&!txt}>↺</button>
+    </div>
+  );
+}
+
+/* ── TERMIN CARD ── */
+function TerminCard({t,nowMin,scrollTarget}){
+  const bc=beraterColor(t.berater);
+  const tb=typeBadge(t.typ);
+  const pct=t.slive?Math.min(100,Math.max(0,((nowMin-t.startMin)/(t.endMin-t.startMin))*100)):0;
+  const restMin=t.slive?t.endMin-nowMin:0;
+  const inMin=t.snext?t.startMin-nowMin:0;
+  const diffStr=m=>m>=60?`${Math.floor(m/60)}h ${m%60}m`:`${m}m`;
+  const scoutShow=t.scout&&t.scout!==t.berater;
+  const quelleShow=t.quelle&&!['Eigenlead','Empfehlung','Sonstige'].includes(t.quelle);
+  const fbLow=(t.feedback||'').toLowerCase();
+  const isVerkauft=fbLow.includes('abschluss')||fbLow.includes('verkauft')||fbLow.includes('unterschrieben');
+  const cls=t.slive?'slive':t.sdone?'sdone':t.sstorno?'sstorno':'snext';
+  return(
+    <div className={`tc ${cls}${scrollTarget?' scroll-target':''}`}>
+      <div className="tc-av" style={{background:`${bc}20`,color:bc,border:`2px solid ${bc}40`}}>{initials(t.berater)}</div>
+      <div className="tc-body">
+        <div className="tc-top">
+          <div className="tc-berater" style={{color:bc}}>{t.berater}</div>
+          <div className="tc-badges">
+            {t.slive&&<span className="badge b-live"><span style={{width:7,height:7,background:'var(--green)',borderRadius:'50%',display:'inline-block',animation:'pulse 1.5s infinite'}}/> Live</span>}
+            {t.snext&&inMin<=120&&<span className="badge b-next">in {diffStr(inMin)}</span>}
+            {t.sdone&&<span className="badge b-done">✓</span>}
+            {t.sstorno&&<span className="badge b-storno">Storno</span>}
+            <span className={`badge ${tb.cls}`}>{tb.lbl}</span>
+          </div>
+        </div>
+        <div className="tc-kunde">{t.kunde||'–'}</div>
+        <div className="tc-ort">{[t.ort,t.plz].filter(Boolean).join(' · ')||'–'}</div>
+        <div className="tc-meta">
+          {scoutShow&&<span className="badge b-scout-info">👤 {t.scout}</span>}
+          {quelleShow&&<span className="badge b-quelle">{t.quelle}</span>}
+          {t.feedback&&<span className={`badge ${isVerkauft?'b-verkauft':'b-feedback'}`}>{isVerkauft?'🏆 ':''}{t.feedback}</span>}
+        </div>
+        {t.slive&&(
+          <>
+            <div className="prog-bar"><div className="prog-fill" style={{width:`${pct}%`,background:`linear-gradient(90deg,${bc},${bc}88)`}}/></div>
+            <div className="remaining" style={{color:bc}}>noch {diffStr(restMin)} · {Math.round(pct)}%</div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── MAIN APP ── */
+function App(){
+  const[raw,setRaw]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[error,setError]=useState(null);
+  const[now,setNow]=useState(new Date());
+  const[lastSync,setLastSync]=useState(null);
+  const tlRef=useRef(null);
+
+  const today=useMemo(()=>new Date().toISOString().slice(0,10),[]);
+
+  /* Wake Lock */
+  useEffect(()=>{
+    let lock=null;
+    async function acquireLock(){
+      try{if('wakeLock' in navigator){lock=await navigator.wakeLock.request('screen');}}catch(e){}
+    }
+    acquireLock();
+    const onVis=()=>{if(document.visibilityState==='visible')acquireLock();};
+    document.addEventListener('visibilitychange',onVis);
+    return()=>{lock?.release();document.removeEventListener('visibilitychange',onVis);};
+  },[]);
+
+  /* Hide cursor after 3s inactivity */
+  useEffect(()=>{
+    let timer;
+    const show=()=>{document.body.classList.add('cursor-visible');clearTimeout(timer);timer=setTimeout(()=>document.body.classList.remove('cursor-visible'),3000);};
+    document.addEventListener('mousemove',show);document.addEventListener('mousedown',show);
+    return()=>{document.removeEventListener('mousemove',show);document.removeEventListener('mousedown',show);clearTimeout(timer);};
+  },[]);
+
+  const load=useCallback(async()=>{
+    try{
+      setError(null);
+      const typeParam=ALLOWED_TYPES.map(t=>`appointment_type.eq.${encodeURIComponent(t)}`).join(',');
+      const data=await supaGet(`leveto_appointments?start_date=gte.${today}T00:00:00&start_date=lt.${today}T23:59:59&or=(${typeParam})&select=*&limit=300&order=start_date.asc`);
+      setRaw(data);setLastSync(new Date());setLoading(false);
+    }catch(e){setError(e.message);setLoading(false);}
+  },[today]);
+
+  useEffect(()=>{load();},[load]);
+  useEffect(()=>{const iv=setInterval(load,90000);return()=>clearInterval(iv);},[load]);
+  useEffect(()=>{const iv=setInterval(()=>setNow(new Date()),15000);return()=>clearInterval(iv);},[]);
+
+  const nowMin=now.getHours()*60+now.getMinutes();
+
+  const termine=useMemo(()=>raw.map(r=>{
+    const start=new Date(r.start_date),end=new Date(r.end_date||r.start_date);
+    const sm=start.getHours()*60+start.getMinutes(),em=end.getHours()*60+end.getMinutes();
+    const st=(r.status||'').toLowerCase();
+    const sstorno=st==='cancelled'||st==='storniert'||st==='abgesagt';
+    return{
+      id:r.id,berater:r.user_received||'?',scout:r.user_created||'',
+      kunde:`${r.kunde_vorname||''} ${r.kunde_nachname||''}`.trim()||'–',
+      plz:r.kunde_plz||'',ort:r.kunde_stadt||'',typ:r.appointment_type||'',
+      status:r.status||'',feedback:r.feedback_status||'',quelle:r.quelle||'',
+      startZeit:start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}),
+      endZeit:end.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}),
+      startMin:sm,endMin:em,
+      slive:!sstorno&&nowMin>=sm&&nowMin<em,
+      sdone:!sstorno&&nowMin>=em,
+      snext:!sstorno&&nowMin<sm,
+      sstorno,
+    };
+  }),[raw,nowMin]);
+
+  const statisToday=useMemo(()=>termine.filter(t=>{
+    const fb=(t.feedback||'').toLowerCase();
+    return fb.includes('abschluss')||fb.includes('unterschrieben')||fb.includes('verkauft');
+  }).map(t=>({berater:t.berater,kunde:t.kunde,ort:t.ort,zeit:t.startZeit,feedback:t.feedback})),[termine]);
+
+  const groups=useMemo(()=>{
+    const map={};
+    for(const t of termine){
+      if(!map[t.startZeit])map[t.startZeit]={zeit:t.startZeit,min:t.startMin,items:[]};
+      map[t.startZeit].items.push(t);
+    }
+    return Object.values(map).sort((a,b)=>a.min-b.min);
+  },[termine]);
+
+  /* Auto-scroll to live/next after load */
+  useEffect(()=>{
+    if(!termine.length||!tlRef.current)return;
+    const timer=setTimeout(()=>{
+      const el=tlRef.current.querySelector('.scroll-target');
+      if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+    },800);
+    return()=>clearTimeout(timer);
+  },[termine.length]);
+
+  const liveCnt=termine.filter(t=>t.slive).length;
+  const nextCnt=termine.filter(t=>t.snext).length;
+  const doneCnt=termine.filter(t=>t.sdone).length;
+  const stornoCnt=termine.filter(t=>t.sstorno).length;
+  const berCnt=new Set(termine.map(t=>t.berater)).size;
+
+  if(loading)return<div className="loading-tv"><div className="spinner"/><div style={{color:'var(--text-dim)',fontSize:18}}>Lade Daten...</div></div>;
+  if(error)return<div className="loading-tv"><div style={{fontSize:44}}>⚠️</div><div style={{color:'var(--red)',fontSize:18,margin:'12px 0'}}>{error}</div><button className="ai-btn" onClick={load}>Erneut</button></div>;
+
+  return(
+    <div className="tv-root">
+
+      {/* TOP BAR */}
+      <div className="topbar">
+        <div className="tb-left">
+          <div className="live-dot"/>
+          <div className="tb-title">bee-doo Live-Ticker</div>
+          <div className="tb-date">{now.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</div>
+        </div>
+        <div className="tb-right">
+          {lastSync&&<span className="sync-badge">Sync {lastSync.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span>}
+          <div className="clock">{now.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <div className="kpi-row">
+        <div className="kpi"><div className="num" style={{color:'var(--green)'}}>{liveCnt}</div><div className="lbl">Live jetzt</div></div>
+        <div className="kpi"><div className="num" style={{color:'var(--orange)'}}>{nextCnt}</div><div className="lbl">Ausstehend</div></div>
+        <div className="kpi"><div className="num" style={{color:'var(--blue)'}}>{doneCnt}</div><div className="lbl">Erledigt</div></div>
+        <div className="kpi"><div className="num" style={{color:'var(--gold)'}}>{statisToday.length}</div><div className="lbl">Statis heute</div></div>
+        <div className="kpi"><div className="num" style={{color:'var(--text-mid)'}}>{berCnt}</div><div className="lbl">Berater</div></div>
+      </div>
+
+      {/* STATIS STRIP */}
+      <div className={`statis-strip${statisToday.length>0?' has-statis':''}`}>
+        {statisToday.length>0&&<>
+          <div className="statis-label">🏆 Statis</div>
+          <div className="statis-items">
+            {statisToday.map((s,i)=>(
+              <div key={i} className="statis-chip">
+                <div className="sc-berater">{s.berater}</div>
+                <div className="sc-info">✅ {s.feedback} · {s.kunde}{s.ort?' · '+s.ort:''}</div>
+              </div>
+            ))}
+          </div>
+        </>}
+      </div>
+
+      {/* AI STRIP */}
+      <AiStrip termine={termine} statis={statisToday} now={now}/>
+
+      {/* TIMELINE */}
+      <div className="tl-area" ref={tlRef}>
+        <div className="tl-header">
+          🗓 Timeline — Nur Vertrieb
+          <span className="tl-count">{termine.length} Termine</span>
+          {stornoCnt>0&&<span className="tl-count" style={{color:'var(--red)'}}>davon {stornoCnt} Storno</span>}
+        </div>
+
+        {groups.map(g=>{
+          const nowSlot=g.min<=nowMin&&nowMin<g.min+60;
+          return(
+            <div key={g.zeit} className="tl-group">
+              <div className="tl-time-row">
+                <div className="tl-time">{g.zeit}</div>
+                <div className="tl-line"/>
+                {nowSlot&&<span className="tl-now-label">● Jetzt</span>}
+              </div>
+              <div className="tl-entries">
+                {g.items.map((t,ti,arr)=>{
+                  const hasAnyLive=termine.some(x=>x.slive);
+                  const isTarget=hasAnyLive
+                    ?t.slive&&!arr.slice(0,ti).some(x=>x.slive)
+                    :t.snext&&!arr.slice(0,ti).some(x=>x.snext);
+                  return<TerminCard key={t.id} t={t} nowMin={nowMin} scrollTarget={isTarget}/>;
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
