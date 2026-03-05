@@ -18,10 +18,9 @@ const ALERT_RECIPIENTS = {
   ],
   slackChannel: 'C09168UCBU2', // #innendienst
   sms: [
-    // Nummern werden noch ergänzt
-    // { number: '+491700000000', name: 'Olaf Schader' },
-    // { number: '+491700000001', name: 'Dominic Pottmann' },
-    // { number: '+491700000002', name: 'Patrick Windolph' },
+    { number: '+491703822950', name: 'Olaf Schader' },
+    { number: '+491736900609', name: 'Patrick Windolph' },
+    { number: '+491766213260', name: 'Dominic Pottmann' },
   ]
 };
 
