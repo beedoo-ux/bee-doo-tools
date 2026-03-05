@@ -100,16 +100,37 @@ export default async function handler(req, res) {
       }
     }
 
-    // 5. Count stornos for logging
-    const stornos = patches.filter(p => p.currentstatus === 'Storniert').length;
+    // 5. Sync stornos to pay_auftraege (mark as storniert if leveto says so)
+    const stornoIds = patches.filter(p => p.currentstatus === 'Storniert').map(p => p.leveto_id);
+    let payStornoFixed = 0;
+    if (stornoIds.length > 0) {
+      // Batch update: set storniert=true on pay_auftraege where leveto contract is storniert
+      for (let i = 0; i < stornoIds.length; i += 100) {
+        const batch = stornoIds.slice(i, i + 100);
+        const filter = batch.map(id => `"${id}"`).join(',');
+        const r = await fetch(`${SU}/rest/v1/pay_auftraege?leveto_contract_id=in.(${batch.join(',')})&storniert=eq.false`, {
+          method: 'PATCH',
+          headers: { ...hd(), Prefer: 'return=headers-only' },
+          body: JSON.stringify({ storniert: true, zahlungsstatus: 'storniert' })
+        });
+        if (r.ok) {
+          const count = parseInt(r.headers.get('content-range')?.split('/')[1] || '0');
+          payStornoFixed += count;
+        }
+      }
+    }
 
-    console.log(`[contracts-status] ${updated} updated, ${stornos} storniert, ${errors} errors in ${Date.now() - t0}ms`);
+    // 6. Count stornos for logging
+    const stornos = stornoIds.length;
+
+    console.log(`[contracts-status] ${updated} updated, ${stornos} storniert, ${payStornoFixed} pay_auftraege fixed, ${errors} errors in ${Date.now() - t0}ms`);
 
     return res.status(200).json({
       ok: true,
       total: allContracts.length,
       updated,
       stornos,
+      payStornoFixed,
       errors,
       pages: page - 1,
       duration_ms: Date.now() - t0
