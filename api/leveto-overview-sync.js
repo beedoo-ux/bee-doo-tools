@@ -102,7 +102,7 @@ function extractWfSteps(workflows, contractId) {
   return result;
 }
 
-function mapContract(c, leadId, leadWorkflows, leadWfHistory, now) {
+function mapContract(c, leadId, leadWorkflows, leadWfHistory, now, hasDC) {
   const products = safeJson(c.products);
   const computed = computeFromProducts(products);
   const allWfs = safeJson(leadWorkflows);
@@ -127,6 +127,7 @@ function mapContract(c, leadId, leadWorkflows, leadWfHistory, now) {
     'pdf_url','typeicons','ist_waermepumpe','products','provision_ausgezahlt_am',
     'efs_prozent','speichererweiterung','workflows','workflow_history',
     'kwp','module_anzahl','module_typ','battery_kap','hat_speicher','speicher_kwh',
+    'auszahlungsrelevant',
     'wf_verkauf_step','wf_verkauf_changed','wf_beedoo_step','wf_beedoo_changed',
     'wf_dc_step','wf_dc_changed','wf_ac_step','wf_ac_changed',
     'overview_lead_id','overview_last_update','sync_aktualisiert_am'];
@@ -149,6 +150,7 @@ function mapContract(c, leadId, leadWorkflows, leadWfHistory, now) {
     efs_prozent:              c.efs_prozent ? parseFloat(c.efs_prozent) : null,
     // currentstatus: NOT set here — comes from contracts-status-sync
     speichererweiterung:      vd(c.speichererweiterung),
+    auszahlungsrelevant:      hasDC || false,
     workflows:                contractWfs.length ? contractWfs : null,
     workflow_history:         allHistory.length ? allHistory : null,
     ...computed,
@@ -256,9 +258,13 @@ export default async function handler(req, res) {
       const leadWfs = lead.workflows;
       const leadWfH = lead.workflow_history;
 
+      // Check if lead has a DC Montage appointment → auszahlungsrelevant
+      const leadApts = safeJson(lead.appointments);
+      const hasDC = leadApts.some(a => 'DC Montage' in a || Object.values(a).some(v => typeof v === 'string' && v.includes('DC Montage')));
+
       for (const c of contracts) {
         if (!c.id) continue;
-        contractRows.push(mapContract(c, lead.id, leadWfs, leadWfH, now));
+        contractRows.push(mapContract(c, lead.id, leadWfs, leadWfH, now, hasDC));
 
         // Parse workflow_history into individual rows
         const history = safeJson(leadWfH);
