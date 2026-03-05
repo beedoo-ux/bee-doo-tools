@@ -108,6 +108,13 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing or invalid ?month=YYYY-MM parameter' });
   }
 
+  // Reject future months
+  const now = new Date();
+  const currMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  if (month > currMonth) {
+    return res.status(200).json({ month, total: 0, byPerson: [], recentLeads: [], byDay: {}, _note: 'future month' });
+  }
+
   const t0 = Date.now();
 
   // 1. Cache lesen
