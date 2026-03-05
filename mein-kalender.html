@@ -161,6 +161,10 @@ body { display:flex; flex-direction:column; padding-top:var(--safe-top); }
     <div class="vt-name" id="vtName">–</div>
     <div class="vt-sub" id="vtSub">–</div>
   </div>
+  <div style="display:flex;gap:8px;margin-top:2px;">
+    <div onclick="openBlockModal()" style="flex:1;padding:7px 10px;background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);border-radius:8px;font-size:12px;font-weight:700;color:var(--red);cursor:pointer;text-align:center;">⛔ Block eintragen</div>
+    <div onclick="openVacModal()" style="flex:1;padding:7px 10px;background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);border-radius:8px;font-size:12px;font-weight:700;color:var(--orange);cursor:pointer;text-align:center;">🏖 Urlaub/Frei</div>
+  </div>
   <div class="date-nav">
     <button class="date-nav-btn" onclick="chDay(-1)">◀</button>
     <div class="date-label" id="dateLbl">–</div>
@@ -185,6 +189,32 @@ body { display:flex; flex-direction:column; padding-top:var(--safe-top); }
     <div class="sheet-title" id="sheetTitle">–</div>
     <div id="sheetBody"></div>
     <button class="sheet-close" onclick="closeSheet()">Schließen</button>
+  </div>
+</div>
+
+<!-- BLOCK MODAL -->
+<div class="mbg" id="blockModal" style="display:none" onclick="if(event.target===this)closeBlockModal()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="blockModalTitle">Zeit blockieren</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Titel</div>
+        <input id="blockTitle" class="fi" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;" placeholder="z.B. Weiterbildung, Privat…">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Von</div>
+          <input id="blockFrom" type="datetime-local" class="fi" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;">
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Bis</div>
+          <input id="blockTo" type="datetime-local" class="fi" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;">
+        </div>
+      </div>
+    </div>
+    <button onclick="submitBlock(false)" style="width:100%;padding:13px;border-radius:12px;background:var(--red);border:none;color:#fff;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:8px;" id="blockSubmitBtn">⛔ Block speichern</button>
+    <button class="sheet-close" onclick="closeBlockModal()">Abbrechen</button>
   </div>
 </div>
 
@@ -390,6 +420,46 @@ function toast(msg) {
   const w=document.getElementById('toastWrap');
   const t=document.createElement('div'); t.className='toast ok'; t.textContent=msg;
   w.appendChild(t); setTimeout(()=>t.remove(),3000);
+}
+
+function openBlockModal(){
+  const d=viewDate(), ds=d.toISOString().slice(0,16);
+  document.getElementById('blockModalTitle').textContent='⛔ Zeit blockieren';
+  document.getElementById('blockTitle').value='';
+  document.getElementById('blockFrom').value=ds;
+  document.getElementById('blockTo').value=ds.slice(0,11)+'17:00';
+  document.getElementById('blockSubmitBtn').style.background='var(--red)';
+  document.getElementById('blockModal').style.display='flex';
+}
+function openVacModal(){
+  const d=viewDate(), ds=d.toISOString().slice(0,16);
+  document.getElementById('blockModalTitle').textContent='🏖 Urlaub / Freier Tag';
+  document.getElementById('blockTitle').value='Urlaub';
+  document.getElementById('blockFrom').value=ds.slice(0,11)+'00:00';
+  document.getElementById('blockTo').value=ds.slice(0,11)+'23:59';
+  document.getElementById('blockSubmitBtn').style.background='var(--orange)';
+  document.getElementById('blockModal').style.display='flex';
+}
+function closeBlockModal(){ document.getElementById('blockModal').style.display='none'; }
+
+async function submitBlock(){
+  const title=document.getElementById('blockTitle').value.trim()||'Blockiert';
+  const from=document.getElementById('blockFrom').value;
+  const to=document.getElementById('blockTo').value;
+  if(!from||!to){ toast('Bitte Von/Bis angeben'); return; }
+  const btn=document.getElementById('blockSubmitBtn');
+  btn.textContent='Speichere…'; btn.disabled=true;
+  try{
+    const r=await fetch('/api/gcal-sync',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'create_block',vt:VT_NAME,title,start:from,end:to})
+    });
+    const d=await r.json();
+    if(d.ok){ toast('✅ Block gespeichert!'); closeBlockModal(); }
+    else toast('Fehler: '+d.error);
+  }catch(e){ toast('Fehler — Google Kalender nicht verbunden?'); }
+  btn.textContent='⛔ Block speichern'; btn.disabled=false;
 }
 
 async function init() {
