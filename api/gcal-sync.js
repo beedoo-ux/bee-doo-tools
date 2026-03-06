@@ -4,8 +4,8 @@
 // ENV VARS needed in Vercel:
 //   GOOGLE_SERVICE_ACCOUNT_EMAIL  = beedoo-calendar@bee-doo-XXXXX.iam.gserviceaccount.com
 //   GOOGLE_PRIVATE_KEY            = -----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----
-//   LEVETO_USER                   = api@bee-doo.de  
-//   LEVETO_PASS                   = Patrick123456789!
+//   LEVETO_USER                   = ' + (process.env.LEVETO_USER || 'api@bee-doo.de') + '  
+//   LEVETO_PASS                   = ' + (process.env.LEVETO_PASS || '') + '
 //
 // Actions:
 //   GET ?action=push&vt=Andreas+Klee   → Leveto → Google (today + next 14 days)
@@ -59,7 +59,7 @@ async function getLevToken() {
   const r = await fetch(`${LEVETO_BASE}/auth`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ username: process.env.LEVETO_USER || "api@bee-doo.de", password: process.env.LEVETO_PASS || "Patrick123456789!" }).toString(),
+    body: new URLSearchParams({ username: process.env.LEVETO_USER || "' + (process.env.LEVETO_USER || 'api@bee-doo.de') + '", password: process.env.LEVETO_PASS || "' + (process.env.LEVETO_PASS || '') + '" }).toString(),
   });
   const d = await r.json();
   _levToken = d.token; _levExp = Date.now() + 13 * 60 * 1000;
