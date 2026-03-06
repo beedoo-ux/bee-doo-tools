@@ -2487,6 +2487,19 @@ function TabStammdaten({ mitarbeiterList, setMitarbeiterList, toast }) {
     setSaving(false);
   };
 
+  const [deactivating, setDeactivating] = useState(null);
+  const deactivateMA = async (m) => {
+    const name = m.vorname + " " + m.nachname;
+    if (!confirm(name + " deaktivieren?\n\nDer Mitarbeiter wird ausgeblendet, aber nicht gelöscht.")) return;
+    setDeactivating(m.id);
+    try {
+      await db.patch("mitarbeiter", "id=eq." + m.id, { aktiv: false, austritt_datum: new Date().toISOString().substring(0,10) });
+      setMitarbeiterList(prev => prev.filter(x => x.id !== m.id));
+      toast(name + " deaktiviert", "ok");
+    } catch(e) { toast("Fehler: " + e.message, "err"); }
+    setDeactivating(null);
+  };
+
   const pct = (n, total) => total > 0 ? Math.round(n/total*100) : 0;
   const TLBL = {angestellt_scouter:"Ang. Scout",hgb_scouter:"\u00a784 Scout",angestellt_vertriebler:"Ang. VB",angestellt_vt:"Ang. VT",hgb_vertriebler_agentur:"\u00a784 Ag.",hgb_vertriebler_haupt:"\u00a784 Hpt.",hgb_vertriebler:"\u00a784 VB",vertriebler:"VB",angestellt_buero:"B\u00fcro",angestellt_montage:"Montage",montage_partner:"Mont.P.",hgb84:"\u00a784"};
   const TCLR = {angestellt_scouter:"var(--b)",hgb_scouter:"var(--p)",angestellt_vertriebler:"var(--g)",angestellt_vt:"var(--g)",hgb_vertriebler_agentur:"var(--o)",hgb_vertriebler_haupt:"var(--y)",hgb_vertriebler:"var(--o)",hgb84:"var(--y)"};
@@ -2564,7 +2577,10 @@ function TabStammdaten({ mitarbeiterList, setMitarbeiterList, toast }) {
                 React.createElement("td", { style: { padding: "6px 10px", fontSize: 11 } }, dot(hasIBAN(m)), hasIBAN(m) ? m.iban.substring(0,4) + "..." + m.iban.slice(-4) : React.createElement("span", { style: { color: "var(--r)", fontSize: 10 } }, "fehlt")),
                 React.createElement("td", { style: { padding: "6px 10px", fontSize: 11, textAlign: "right" } }, isAng(m) ? (hasGehalt(m) ? React.createElement("span", { style: { fontWeight: 600 } }, parseFloat(m.grundgehalt).toLocaleString("de-DE") + " \u20ac") : React.createElement("span", { style: { color: "var(--r)", fontSize: 10 } }, "fehlt")) : React.createElement("span", { style: { fontSize: 10, color: "var(--ts)" } }, "\u2013")),
                 React.createElement("td", { style: { padding: "6px 10px" } }, isHGB(m) ? React.createElement("span", { style: { fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4, background: m.abrechnungsart==="brutto" ? "#fb923c18" : "#60a5fa18", color: m.abrechnungsart==="brutto" ? "#fb923c" : "#60a5fa" } }, m.abrechnungsart==="brutto" ? "BRUTTO" : "NETTO") : React.createElement("span", { style: { fontSize: 10, color: "var(--ts)" } }, "\u2013")),
-                React.createElement("td", { style: { padding: "6px 10px" } }, React.createElement("button", { onClick: () => startEdit(m), style: { background: "var(--s3)", border: "1px solid var(--bd)", borderRadius: 4, color: "var(--ts)", padding: "3px 8px", fontSize: 10, cursor: "pointer" } }, "\u270e"))
+                React.createElement("td", { style: { padding: "6px 10px" } }, React.createElement("div", { style: { display: "flex", gap: 3 } },
+                  React.createElement("button", { onClick: () => startEdit(m), style: { background: "var(--s3)", border: "1px solid var(--bd)", borderRadius: 4, color: "var(--ts)", padding: "3px 8px", fontSize: 10, cursor: "pointer" } }, "\u270e"),
+                  React.createElement("button", { onClick: () => deactivateMA(m), disabled: deactivating===m.id, style: { background: "#f8717112", border: "1px solid #f8717130", borderRadius: 4, color: "#f87171", padding: "3px 6px", fontSize: 10, cursor: "pointer" } }, deactivating===m.id ? "..." : "\u2715")
+                ))
               );
             })
         )
