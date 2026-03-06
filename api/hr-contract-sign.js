@@ -16,7 +16,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
-const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SUPABASE_URL = process.env.SUPABASE_URL;
 
 // Vertragstyp → Label
 const CONTRACT_LABELS = {
