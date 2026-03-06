@@ -237,6 +237,30 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 .dcLabel{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
 .dcVal{font-size:13px;font-weight:600;color:var(--text);}
 .dcSub{font-size:11px;color:var(--text2);}
+.twilio-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#1a7f3c;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;text-decoration:none;}
+.twilio-btn:hover{background:#15a34a;transform:translateY(-1px);}
+.twilio-btn.calling{background:#ef4444;animation:pulse 1s infinite;}
+.fq-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);}
+.fq-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:min(680px,96vw);max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;}
+.fq-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg2);z-index:2;}
+.fq-head h2{font-size:16px;font-weight:800;}
+.fq-body{padding:20px;}
+.fq-section{margin-bottom:20px;}
+.fq-section h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.fq-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.fq-grid.cols3{grid-template-columns:1fr 1fr 1fr;}
+.fq-field{display:flex;flex-direction:column;gap:4px;}
+.fq-field label{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;}
+.fq-field input,.fq-field select,.fq-field textarea{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:inherit;font-size:12px;outline:none;transition:border .15s;}
+.fq-field input:focus,.fq-field select,.fq-field textarea:focus{border-color:var(--accent);}
+.fq-field textarea{resize:vertical;min-height:70px;}
+.fq-radio{display:flex;gap:8px;flex-wrap:wrap;}
+.fq-radio label{display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:5px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;transition:all .15s;}
+.fq-radio label:hover{border-color:var(--accent);}
+.fq-radio input:checked+span{color:var(--accent);font-weight:700;}
+.fq-radio label:has(input:checked){border-color:var(--accent);background:var(--accent)15;}
+.fq-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:10px;position:sticky;bottom:0;background:var(--bg2);}
+.fq-call-status{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#1a7f3c15;border:1px solid #1a7f3c40;border-radius:10px;margin-bottom:14px;font-size:12px;font-weight:600;color:#22c55e;}
 
 /* TAGESPLAN */
 .planRow{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;transition:background .1s;}
@@ -475,7 +499,146 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 </div>
 
 <div class="tt" id="tt"></div>
-<div class="tfw" id="tfw"></div>
+<div class="tfw" id="tfw">
+
+<!-- FRAGEBOGEN MODAL -->
+<div class="fq-overlay" id="fqOverlay" style="display:none" onclick="if(event.target===this)closeFQ()">
+  <div class="fq-box">
+    <div class="fq-head">
+      <h2>📋 Qualifizierungsgespräch</h2>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span id="fqCallStatus" class="fq-call-status" style="display:none">📞 Anruf läuft…</span>
+        <div class="mx" onclick="closeFQ()">✕</div>
+      </div>
+    </div>
+    <div class="fq-body">
+      <!-- Kundendaten -->
+      <div class="fq-section">
+        <h3>👤 Kundendaten</h3>
+        <div class="fq-grid">
+          <div class="fq-field"><label>Vorname</label><input id="fqVn" type="text" placeholder="Max"></div>
+          <div class="fq-field"><label>Nachname</label><input id="fqNn" type="text" placeholder="Mustermann"></div>
+          <div class="fq-field"><label>Telefon</label><input id="fqTel" type="text" placeholder="+49…"></div>
+          <div class="fq-field"><label>PLZ</label><input id="fqPlz" type="text" placeholder="33609"></div>
+          <div class="fq-field"><label>Ort</label><input id="fqOrt" type="text" placeholder="Bielefeld"></div>
+          <div class="fq-field"><label>Straße + Nr.</label><input id="fqStr" type="text" placeholder="Musterstr. 1"></div>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="fq-field"><label>Eigentümer?</label>
+            <div class="fq-radio">
+              <label><input type="radio" name="fqEig" value="1"><span>✅ Ja</span></label>
+              <label><input type="radio" name="fqEig" value="0"><span>❌ Nein</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dach & Anlage -->
+      <div class="fq-section">
+        <h3>🏠 Dach & Anlage</h3>
+        <div class="fq-grid cols3">
+          <div class="fq-field"><label>Dachalter</label>
+            <select id="fqDachAlter">
+              <option value="">–</option>
+              <option>Unter 10 Jahre</option>
+              <option>10–20 Jahre</option>
+              <option>20–30 Jahre</option>
+              <option>Über 30 Jahre</option>
+            </select>
+          </div>
+          <div class="fq-field"><label>Dachtyp</label>
+            <select id="fqDachTyp">
+              <option value="">–</option>
+              <option>Satteldach</option>
+              <option>Pultdach</option>
+              <option>Flachdach</option>
+              <option>Walmdach</option>
+              <option>Sonstiges</option>
+            </select>
+          </div>
+          <div class="fq-field"><label>Ausrichtung</label>
+            <select id="fqAusrichtung">
+              <option value="">–</option>
+              <option>Süd</option>
+              <option>Süd-West</option>
+              <option>Süd-Ost</option>
+              <option>West</option>
+              <option>Ost</option>
+              <option>Nord</option>
+            </select>
+          </div>
+        </div>
+        <div class="fq-grid" style="margin-top:10px;">
+          <div class="fq-field"><label>Dachfläche (m²)</label><input id="fqFlaeche" type="number" placeholder="80"></div>
+          <div class="fq-field"><label>Personen im Haushalt</label><input id="fqPersonen" type="number" placeholder="3" min="1" max="10"></div>
+        </div>
+      </div>
+
+      <!-- Strom & Verbrauch -->
+      <div class="fq-section">
+        <h3>⚡ Strom & Verbrauch</h3>
+        <div class="fq-grid">
+          <div class="fq-field"><label>Jahresverbrauch (kWh)</label><input id="fqVerbrauch" type="number" placeholder="4500"></div>
+          <div class="fq-field"><label>Monatl. Abschlag (€)</label><input id="fqAbschlag" type="number" placeholder="150"></div>
+        </div>
+        <div class="fq-grid" style="margin-top:10px;">
+          <div class="fq-field"><label>E-Auto vorhanden/geplant?</label>
+            <div class="fq-radio">
+              <label><input type="radio" name="fqEAuto" value="1"><span>✅ Ja</span></label>
+              <label><input type="radio" name="fqEAuto" value="0"><span>❌ Nein</span></label>
+            </div>
+          </div>
+          <div class="fq-field"><label>Wallbox gewünscht?</label>
+            <div class="fq-radio">
+              <label><input type="radio" name="fqWallbox" value="1"><span>✅ Ja</span></label>
+              <label><input type="radio" name="fqWallbox" value="0"><span>❌ Nein</span></label>
+            </div>
+          </div>
+        </div>
+        <div class="fq-grid" style="margin-top:10px;">
+          <div class="fq-field"><label>Heizungsart</label>
+            <select id="fqHeizung">
+              <option value="">–</option>
+              <option>Gas</option>
+              <option>Öl</option>
+              <option>Wärmepumpe</option>
+              <option>Fernwärme</option>
+              <option>Elektro</option>
+              <option>Sonstiges</option>
+            </select>
+          </div>
+          <div class="fq-field"><label>Finanzierung</label>
+            <div class="fq-radio">
+              <label><input type="radio" name="fqFinanz" value="Finanzierung"><span>💳 Finanzierung</span></label>
+              <label><input type="radio" name="fqFinanz" value="Bar"><span>💰 Bar</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interesse & Notizen -->
+      <div class="fq-section">
+        <h3>💬 Einschätzung & Notizen</h3>
+        <div class="fq-field" style="margin-bottom:10px;"><label>Interesse</label>
+          <div class="fq-radio">
+            <label><input type="radio" name="fqInteresse" value="hoch"><span>🔥 Hoch</span></label>
+            <label><input type="radio" name="fqInteresse" value="mittel"><span>🟡 Mittel</span></label>
+            <label><input type="radio" name="fqInteresse" value="niedrig"><span>❄️ Niedrig</span></label>
+            <label><input type="radio" name="fqInteresse" value="kein"><span>🚫 Kein Interesse</span></label>
+          </div>
+        </div>
+        <div class="fq-field"><label>Notizen</label><textarea id="fqNotizen" placeholder="Besonderheiten, Einwände, Folgetermin…"></textarea></div>
+      </div>
+    </div>
+
+    <div class="fq-footer">
+      <button class="mbtn" onclick="saveFQ(false)">💾 Speichern (ohne Termin)</button>
+      <button class="mbtn p" onclick="saveFQ(true)">📅 Speichern + Termin buchen</button>
+    </div>
+  </div>
+</div>
+
+</div>
 
 <script>
 const PROXY = '/api/leveto';
@@ -1609,7 +1772,7 @@ function showDetail(d){
       <div class="detailCard"><div class="dcLabel">📡 Leadquelle</div><div class="dcVal" style="color:var(--accent)">${esc(d.q||'–')}</div></div>
     </div>`:`${d.q?`<div class="detailCard" style="margin-bottom:8px;"><div class="dcLabel">📡 Leadquelle</div><div class="dcVal" style="color:var(--accent)">${esc(d.q)}</div></div>`:''}`}
     ${d.pl?`<div class="detailCard" style="margin-bottom:8px;"><div class="dcLabel">📍 Adresse</div><div class="dcVal">${esc(d.addr||'')}</div><div class="dcSub">${esc(d.pl)} ${esc(d.ci)}</div></div>`:''}
-    ${d.ph?`<div class="detailCard" style="margin-bottom:8px;"><div class="dcLabel">📞 Telefon</div><a href="tel:${esc(d.ph)}" style="font-size:16px;font-weight:800;color:var(--accent);text-decoration:none;">${esc(d.ph)}</a></div>`:''}
+    ${d.ph?`<div class="detailCard" style="margin-bottom:8px;"><div class="dcLabel">📞 Telefon</div><div style="display:flex;align-items:center;gap:10px;margin-top:4px;"><a href="tel:${esc(d.ph)}" style="font-size:16px;font-weight:800;color:var(--accent);text-decoration:none;">${esc(d.ph)}</a><button class="twilio-btn" onclick="openFragebogen('${esc(d.ph)}','${esc(d.n)}','${esc(d.pl)}','${esc(d.ci)}',${d._leadID||'null'})">📞 Anrufen + Fragebogen</button></div></div>`:''}
     ${d.tx?`<div class="detailCard" style="margin-bottom:8px;"><div class="dcLabel">📝 Notiz</div><div class="dcSub" style="line-height:1.5;">${esc(d.tx)}</div></div>`:''}
     <div class="mbtns" style="margin-top:6px;">
       <button class="mbtn p" style="font-size:12px;" onclick="closeDetail();openModal('${esc(d.s?d.s.slice(0,10):'')}',null,'${esc(d.v)}')">+ Neuer Termin bei ${esc(d.v)}</button>
@@ -1620,9 +1783,139 @@ function showDetail(d){
 function showDetailFromApt(a){
   const st=parseD(a.start_date),en=parseD(a.end_date);
   const name=[a.vorname,a.nachname].filter(Boolean).join(' ')||a.text||'Blocker';
-  showDetail({n:name,s:fmtT(st),e:fmtT(en),v:a.user_received||'',pl:a.plz||'',ci:a.stadt||'',st:a.status||'',addr:[a.strasse,a.hausnummer].filter(Boolean).join(' '),ph:a.telefon||'',tx:a.text||'',q:a.quelle||'',tp:a.appointment_type||''});
+  showDetail({n:name,s:fmtT(st),e:fmtT(en),v:a.user_received||'',pl:a.plz||'',ci:a.stadt||'',st:a.status||'',addr:[a.strasse,a.hausnummer].filter(Boolean).join(' '),ph:a.telefon||'',tx:a.text||'',q:a.quelle||'',tp:a.appointment_type||'',_leadID:a.lead_id||null});
 }
 function closeDetail(){document.getElementById('detailModal').style.display='none';}
+
+// ── FRAGEBOGEN ────────────────────────────────────────────────────
+let fqLeadID = null;
+let fqCalling = false;
+
+function openFragebogen(tel, name, plz, city, leadID) {
+  fqLeadID = leadID || null;
+  // Pre-fill from lead data
+  const parts = (name || '').split(' ');
+  document.getElementById('fqVn').value = parts[0] || '';
+  document.getElementById('fqNn').value = parts.slice(1).join(' ') || '';
+  document.getElementById('fqTel').value = tel || '';
+  document.getElementById('fqPlz').value = plz || '';
+  document.getElementById('fqOrt').value = city || '';
+  document.getElementById('fqStr').value = '';
+  // Reset fields
+  ['fqDachAlter','fqDachTyp','fqAusrichtung','fqFlaeche','fqPersonen','fqVerbrauch','fqAbschlag','fqHeizung','fqNotizen'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  document.querySelectorAll('.fq-radio input').forEach(r => r.checked = false);
+  document.getElementById('fqOverlay').style.display = 'flex';
+  // Start Twilio call
+  if(tel) startTwilioCall(tel, name);
+}
+
+async function startTwilioCall(tel, name) {
+  fqCalling = true;
+  const statusEl = document.getElementById('fqCallStatus');
+  statusEl.style.display = 'flex';
+  statusEl.textContent = `📞 Wähle ${tel}…`;
+  try {
+    const r = await fetch('/api/whatsapp', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action: 'call', to: tel, name: name})
+    });
+    // Twilio call initiated - show status
+    statusEl.textContent = `📞 Anruf läuft mit ${tel}`;
+    statusEl.style.background = '#ef444415';
+    statusEl.style.borderColor = '#ef444440';
+    statusEl.style.color = '#ef4444';
+  } catch(e) {
+    // Even if call fails, keep fragebogen open
+    statusEl.textContent = `📞 ${tel} — Manuell wählen`;
+    statusEl.style.color = 'var(--text2)';
+  }
+}
+
+function closeFQ() {
+  document.getElementById('fqOverlay').style.display = 'none';
+  fqLeadID = null;
+  fqCalling = false;
+}
+
+function getRadioVal(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : null;
+}
+
+async function saveFQ(openTermin) {
+  const data = {
+    lead_id: fqLeadID,
+    vorname: document.getElementById('fqVn').value.trim() || null,
+    nachname: document.getElementById('fqNn').value.trim() || null,
+    telefon: document.getElementById('fqTel').value.trim() || null,
+    plz: document.getElementById('fqPlz').value.trim() || null,
+    ort: document.getElementById('fqOrt').value.trim() || null,
+    strasse: document.getElementById('fqStr').value.trim() || null,
+    eigentuemer: getRadioVal('fqEig') === '1',
+    dach_alter: document.getElementById('fqDachAlter').value || null,
+    dach_typ: document.getElementById('fqDachTyp').value || null,
+    dach_ausrichtung: document.getElementById('fqAusrichtung').value || null,
+    dach_flaeche: document.getElementById('fqFlaeche').value || null,
+    personen_haushalt: parseInt(document.getElementById('fqPersonen').value) || null,
+    stromverbrauch_kwh: parseInt(document.getElementById('fqVerbrauch').value) || null,
+    monatl_abschlag_eur: parseInt(document.getElementById('fqAbschlag').value) || null,
+    e_auto: getRadioVal('fqEAuto') === '1',
+    wallbox: getRadioVal('fqWallbox') === '1',
+    heizung: document.getElementById('fqHeizung').value || null,
+    finanzierung: getRadioVal('fqFinanz') || null,
+    interesse_grad: getRadioVal('fqInteresse') || null,
+    notizen: document.getElementById('fqNotizen').value.trim() || null,
+    termin_gebucht: openTermin,
+  };
+
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/cc_fragebogen`, {
+      method: 'POST',
+      headers: {
+        apikey: SB_ANON,
+        Authorization: 'Bearer ' + SB_ANON,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal'
+      },
+      body: JSON.stringify(data)
+    });
+    if (!r.ok) throw new Error('Speichern fehlgeschlagen');
+
+    if (openTermin) {
+      // Pre-fill booking modal and open it
+      closeFQ();
+      closeDetail();
+      // Find VT slot — open the booking modal with pre-filled data
+      const vn = data.vorname || '';
+      const nn = data.nachname || '';
+      const fullName = [vn, nn].filter(Boolean).join(' ');
+      selectedLeadID = fqLeadID;
+      // Open modal for today
+      openModal(fmt(viewDate()), null, null);
+      // Pre-fill fields after modal opens
+      setTimeout(() => {
+        if(document.getElementById('fVn')) document.getElementById('fVn').value = vn;
+        if(document.getElementById('fNn')) document.getElementById('fNn').value = nn;
+        if(document.getElementById('fTl')) document.getElementById('fTl').value = data.telefon || '';
+        if(document.getElementById('fPo')) document.getElementById('fPo').value = [data.plz, data.ort].filter(Boolean).join(' ');
+        if(document.getElementById('fNz')) document.getElementById('fNz').value = data.notizen || '';
+      }, 100);
+    } else {
+      closeFQ();
+      // Show brief success toast
+      const t = document.createElement('div');
+      t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#22c55e;color:#000;font-weight:700;font-size:13px;padding:10px 20px;border-radius:20px;z-index:9999;pointer-events:none;';
+      t.textContent = '✅ Fragebogen gespeichert';
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 2500);
+    }
+  } catch(e) {
+    alert('Fehler beim Speichern: ' + e.message);
+  }
+}
 
 // ── TAGESPLAN ─────────────────────────────────────────────────────
 function openPlan(){
