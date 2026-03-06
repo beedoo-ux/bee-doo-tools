@@ -3,8 +3,8 @@
 // vercel.json: { "crons": [{ "path": "/api/cron-morgenplan", "schedule": "55 5 * * 1-6" }] }
 
 const LEVETO_BASE = "https://beedoo.leveto.net/API";
-const LEVETO_USER = process.env.LEVETO_USER || "api@bee-doo.de";
-const LEVETO_PASS = process.env.LEVETO_PASS || "Patrick123456789!";
+const LEVETO_USER = process.env.LEVETO_USER || "' + (process.env.LEVETO_USER || 'api@bee-doo.de') + '";
+const LEVETO_PASS = process.env.LEVETO_PASS || "' + (process.env.LEVETO_PASS || '') + '";
 
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH = process.env.TWILIO_AUTH_TOKEN;
