@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bee-doo Nummern-Monitor</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #08080d;
+            --bg2: #0f0f17;
+            --bg3: #161622;
+            --bg4: #1e1e30;
+            --bg5: #28283e;
+            --border: rgba(255,255,255,0.05);
+            --border-accent: rgba(245,197,0,0.25);
+            --text: #eeeef4;
+            --text2: #9999b0;
+            --text3: #5c5c78;
+            --accent: #F5C500;
+            --accent-dim: rgba(245,197,0,0.12);
+            --green: #22c55e;
+            --green-dim: rgba(34,197,94,0.12);
+            --red: #ef4444;
+            --red-dim: rgba(239,68,68,0.12);
+            --orange: #f97316;
+            --orange-dim: rgba(249,115,22,0.12);
+            --blue: #3b82f6;
+            --blue-dim: rgba(59,130,246,0.12);
+            --r: 14px;
+            --rs: 8px;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+        /* Header */
+        .header { display:flex; align-items:center; justify-content:space-between; padding:0 28px; height:56px; background:var(--bg2); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:50; }
+        .header-left { display:flex; align-items:center; gap:12px; }
+        .header-left a { color:var(--text3); text-decoration:none; font-size:13px; transition:0.2s; }
+        .header-left a:hover { color:var(--accent); }
+        .header-title { font-weight:700; font-size:15px; letter-spacing:-0.3px; }
+        .header-title span { color:var(--accent); }
+        .badge { font-size:10px; font-weight:600; padding:3px 8px; background:var(--accent-dim); color:var(--accent); border-radius:20px; letter-spacing:0.5px; text-transform:uppercase; }
+        .header-actions { display:flex; gap:8px; }
+
+        .btn { padding:8px 16px; border:none; border-radius:var(--rs); font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:0.2s; display:inline-flex; align-items:center; gap:6px; }
+        .btn-accent { background:var(--accent); color:#000; }
+        .btn-accent:hover { background:#e6b800; }
+        .btn-ghost { background:var(--bg3); color:var(--text2); border:1px solid var(--border); }
+        .btn-ghost:hover { border-color:var(--border-accent); color:var(--text); }
+        .btn-red { background:var(--red); color:#fff; }
+        .btn-green { background:var(--green); color:#fff; }
+        .btn-sm { padding:6px 12px; font-size:12px; }
+
+        /* Content */
+        .content { max-width:1400px; margin:0 auto; padding:28px; }
+
+        /* KPI Row */
+        .kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:16px; margin-bottom:28px; }
+        .kpi { background:var(--bg2); border-radius:var(--r); padding:20px; border:1px solid var(--border); }
+        .kpi-value { font-size:32px; font-weight:700; font-family:'JetBrains Mono',monospace; letter-spacing:-1px; }
+        .kpi-label { font-size:12px; color:var(--text3); margin-top:4px; }
+        .kpi-sub { font-size:12px; font-weight:600; margin-top:8px; }
+
+        /* Number Cards Grid */
+        .section-title { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--text3); margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; }
+        .numbers-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(380px,1fr)); gap:16px; margin-bottom:32px; }
+
+        .num-card { background:var(--bg2); border-radius:var(--r); border:1px solid var(--border); overflow:hidden; transition:0.2s; }
+        .num-card:hover { border-color:var(--border-accent); }
+        .num-card.spam { border-color:var(--red); box-shadow:0 0 20px rgba(239,68,68,0.08); }
+        .num-card.warning { border-color:var(--orange); }
+
+        .num-card-head { padding:16px 20px; display:flex; align-items:center; gap:14px; border-bottom:1px solid var(--border); }
+        .num-status-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+        .num-status-dot.ok { background:var(--green); box-shadow:0 0 8px rgba(34,197,94,0.4); }
+        .num-status-dot.warning { background:var(--orange); box-shadow:0 0 8px rgba(249,115,22,0.4); }
+        .num-status-dot.spam { background:var(--red); box-shadow:0 0 8px rgba(239,68,68,0.4); animation:pulse 1.5s infinite; }
+        .num-status-dot.paused { background:var(--text3); }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+        .num-info { flex:1; min-width:0; }
+        .num-phone { font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600; letter-spacing:0.5px; }
+        .num-name { font-size:12px; color:var(--text2); margin-top:2px; }
+
+        .num-type-badge { font-size:10px; padding:3px 10px; border-radius:20px; font-weight:600; }
+        .type-local { background:var(--blue-dim); color:var(--blue); }
+        .type-mobile { background:var(--accent-dim); color:var(--accent); }
+        .type-tollfree { background:var(--green-dim); color:var(--green); }
+
+        .num-card-body { padding:16px 20px; }
+        .num-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
+        .num-stat { text-align:center; padding:10px 4px; background:var(--bg); border-radius:var(--rs); }
+        .num-stat-val { font-size:16px; font-weight:700; font-family:'JetBrains Mono',monospace; }
+        .num-stat-label { font-size:10px; color:var(--text3); margin-top:2px; letter-spacing:0.3px; }
+
+        /* Reputation Bar */
+        .rep-bar-wrap { margin-bottom:14px; }
+        .rep-bar-header { display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; }
+        .rep-bar-header .label { color:var(--text3); }
+        .rep-bar-header .value { font-weight:600; font-family:'JetBrains Mono',monospace; }
+        .rep-bar { height:6px; background:var(--bg); border-radius:3px; overflow:hidden; }
+        .rep-bar-fill { height:100%; border-radius:3px; transition:width 0.5s ease; }
+
+        /* Spam reason */
+        .spam-reason { font-size:12px; padding:10px 14px; background:var(--red-dim); border-radius:var(--rs); color:var(--red); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+        .warning-reason { font-size:12px; padding:10px 14px; background:var(--orange-dim); border-radius:var(--rs); color:var(--orange); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+
+        .num-card-actions { display:flex; gap:6px; }
+        .num-card-actions .btn { flex:1; justify-content:center; }
+
+        /* History Table */
+        .table-wrap { background:var(--bg2); border-radius:var(--r); border:1px solid var(--border); overflow:hidden; margin-bottom:28px; }
+        table { width:100%; border-collapse:collapse; }
+        th,td { padding:12px 16px; text-align:left; font-size:13px; border-bottom:1px solid var(--border); }
+        th { background:var(--bg3); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text3); }
+        tr:last-child td { border-bottom:none; }
+        tr:hover td { background:rgba(255,255,255,0.02); }
+
+        /* Add Number Modal */
+        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); backdrop-filter:blur(6px); z-index:200; align-items:center; justify-content:center; }
+        .modal-overlay.visible { display:flex; }
+        .modal { background:var(--bg3); border-radius:var(--r); border:1px solid var(--border); width:480px; max-height:90vh; overflow-y:auto; animation:slideUp 0.25s ease; }
+        @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        .modal-head { padding:20px 24px; border-bottom:1px solid var(--border); }
+        .modal-head h2 { font-size:18px; font-weight:700; }
+        .modal-head p { font-size:13px; color:var(--text2); margin-top:4px; }
+        .modal-body { padding:20px 24px; }
+        .field { margin-bottom:16px; }
+        .field label { display:block; font-size:12px; font-weight:600; color:var(--text2); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px; }
+        .field input, .field select { width:100%; padding:10px 14px; background:var(--bg); border:1px solid var(--border); border-radius:var(--rs); color:var(--text); font-family:inherit; font-size:13px; outline:none; transition:0.2s; }
+        .field input:focus, .field select:focus { border-color:var(--accent); }
+        .field input::placeholder { color:var(--text3); }
+        .modal-foot { padding:16px 24px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:8px; }
+
+        /* Responsive */
+        @media (max-width:1100px) { .kpis { grid-template-columns:repeat(3,1fr); } }
+        @media (max-width:768px) {
+            .kpis { grid-template-columns:repeat(2,1fr); }
+            .numbers-grid { grid-template-columns:1fr; }
+            .header-actions { display:none; }
+            .content { padding:16px; }
+        }
+
+        /* Loading spinner */
+        .spinner { width:18px; height:18px; border:2px solid var(--text3); border-top-color:var(--accent); border-radius:50%; animation:spin 0.6s linear infinite; display:inline-block; }
+        @keyframes spin { to{transform:rotate(360deg)} }
+        .loading-overlay { position:absolute; inset:0; background:rgba(8,8,13,0.7); display:flex; align-items:center; justify-content:center; border-radius:var(--r); z-index:5; }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <div class="header-left">
+        <a href="index.html">← Toolbox</a>
+        <span style="color:var(--text3)">|</span>
+        <div class="header-title"><span>bee-doo</span> Nummern-Monitor</div>
+        <span class="badge">Live</span>
+    </div>
+    <div class="header-actions">
+        <a href="callcenter.html" style="text-decoration:none"><span class="btn btn-ghost">📞 Agent</span></a>
+        <a href="cc-supervisor.html" style="text-decoration:none"><span class="btn btn-ghost">👁️ Leitstand</span></a>
+        <a href="cc-workforce.html" style="text-decoration:none"><span class="btn btn-ghost">📊 Workforce</span></a>
+        <a href="cc-nurture-settings.html" style="text-decoration:none"><span class="btn btn-ghost">🔄 Nurture</span></a>
+        <button class="btn btn-ghost" onclick="runSpamCheck()">🔍 Spam-Check</button>
+        <button class="btn btn-ghost" onclick="checkAnswerRates()">📊 Abhebquoten</button>
+        <button class="btn btn-accent" onclick="showAddModal()">+ Nummer</button>
+    </div>
+</header>
+
+<div class="content">
+    <!-- KPIs -->
+    <div class="kpis" id="kpiRow">
+        <div class="kpi">
+            <div class="kpi-value" style="color:var(--accent)" id="kpiTotal">—</div>
+            <div class="kpi-label">Nummern im Pool</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-value" style="color:var(--green)" id="kpiHealthy">—</div>
+            <div class="kpi-label">Gesund</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-value" style="color:var(--red)" id="kpiSpam">—</div>
+            <div class="kpi-label">Spam-markiert</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-value" id="kpiCallsToday">—</div>
+            <div class="kpi-label">Anrufe heute (gesamt)</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-value" style="color:var(--blue)" id="kpiAvgRep">—</div>
+            <div class="kpi-label">Ø Reputation</div>
+        </div>
+    </div>
+
+    <!-- Numbers Grid -->
+    <div class="section-title">
+        <span>📱 Nummern-Pool</span>
+        <span style="font-size:11px;color:var(--text3);text-transform:none;letter-spacing:0;font-weight:400">
+            Letzter Spam-Check: <span id="lastCheck">—</span>
+        </span>
+    </div>
+    <div class="numbers-grid" id="numbersGrid">
+        <div style="padding:40px;text-align:center;color:var(--text3);grid-column:1/-1">
+            <div class="spinner" style="margin:0 auto 12px"></div>
+            <div>Nummern werden geladen...</div>
+        </div>
+    </div>
+
+    <!-- Spam Check History -->
+    <div class="section-title">
+        <span>📋 Letzte Spam-Checks</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Datum</th>
+                    <th>Nummer</th>
+                    <th>Quelle</th>
+                    <th>Score</th>
+                    <th>Status</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody id="checkHistory">
+                <tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Lade...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Best Practices -->
+    <div class="section-title"><span>💡 Anti-Spam Best Practices</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:28px">
+        <div style="background:var(--bg2);border-radius:var(--r);padding:16px 20px;border:1px solid var(--border)">
+            <div style="font-weight:600;font-size:14px;margin-bottom:6px">📞 Max. 100 Anrufe/Tag/Nummer</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.6">Das System limitiert automatisch. Ortsnetz-Nummern werden bevorzugt rotiert.</div>
+        </div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:16px 20px;border:1px solid var(--border)">
+            <div style="font-weight:600;font-size:14px;margin-bottom:6px">⏱️ 5s Pause zwischen Anrufen</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.6">Der Power Dialer wartet automatisch. Schnelles Durchwählen = Spam-Signal.</div>
+        </div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:16px 20px;border:1px solid var(--border)">
+            <div style="font-weight:600;font-size:14px;margin-bottom:6px">🕐 Nur 9–18 Uhr anrufen</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.6">Anrufe außerhalb der Geschäftszeiten triggern Spam-Algorithmen.</div>
+        </div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:16px 20px;border:1px solid var(--border)">
+            <div style="font-weight:600;font-size:14px;margin-bottom:6px">🔄 45 Tage Cooldown</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.6">Spam-markierte Nummern 45 Tage pausieren bevor sie wieder eingesetzt werden.</div>
+        </div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:16px 20px;border:1px solid var(--border)">
+            <div style="font-weight:600;font-size:14px;margin-bottom:6px">🏷️ Separate Zwecke</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.6">Kaltakquise, Kundenservice und SMS/WhatsApp auf verschiedenen Nummern.</div>
+        </div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:16px 20px;border:1px solid var(--border)">
+            <div style="font-weight:600;font-size:14px;margin-bottom:6px">📈 Langsam hochfahren</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.6">Neue Nummern: Woche 1 max. 30 Calls/Tag, dann schrittweise steigern.</div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Number Modal -->
+<div class="modal-overlay" id="addModal">
+    <div class="modal">
+        <div class="modal-head">
+            <h2>Nummer zum Pool hinzufügen</h2>
+            <p>Twilio-Nummer registrieren und für die Auto-Rotation freigeben</p>
+        </div>
+        <div class="modal-body">
+            <div class="field">
+                <label>Telefonnummer</label>
+                <input type="tel" id="addPhone" placeholder="+49 521 ..." style="font-family:'JetBrains Mono',monospace">
+            </div>
+            <div class="field">
+                <label>Bezeichnung</label>
+                <input type="text" id="addName" placeholder="z.B. Bielefeld Ortsnetz #1">
+            </div>
+            <div class="field">
+                <label>Nummerntyp</label>
+                <select id="addType">
+                    <option value="local">Ortsnetz (Festnetz)</option>
+                    <option value="mobile">Mobilfunk</option>
+                    <option value="tollfree">Kostenlos (0800)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Verwendung</label>
+                <select id="addPurpose">
+                    <option value="outbound">Nur Outbound (Kaltakquise)</option>
+                    <option value="inbound">Nur Inbound (Kundenservice)</option>
+                    <option value="both">Beides</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Max. Anrufe pro Tag</label>
+                <input type="number" id="addMaxCalls" value="100" min="10" max="500">
+            </div>
+            <div class="field">
+                <label>Region (optional)</label>
+                <input type="text" id="addRegion" placeholder="z.B. Bielefeld, NRW">
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeAddModal()">Abbrechen</button>
+            <button class="btn btn-accent" onclick="addNumber()">📱 Nummer hinzufügen</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation'
+};
+
+let numbers = [];
+
+// ─── INIT ───
+document.addEventListener('DOMContentLoaded', () => {
+    loadNumbers();
+    loadCheckHistory();
+});
+
+// ─── LOAD DATA ───
+async function loadNumbers() {
+    try {
+        const resp = await fetch(`${SUPABASE_URL}/rest/v1/cc_phone_numbers?order=phone_number.asc`, { headers });
+        numbers = await resp.json();
+        renderNumbers();
+        renderKPIs();
+    } catch (err) {
+        console.error('Fehler beim Laden:', err);
+    }
+}
+
+async function loadCheckHistory() {
+    try {
+        const resp = await fetch(`${SUPABASE_URL}/rest/v1/cc_spam_checks?order=checked_at.desc&limit=20`, { headers });
+        const checks = await resp.json();
+        renderCheckHistory(checks);
+    } catch (err) {
+        console.error('Fehler beim Laden der Checks:', err);
+    }
+}
+
+// ─── RENDER KPIs ───
+function renderKPIs() {
+    const total = numbers.length;
+    const healthy = numbers.filter(n => !n.spam_flagged && n.active).length;
+    const spam = numbers.filter(n => n.spam_flagged).length;
+    const callsToday = numbers.reduce((sum, n) => sum + (n.calls_today || 0), 0);
+    const avgRep = total > 0 ? Math.round(numbers.reduce((sum, n) => sum + (n.reputation_score || 0), 0) / total) : 0;
+
+    document.getElementById('kpiTotal').textContent = total;
+    document.getElementById('kpiHealthy').textContent = healthy;
+    document.getElementById('kpiSpam').textContent = spam;
+    document.getElementById('kpiCallsToday').textContent = callsToday;
+    document.getElementById('kpiAvgRep').textContent = avgRep + '/100';
+
+    // Last check
+    const lastChecked = numbers.reduce((latest, n) => {
+        const d = n.tellows_last_check ? new Date(n.tellows_last_check) : null;
+        return d && (!latest || d > latest) ? d : latest;
+    }, null);
+    document.getElementById('lastCheck').textContent = lastChecked
+        ? lastChecked.toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+        : 'Noch nie';
+}
+
+// ─── RENDER NUMBERS ───
+function renderNumbers() {
+    const grid = document.getElementById('numbersGrid');
+
+    if (numbers.length === 0) {
+        grid.innerHTML = `
+            <div style="padding:60px;text-align:center;color:var(--text3);grid-column:1/-1">
+                <div style="font-size:40px;margin-bottom:12px;opacity:0.3">📱</div>
+                <div style="font-size:14px;margin-bottom:16px">Noch keine Nummern im Pool</div>
+                <button class="btn btn-accent" onclick="showAddModal()">+ Erste Nummer hinzufügen</button>
+            </div>
+        `;
+        return;
+    }
+
+    grid.innerHTML = numbers.map(n => {
+        const status = n.spam_flagged ? 'spam' : (n.reputation_score || 100) < 60 ? 'warning' : 'ok';
+        const statusLabel = n.spam_flagged ? 'Spam' : !n.active ? 'Pausiert' : status === 'warning' ? 'Warnung' : 'Gesund';
+        const repScore = n.reputation_score || 100;
+        const repColor = repScore >= 70 ? 'var(--green)' : repScore >= 40 ? 'var(--orange)' : 'var(--red)';
+        const typeClass = n.number_type === 'local' ? 'type-local' : n.number_type === 'tollfree' ? 'type-tollfree' : 'type-mobile';
+        const typeLabel = n.number_type === 'local' ? 'Ortsnetz' : n.number_type === 'tollfree' ? 'Kostenlos' : 'Mobil';
+        const answerRate = n.answer_rate_7d != null ? n.answer_rate_7d + '%' : '—';
+        const callsPercent = n.max_calls_per_day > 0 ? Math.round((n.calls_today || 0) / n.max_calls_per_day * 100) : 0;
+
+        return `
+        <div class="num-card ${n.spam_flagged ? 'spam' : status === 'warning' ? 'warning' : ''}">
+            <div class="num-card-head">
+                <div class="num-status-dot ${n.spam_flagged ? 'spam' : !n.active ? 'paused' : status}"></div>
+                <div class="num-info">
+                    <div class="num-phone">${formatPhone(n.phone_number)}</div>
+                    <div class="num-name">${n.friendly_name || '—'}</div>
+                </div>
+                <span class="num-type-badge ${typeClass}">${typeLabel}</span>
+            </div>
+            <div class="num-card-body">
+                ${n.spam_flagged ? `<div class="spam-reason">🔴 ${n.spam_flagged_reason || 'Als Spam markiert'}</div>` : ''}
+                ${!n.spam_flagged && status === 'warning' ? `<div class="warning-reason">⚠️ Reputation niedrig — Nummer beobachten</div>` : ''}
+                <div class="num-stats">
+                    <div class="num-stat">
+                        <div class="num-stat-val" style="color:${repColor}">${repScore}</div>
+                        <div class="num-stat-label">Reputation</div>
+                    </div>
+                    <div class="num-stat">
+                        <div class="num-stat-val">${n.calls_today || 0}<span style="font-size:11px;color:var(--text3)">/${n.max_calls_per_day}</span></div>
+                        <div class="num-stat-label">Calls heute</div>
+                    </div>
+                    <div class="num-stat">
+                        <div class="num-stat-val" style="color:var(--blue)">${answerRate}</div>
+                        <div class="num-stat-label">Abhebquote</div>
+                    </div>
+                    <div class="num-stat">
+                        <div class="num-stat-val">${n.tellows_score != null ? n.tellows_score + '/9' : '—'}</div>
+                        <div class="num-stat-label">tellows</div>
+                    </div>
+                </div>
+                <div class="rep-bar-wrap">
+                    <div class="rep-bar-header">
+                        <span class="label">Tageslimit</span>
+                        <span class="value">${callsPercent}%</span>
+                    </div>
+                    <div class="rep-bar">
+                        <div class="rep-bar-fill" style="width:${callsPercent}%;background:${callsPercent > 80 ? 'var(--red)' : callsPercent > 50 ? 'var(--orange)' : 'var(--green)'}"></div>
+                    </div>
+                </div>
+                <div class="num-card-actions">
+                    ${n.spam_flagged
+                        ? `<button class="btn btn-sm btn-ghost" onclick="unflagNumber('${n.id}')">🔓 Entsperren</button>`
+                        : n.active
+                            ? `<button class="btn btn-sm btn-ghost" onclick="pauseNumber('${n.id}')">⏸ Pausieren</button>`
+                            : `<button class="btn btn-sm btn-green" onclick="activateNumber('${n.id}')">▶ Aktivieren</button>`
+                    }
+                    <button class="btn btn-sm btn-ghost" onclick="checkOneNumber('${n.phone_number}')">🔍 Prüfen</button>
+                    <button class="btn btn-sm btn-ghost" style="color:var(--red)" onclick="removeNumber('${n.id}')">🗑</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ─── RENDER CHECK HISTORY ───
+function renderCheckHistory(checks) {
+    const tbody = document.getElementById('checkHistory');
+    if (!checks || checks.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Noch keine Spam-Checks durchgeführt</td></tr>';
+        return;
+    }
+    tbody.innerHTML = checks.map(c => {
+        const isSpam = c.is_spam;
+        const date = new Date(c.checked_at);
+        return `<tr>
+            <td style="font-family:'JetBrains Mono',monospace;font-size:12px">${date.toLocaleString('de-DE', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+            <td style="font-family:'JetBrains Mono',monospace">${formatPhone(c.phone_number)}</td>
+            <td><span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:var(--bg4)">${c.check_source}</span></td>
+            <td style="font-family:'JetBrains Mono',monospace;font-weight:600;color:${isSpam ? 'var(--red)' : c.score >= 5 ? 'var(--orange)' : 'var(--green)'}">${c.score != null ? c.score : '—'}</td>
+            <td>${isSpam ? '<span style="color:var(--red);font-weight:600">🔴 Spam</span>' : '<span style="color:var(--green)">🟢 OK</span>'}</td>
+            <td style="font-size:12px;color:var(--text2)">${c.details ? (c.details.reports || 0) + ' Meldungen' : '—'}</td>
+        </tr>`;
+    }).join('');
+}
+
+// ─── ACTIONS ───
+async function runSpamCheck() {
+    const btn = event.target;
+    btn.innerHTML = '<span class="spinner"></span> Prüfe...';
+    btn.disabled = true;
+    try {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/cc-spam-check?action=check_all`);
+        const data = await resp.json();
+        await loadNumbers();
+        await loadCheckHistory();
+        const spamCount = (data.results || []).filter(r => r.action === 'PAUSIERT').length;
+        alert(spamCount > 0
+            ? `⚠️ ${spamCount} Nummer(n) als Spam erkannt und pausiert!`
+            : `✅ Alle ${(data.results || []).length} Nummern sind sauber.`
+        );
+    } catch (err) {
+        alert('Fehler: ' + err.message);
+    }
+    btn.innerHTML = '🔍 Spam-Check starten';
+    btn.disabled = false;
+}
+
+async function checkAnswerRates() {
+    try {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/cc-spam-check?action=check_answer_rates`);
+        const data = await resp.json();
+        await loadNumbers();
+        const flagged = (data.rates || []).filter(r => r.flagged).length;
+        alert(flagged > 0
+            ? `⚠️ ${flagged} Nummer(n) mit niedrigen Abhebquoten gefunden.`
+            : `✅ Alle Abhebquoten im grünen Bereich.`
+        );
+    } catch (err) {
+        alert('Fehler: ' + err.message);
+    }
+}
+
+async function checkOneNumber(phone) {
+    try {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/cc-spam-check?action=check_one&phone=${encodeURIComponent(phone)}`);
+        const data = await resp.json();
+        await loadNumbers();
+        await loadCheckHistory();
+        alert(`${phone}\ntellows Score: ${data.tellows?.score || 'Kein Eintrag'}\nStatus: ${data.status}`);
+    } catch (err) {
+        alert('Fehler: ' + err.message);
+    }
+}
+
+async function pauseNumber(id) {
+    await fetch(`${SUPABASE_URL}/rest/v1/cc_phone_numbers?id=eq.${id}`, {
+        method: 'PATCH', headers,
+        body: JSON.stringify({ active: false, updated_at: new Date().toISOString() })
+    });
+    await loadNumbers();
+}
+
+async function activateNumber(id) {
+    await fetch(`${SUPABASE_URL}/rest/v1/cc_phone_numbers?id=eq.${id}`, {
+        method: 'PATCH', headers,
+        body: JSON.stringify({ active: true, spam_flagged: false, updated_at: new Date().toISOString() })
+    });
+    await loadNumbers();
+}
+
+async function unflagNumber(id) {
+    if (!confirm('Nummer wirklich entsperren? Nur wenn sicher ist, dass kein Spam-Problem mehr besteht.')) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/cc_phone_numbers?id=eq.${id}`, {
+        method: 'PATCH', headers,
+        body: JSON.stringify({ spam_flagged: false, spam_flagged_reason: null, reputation_score: 70, active: true, updated_at: new Date().toISOString() })
+    });
+    await loadNumbers();
+}
+
+async function removeNumber(id) {
+    if (!confirm('Nummer wirklich aus dem Pool entfernen?')) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/cc_phone_numbers?id=eq.${id}`, { method: 'DELETE', headers });
+    await loadNumbers();
+}
+
+// ─── ADD NUMBER ───
+function showAddModal() { document.getElementById('addModal').classList.add('visible'); }
+function closeAddModal() { document.getElementById('addModal').classList.remove('visible'); }
+
+async function addNumber() {
+    const phone = document.getElementById('addPhone').value.trim();
+    const name = document.getElementById('addName').value.trim();
+    const type = document.getElementById('addType').value;
+    const purpose = document.getElementById('addPurpose').value;
+    const maxCalls = parseInt(document.getElementById('addMaxCalls').value) || 100;
+    const region = document.getElementById('addRegion').value.trim();
+
+    if (!phone) { alert('Bitte Telefonnummer eingeben'); return; }
+
+    // Normalize
+    let cleanPhone = phone.replace(/[^+0-9]/g, '');
+    if (!cleanPhone.startsWith('+')) {
+        if (cleanPhone.startsWith('0')) cleanPhone = '+49' + cleanPhone.substring(1);
+        else cleanPhone = '+49' + cleanPhone;
+    }
+
+    const resp = await fetch(`${SUPABASE_URL}/rest/v1/cc_phone_numbers`, {
+        method: 'POST', headers,
+        body: JSON.stringify({
+            phone_number: cleanPhone,
+            friendly_name: name || null,
+            number_type: type,
+            purpose: purpose,
+            max_calls_per_day: maxCalls,
+            region: region || null,
+            active: true,
+            auto_rotate: true,
+            reputation_score: 100
+        })
+    });
+
+    if (resp.ok) {
+        closeAddModal();
+        document.getElementById('addPhone').value = '';
+        document.getElementById('addName').value = '';
+        document.getElementById('addRegion').value = '';
+        await loadNumbers();
+    } else {
+        const err = await resp.json();
+        alert('Fehler: ' + (err.message || JSON.stringify(err)));
+    }
+}
+
+// ─── HELPERS ───
+function formatPhone(phone) {
+    if (!phone) return '—';
+    // +4915888651131 → +49 158 886 51131
+    if (phone.startsWith('+49')) {
+        const rest = phone.substring(3);
+        if (rest.length === 11 && rest.startsWith('1')) {
+            return `+49 ${rest.substring(0,3)} ${rest.substring(3,6)} ${rest.substring(6)}`;
+        }
+        if (rest.length >= 6) {
+            // Ortsnetz: +49 521 1234567
+            return `+49 ${rest.substring(0,3)} ${rest.substring(3)}`;
+        }
+    }
+    return phone;
+}
+
+// Auto-refresh every 60 seconds
+setInterval(() => { loadNumbers(); loadCheckHistory(); }, 60000);
+</script>
+</body>
+</html>
