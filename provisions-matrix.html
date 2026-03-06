@@ -2392,6 +2392,13 @@ function TabStammdaten({ mitarbeiterList, setMitarbeiterList, toast }) {
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
+  const [sortCol, setSortCol] = useState("name");
+  const [sortDir, setSortDir] = useState("asc");
+
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("asc"); }
+  };
 
   const isHGB = (m) => (m.typ||'').includes('hgb');
   const isAng = (m) => (m.typ||'').includes('angestellt');
@@ -2443,6 +2450,28 @@ function TabStammdaten({ mitarbeiterList, setMitarbeiterList, toast }) {
     filtered = filtered.filter(m => (m.vorname+' '+m.nachname).toLowerCase().includes(q) || (m.leveto_ma_nummer||'').includes(q) || (m.email||'').toLowerCase().includes(q));
   }
 
+  // Sort
+  const sortFn = (a, b) => {
+    let va, vb;
+    const name = m => (m.vorname+' '+m.nachname).toLowerCase();
+    switch(sortCol) {
+      case 'name': va=name(a); vb=name(b); break;
+      case 'typ': va=a.typ||''; vb=b.typ||''; break;
+      case 'adresse': va=a.plz||'zzz'; vb=b.plz||'zzz'; break;
+      case 'email': va=a.email||'zzz'; vb=b.email||'zzz'; break;
+      case 'telefon': va=a.telefon||'zzz'; vb=b.telefon||'zzz'; break;
+      case 'stnr': va=a.steuernummer||'zzz'; vb=b.steuernummer||'zzz'; break;
+      case 'ustid': va=a.ustid||'zzz'; vb=b.ustid||'zzz'; break;
+      case 'iban': va=a.iban||'zzz'; vb=b.iban||'zzz'; break;
+      case 'gehalt': va=parseFloat(a.grundgehalt||0); vb=parseFloat(b.grundgehalt||0); return sortDir==='asc'?va-vb:vb-va;
+      case 'ust': va=a.abrechnungsart||'netto'; vb=b.abrechnungsart||'netto'; break;
+      default: va=name(a); vb=name(b);
+    }
+    if (typeof va === 'string') { const c=va.localeCompare(vb); return sortDir==='asc'?c:-c; }
+    return sortDir==='asc'?va-vb:vb-va;
+  };
+  filtered = [...filtered].sort(sortFn);
+
   const startEdit = (m) => { setEditId(m.id); setEditData({strasse:m.strasse||'',hausnr:m.hausnr||'',plz:m.plz||'',ort:m.ort||'',email:m.email||'',telefon:m.telefon||'',steuernummer:m.steuernummer||'',ustid:m.ustid||'',iban:m.iban||'',firmenname:m.firmenname||'',grundgehalt:m.grundgehalt||0}); };
   const cancelEdit = () => { setEditId(null); setEditData({}); };
   const saveEdit = async () => {
@@ -2491,8 +2520,8 @@ function TabStammdaten({ mitarbeiterList, setMitarbeiterList, toast }) {
       React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", minWidth: 1100 } },
         React.createElement("thead", null,
           React.createElement("tr", null,
-            ["Name","Typ","Adresse","E-Mail","Telefon","StNr","USt-Id","IBAN","Gehalt","USt",""].map((h,i) =>
-              React.createElement("th", { key: i, style: { padding: "8px 10px", fontSize: 10, fontWeight: 700, color: "var(--ts)", textTransform: "uppercase", letterSpacing: ".4px", borderBottom: "2px solid var(--bd)", background: "var(--s3)", position: "sticky", top: 0, zIndex: 2, textAlign: "left", whiteSpace: "nowrap" } }, h)
+            [["Name","name"],["Typ","typ"],["Adresse","adresse"],["E-Mail","email"],["Telefon","telefon"],["StNr","stnr"],["USt-Id","ustid"],["IBAN","iban"],["Gehalt","gehalt"],["USt","ust"],["",""]].map(([h,col],i) =>
+              React.createElement("th", { key: i, onClick: col ? () => toggleSort(col) : undefined, style: { padding: "8px 10px", fontSize: 10, fontWeight: 700, color: sortCol===col ? "var(--y)" : "var(--ts)", textTransform: "uppercase", letterSpacing: ".4px", borderBottom: "2px solid var(--bd)", background: "var(--s3)", position: "sticky", top: 0, zIndex: 2, textAlign: "left", whiteSpace: "nowrap", cursor: col ? "pointer" : "default", userSelect: "none" } }, h + (sortCol===col ? (sortDir==="asc" ? " \u25b2" : " \u25bc") : ""))
             )
           )
         ),
