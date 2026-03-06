@@ -245,27 +245,37 @@ async function claudeStream(sys, messages, onChunk, onDone, onError) {
   try {
     const r = await fetch('/api/ai-proxy', {
       method: 'POST',
-      headers: {
-        'Content-Type':'application/json'
-},
-      body: JSON.stringify({ model:CLAUDE_MODEL, max_tokens:500, stream:true, system:sys, messages })
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ model:CLAUDE_MODEL, max_tokens:500, system:sys, messages })
     });
-    if (!r.ok) throw new Error(`Claude ${r.status}`);
-    const reader = r.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '';
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value,{stream:true});
-      const lines = buf.split('\n'); buf = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const d = line.slice(6).trim();
-        if (d==='[DONE]') continue;
-        try { const p=JSON.parse(d); if(p.type==='content_block_delta'&&p.delta?.text) onChunk(p.delta.text); }
-        catch(e){}
+    if (!r.ok) {
+      const errData = await r.json().catch(() => ({}));
+      throw new Error(errData.error?.message || errData.error || `Claude ${r.status}`);
+    }
+    const contentType = r.headers.get('content-type') || '';
+    if (contentType.includes('text/event-stream')) {
+      // Streaming response
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value,{stream:true});
+        const lines = buf.split('\n'); buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const d = line.slice(6).trim();
+          if (d==='[DONE]') continue;
+          try { const p=JSON.parse(d); if(p.type==='content_block_delta'&&p.delta?.text) onChunk(p.delta.text); }
+          catch(e){}
+        }
       }
+    } else {
+      // Non-streaming JSON response
+      const data = await r.json();
+      const text = (data.content || []).map(c => c.text || '').join('');
+      if (text) onChunk(text);
     }
     onDone();
   } catch(e) { onError(e.message); }
@@ -460,16 +470,6 @@ function App() {
   useEffect(() => { const iv=setInterval(load,90000); return ()=>clearInterval(iv); }, [load]);
   useEffect(() => { const iv=setInterval(()=>setNow(new Date()),20000); return ()=>clearInterval(iv); }, []);
 
-  // Auto-scroll to first live (or next) card after data loads
-  useEffect(() => {
-    if (!termine.length) return;
-    const timer = setTimeout(() => {
-      const el = document.querySelector('.scroll-target');
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 700);
-    return () => clearTimeout(timer);
-  }, [termine.length]);
-
   const nowMin = now.getHours()*60+now.getMinutes();
 
   // Map raw to display objects with live/next/done computed from current clock
@@ -500,6 +500,16 @@ function App() {
       sstorno,
     };
   }), [raw, nowMin]);
+
+  // Auto-scroll to first live (or next) card after data loads
+  useEffect(() => {
+    if (!termine.length) return;
+    const timer = setTimeout(() => {
+      const el = document.querySelector('.scroll-target');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [termine.length]);
 
   // Statis direkt aus Terminen: feedback_status enthält 'Abschluss'
   const statisToday = useMemo(() => termine
@@ -628,3 +638,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
+
