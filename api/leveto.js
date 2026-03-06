@@ -2,8 +2,8 @@
 // Deployed on Vercel, handles CORS and Leveto auth
 
 const LEVETO_BASE = "https://beedoo.leveto.net/API";
-const LEVETO_USER = "api@bee-doo.de";
-const LEVETO_PASS = "Patrick123456789!";
+const LEVETO_USER = process.env.LEVETO_USER || 'api@bee-doo.de';
+const LEVETO_PASS = process.env.LEVETO_PASS;
 
 let _tokenCache = { token: null, expires: 0 };
 
