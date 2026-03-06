@@ -1400,7 +1400,7 @@ function TabImport({ toast, mitarbeiterList }) {
 
 
 // ═══ Tab: Abrechnungsübersicht ═══
-function TabAbrechnung({ mitarbeiterList, historie, sonder, teamBonus, regeln, toast }) {
+function TabAbrechnung({ mitarbeiterList, setMitarbeiterList, historie, sonder, teamBonus, regeln, toast }) {
   const now = new Date();
   const [monat, setMonat] = useState(now.getMonth() === 0 ? 12 : now.getMonth());
   const [jahr, setJahr] = useState(now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear());
@@ -1409,6 +1409,20 @@ function TabAbrechnung({ mitarbeiterList, historie, sonder, teamBonus, regeln, t
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(null);
   const [dirty, setDirty] = useState(new Set());
+  const [abrArtSaving, setAbrArtSaving] = useState({});
+
+  const toggleAbrArt = async (maId, name) => {
+    setAbrArtSaving(s => ({ ...s, [maId]: true }));
+    const ma = mitarbeiterList.find(m => m.id === maId);
+    const neu = ma?.abrechnungsart === "brutto" ? "netto" : "brutto";
+    try {
+      await db.patch("mitarbeiter", "id=eq." + maId, { abrechnungsart: neu });
+      setMitarbeiterList(prev => prev.map(m => m.id === maId ? { ...m, abrechnungsart: neu } : m));
+      setRows(prev => prev.map(r => r.maId === maId ? { ...r, abrechnungsart: neu } : r));
+      toast((name || "") + " \u2192 " + (neu === "brutto" ? "Brutto (mit MwSt)" : "Netto (Kleinunternehmer)"), "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+    finally { setAbrArtSaving(s => ({ ...s, [maId]: false })); }
+  };
 
   const regelMap = {};
   (regeln || []).forEach(r => { regelMap[r.name] = r; });
@@ -1554,6 +1568,7 @@ function TabAbrechnung({ mitarbeiterList, historie, sonder, teamBonus, regeln, t
 
         result.push({
           name, status, rolle, typ, modellName, isFlat, isSkip,
+          maId: ma?.id || null, abrechnungsart: ma?.abrechnungsart || "netto",
           basisRate, staffelRate, schwelle,
           elBonus, empBonus, spBonus, stufenBerechtigt,
           sales: sales.count, brutto: sales.brutto,
@@ -1716,7 +1731,19 @@ function TabAbrechnung({ mitarbeiterList, historie, sonder, teamBonus, regeln, t
           padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600,
           background: r.status === "HGB" ? "#4fc3f718" : "#81c78418",
           color: r.status === "HGB" ? "#4fc3f7" : "#81c784",
-        }}, r.status)
+        }}, r.status),
+        r.status === "HGB" && r.maId && React.createElement("button", {
+          onClick: (ev) => { ev.stopPropagation(); toggleAbrArt(r.maId, r.name); },
+          disabled: abrArtSaving[r.maId],
+          style: {
+            display: "block", marginTop: 3,
+            background: r.abrechnungsart === "brutto" ? "#fb923c18" : "#60a5fa18",
+            border: "1px solid " + (r.abrechnungsart === "brutto" ? "#fb923c40" : "#60a5fa40"),
+            color: r.abrechnungsart === "brutto" ? "#fb923c" : "#60a5fa",
+            borderRadius: 4, padding: "1px 6px", fontSize: 9, fontWeight: 700,
+            cursor: "pointer", letterSpacing: 0.3, textTransform: "uppercase",
+          }
+        }, abrArtSaving[r.maId] ? "..." : (r.abrechnungsart === "brutto" ? "BRUTTO" : "NETTO"))
       ),
       React.createElement("td", { style: cs({ fontSize: 10, color: "var(--ts)" }) }, r.rolle),
       React.createElement("td", { style: cs() },
@@ -2211,7 +2238,7 @@ function App() {
           db.get("pay_sperrlisten", "?order=auftrag_nr.asc").catch(() => []),
           db.get("pay_duplikate", "?order=kunde_name.asc").catch(() => []),
           db.get("pay_provisions_historie", "?order=mitarbeiter_name.asc,gueltig_ab.asc").catch(() => []),
-          db.get("mitarbeiter", "?select=id,vorname,nachname,typ&order=nachname.asc").catch(() => []),
+          db.get("mitarbeiter", "?select=id,vorname,nachname,typ,abrechnungsart&order=nachname.asc").catch(() => []),
           db.get("pay_regel_overrides", "?order=periode.asc").catch(() => []),
         ]);
         setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp); setHistorieData(hi); setMitarbeiterList(ma); setOverrides(ov);
@@ -2234,6 +2261,7 @@ function App() {
     { key: "historie", label: "📜 Historie", color: "var(--p)" },
     { key: "staffel", label: "📈 Staffel-History", color: "var(--g)" },
     { key: "monatssteuerung", label: "🎛️ Monatssteuerung", color: "var(--o)" },
+    { key: "abrechnung", label: "🧾 Abrechnung", color: "var(--g)" },
     { key: "import", label: "📥 CSV-Import", color: "var(--t)" },
   ];
 
@@ -2312,7 +2340,7 @@ function App() {
         {tab === "historie" && <TabHistorie historie={historieData} setHistorie={setHistorieData} toast={toast} />}
         {tab === "staffel" && <TabStaffelHistory mitarbeiterList={mitarbeiterList} toast={toast} />}
         {tab === "monatssteuerung" && <TabMonatssteuerung regeln={regeln} sonder={sonder} stufen={stufen} teamBonus={teamBonus} overrides={overrides} setOverrides={setOverrides} toast={toast} />}
-        {tab === "abrechnung" && <TabAbrechnung mitarbeiterList={mitarbeiterList} historie={historieData} sonder={sonder} teamBonus={teamBonus} regeln={regeln} toast={toast} />}
+        {tab === "abrechnung" && <TabAbrechnung mitarbeiterList={mitarbeiterList} setMitarbeiterList={setMitarbeiterList} historie={historieData} sonder={sonder} teamBonus={teamBonus} regeln={regeln} toast={toast} />}
         {tab === "import" && <TabImport toast={toast} mitarbeiterList={mitarbeiterList} />}
       </div>
     </div>
