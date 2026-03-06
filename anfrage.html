@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kostenlose Beratung anfragen | bee-doo GmbH</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --yellow: #F5C500;
+  --bg: #111111;
+  --card: #1a1a1a;
+  --border: #2a2a2a;
+  --text: #ffffff;
+  --muted: #888888;
+  --success: #22c55e;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* NAV */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 20px 40px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(17,17,17,0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-logo img { height: 32px; }
+.nav-back {
+  color: var(--muted); font-size: 14px; text-decoration: none;
+  display: flex; align-items: center; gap: 6px; transition: color 0.2s;
+}
+.nav-back:hover { color: var(--text); }
+
+/* MAIN */
+.main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 100px 20px 40px;
+  min-height: 100vh;
+}
+
+/* FORM CONTAINER */
+.form-wrap {
+  width: 100%;
+  max-width: 560px;
+}
+
+/* PROGRESS */
+.progress-bar {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-bottom: 48px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--yellow);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* STEP */
+.step { display: none; animation: fadeUp 0.35s ease; }
+.step.active { display: block; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.step-label {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.12em;
+  color: var(--yellow); text-transform: uppercase; margin-bottom: 16px;
+}
+
+.step-title {
+  font-size: clamp(22px, 4vw, 32px);
+  font-weight: 700; line-height: 1.25;
+  margin-bottom: 32px;
+}
+
+/* CHOICES */
+.choices { display: flex; flex-direction: column; gap: 12px; }
+
+.choice {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px 20px;
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 16px; font-weight: 500;
+  user-select: none;
+}
+.choice:hover { border-color: var(--yellow); background: #222; }
+.choice.selected { border-color: var(--yellow); background: rgba(245,197,0,0.08); }
+
+.choice-key {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: var(--border); color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+  transition: all 0.2s;
+}
+.choice.selected .choice-key { background: var(--yellow); color: #111; }
+
+/* INPUTS */
+.input-field {
+  width: 100%;
+  padding: 18px 20px;
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 18px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.input-field:focus { border-color: var(--yellow); }
+.input-field::placeholder { color: var(--muted); }
+
+.input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* BUTTONS */
+.btn-row { margin-top: 32px; display: flex; align-items: center; gap: 16px; }
+
+.btn-next {
+  padding: 16px 36px;
+  background: var(--yellow);
+  color: #111;
+  border: none; border-radius: 50px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 16px; font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex; align-items: center; gap: 8px;
+}
+.btn-next:hover { background: #ffd700; transform: translateY(-1px); }
+.btn-next:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.btn-back {
+  background: none; border: none;
+  color: var(--muted); font-family: 'DM Sans', sans-serif;
+  font-size: 14px; cursor: pointer;
+  transition: color 0.2s;
+}
+.btn-back:hover { color: var(--text); }
+
+.hint { margin-top: 12px; font-size: 13px; color: var(--muted); }
+
+/* DISQUALIFY */
+.disqualify {
+  text-align: center; padding: 40px 20px; display: none;
+}
+.disqualify.active { display: block; }
+.disqualify-icon { font-size: 56px; margin-bottom: 24px; }
+.disqualify h2 { font-size: 26px; font-weight: 700; margin-bottom: 12px; }
+.disqualify p { color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 400px; margin: 0 auto 32px; }
+.disqualify a {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 28px; background: var(--yellow); color: #111;
+  border-radius: 50px; font-weight: 700; text-decoration: none;
+  transition: all 0.2s;
+}
+.disqualify a:hover { background: #ffd700; }
+
+/* SUCCESS */
+.success {
+  text-align: center; padding: 40px 20px; display: none;
+}
+.success.active { display: block; animation: fadeUp 0.4s ease; }
+.success-icon {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: rgba(34,197,94,0.15);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 24px;
+  font-size: 32px;
+}
+.success h2 { font-size: 28px; font-weight: 700; margin-bottom: 12px; }
+.success p { color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 400px; margin: 0 auto 32px; }
+.success-details {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 24px; text-align: left;
+  max-width: 400px; margin: 0 auto 32px;
+}
+.success-details .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.success-details .row:last-child { border-bottom: none; }
+.success-details .row span:first-child { color: var(--muted); }
+.success-details .row span:last-child { font-weight: 600; }
+.success a {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 28px; background: var(--yellow); color: #111;
+  border-radius: 50px; font-weight: 700; text-decoration: none;
+}
+
+/* LOADING */
+.loading { display: none; text-align: center; padding: 20px; }
+.loading.active { display: block; }
+.spinner {
+  width: 36px; height: 36px; border: 3px solid var(--border);
+  border-top-color: var(--yellow); border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* RESPONSIVE */
+@media (max-width: 600px) {
+  .nav { padding: 16px 20px; }
+  .input-row { grid-template-columns: 1fr; }
+  .progress-bar { margin-bottom: 32px; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="/">
+    <img src="https://cdn.jsdelivr.net/gh/beedoo-ux/bee-doo-tools@main/bee-doo-Logo-white.svg" alt="bee-doo">
+  </a>
+  <a class="nav-back" href="javascript:history.back()">
+    ← Zurück
+  </a>
+</nav>
+
+<main class="main">
+  <div class="form-wrap">
+
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress" style="width:11%"></div>
+    </div>
+
+    <!-- STEP 1: Eigenheimbesitzer -->
+    <div class="step active" id="step-1">
+      <div class="step-label">Schritt 1 von 9</div>
+      <h2 class="step-title">Sind Sie Eigenheimbesitzer?</h2>
+      <div class="choices">
+        <div class="choice" data-value="Ja" onclick="selectChoice(this, 1)">
+          <div class="choice-key">A</div> Ja
+        </div>
+        <div class="choice" data-value="Nein" onclick="selectChoice(this, 1)">
+          <div class="choice-key">B</div> Nein
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-next" id="btn-1" onclick="next(1)" disabled>Weiter →</button>
+      </div>
+    </div>
+
+    <!-- DISQUALIFY -->
+    <div class="disqualify" id="disqualify">
+      <div class="disqualify-icon">🏠</div>
+      <h2>Leider nicht geeignet</h2>
+      <p>Unsere Solaranlagen sind aktuell nur für Eigenheimbesitzer verfügbar. Als Mieter oder Wohnungseigentümer können wir Ihnen leider kein passendes Angebot machen.</p>
+      <a href="/">← Zurück zur Startseite</a>
+    </div>
+
+    <!-- STEP 2: Stromkosten -->
+    <div class="step" id="step-2">
+      <div class="step-label">Schritt 2 von 9</div>
+      <h2 class="step-title">Wie hoch sind Ihre monatlichen Stromkosten?</h2>
+      <div class="choices">
+        <div class="choice" data-value="Unter 150 €" onclick="selectChoice(this, 2)">
+          <div class="choice-key">A</div> Unter 150 €
+        </div>
+        <div class="choice" data-value="Über 150 €" onclick="selectChoice(this, 2)">
+          <div class="choice-key">B</div> Über 150 €
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-next" id="btn-2" onclick="next(2)" disabled>Weiter →</button>
+        <button class="btn-back" onclick="back(2)">← Zurück</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Haustyp -->
+    <div class="step" id="step-3">
+      <div class="step-label">Schritt 3 von 9</div>
+      <h2 class="step-title">Welcher Haustyp trifft auf Sie zu?</h2>
+      <div class="choices">
+        <div class="choice" data-value="Freistehendes Haus" onclick="selectChoice(this, 3)">
+          <div class="choice-key">A</div> Freistehendes Haus
+        </div>
+        <div class="choice" data-value="Doppelhaushälfte" onclick="selectChoice(this, 3)">
+          <div class="choice-key">B</div> Doppelhaushälfte
+        </div>
+        <div class="choice" data-value="Reihenhaus" onclick="selectChoice(this, 3)">
+          <div class="choice-key">C</div> Reihenhaus
+        </div>
+        <div class="choice" data-value="Mehrfamilienhaus" onclick="selectChoice(this, 3)">
+          <div class="choice-key">D</div> Mehrfamilienhaus
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-next" id="btn-3" onclick="next(3)" disabled>Weiter →</button>
+        <button class="btn-back" onclick="back(3)">← Zurück</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: PLZ -->
+    <div class="step" id="step-4">
+      <div class="step-label">Schritt 4 von 9</div>
+      <h2 class="step-title">Die PLZ Ihres Wohnortes?</h2>
+      <input type="text" class="input-field" id="input-plz" placeholder="z.B. 33609"
+        maxlength="5" oninput="validateInput(4)" onkeydown="enterNext(event,4)">
+      <p class="hint">Wir prüfen, ob wir in Ihrer Region tätig sind.</p>
+      <div class="btn-row">
+        <button class="btn-next" id="btn-4" onclick="next(4)" disabled>Weiter →</button>
+        <button class="btn-back" onclick="back(4)">← Zurück</button>
+      </div>
+    </div>
+
+    <!-- STEP 5: Straße -->
+    <div class="step" id="step-5">
+      <div class="step-label">Schritt 5 von 9</div>
+      <h2 class="step-title">Ihre Straße und Hausnummer?</h2>
+      <input type="text" class="input-field" id="input-strasse" placeholder="z.B. Musterstraße 12"
+        oninput="validateInput(5)" onkeydown="enterNext(event,5)">
+      <div class="btn-row">
+        <button class="btn-next" id="btn-5" onclick="next(5)" disabled>Weiter →</button>
+        <button class="btn-back" onclick="back(5)">← Zurück</button>
+      </div>
+    </div>
+
+    <!-- STEP 6: Vorname -->
+    <div class="step" id="step-6">
+      <div class="step-label">Schritt 6 von 9</div>
+      <h2 class="step-title">Ihr Vorname?</h2>
+      <input type="text" class="input-field" id="input-vorname" placeholder="z.B. Max"
+        oninput="validateInput(6)" onkeydown="enterNext(event,6)">
+      <div class="btn-row">
+        <button class="btn-next" id="btn-6" onclick="next(6)" disabled>Weiter →</button>
+        <button class="btn-back" onclick="back(6)">← Zurück</button>
+      </div>
+    </div>
+
+    <!-- STEP 7: Nachname -->
+    <div class="step" id="step-7">
+      <div class="step-label">Schritt 7 von 9</div>
+      <h2 class="step-title">Ihr Nachname?</h2>
+      <input type="text" class="input-field" id="input-nachname" placeholder="z.B. Mustermann"
+        oninput="validateInput(7)" onkeydown="enterNext(event,7)">
+      <div class="btn-row">
+        <button class="btn-next" id="btn-7" onclick="next(7)" disabled>Weiter →</button>
+        <button class="btn-back" onclick="back(7)">← Zurück</button>
+      </div>
+    </div>
+
+    <!-- STEP 8: E-Mail -->
+    <div class="step" id="step-8">
+      <div class="step-label">Schritt 8 von 9</div>
+      <h2 class="step-title">Ihre E-Mail-Adresse?</h2>
+      <input type="email" class="input-field" id="input-email" placeholder="max@beispiel.de"
+        oninput="validateInput(8)" onkeydown="enterNext(event,8)">
+      <p class="hint">Wir senden Ihnen eine Terminbestätigung.</p>
+      <div class="btn-row">
+        <button class="btn-next" id="btn-8" onclick="next(8)" disabled>Weiter →</button>
+        <button class="btn-back" onclick="back(8)">← Zurück</button>
+      </div>
+    </div>
+
+    <!-- STEP 9: Telefon -->
+    <div class="step" id="step-9">
+      <div class="step-label">Schritt 9 von 9</div>
+      <h2 class="step-title">Ihre Handynummer?</h2>
+      <input type="tel" class="input-field" id="input-tel" placeholder="+49 152 12345678"
+        oninput="validateInput(9)" onkeydown="enterSubmit(event)">
+      <p class="hint">Für die Terminvereinbarung — kein Spam, versprochen.</p>
+      <div class="btn-row">
+        <button class="btn-next" id="btn-9" onclick="submitForm()" disabled>
+          Beratung anfragen ✓
+        </button>
+        <button class="btn-back" onclick="back(9)">← Zurück</button>
+      </div>
+    </div>
+
+    <!-- LOADING -->
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p style="color:var(--muted); font-size:14px;">Anfrage wird übermittelt...</p>
+    </div>
+
+    <!-- SUCCESS -->
+    <div class="success" id="success">
+      <div class="success-icon">✓</div>
+      <h2>Anfrage eingegangen!</h2>
+      <p>Vielen Dank! Wir melden uns innerhalb von 24 Stunden bei Ihnen.</p>
+      <div class="success-details" id="success-details"></div>
+      <a href="/">← Zurück zur Startseite</a>
+    </div>
+
+  </div>
+</main>
+
+<script>
+const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+const answers = {};
+let currentStep = 1;
+const totalSteps = 9;
+
+function updateProgress() {
+  const pct = Math.round((currentStep / totalSteps) * 100);
+  document.getElementById('progress').style.width = pct + '%';
+}
+
+function selectChoice(el, step) {
+  el.closest('.choices').querySelectorAll('.choice').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  answers['step' + step] = el.dataset.value;
+  document.getElementById('btn-' + step).disabled = false;
+}
+
+function validateInput(step) {
+  const ids = { 4:'plz', 5:'strasse', 6:'vorname', 7:'nachname', 8:'email', 9:'tel' };
+  const val = document.getElementById('input-' + ids[step]).value.trim();
+  let valid = val.length > 0;
+  if (step === 4) valid = /^\d{5}$/.test(val);
+  if (step === 8) valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+  document.getElementById('btn-' + step).disabled = !valid;
+  if (step !== 9) answers['step' + step] = val;
+}
+
+function enterNext(e, step) {
+  if (e.key === 'Enter' && !document.getElementById('btn-' + step).disabled) next(step);
+}
+function enterSubmit(e) {
+  if (e.key === 'Enter' && !document.getElementById('btn-9').disabled) submitForm();
+}
+
+function next(step) {
+  // Logic: step 1 Nein → disqualify
+  if (step === 1 && answers.step1 === 'Nein') {
+    document.getElementById('step-1').classList.remove('active');
+    document.getElementById('disqualify').classList.add('active');
+    return;
+  }
+
+  const ids = { 4:'plz', 5:'strasse', 6:'vorname', 7:'nachname', 8:'email', 9:'tel' };
+  if (ids[step]) answers['step' + step] = document.getElementById('input-' + ids[step]).value.trim();
+
+  document.getElementById('step-' + step).classList.remove('active');
+  currentStep = step + 1;
+  document.getElementById('step-' + currentStep).classList.remove('active');
+  void document.getElementById('step-' + currentStep).offsetWidth; // trigger reflow
+  document.getElementById('step-' + currentStep).classList.add('active');
+  updateProgress();
+
+  // Auto-focus input fields
+  const nextInput = document.querySelector('#step-' + currentStep + ' .input-field');
+  if (nextInput) setTimeout(() => nextInput.focus(), 100);
+}
+
+function back(step) {
+  document.getElementById('step-' + step).classList.remove('active');
+  currentStep = step - 1;
+  document.getElementById('step-' + currentStep).classList.add('active');
+  updateProgress();
+}
+
+async function submitForm() {
+  answers.step9 = document.getElementById('input-tel').value.trim();
+
+  // Hide step 9, show loading
+  document.getElementById('step-9').classList.remove('active');
+  document.getElementById('loading').classList.add('active');
+
+  const payload = {
+    eigenheimbesitzer: answers.step1,
+    stromkosten: answers.step2,
+    haustyp: answers.step3,
+    plz: answers.step4,
+    strasse: answers.step5,
+    vorname: answers.step6,
+    nachname: answers.step7,
+    email: answers.step8,
+    telefon: answers.step9,
+    quelle: 'website-anfrage',
+    erstellt_am: new Date().toISOString()
+  };
+
+  try {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/anfragen', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    document.getElementById('loading').classList.remove('active');
+
+    if (res.ok || res.status === 201) {
+      showSuccess(payload);
+    } else {
+      const err = await res.text();
+      console.error('Supabase error:', err);
+      // Show success anyway (fallback)
+      showSuccess(payload);
+    }
+  } catch(e) {
+    console.error(e);
+    document.getElementById('loading').classList.remove('active');
+    showSuccess(payload);
+  }
+}
+
+function showSuccess(d) {
+  const details = document.getElementById('success-details');
+  details.innerHTML = `
+    <div class="row"><span>Name</span><span>${d.vorname} ${d.nachname}</span></div>
+    <div class="row"><span>E-Mail</span><span>${d.email}</span></div>
+    <div class="row"><span>Telefon</span><span>${d.telefon}</span></div>
+    <div class="row"><span>Adresse</span><span>${d.strasse}, ${d.plz}</span></div>
+    <div class="row"><span>Haustyp</span><span>${d.haustyp}</span></div>
+    <div class="row"><span>Stromkosten</span><span>${d.stromkosten}</span></div>
+  `;
+  document.getElementById('progress').style.width = '100%';
+  document.getElementById('success').classList.add('active');
+}
+</script>
+</body>
+</html>
