@@ -330,7 +330,60 @@ let debounceTimer = null;
 document.addEventListener('DOMContentLoaded', () => {
   checkApiStatus();
   setupSearch();
+  restoreLastSearch();
 });
+
+// ─── PERSIST STATE ───
+function saveSearchState() {
+  const state = { lat: selectedLat, lng: selectedLng, addr: selectedAddress };
+  try { localStorage.setItem('solar_check_last', JSON.stringify(state)); } catch {}
+  // Update URL without reload
+  const url = new URL(window.location);
+  url.searchParams.set('addr', selectedAddress);
+  window.history.replaceState({}, '', url);
+}
+
+function restoreLastSearch() {
+  // 1. Check URL params first
+  const params = new URLSearchParams(window.location.search);
+  const urlAddr = params.get('addr');
+  if (urlAddr && urlAddr.length > 3) {
+    document.getElementById('searchInput').value = urlAddr;
+    // Geocode and run
+    geocodeAndRun(urlAddr);
+    return;
+  }
+  // 2. Check localStorage
+  try {
+    const saved = JSON.parse(localStorage.getItem('solar_check_last'));
+    if (saved && saved.lat && saved.addr) {
+      selectedLat = saved.lat;
+      selectedLng = saved.lng;
+      selectedAddress = saved.addr;
+      document.getElementById('searchInput').value = saved.addr;
+      document.getElementById('searchBtn').disabled = false;
+      // Show hint
+      document.getElementById('infoBanner').querySelector('.text').innerHTML = 
+        '<strong>Letzte Suche:</strong> ' + saved.addr + '<br><span style="color:var(--tx3)">Klicke "Prüfen" oder gib eine neue Adresse ein.</span>';
+    }
+  } catch {}
+}
+
+async function geocodeAndRun(address) {
+  try {
+    const url = 'https://maps.googleapis.com/maps/api/geocode/json?address=' + encodeURIComponent(address) + '&components=country:DE&key=' + GOOGLE_KEY + '&language=de';
+    const r = await fetch(url);
+    const data = await r.json();
+    if (data.results && data.results.length) {
+      selectedLat = data.results[0].geometry.location.lat;
+      selectedLng = data.results[0].geometry.location.lng;
+      selectedAddress = data.results[0].formatted_address;
+      document.getElementById('searchInput').value = selectedAddress;
+      document.getElementById('searchBtn').disabled = false;
+      runSolarCheck();
+    }
+  } catch (e) { console.warn('Geocode failed:', e); }
+}
 
 // ─── API STATUS CHECK ───
 async function checkApiStatus() {
@@ -459,6 +512,9 @@ async function runSolarCheck() {
     await delay(400);
 
     renderResult(data);
+
+    // Save state for page reload
+    saveSearchState();
 
     // Load MaStR context for PLZ
     loadMastrContext(selectedAddress);
