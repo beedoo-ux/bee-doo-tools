@@ -484,13 +484,22 @@ function App(){
     setLoading(true);
     try{
       const [mas,regs]=await Promise.all([
-        db.get("mitarbeiter","?select=*&order=nachname"),
-        db.get("provisions_regeln","?select=*")
+        db.get("mitarbeiter","?select=*&aktiv=eq.true&order=nachname.asc"),
+        db.get("provisionsmodelle","?select=*&aktiv=eq.true")
       ]);
+      // Map DB field names to what probe-abrechnung expects
+      const mappedRegs=(regs||[]).map(r=>({
+        id:r.id, name:r.name, typ:r.typ,
+        basis_betrag_sale:r.basis_rate||0, staffel_betrag_sale:r.staffel_rate||0,
+        staffel_schwelle:r.staffel_schwelle||999, rueckwirkend:r.rueckwirkend||false,
+        betrag_eigenlead:r.eigenlead_bonus||0, betrag_empfehlung:r.empfehlungs_bonus||0,
+        betrag_speicher:r.speicher_bonus||0, betrag_termin_sf:r.termin_bonus||0,
+        betrag_lead:r.lead_bonus||0
+      }));
       setSbMitarb(mas||[]);
-      setSbRegeln(regs||[]);
+      setSbRegeln(mappedRegs);
       setMitarb(mas||[]);
-      toast(`${(mas||[]).length} Mitarbeiter + ${(regs||[]).length} Regeln geladen`);
+      toast(`${(mas||[]).length} Mitarbeiter + ${mappedRegs.length} Regeln geladen`);
     }catch(e){ toast("Fehler: "+e.message,C.R); }
     setLoading(false);
   };
@@ -573,7 +582,7 @@ function App(){
     const m={"global":globalRegel};
     // SB-Regeln als Basis falls vorhanden
     sbMitarb.forEach(ma=>{
-      const r=sbRegeln.find(r=>r.id===ma.provisions_regel_id);
+      const r=sbRegeln.find(r=>r.typ===ma.typ);
       if(r) m[ma.id]=r;
     });
     // Overrides
