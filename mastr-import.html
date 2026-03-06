@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MaStR Import · bee-doo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#09090e;--sf:#101018;--card:#151520;--card2:#1a1a28;--bd:#222236;--gold:#F5C500;--tx:#eeeef5;--tx2:#9999b5;--tx3:#5a5a78;--gr:#22c55e;--rd:#ef4444;--bl:#60a5fa;--or:#fb923c;--font:'DM Sans',system-ui,sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font);background:var(--bg);color:var(--tx);min-height:100vh;}
+.hdr{background:var(--sf);border-bottom:1px solid var(--bd);padding:12px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:50;}
+.logo{font-size:17px;font-weight:800;color:var(--gold);}
+.sep{width:1px;height:16px;background:var(--bd);}
+.htitle{font-size:13px;font-weight:600;color:var(--tx2);}
+.hbtn{margin-left:auto;padding:6px 12px;border-radius:8px;background:var(--card);border:1px solid var(--bd);color:var(--tx2);font-size:12px;cursor:pointer;text-decoration:none;font-family:var(--font);}
+.main{max-width:700px;margin:0 auto;padding:20px 16px;}
+
+/* Drop Zone */
+.dropzone{border:2px dashed var(--bd);border-radius:16px;padding:40px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--card);margin-bottom:16px;}
+.dropzone:hover,.dropzone.over{border-color:var(--gold);background:rgba(245,197,0,.04);}
+.dropzone.has-files{border-color:var(--gr);border-style:solid;}
+.dz-icon{font-size:42px;margin-bottom:12px;}
+.dz-title{font-size:16px;font-weight:700;margin-bottom:6px;}
+.dz-sub{font-size:12px;color:var(--tx3);line-height:1.6;}
+.dz-sub strong{color:var(--gold);}
+input[type=file]{display:none;}
+
+/* File List */
+.file-list{margin-bottom:16px;}
+.file-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border:1px solid var(--bd);border-radius:10px;margin-bottom:5px;font-size:12px;}
+.file-icon{font-size:18px;flex-shrink:0;}
+.file-name{font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.file-size{color:var(--tx3);flex-shrink:0;}
+.file-status{flex-shrink:0;font-weight:700;font-size:11px;}
+.file-status.pending{color:var(--tx3);}
+.file-status.processing{color:var(--or);}
+.file-status.done{color:var(--gr);}
+.file-status.error{color:var(--rd);}
+.file-remove{cursor:pointer;color:var(--tx3);font-size:16px;padding:2px 6px;border-radius:6px;}
+.file-remove:hover{color:var(--rd);background:rgba(239,68,68,.1);}
+
+/* Start Button */
+.start-btn{width:100%;padding:16px;border-radius:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font);border:none;transition:all .15s;margin-bottom:20px;}
+.start-btn.ready{background:var(--gold);color:#000;}
+.start-btn.ready:hover{opacity:.85;}
+.start-btn:disabled{background:var(--card);color:var(--tx3);cursor:not-allowed;border:1px solid var(--bd);}
+.start-btn.running{background:var(--card);color:var(--or);border:1px solid rgba(251,146,60,.3);cursor:wait;}
+
+/* Progress */
+.progress-wrap{display:none;margin-bottom:20px;}
+.progress-wrap.show{display:block;}
+.prog-bar-wrap{height:8px;background:var(--bd);border-radius:4px;overflow:hidden;margin-bottom:10px;}
+.prog-bar{height:100%;background:var(--gold);border-radius:4px;transition:width .3s;width:0%;}
+.prog-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;}
+.ps{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;text-align:center;}
+.ps-val{font-size:20px;font-weight:800;line-height:1.1;}
+.ps-lbl{font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.8px;margin-top:3px;font-weight:600;}
+.prog-log{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;max-height:200px;overflow-y:auto;font-size:11px;font-family:'SF Mono',monospace;line-height:1.8;}
+.prog-log::-webkit-scrollbar{width:3px;}
+.prog-log::-webkit-scrollbar-thumb{background:var(--bd);}
+.log-line{color:var(--tx2);}
+.log-line.ok{color:var(--gr);}
+.log-line.warn{color:var(--or);}
+.log-line.err{color:var(--rd);}
+.log-line .ts{color:var(--tx3);margin-right:6px;}
+
+/* Result */
+.result-box{display:none;margin-bottom:20px;}
+.result-box.show{display:block;}
+.result-hero{background:linear-gradient(135deg,rgba(34,197,94,.08),rgba(245,197,0,.06));border:1px solid rgba(34,197,94,.2);border-radius:16px;padding:24px;text-align:center;margin-bottom:14px;}
+.result-icon{font-size:48px;margin-bottom:8px;}
+.result-title{font-size:18px;font-weight:800;color:var(--gr);margin-bottom:4px;}
+.result-sub{font-size:13px;color:var(--tx2);}
+.result-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.rg{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center;}
+.rg-val{font-size:22px;font-weight:800;}
+.rg-lbl{font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.7px;margin-top:3px;}
+
+/* Responsive */
+@media(max-width:600px){.prog-stats,.result-grid{grid-template-columns:1fr 1fr;}.ps-val,.rg-val{font-size:16px;}}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="logo">bee-doo</div>
+  <div class="sep"></div>
+  <div class="htitle">📦 MaStR XML Import</div>
+  <a href="index.html" class="hbtn">← Toolbox</a>
+</div>
+
+<div class="main">
+
+  <!-- Drop Zone -->
+  <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+    <div class="dz-icon">📂</div>
+    <div class="dz-title">XML-Dateien hier reinziehen</div>
+    <div class="dz-sub">
+      <strong>EinheitenSolar_*.xml</strong> – Solaranlagen-Stammdaten<br>
+      Alle Dateien auf einmal auswaehlen (Cmd+A / Strg+A)<br>
+      <span style="color:var(--tx3);font-size:11px;">Quelle: marktstammdatenregister.de/MaStR/Datendownload</span>
+    </div>
+  </div>
+  <input type="file" id="fileInput" multiple accept=".xml">
+
+  <!-- File List -->
+  <div class="file-list" id="fileList"></div>
+
+  <!-- Start Button -->
+  <button class="start-btn" id="startBtn" disabled>Dateien auswaehlen zum Starten</button>
+
+  <!-- Progress -->
+  <div class="progress-wrap" id="progressWrap">
+    <div class="prog-bar-wrap"><div class="prog-bar" id="progBar"></div></div>
+    <div class="prog-stats">
+      <div class="ps"><div class="ps-val" id="pRecords" style="color:var(--bl)">0</div><div class="ps-lbl">Records</div></div>
+      <div class="ps"><div class="ps-val" id="pPlz" style="color:var(--gold)">0</div><div class="ps-lbl">PLZ-Gebiete</div></div>
+      <div class="ps"><div class="ps-val" id="pGwp" style="color:var(--gr)">0</div><div class="ps-lbl">GWp</div></div>
+    </div>
+    <div class="prog-log" id="logBox"></div>
+  </div>
+
+  <!-- Result -->
+  <div class="result-box" id="resultBox">
+    <div class="result-hero">
+      <div class="result-icon">✅</div>
+      <div class="result-title" id="resultTitle">Import abgeschlossen!</div>
+      <div class="result-sub" id="resultSub">–</div>
+    </div>
+    <div class="result-grid">
+      <div class="rg"><div class="rg-val" id="rAnlagen" style="color:var(--bl)">–</div><div class="rg-lbl">Anlagen</div></div>
+      <div class="rg"><div class="rg-val" id="rPlz" style="color:var(--gold)">–</div><div class="rg-lbl">PLZ</div></div>
+      <div class="rg"><div class="rg-val" id="rGwp" style="color:var(--gr)">–</div><div class="rg-lbl">GWp</div></div>
+      <div class="rg"><div class="rg-val" id="rRes" style="color:var(--bl)">–</div><div class="rg-lbl">Residential</div></div>
+      <div class="rg"><div class="rg-val" id="rGew" style="color:var(--or)">–</div><div class="rg-lbl">Gewerbe</div></div>
+      <div class="rg"><div class="rg-val" id="rBal" style="color:var(--tx2)">–</div><div class="rg-lbl">Balkon-PV</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+const SB_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
+
+// Catalog codes
+const BUNDESLAND_NRW = '1409';
+const STATUS_IN_BETRIEB = '35';
+const ART_GEBAEUDE = '853';
+const ART_STECKER = '2961'; // Balkon
+const ART_FREIFLÄCHE = '852';
+const NUTZ_HAUSHALT = '713';
+const NUTZ_LANDWIRTSCHAFT = '717';
+const EINSP_VOLL = '688';
+const EINSP_TEIL = '689';
+const AUSRICHTUNG = {'695':'N','696':'NO','697':'O','698':'SO','699':'S','700':'SW','701':'W','702':'NW','703':'NAuf','704':'NSch'};
+
+let files = [];
+let plzData = {};
+let totalRecords = 0;
+let isRunning = false;
+
+// ─── FILE HANDLING ───
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+['dragenter','dragover'].forEach(e => {
+  dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.add('over'); });
+});
+['dragleave','drop'].forEach(e => {
+  dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.remove('over'); });
+});
+dropzone.addEventListener('drop', ev => {
+  const dt = ev.dataTransfer;
+  if (dt.files) addFiles(dt.files);
+});
+fileInput.addEventListener('change', ev => {
+  if (ev.target.files) addFiles(ev.target.files);
+});
+
+function addFiles(fileList) {
+  const validFiles = Array.from(fileList).filter(f => 
+    f.name.endsWith('.xml') && (
+      f.name.startsWith('EinheitenSolar') || 
+      f.name.startsWith('AnlagenEegSolar')
+    )
+  );
+  
+  if (!validFiles.length) {
+    const allXml = Array.from(fileList).filter(f => f.name.endsWith('.xml'));
+    if (allXml.length) {
+      log('warn', `${allXml.length} XML-Dateien gefunden, aber keine EinheitenSolar_*.xml. Bitte die richtigen Dateien auswaehlen.`);
+    } else {
+      log('warn', 'Keine XML-Dateien gefunden. Bitte .xml Dateien auswaehlen.');
+    }
+    return;
+  }
+
+  // Sort: EinheitenSolar first, then by number
+  validFiles.sort((a, b) => {
+    const aType = a.name.startsWith('Einheiten') ? 0 : 1;
+    const bType = b.name.startsWith('Einheiten') ? 0 : 1;
+    if (aType !== bType) return aType - bType;
+    const aNum = parseInt(a.name.match(/_(\d+)\./)?.[1] || '0');
+    const bNum = parseInt(b.name.match(/_(\d+)\./)?.[1] || '0');
+    return aNum - bNum;
+  });
+
+  files = validFiles;
+  renderFileList();
+  
+  const btn = document.getElementById('startBtn');
+  btn.disabled = false;
+  btn.className = 'start-btn ready';
+  const einheiten = files.filter(f => f.name.startsWith('Einheiten')).length;
+  const anlagen = files.filter(f => f.name.startsWith('Anlagen')).length;
+  btn.textContent = `🚀 Import starten (${einheiten} Einheiten + ${anlagen} EEG-Dateien)`;
+  btn.onclick = startImport;
+  
+  dropzone.classList.add('has-files');
+  dropzone.querySelector('.dz-title').textContent = `${files.length} Dateien bereit`;
+  const totalMB = files.reduce((s, f) => s + f.size, 0) / 1024 / 1024;
+  dropzone.querySelector('.dz-sub').innerHTML = `${totalMB.toFixed(0)} MB gesamt · Klicke den Button zum Starten`;
+  
+  log('ok', `${files.length} Dateien geladen (${totalMB.toFixed(0)} MB): ${einheiten} EinheitenSolar + ${anlagen} AnlagenEegSolar`);
+}
+
+function renderFileList() {
+  const list = document.getElementById('fileList');
+  list.innerHTML = files.map((f, i) => {
+    const mb = (f.size / 1024 / 1024).toFixed(1);
+    const type = f.name.startsWith('Einheiten') ? '⚡' : '📋';
+    return `<div class="file-item" id="file-${i}">
+      <div class="file-icon">${type}</div>
+      <div class="file-name">${f.name}</div>
+      <div class="file-size">${mb} MB</div>
+      <div class="file-status pending" id="fstat-${i}">Bereit</div>
+    </div>`;
+  }).join('');
+}
+
+function setFileStatus(i, status, text) {
+  const el = document.getElementById('fstat-' + i);
+  if (el) { el.className = 'file-status ' + status; el.textContent = text; }
+}
+
+// ─── LOGGING ───
+function log(type, msg) {
+  const box = document.getElementById('logBox');
+  const ts = new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const cls = type === 'ok' ? 'ok' : type === 'warn' ? 'warn' : type === 'err' ? 'err' : '';
+  box.innerHTML += `<div class="log-line ${cls}"><span class="ts">${ts}</span>${msg}</div>`;
+  box.scrollTop = box.scrollHeight;
+}
+
+function updateStats() {
+  const recs = totalRecords;
+  const plzCount = Object.keys(plzData).length;
+  const kwp = Object.values(plzData).reduce((s, d) => s + d.kwp_gesamt, 0);
+  document.getElementById('pRecords').textContent = recs.toLocaleString('de');
+  document.getElementById('pPlz').textContent = plzCount.toLocaleString('de');
+  document.getElementById('pGwp').textContent = (kwp / 1e6).toFixed(2);
+}
+
+// ─── XML PARSING ───
+function extractTag(xml, tag) {
+  const re = new RegExp(`<${tag}>([^<]*)</${tag}>`);
+  const m = xml.match(re);
+  return m ? m[1].trim() : '';
+}
+
+function processEinheit(xml) {
+  // Only "In Betrieb"
+  const status = extractTag(xml, 'EinheitBetriebsstatus');
+  if (status !== STATUS_IN_BETRIEB) return;
+
+  const plz = extractTag(xml, 'Postleitzahl').trim();
+  if (!plz || plz.length !== 5) return;
+
+  const kwp = parseFloat(extractTag(xml, 'Nettonennleistung') || extractTag(xml, 'Bruttoleistung')) || 0;
+  const ibd = extractTag(xml, 'Inbetriebnahmedatum'); // YYYY-MM-DD
+  const art = extractTag(xml, 'ArtDerSolaranlage');
+  const nutz = extractTag(xml, 'Nutzungsbereich');
+  const einsp = extractTag(xml, 'Einspeisungsart');
+  const module = parseInt(extractTag(xml, 'AnzahlModule')) || 0;
+  const ort = extractTag(xml, 'Ort') || extractTag(xml, 'Gemeinde');
+  const bundesland = extractTag(xml, 'Bundesland');
+
+  if (!plzData[plz]) {
+    plzData[plz] = {
+      plz, ort: ort,
+      anlagen_gesamt: 0, kwp_gesamt: 0,
+      anlagen_residential: 0, kwp_residential: 0,
+      anlagen_gewerbe: 0, kwp_gewerbe: 0,
+      anlagen_balkon: 0, module_gesamt: 0,
+      volleinspeisung: 0, eigenverbrauch: 0,
+      anlagen_2024_plus: 0, kwp_2024_plus: 0,
+      neueste_anlage: null, aelteste_anlage: null,
+      nrw: 0, nicht_nrw: 0
+    };
+  }
+
+  const d = plzData[plz];
+  d.anlagen_gesamt++;
+  d.kwp_gesamt += kwp;
+  d.module_gesamt += module;
+
+  // NRW tracking
+  if (bundesland === BUNDESLAND_NRW) d.nrw++;
+  else d.nicht_nrw++;
+
+  // Residential vs Gewerbe
+  const isRes = [NUTZ_HAUSHALT, NUTZ_LANDWIRTSCHAFT].includes(nutz) || (kwp > 0 && kwp <= 30);
+  if (isRes) { d.anlagen_residential++; d.kwp_residential += kwp; }
+  else if (kwp > 30) { d.anlagen_gewerbe++; d.kwp_gewerbe += kwp; }
+
+  // Balkon
+  if (art === ART_STECKER) d.anlagen_balkon++;
+
+  // Einspeisung
+  if (einsp === EINSP_VOLL) d.volleinspeisung++;
+  else if (einsp === EINSP_TEIL) d.eigenverbrauch++;
+
+  // Dates
+  if (ibd && ibd.length >= 10) {
+    const dateStr = ibd.substring(0, 10);
+    if (!d.neueste_anlage || dateStr > d.neueste_anlage) d.neueste_anlage = dateStr;
+    if (!d.aelteste_anlage || dateStr < d.aelteste_anlage) d.aelteste_anlage = dateStr;
+    if (dateStr >= '2024-01-01') { d.anlagen_2024_plus++; d.kwp_2024_plus += kwp; }
+  }
+
+  if (!d.ort && ort) d.ort = ort;
+  totalRecords++;
+}
+
+async function parseXmlFile(file, fileIdx) {
+  setFileStatus(fileIdx, 'processing', 'Lese...');
+  const isEinheiten = file.name.startsWith('Einheiten');
+  const tagName = isEinheiten ? 'EinheitSolar' : 'AnlageEegSolar';
+  const openTag = `<${tagName}>`;
+  const closeTag = `</${tagName}>`;
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const text = e.target.result;
+      setFileStatus(fileIdx, 'processing', 'Parse...');
+      
+      let count = 0;
+      let pos = 0;
+      
+      // Only process EinheitenSolar files for now (they have all the data we need)
+      if (!isEinheiten) {
+        setFileStatus(fileIdx, 'done', 'Skip (EEG)');
+        log('ok', `${file.name}: Übersprungen (EEG-Daten werden aus Einheiten-Dateien extrahiert)`);
+        resolve(0);
+        return;
+      }
+      
+      while (true) {
+        const start = text.indexOf(openTag, pos);
+        if (start === -1) break;
+        const end = text.indexOf(closeTag, start);
+        if (end === -1) break;
+        
+        const chunk = text.substring(start, end + closeTag.length);
+        processEinheit(chunk);
+        count++;
+        pos = end + closeTag.length;
+        
+        // Update UI every 10000 records
+        if (count % 10000 === 0) {
+          setFileStatus(fileIdx, 'processing', `${count.toLocaleString('de')}...`);
+        }
+      }
+      
+      setFileStatus(fileIdx, 'done', `✓ ${count.toLocaleString('de')}`);
+      updateStats();
+      resolve(count);
+    };
+    
+    reader.onerror = () => {
+      setFileStatus(fileIdx, 'error', 'Fehler');
+      reject(reader.error);
+    };
+    
+    reader.readAsText(file);
+  });
+}
+
+// ─── SUPABASE UPLOAD ───
+async function pushToSupabase() {
+  log('ok', `Schreibe ${Object.keys(plzData).length} PLZ nach Supabase...`);
+
+  // Delete old data
+  try {
+    await fetch(`${SB_URL}/rest/v1/mastr_solar_plz?plz=neq.IMPOSSIBLE`, {
+      method: 'DELETE',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' }
+    });
+    log('ok', 'Alte Daten gelöscht');
+  } catch (e) {
+    log('warn', 'Alte Daten konnten nicht gelöscht werden: ' + e.message);
+  }
+
+  // Prepare rows
+  const rows = Object.values(plzData).map(r => ({
+    plz: r.plz,
+    ort: r.ort || '',
+    anlagen_gesamt: r.anlagen_gesamt,
+    kwp_gesamt: Math.round(r.kwp_gesamt * 10) / 10,
+    anlagen_residential: r.anlagen_residential,
+    kwp_residential: Math.round(r.kwp_residential * 10) / 10,
+    anlagen_gewerbe: r.anlagen_gewerbe,
+    kwp_gewerbe: Math.round(r.kwp_gewerbe * 10) / 10,
+    anlagen_balkon: r.anlagen_balkon,
+    module_gesamt: r.module_gesamt,
+    volleinspeisung: r.volleinspeisung,
+    eigenverbrauch: r.eigenverbrauch,
+    anlagen_2024_plus: r.anlagen_2024_plus,
+    kwp_2024_plus: Math.round(r.kwp_2024_plus * 10) / 10,
+    neueste_anlage: r.neueste_anlage,
+    aelteste_anlage: r.aelteste_anlage,
+    sampling_factor: 1,
+    data_quality: 'full'
+  }));
+
+  // Upload in batches of 200
+  let ok = 0;
+  const BATCH = 200;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/mastr_solar_plz`, {
+        method: 'POST',
+        headers: {
+          'apikey': SB_KEY,
+          'Authorization': `Bearer ${SB_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(batch)
+      });
+      if (r.ok) {
+        ok += batch.length;
+      } else {
+        const err = await r.text();
+        log('err', `Batch ${Math.floor(i/BATCH)+1}: ${err.substring(0, 100)}`);
+      }
+    } catch (e) {
+      log('err', `Batch ${Math.floor(i/BATCH)+1}: ${e.message}`);
+    }
+    
+    const pct = Math.round(ok / rows.length * 100);
+    document.getElementById('progBar').style.width = `${50 + pct/2}%`;
+  }
+  
+  log('ok', `✅ ${ok}/${rows.length} PLZ erfolgreich hochgeladen`);
+  return ok;
+}
+
+// ─── MAIN IMPORT ───
+async function startImport() {
+  if (isRunning) return;
+  isRunning = true;
+  
+  plzData = {};
+  totalRecords = 0;
+  
+  const btn = document.getElementById('startBtn');
+  btn.className = 'start-btn running';
+  btn.textContent = '⏳ Import läuft...';
+  btn.disabled = true;
+  
+  document.getElementById('progressWrap').classList.add('show');
+  document.getElementById('resultBox').classList.remove('show');
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('progBar').style.width = '0%';
+  
+  log('ok', '🚀 Import gestartet');
+  const t0 = performance.now();
+  
+  // Process files sequentially
+  const einheitenFiles = files.filter(f => f.name.startsWith('Einheiten'));
+  const totalFiles = einheitenFiles.length;
+  
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const fileIdx = i;
+    const mb = (f.size / 1024 / 1024).toFixed(1);
+    log('ok', `📄 ${f.name} (${mb} MB)...`);
+    
+    try {
+      const count = await parseXmlFile(f, fileIdx);
+      if (count > 0) {
+        log('ok', `   → ${count.toLocaleString('de')} Einheiten verarbeitet`);
+      }
+    } catch (e) {
+      log('err', `   ✗ Fehler: ${e.message}`);
+    }
+    
+    // Update progress bar (first 50% is parsing)
+    const parsePct = ((i + 1) / files.length) * 50;
+    document.getElementById('progBar').style.width = `${parsePct}%`;
+    updateStats();
+    
+    // Let UI breathe
+    await new Promise(r => setTimeout(r, 50));
+  }
+  
+  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+  log('ok', `📊 Parsing fertig: ${totalRecords.toLocaleString('de')} Records → ${Object.keys(plzData).length} PLZ in ${elapsed}s`);
+  
+  // Upload to Supabase
+  document.getElementById('progBar').style.width = '50%';
+  const uploaded = await pushToSupabase();
+  document.getElementById('progBar').style.width = '100%';
+  
+  // Show result
+  const totalElapsed = ((performance.now() - t0) / 1000).toFixed(0);
+  const kwpTotal = Object.values(plzData).reduce((s, d) => s + d.kwp_gesamt, 0);
+  const resTotal = Object.values(plzData).reduce((s, d) => s + d.anlagen_residential, 0);
+  const gewTotal = Object.values(plzData).reduce((s, d) => s + d.anlagen_gewerbe, 0);
+  const balTotal = Object.values(plzData).reduce((s, d) => s + d.anlagen_balkon, 0);
+  
+  document.getElementById('resultBox').classList.add('show');
+  document.getElementById('resultTitle').textContent = '✅ Import abgeschlossen!';
+  document.getElementById('resultSub').textContent = `${totalRecords.toLocaleString('de')} Anlagen → ${uploaded} PLZ in ${totalElapsed}s`;
+  document.getElementById('rAnlagen').textContent = totalRecords.toLocaleString('de');
+  document.getElementById('rPlz').textContent = uploaded.toLocaleString('de');
+  document.getElementById('rGwp').textContent = (kwpTotal / 1e6).toFixed(2);
+  document.getElementById('rRes').textContent = resTotal.toLocaleString('de');
+  document.getElementById('rGew').textContent = gewTotal.toLocaleString('de');
+  document.getElementById('rBal').textContent = balTotal.toLocaleString('de');
+  
+  log('ok', `🎉 FERTIG! ${totalRecords.toLocaleString('de')} Anlagen, ${(kwpTotal/1e6).toFixed(2)} GWp → ${uploaded} PLZ in Supabase`);
+  
+  btn.className = 'start-btn';
+  btn.textContent = '✅ Fertig – Seite kann geschlossen werden';
+  btn.disabled = true;
+  isRunning = false;
+}
+</script>
+</body>
+</html>
