@@ -144,6 +144,13 @@ function render(s,d,lid){
     if(w){h+=`<div class="wetter-box"><div class="wetter-icon">${w.icon}</div><div><div class="wetter-temp">${w.temp}\u00B0C</div><div style="font-size:12px;color:var(--t2)">${w.desc}</div>${w.solar_hint?'<div class="wetter-hint">\u{1F4A1} '+w.solar_hint+'</div>':''}</div></div>`;}
     h+='</div></div>';
 
+    // GOOGLE SOLAR API - Dachanalyse + Panel-Belegung
+    if(hg) {
+        h+=`<div class="card" id="solarApiCard"><div class="card-h">\u2600\uFE0F Google Solar API \u2014 Dachanalyse<span id="solarStatus" style="font-size:10px;color:var(--t3);text-transform:none;letter-spacing:0;font-weight:400">L\u00E4dt...</span></div><div class="card-b" id="solarBody"><div style="text-align:center;padding:20px;color:var(--t3)"><div class="spinner" style="width:20px;height:20px;border-width:2px;margin:0 auto 8px"></div>Solar-Daten werden geladen...</div></div></div>`;
+        // Async Solar API Call
+        setTimeout(()=>loadSolarData(l.lat, l.lng), 100);
+    }
+
     // DUPLICATES WARNING
     if(du.found){
         h+=`<div class="card" style="border-color:var(--r)"><div class="card-h" style="color:var(--r)">\u26A0\uFE0F Duplikate erkannt (${du.count})</div><div class="card-b">
@@ -311,6 +318,93 @@ function render(s,d,lid){
 
     document.getElementById('res').innerHTML=h;
     document.getElementById('res').classList.add('on');
+}
+
+async function loadSolarData(lat, lng) {
+    const body = document.getElementById('solarBody');
+    const status = document.getElementById('solarStatus');
+    if (!body) return;
+    try {
+        const r = await fetch(`${SB}/functions/v1/cc-solar-api?lat=${lat}&lng=${lng}&action=insights`);
+        const d = await r.json();
+        if (d.error) {
+            status.textContent = 'Nicht verf\u00FCgbar';
+            status.style.color = 'var(--o)';
+            body.innerHTML = `<div style="padding:16px;text-align:center">
+                <div style="font-size:13px;color:var(--o);margin-bottom:8px">\u26A0\uFE0F Solar API noch nicht freigeschaltet</div>
+                <div style="font-size:11px;color:var(--t3);line-height:1.6">
+                    Google Cloud Console \u2192 Solar API aktivieren \u2192 API Key Referrer: bee-doo-tools.vercel.app<br>
+                    <span style="color:var(--t2)">Sobald aktiv: Dachsegmente, Sonnenstunden-Heatmap, optimale Panel-Belegung, Ertragsberechnung</span>
+                </div>
+            </div>`;
+            return;
+        }
+        if (!d.ok) { body.innerHTML = '<div style="padding:12px;color:var(--r)">Fehler: ' + JSON.stringify(d) + '</div>'; return; }
+
+        status.textContent = 'Qualit\u00E4t: ' + (d.imageryQuality || '?');
+        status.style.color = 'var(--g)';
+
+        let sh = '';
+
+        // Optimale Konfiguration KPIs
+        if (d.optimal) {
+            const o = d.optimal;
+            sh += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+                <div class="strom-c"><div class="strom-v" style="color:var(--a)">${o.panels}</div><div class="strom-l">Module</div></div>
+                <div class="strom-c"><div class="strom-v" style="color:var(--a)">${o.kwp}</div><div class="strom-l">kWp</div></div>
+                <div class="strom-c"><div class="strom-v" style="color:var(--g)">${o.yearlyKwh.toLocaleString()}</div><div class="strom-l">kWh/Jahr</div></div>
+                <div class="strom-c"><div class="strom-v" style="color:var(--g)">\u20AC${o.savingsYear}</div><div class="strom-l">Ersparnis/J</div></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+                <div class="strom-c"><div class="strom-v" style="font-size:16px">\u20AC${o.priceEstimate.toLocaleString()}</div><div class="strom-l">Anlagenpreis ca.</div></div>
+                <div class="strom-c"><div class="strom-v" style="font-size:16px">${o.amortisation}J</div><div class="strom-l">Amortisation</div></div>
+                <div class="strom-c"><div class="strom-v" style="font-size:16px;color:var(--g)">\u20AC${o.savingsMonth}/M</div><div class="strom-l">Monatl. Ersparnis</div></div>
+                <div class="strom-c"><div class="strom-v" style="font-size:16px">${o.co2SavedKg ? o.co2SavedKg + 'kg' : '?'}</div><div class="strom-l">CO\u2082 gespart/J</div></div>
+            </div>`;
+        }
+
+        // Dachsegmente
+        if (d.roofSegments && d.roofSegments.length > 0) {
+            sh += `<div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">\u{1F3E0} ${d.roofSegments.length} Dachsegmente erkannt</div>`;
+            sh += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:14px">';
+            d.roofSegments.forEach((seg, i) => {
+                const dirColor = ['S','SO','SW'].includes(seg.direction) ? 'var(--g)' : ['O','W'].includes(seg.direction) ? 'var(--a)' : 'var(--o)';
+                sh += `<div style="padding:10px;background:var(--bg);border-radius:var(--Rs);border-left:3px solid ${dirColor}">
+                    <div style="font-size:12px;font-weight:600;color:${dirColor}">Segment ${i+1}: ${seg.direction} (${seg.azimuth}\u00B0)</div>
+                    <div style="font-size:11px;color:var(--t2);margin-top:4px">
+                        Fl\u00E4che: <strong>${seg.areaM2}m\u00B2</strong> | Neigung: ${seg.pitch}\u00B0 | Sonne: ${seg.sunshineHours}h/J
+                    </div>
+                </div>`;
+            });
+            sh += '</div>';
+        }
+
+        // Sonnenstunden + Panel-Info
+        sh += `<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--t2)">
+            <span>\u2600\uFE0F Max Sonnenstunden: <strong>${d.maxSunshineHours}h/Jahr</strong></span>
+            <span>\u{1F4CF} Max Dachfl\u00E4che: <strong>${d.maxAreaM2}m\u00B2</strong></span>
+            <span>\u{1F50B} Panel: ${d.panelCapacityW}W (${d.panelWidth}x${d.panelHeight}m)</span>
+            ${d.imageryDate ? '<span>\u{1F4F7} Aufnahme: ' + (d.imageryDate.year || '') + '-' + (d.imageryDate.month || '') + '-' + (d.imageryDate.day || '') + '</span>' : ''}
+        </div>`;
+
+        // Panel Konfigurationen
+        if (d.panelConfigs && d.panelConfigs.length > 0) {
+            sh += `<details style="margin-top:12px"><summary style="font-size:11px;font-weight:600;color:var(--t3);cursor:pointer">\u{1F527} ${d.panelConfigs.length} Konfigurationen verf\u00FCgbar (klick)</summary><div style="margin-top:8px">`;
+            d.panelConfigs.forEach(c => {
+                sh += `<div style="padding:6px 10px;background:var(--bg);border-radius:4px;margin-bottom:4px;font-size:11px;display:flex;justify-content:space-between">
+                    <span>${c.panels} Module \u2192 ${c.kwp.toFixed(1)} kWp</span>
+                    <span style="color:var(--g)">${c.yearlyKwh ? c.yearlyKwh.toLocaleString() + ' kWh/Jahr' : ''}</span>
+                </div>`;
+            });
+            sh += '</div></details>';
+        }
+
+        body.innerHTML = sh;
+    } catch (err) {
+        status.textContent = 'Fehler';
+        status.style.color = 'var(--r)';
+        body.innerHTML = '<div style="padding:12px;color:var(--r);font-size:12px">Fehler: ' + err.message + '</div>';
+    }
 }
 </script>
 </body>
