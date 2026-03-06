@@ -184,6 +184,8 @@
   .house-card.yellow .house-score { color: var(--yellow); }
   .house-card.red .house-score { color: var(--red); }
   .house-card.nodata .house-score { color: var(--muted); }
+  .highlight-kpi { background: var(--accent-dim) !important; border-radius: 6px; }
+  .highlight-kpi .val { color: var(--accent) !important; font-weight: 900 !important; }
 
   .house-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
   .house-kpi {
@@ -486,16 +488,29 @@ async function reverseGeocode(lat, lng) {
   return await res.json();
 }
 
-// ─── Google Solar API ───
+// ─── Google Solar API (via Supabase Proxy) ───
 async function fetchSolarData(lat, lng) {
-  const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=MEDIUM&key=${GKEY}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  if (data.error) {
-    if (data.error.code === 404) return null; // No data for this location
-    throw new Error('Solar API: ' + data.error.message);
+  // Try via Supabase proxy first (avoids API key referrer restrictions)
+  const proxyUrl = `${SUPABASE_URL}/functions/v1/solar-proxy?lat=${lat}&lng=${lng}`;
+  try {
+    const res = await fetch(proxyUrl, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    const data = await res.json();
+    if (!data.error) return data;
+    if (data.error.code === 404) return null;
+    // If proxy blocked, try direct call
+  } catch(e) { /* fallthrough to direct */ }
+  
+  // Direct browser call (works if API key allows this domain)
+  const directUrl = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=MEDIUM&key=${GKEY}`;
+  const res2 = await fetch(directUrl);
+  const data2 = await res2.json();
+  if (data2.error) {
+    if (data2.error.code === 404) return null;
+    throw new Error('Solar API: ' + data2.error.message);
   }
-  return data;
+  return data2;
 }
 
 // ─── Nearby addresses via Nominatim ───
@@ -695,10 +710,10 @@ function renderResults() {
         <div class="house-score">${r.scoring.score}</div>
       </div>
       <div class="house-kpis">
+        <div class="house-kpi highlight-kpi"><div class="val">${panels}</div><div class="lbl">Module</div></div>
         <div class="house-kpi"><div class="val">${kwp}</div><div class="lbl">kWp</div></div>
         <div class="house-kpi"><div class="val">${kwh.toLocaleString('de-DE')}</div><div class="lbl">kWh/Jahr</div></div>
         <div class="house-kpi"><div class="val">${area}</div><div class="lbl">m² Dach</div></div>
-        <div class="house-kpi"><div class="val">${sunH}</div><div class="lbl">Sonnen-h</div></div>
       </div>
     `;
     list.appendChild(card);
@@ -730,10 +745,13 @@ function openDetail(idx) {
 
   // Grid
   document.getElementById('detailGrid').innerHTML = `
-    <div class="detail-card highlight">
-      <div class="label">Leistung</div>
-      <div class="value">${kwp}<span class="unit">kWp</span></div>
-      <div class="sub">${panels} × AIKO 475W</div>
+    <div class="detail-card highlight" style="grid-column: span 2">
+      <div class="label">☀️ Module aufs Dach</div>
+      <div style="display:flex;gap:16px;align-items:baseline;margin-top:4px">
+        <div><div class="value" style="font-size:32px">${panels}</div><div class="sub">Module × AIKO 475W</div></div>
+        <div style="color:var(--muted);font-size:20px;font-weight:300">=</div>
+        <div><div class="value">${kwp}<span class="unit">kWp</span></div><div class="sub">Anlagenleistung</div></div>
+      </div>
     </div>
     <div class="detail-card">
       <div class="label">Jahresertrag</div>
