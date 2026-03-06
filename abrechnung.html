@@ -212,7 +212,7 @@ const docRaptorPdf=async(html,fname)=>{
 async function runHealthCheck(periode) {
   const warnings = [];
   const allOrders = await sbG('pay_auftraege',`produkt_typ=not.in.(lead_count,termin_count,zero_count,sonderzulage)&limit=1000`);
-  const mitarbeiter = await sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,typ');
+  const mitarbeiter = await sbG('mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,typ');
   const vtMap = {}; mitarbeiter.forEach(m => vtMap[m.id] = `${m.vorname} ${m.nachname}`);
   const now = new Date();
 
@@ -269,7 +269,7 @@ async function generateAbrechnungen(periode, onProgress){
   ] = await Promise.all([
     sbG('provisions_regeln','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
-    sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig,auto_zuschuss,firmenname,ustid,hausnr'),
+    sbG('mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig,auto_zuschuss,firmenname,ustid,hausnr'),
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=*`),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${leistungsStart}&select=*`),
@@ -990,7 +990,7 @@ function BereinigungPanel({onClose}){
       if(missing.length>0){
         const ans=missing.map(s=>'AN-'+s.auftrag_nr);
         const auftr=await sbG('pay_auftraege',`auftrag_nr=in.(${ans.join(',')})&select=auftrag_nr,kunde_name,vertriebler_id`).catch(()=>[]);
-        const mitarb=await sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname').catch(()=>[]);
+        const mitarb=await sbG('mitarbeiter','aktiv=eq.true&select=id,vorname,nachname').catch(()=>[]);
         const vtMap=Object.fromEntries(mitarb.map(m=>[m.id,`${m.vorname} ${m.nachname}`]));
         for(const s of missing){
           const a=auftr.find(x=>x.auftrag_nr==='AN-'+s.auftrag_nr);
@@ -1932,7 +1932,7 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
   const load=async()=>{setLd(true);try{
     // VP-Stammdaten laden
     const nameParts=vtN.trim().split(/\s+/);const vn=nameParts[0];const nn=nameParts.slice(1).join(' ');
-    const vpArr=await sbG('pay_mitarbeiter',`vorname=eq.${encodeURIComponent(vn)}&nachname=eq.${encodeURIComponent(nn)}&limit=1`).catch(()=>[]);
+    const vpArr=await sbG('mitarbeiter',`vorname=eq.${encodeURIComponent(vn)}&nachname=eq.${encodeURIComponent(nn)}&limit=1`).catch(()=>[]);
     const vp=vpArr[0]||null;if(vp)window.__vpData=vp;
     if(aId){const[a,p]=await Promise.all([sbG('pay_abrechnungen',`id=eq.${aId}`),sbG('pay_abrechnungen_positionen',`abrechnung_id=eq.${aId}&order=erstellt_am.asc`)]);if(a.length){setAb(a[0]);setPos(p);}}else{setAb({periode:per,mitarbeiter_name:vtN,kuerzel:vp?.kuerzel||gK(vtN),beschaeftigungsart:vp?.typ?.startsWith('hgb')?'hgb':'angestellt',status:'entwurf',notizen:'',stb_kommentar:''});setPos((vtD||[]).map(d=>({typ:'provision',auftrag_nr:'',kunde:d.kunde,produkt:d.produkt,original_betrag:d.netto,override_betrag:null,aktiv:true,zurueckgestellt:false,notiz:'',isNew:true})));}}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);};
 
@@ -1996,7 +1996,7 @@ function App(){
   const merged=[...new Set([...allMonths,...u])].sort().reverse();
   setPers(merged);setPer(merged[0]||cp);}catch(e){const now=new Date();const allM=[];let dt=new Date(2025,9,1);while(dt<=now){allM.push(`${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}`);dt=new Date(dt.getFullYear(),dt.getMonth()+1,1);}const sorted=allM.sort().reverse();setPers(sorted);setPer(sorted[0]);}})();},[]);
 
-  const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s,ma]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&archiviert_am=is.null&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,strasse,plz,ort,steuernummer,typ,mwst_pflichtig,iban,bic,kuerzel,firmenname,ustid,hausnr')]);setAbrs(a);setAusz(z);setSg(s[0]||null);setMaArr(ma);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
+  const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s,ma]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&archiviert_am=is.null&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),sbG('mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,strasse,plz,ort,steuernummer,typ,mwst_pflichtig,iban,bic,kuerzel,firmenname,ustid,hausnr')]);setAbrs(a);setAusz(z);setSg(s[0]||null);setMaArr(ma);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
   useEffect(()=>{loadP();},[loadP]);
 
   // Partner-Daten Lookup
@@ -2047,7 +2047,7 @@ function App(){
         // Load positions + VP data
         const posArr=await sbG('pay_abrechnungen_positionen',`abrechnung_id=eq.${ab.id}&order=erstellt_am.asc`);
         const nameParts=ab.mitarbeiter_name.trim().split(/\s+/);
-        const vpArr=await sbG('pay_mitarbeiter',`vorname=eq.${encodeURIComponent(nameParts[0])}&nachname=eq.${encodeURIComponent(nameParts.slice(1).join(' '))}&limit=1`).catch(()=>[]);
+        const vpArr=await sbG('mitarbeiter',`vorname=eq.${encodeURIComponent(nameParts[0])}&nachname=eq.${encodeURIComponent(nameParts.slice(1).join(' '))}&limit=1`).catch(()=>[]);
         if(vpArr[0])window.__vpData=vpArr[0];
         // Render offscreen
         const root=ReactDOM.createRoot(container);
