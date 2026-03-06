@@ -1388,6 +1388,7 @@ function App(){
   const [vsForm,setVSF]=useState({ma_id:"",betrag:"",grund:"",quelle:"manuell"});
   const [vsLoading,setVSLd]=useState(false);
   const [ktSaving,setKTSv]=useState({});
+  const [abrArtSv,setAbrArtSv]=useState({});
 
   const ok=msg=>setToast({msg,type:"success"});
   const err=msg=>setToast({msg,type:"error"});
@@ -1470,6 +1471,14 @@ function App(){
   const saveSlack=async()=>{try{await db.upsert("pay_settings",[{key:"slack_webhook",value:slackWH},{key:"slack_enabled",value:String(slackOn)}]);ok("Einstellungen gespeichert ✓");setShowSt(false);}catch(e){err(e.message);}};
   const testSlack=async()=>{if(!slackWH){err("Kein Webhook eingetragen");return;}await sendSlack(slackWH,[{type:"section",text:{type:"mrkdwn",text:"🟡 *bee-doo PAY* – Testbenachrichtigung ✓"}}]);ok("Testnachricht gesendet!");};
 
+  const toggleAbrArt=useCallback(async(maId)=>{
+    setAbrArtSv(s=>({...s,[maId]:true}));
+    const ma=mitarb.find(m=>m.id===maId);
+    const neu=ma?.abrechnungsart==="brutto"?"netto":"brutto";
+    try{await db.patch("mitarbeiter","id=eq."+maId,{abrechnungsart:neu});setMA(prev=>prev.map(m=>m.id===maId?{...m,abrechnungsart:neu}:m));ok((ma?.vorname||"")+" → "+(neu==="brutto"?"Brutto (mit MwSt)":"Netto (Kleinunternehmer)"));}
+    catch(e){err(e.message);}finally{setAbrArtSv(s=>({...s,[maId]:false}));}
+  },[mitarb]);
+
   // Stats
   const allE=Object.values(E).map(e=>({...e,status:abr.find(a=>a.mitarbeiter_id===e.ma.id)?.status||"entwurf"}));
   const cA=allE.filter(e=>e.status==="ausgezahlt").length;
@@ -1512,6 +1521,7 @@ function App(){
           </div>
           <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
             <Chip c={tc} l={TLBL[e.ma.typ]||e.ma.typ}/>
+            {e.ma.typ.startsWith("hgb")&&<button onClick={ev=>{ev.stopPropagation();toggleAbrArt(e.ma.id)}} disabled={abrArtSv[e.ma.id]} style={{background:e.ma.abrechnungsart==="brutto"?`${C.O}18`:`${C.B}18`,border:`1px solid ${e.ma.abrechnungsart==="brutto"?C.O+"30":C.B+"30"}`,color:e.ma.abrechnungsart==="brutto"?C.O:C.B,borderRadius:4,padding:"2px 8px",fontSize:9,fontWeight:700,cursor:"pointer",textTransform:"uppercase"}}>{abrArtSv[e.ma.id]?"...":e.ma.abrechnungsart==="brutto"?"BRUTTO":"NETTO"}</button>}
             <Badge c={sc.c} bg={sc.bg} l={sc.l}/>
           </div>
         </div>
@@ -1771,7 +1781,10 @@ function App(){
                     <div style={{fontWeight:600,fontSize:12}}>{e.ma.vorname} {e.ma.nachname}</div>
                     <div style={{fontSize:9,color:C.tm}}>{e.ma.kuerzel}{isA&&e.ma.grundgehalt>0?" · "+eur(e.ma.grundgehalt):""}</div>
                   </td>
-                  <td style={{padding:"7px 10px"}}><Chip c={tc} l={TLBL[e.ma.typ]||e.ma.typ}/></td>
+                  <td style={{padding:"7px 10px"}} onClick={ev=>ev.stopPropagation()}>
+                    <Chip c={tc} l={TLBL[e.ma.typ]||e.ma.typ}/>
+                    {e.ma.typ.startsWith("hgb")&&<button onClick={()=>toggleAbrArt(e.ma.id)} disabled={abrArtSv[e.ma.id]} style={{display:"block",marginTop:3,background:e.ma.abrechnungsart==="brutto"?`${C.O}18`:`${C.B}18`,border:`1px solid ${e.ma.abrechnungsart==="brutto"?C.O+"30":C.B+"30"}`,color:e.ma.abrechnungsart==="brutto"?C.O:C.B,borderRadius:4,padding:"1px 6px",fontSize:8,fontWeight:700,cursor:"pointer",letterSpacing:.3,textTransform:"uppercase"}}>{abrArtSv[e.ma.id]?"...":e.ma.abrechnungsart==="brutto"?"BRUTTO":"NETTO"}</button>}
+                  </td>
                   <td style={{padding:"7px 10px"}}><div style={{fontWeight:700,fontSize:13,color:e.staf_ok?C.Y:C.tx}}>{e.sales}</div>{sw&&sw<999&&<div style={{fontSize:9,color:C.tm}}>/{sw}</div>}</td>
                   <td style={{padding:"7px 10px"}}>
                     {e.staf_ok?<span style={{color:C.Y,fontSize:11,fontWeight:700}}>⚡ +{eur(e.staf_bonus)}</span>
@@ -1842,6 +1855,7 @@ function App(){
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
               <h2 style={{fontSize:19,fontWeight:800}}>{selEntry.ma.vorname} {selEntry.ma.nachname}</h2>
               <Chip c={TCLR[selEntry.ma.typ]||C.tx} l={TLBL[selEntry.ma.typ]||selEntry.ma.typ}/>
+              {selEntry.ma.typ.startsWith("hgb")&&<button onClick={()=>toggleAbrArt(selEntry.ma.id)} disabled={abrArtSv[selEntry.ma.id]} style={{background:selEntry.ma.abrechnungsart==="brutto"?`${C.O}18`:`${C.B}18`,border:`1px solid ${selEntry.ma.abrechnungsart==="brutto"?C.O+"30":C.B+"30"}`,color:selEntry.ma.abrechnungsart==="brutto"?C.O:C.B,borderRadius:5,padding:"3px 10px",fontSize:10,fontWeight:700,cursor:"pointer",textTransform:"uppercase"}}>{abrArtSv[selEntry.ma.id]?"...":selEntry.ma.abrechnungsart==="brutto"?"BRUTTO":"NETTO"}</button>}
               {selEntry.status&&<Badge c={STCFG[selEntry.status]?.c||C.O} bg={STCFG[selEntry.status]?.bg||C.OD} l={STCFG[selEntry.status]?.l||"Offen"}/>}
               {selEntry.prevNetto!==null&&<span style={{fontSize:11,color:C.ts}}>vs {MO[vM]}: <Delta curr={selEntry.netto} prev={selEntry.prevNetto}/></span>}
             </div>
