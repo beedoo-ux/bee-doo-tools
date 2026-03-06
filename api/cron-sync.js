@@ -7,11 +7,11 @@
 // leveto_appointments + scout_sync are NOT in this list - they power live-ticker & scouting
 const PAUSED_KEYS = ['leveto_sync', 'leveto_contracts', 'lohn_sheet', 'auto_merge'];
 
-const SU = 'https://hqzpemfaljxcysyqssng.supabase.co';
-const SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
+const SU = process.env.SUPABASE_URL;
+const SK = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const LU = 'https://beedoo.leveto.net/API';
-const LN = 'api@bee-doo.de';
-const LP = 'Patrick123456789!';
+const LN = process.env.LEVETO_USER || 'api@bee-doo.de';
+const LP = process.env.LEVETO_PASS;
 
 const hd = () => ({ apikey: SK, Authorization: `Bearer ${SK}`, 'Content-Type': 'application/json' });
 const ap = (t) => `${SU}/rest/v1/${t}`;
