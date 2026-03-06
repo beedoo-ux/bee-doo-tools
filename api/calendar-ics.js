@@ -2,8 +2,8 @@
 // URL: /api/calendar-ics?vt=Andreas+Klee
 
 const LEVETO_BASE = "https://beedoo.leveto.net/API";
-const LEVETO_USER = "api@bee-doo.de";
-const LEVETO_PASS = "Patrick123456789!";
+const LEVETO_USER = process.env.LEVETO_USER || 'api@bee-doo.de';
+const LEVETO_PASS = process.env.LEVETO_PASS;
 
 let _token = null, _tokenExp = 0;
 
