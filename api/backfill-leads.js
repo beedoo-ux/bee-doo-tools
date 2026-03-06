@@ -2,8 +2,8 @@
 // Usage: GET /api/backfill-leads?page=1 (processes 50 leads per call)
 // Returns: { processed, page, totalPages, done, nextUrl }
 
-const SU = 'https://hqzpemfaljxcysyqssng.supabase.co';
-const SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
+const SU = process.env.SUPABASE_URL;
+const SK = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const LU = 'https://beedoo.leveto.net/API';
 
 function vd(d) { return d && d !== '0000-00-00' && d !== '0000-00-00 00:00:00' ? d : null; }
