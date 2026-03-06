@@ -240,6 +240,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 .twilio-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#1a7f3c;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;text-decoration:none;}
 .twilio-btn:hover{background:#15a34a;transform:translateY(-1px);}
 .twilio-btn.calling{background:#ef4444;animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 .fq-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);}
 .fq-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:min(680px,96vw);max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;}
 .fq-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg2);z-index:2;}
@@ -1815,22 +1816,53 @@ async function startTwilioCall(tel, name) {
   fqCalling = true;
   const statusEl = document.getElementById('fqCallStatus');
   statusEl.style.display = 'flex';
-  statusEl.textContent = `📞 Wähle ${tel}…`;
+  statusEl.innerHTML = `<span style="animation:pulse 1s infinite;display:inline-block">📞</span> Wähle ${tel}…`;
+  statusEl.style.background = '#f5c50015';
+  statusEl.style.borderColor = '#f5c50040';
+  statusEl.style.color = '#F5C500';
+
+  // Twilio-Credentials aus localStorage (wie in whatsapp.html gespeichert)
+  let creds = {};
   try {
-    const r = await fetch('/api/whatsapp', {
+    const saved = localStorage.getItem('beedoo_twilio_creds');
+    if (saved) creds = JSON.parse(saved);
+  } catch(e) {}
+
+  if (!creds.sid || !creds.token) {
+    statusEl.innerHTML = `⚠️ Twilio-Zugangsdaten fehlen – bitte in <a href="whatsapp.html" target="_blank" style="color:var(--accent)">whatsapp.html</a> speichern`;
+    statusEl.style.color = '#f97316';
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/twilio-call', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({action: 'call', to: tel, name: name})
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        to:    tel,
+        sid:   creds.sid,
+        token: creds.token,
+        from:  creds.smsSender || '+4915888651131',
+      })
     });
-    // Twilio call initiated - show status
-    statusEl.textContent = `📞 Anruf läuft mit ${tel}`;
-    statusEl.style.background = '#ef444415';
-    statusEl.style.borderColor = '#ef444440';
-    statusEl.style.color = '#ef4444';
+
+    const data = await r.json();
+
+    if (data.ok) {
+      statusEl.innerHTML = `📞 Anruf läuft · ${data.to || tel}`;
+      statusEl.style.background = '#ef444415';
+      statusEl.style.borderColor = '#ef444440';
+      statusEl.style.color = '#ef4444';
+      // Store callSid for reference
+      statusEl.dataset.callSid = data.callSid || '';
+    } else {
+      // Twilio error – show error but keep fragebogen open
+      statusEl.innerHTML = `⚠️ ${data.error || 'Anruf fehlgeschlagen'} · <a href="tel:${tel}" style="color:var(--accent)">Manuell wählen</a>`;
+      statusEl.style.color = '#f97316';
+    }
   } catch(e) {
-    // Even if call fails, keep fragebogen open
-    statusEl.textContent = `📞 ${tel} — Manuell wählen`;
-    statusEl.style.color = 'var(--text2)';
+    statusEl.innerHTML = `⚠️ Netzwerkfehler · <a href="tel:${tel}" style="color:var(--accent)">Manuell wählen</a>`;
+    statusEl.style.color = '#f97316';
   }
 }
 
