@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>bee-doo Lead Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07070c;--bg2:#0e0e16;--bg3:#151520;--bg4:#1c1c2c;--border:rgba(255,255,255,.05);--ba:rgba(245,197,0,.25);--t:#eef;--t2:#99a;--t3:#556;--a:#F5C500;--ad:rgba(245,197,0,.1);--g:#22c55e;--gd:rgba(34,197,94,.1);--r:#ef4444;--rd:rgba(239,68,68,.1);--o:#f97316;--od:rgba(249,115,22,.1);--b:#3b82f6;--bd:rgba(59,130,246,.1);--p:#a855f7;--pd:rgba(168,85,247,.1);--R:14px;--Rs:8px}
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);min-height:100vh}.mono{font-family:'JetBrains Mono',monospace}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:52px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
+.hdr-l{display:flex;align-items:center;gap:10px}.hdr-l a{color:var(--t3);text-decoration:none;font-size:13px}.hdr-l a:hover{color:var(--a)}.hdr-t{font-weight:700;font-size:14px}.hdr-t span{color:var(--a)}
+.hdr-r{display:flex;gap:6px;flex-wrap:wrap}.hdr-r a{text-decoration:none}
+.btn{padding:6px 12px;border:none;border-radius:var(--Rs);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:.15s}.btn-a{background:var(--a);color:#000}.btn-g{background:var(--bg3);color:var(--t2);border:1px solid var(--border)}.btn-g:hover{border-color:var(--ba);color:var(--t)}
+.pad{max-width:1200px;margin:0 auto;padding:24px}
+.search-wrap{display:flex;gap:8px;margin-bottom:24px}
+.search-input{flex:1;padding:12px 18px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--R);color:var(--t);font-family:inherit;font-size:14px;outline:none}.search-input:focus{border-color:var(--a)}.search-input::placeholder{color:var(--t3)}
+.result{display:none}.result.on{display:block;animation:fadeIn .3s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
+.loading{text-align:center;padding:60px;color:var(--t3);display:none}
+.spinner{width:24px;height:24px;border:3px solid var(--t3);border-top-color:var(--a);border-radius:50%;animation:spin .6s linear infinite;margin:0 auto 12px}@keyframes spin{to{transform:rotate(360deg)}}
+
+.card{background:var(--bg2);border-radius:var(--R);border:1px solid var(--border);margin-bottom:14px;overflow:hidden}
+.card-h{padding:14px 18px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px;justify-content:space-between}
+.card-b{padding:16px 18px}
+
+.top-row{display:grid;grid-template-columns:300px 1fr;gap:14px;margin-bottom:14px}
+.score-panel{display:flex;flex-direction:column;align-items:center;text-align:center;padding:24px}
+.score-ring{width:130px;height:130px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:14px}
+.score-inner{position:absolute;inset:10px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;flex-direction:column}
+.score-num{font-size:36px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.score-lbl{font-size:12px;font-weight:600}
+.factor{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-bottom:1px solid rgba(255,255,255,.03);width:100%}
+.factor:last-child{border:none}
+.factor-pts{font-family:'JetBrains Mono',monospace;font-weight:600;min-width:36px;text-align:right}
+
+.maps-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.map-f{border-radius:var(--Rs);overflow:hidden;border:1px solid var(--border);position:relative;height:180px}
+.map-f img{width:100%;height:100%;object-fit:cover}
+.map-lbl{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.7);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+
+.info-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:14px}
+.ic-row{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid rgba(255,255,255,.03)}.ic-row:last-child{border:none}
+.ic-l{color:var(--t2)}.ic-v{font-weight:600}
+
+.lf-box{padding:12px 16px;background:rgba(59,130,246,.05);border-left:3px solid var(--b);border-radius:0 8px 8px 0;font-size:13px;line-height:1.7;color:var(--t2);font-style:italic}
+.strom-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}
+.strom-c{text-align:center;padding:14px;background:var(--bg);border-radius:var(--Rs)}
+.strom-v{font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.strom-l{font-size:10px;color:var(--t3);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+
+.nb-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(34,197,94,.05);border:1px solid rgba(34,197,94,.12);border-radius:8px;margin-bottom:6px;font-size:12px}
+.dupe-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.12);border-radius:8px;margin-bottom:6px;font-size:12px}
+
+.ek-card{padding:12px;background:var(--bg);border-radius:var(--Rs);margin-bottom:8px;border-left:3px solid var(--o)}
+.ek-keyword{font-weight:700;font-size:13px;color:var(--o);margin-bottom:4px}
+.ek-short{font-size:12px;color:var(--t2);margin-bottom:6px;line-height:1.5}
+.ek-example{font-size:11px;color:var(--t3);font-style:italic;padding:6px 10px;background:rgba(255,255,255,.02);border-radius:4px}
+.ek-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.ek-tag{font-size:9px;padding:2px 6px;background:var(--bg3);border-radius:4px;color:var(--t3)}
+
+.wetter-box{display:flex;align-items:center;gap:14px;padding:14px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.12);border-radius:var(--Rs)}
+.wetter-icon{font-size:36px}
+.wetter-temp{font-size:24px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.wetter-hint{font-size:12px;color:var(--a);font-style:italic;margin-top:4px}
+
+.actions-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.actions-row .btn{padding:8px 16px;font-size:12px}
+
+@media(max-width:900px){.top-row{grid-template-columns:1fr}.maps-row{grid-template-columns:1fr}.strom-grid{grid-template-columns:1fr}.info-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="hdr">
+<div class="hdr-l"><a href="cc-supervisor.html">&larr; Leitstand</a><span style="color:var(--t3)">|</span><div class="hdr-t"><span>bee-doo</span> Lead Intelligence</div></div>
+<div class="hdr-r">
+<a href="callcenter.html"><span class="btn btn-g">&#x1F4DE; Agent</span></a>
+<a href="cc-supervisor.html"><span class="btn btn-g">&#x1F441; Leitstand</span></a>
+<a href="cc-workforce.html"><span class="btn btn-g">&#x1F4CA; Workforce</span></a>
+<a href="cc-nurture-settings.html"><span class="btn btn-g">&#x1F504; Nurture</span></a>
+<a href="spam-monitor.html"><span class="btn btn-g">&#x1F4F1; Nummern</span></a>
+</div>
+</header>
+<div class="pad">
+<div class="search-wrap">
+<input class="search-input" id="si" placeholder="Leveto-ID, Name oder Telefonnummer eingeben..." autofocus>
+<button class="btn btn-a" style="padding:10px 20px;font-size:13px" onclick="go()">&#x1F50D; Analysieren</button>
+</div>
+<div class="loading" id="ld"><div class="spinner"></div>Lead wird analysiert...</div>
+<div class="result" id="res"></div>
+</div>
+<script>
+const SB='https://hqzpemfaljxcysyqssng.supabase.co',KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik',GK='AIzaSyB7Y7FgAc4R6GX1V6GjGzm0bSNK5IfBg7o';
+const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
+document.getElementById('si').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
+
+async function go(){
+    const q=document.getElementById('si').value.trim();if(!q)return;
+    document.getElementById('ld').style.display='block';document.getElementById('res').classList.remove('on');
+    let lid=q;
+    if(!/^\d+$/.test(q)){
+        try{
+            let f='';const cl=q.replace(/[^0-9]/g,'');
+            if(q.startsWith('+')||q.startsWith('0')||/^\d{6,}$/.test(cl))f=`or=(telefon.ilike.*${cl}*,mobil.ilike.*${cl}*)`;
+            else{const p=q.split(' ');f=p.length>=2?`and=(vorname.ilike.*${p[0]}*,nachname.ilike.*${p[1]}*)`:`or=(vorname.ilike.*${q}*,nachname.ilike.*${q}*)`;}
+            const r=await fetch(`${SB}/rest/v1/leveto_leads?${f}&limit=1&select=leveto_id`,{headers:H});
+            const d=await r.json();
+            if(d&&d.length>0)lid=String(d[0].leveto_id);
+            else{document.getElementById('ld').style.display='none';alert('Kein Lead gefunden.');return;}
+        }catch(e){document.getElementById('ld').style.display='none';alert('Fehler: '+e.message);return;}
+    }
+    try{
+        const [sr,dr]=await Promise.all([
+            fetch(`${SB}/functions/v1/cc-lead-score?lead_id=${lid}`),
+            fetch(`${SB}/functions/v1/cc-smart-dial?action=enrich`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lead_id:lid,attempt:1,radius:500})})
+        ]);
+        const s=await sr.json(),d=await dr.json();
+        document.getElementById('ld').style.display='none';
+        render(s,d,lid);
+    }catch(e){document.getElementById('ld').style.display='none';alert('Fehler: '+e.message);}
+}
+
+function render(s,d,lid){
+    if(s.error){document.getElementById('res').innerHTML='<div style="padding:40px;text-align:center;color:var(--r)">'+s.error+'</div>';document.getElementById('res').classList.add('on');return;}
+    const sc=s.score>=80?'var(--g)':s.score>=60?'var(--a)':s.score>=40?'var(--o)':'var(--r)';
+    const em=s.score>=80?'\u{1F525}':s.score>=60?'\u2B50':s.score>=40?'\u{1F4A1}':'\u2744\uFE0F';
+    const l=s.lead||{},nb=d.nearby||{},ti=d.timing||{},w=s.wetter,du=s.duplicates||{},ek=s.einwand_karten||[];
+    const nm=(l.name||'').trim()||'Unbekannt',hg=l.lat&&l.lat!==0;
+    let h='';
+
+    // TOP ROW: Score + Maps
+    h+=`<div class="top-row"><div class="card"><div class="score-panel">
+    <div class="score-ring" style="background:conic-gradient(${sc} ${s.score*3.6}deg,rgba(255,255,255,.05) 0)"><div class="score-inner"><div class="score-num" style="color:${sc}">${s.score}</div><div class="score-lbl">${em} ${s.label}</div></div></div>
+    <div style="font-size:16px;font-weight:700">${nm}</div>
+    <div style="font-size:12px;color:var(--t2)">${l.strasse||''} ${l.hausnr||''}, ${l.plz||''} ${l.ort||''}</div>
+    <div style="font-size:11px;color:var(--t3);margin:4px 0 12px">Quelle: ${l.quelle||'?'} | Alter: ${s.lead_alter_tage}d</div>
+    ${(s.factors||[]).map(f=>'<div class="factor"><span class="factor-pts" style="color:'+(f.p>0?'var(--g)':'var(--r)')+'">'+(f.p>0?'+':'')+f.p+'</span><span>'+f.f+'</span></div>').join('')}
+    </div></div><div>${hg?`<div class="maps-row" style="margin-bottom:10px">
+    <div class="map-f"><div class="map-lbl">\u{1F6F0}\uFE0F Satellit</div><img src="https://maps.googleapis.com/maps/api/staticmap?center=${l.lat},${l.lng}&zoom=19&size=600x180&maptype=satellite&markers=color:yellow|${l.lat},${l.lng}&key=${GK}" loading="lazy"></div>
+    <div class="map-f"><div class="map-lbl">\u{1F5FA}\uFE0F Karte</div><img src="https://maps.googleapis.com/maps/api/staticmap?center=${l.lat},${l.lng}&zoom=16&size=600x180&maptype=roadmap&markers=color:yellow|${l.lat},${l.lng}&key=${GK}" loading="lazy"></div>
+    </div>`:''}`;
+
+    // WETTER
+    if(w){h+=`<div class="wetter-box"><div class="wetter-icon">${w.icon}</div><div><div class="wetter-temp">${w.temp}\u00B0C</div><div style="font-size:12px;color:var(--t2)">${w.desc}</div>${w.solar_hint?'<div class="wetter-hint">\u{1F4A1} '+w.solar_hint+'</div>':''}</div></div>`;}
+    h+='</div></div>';
+
+    // DUPLICATES WARNING
+    if(du.found){
+        h+=`<div class="card" style="border-color:var(--r)"><div class="card-h" style="color:var(--r)">\u26A0\uFE0F Duplikate erkannt (${du.count})</div><div class="card-b">
+        ${(du.duplicates||[]).map(d=>`<div class="dupe-item"><span style="font-size:14px">\u26A0\uFE0F</span><div style="flex:1"><strong>${d.name}</strong> \u2014 ${d.status} (${d.quelle})<br><span style="font-size:11px;color:var(--t3)">Match: ${d.match_type} | ${d.datum?new Date(d.datum).toLocaleDateString('de-DE'):''}</span></div><span class="mono" style="font-size:11px;color:var(--t3)">ID ${d.leveto_id}</span></div>`).join('')}
+        <div style="font-size:11px;color:var(--r);margin-top:6px">\u26A0\uFE0F Pr\u00FCfe ob dieser Lead bereits bearbeitet wurde!</div></div></div>`;
+    }
+
+    // LEITFADEN
+    if(s.leitfaden){
+        h+=`<div class="card"><div class="card-h">\u{1F5E3}\uFE0F Gespr\u00E4chsleitfaden <span style="font-size:10px;padding:1px 6px;background:var(--bd);color:var(--b);border-radius:4px;text-transform:none;letter-spacing:0">${s.leitfaden_typ}</span></div>
+        <div class="card-b"><div class="lf-box">"${s.leitfaden}"</div></div></div>`;
+    }
+
+    // INFO CARDS ROW
+    h+='<div class="info-grid">';
+
+    // Strom
+    if(s.strom){
+        h+=`<div class="card"><div class="card-h">\u26A1 Stromkosten-Analyse</div><div class="card-b">
+        <div class="strom-grid">
+        <div class="strom-c"><div class="strom-v">${s.strom.verbrauch_kwh.toLocaleString()}</div><div class="strom-l">kWh/Jahr</div></div>
+        <div class="strom-c"><div class="strom-v" style="color:var(--r)">\u20AC${s.strom.kosten_jahr}</div><div class="strom-l">Kosten/Jahr</div></div>
+        <div class="strom-c"><div class="strom-v" style="color:var(--g)">\u20AC${s.strom.ersparnis_jahr}</div><div class="strom-l">Ersparnis</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--t2)">Monatlich: <strong style="color:var(--g)">\u20AC${s.strom.ersparnis_monat}/Monat</strong> | Basis: 40ct/kWh, 70% Eigenverbrauch</div>
+        </div></div>`;
+    }
+
+    // Dach
+    if(s.dach){const dd=s.dach;h+=`<div class="card"><div class="card-h">\u{1F3E0} Dach</div><div class="card-b">
+    <div class="ic-row"><span class="ic-l">Form</span><span class="ic-v">${dd.form||'\u2014'}</span></div>
+    <div class="ic-row"><span class="ic-l">Gr\u00F6\u00DFe</span><span class="ic-v">${dd.groesse||'\u2014'}</span></div>
+    <div class="ic-row"><span class="ic-l">Ausrichtung</span><span class="ic-v">${dd.ausrichtung||'\u2014'}</span></div>
+    <div class="ic-row"><span class="ic-l">Alter</span><span class="ic-v">${dd.alter||'\u2014'}</span></div>
+    <div class="ic-row"><span class="ic-l">Asbest</span><span class="ic-v" style="color:${dd.belag==='Ja.'?'var(--r)':'var(--g)'}">${dd.belag==='Ja.'?'\u26A0\uFE0F Ja':dd.belag==='Nein.'?'\u2705 Nein':'\u2014'}</span></div>
+    ${dd.kwp?`<div class="ic-row"><span class="ic-l">kWp</span><span class="ic-v" style="color:var(--a)">${dd.kwp} kWp</span></div>`:''}
+    </div></div>`;}
+
+    // Timing
+    h+=`<div class="card"><div class="card-h">\u23F0 Anruf-Empfehlung</div><div class="card-b">
+    <div class="ic-row"><span class="ic-l">N\u00E4chster Slot</span><span class="ic-v" style="color:var(--b)">${ti.label||'\u2014'}</span></div>
+    <div class="ic-row"><span class="ic-l">Versuch</span><span class="ic-v">#${ti.attempt||1}</span></div>
+    <div class="ic-row"><span class="ic-l">Versucht um</span><span class="ic-v">${(ti.used_slots||[]).length>0?(ti.used_slots||[]).map(h=>h+':00').join(', '):'Noch nie'}</span></div>
+    ${l.erreichbarkeit?`<div class="ic-row"><span class="ic-l">Erreichbarkeit</span><span class="ic-v" style="color:var(--g)">${l.erreichbarkeit}</span></div>`:''}
+    </div></div>`;
+    h+='</div>';
+
+    // NEARBY
+    if(nb.found&&(nb.installations||[]).length>0){
+        h+=`<div class="card"><div class="card-h">\u{1F3E0} ${nb.count} Anlage${nb.count>1?'n':''} im Umkreis (${nb.radius_m}m)</div><div class="card-b">
+        ${(nb.installations||[]).map(i=>`<div class="nb-item"><span style="font-size:16px">\u2600\uFE0F</span><div style="flex:1"><strong>${i.strasse}</strong>, ${i.plz} ${i.ort}<br><span style="color:var(--t3)">${i.quelle||''} \u2014 ${i.datum?new Date(i.datum).toLocaleDateString('de-DE'):''}</span></div><div class="mono" style="font-size:14px;font-weight:700;color:var(--g)">${i.entfernung_m}m</div></div>`).join('')}
+        <div style="font-size:11px;color:var(--a);margin-top:8px;font-style:italic">\u{1F4A1} "Ihr Nachbar hat sich auch f\u00FCr Solar entschieden!"</div></div></div>`;
+    }
+
+    // SOLAR-KONTEXT: MaStR PLZ-Daten + NRW Solarkataster
+    const sk=s.solar_kontext;
+    if(sk){
+        const m=sk.mastr, sol=sk.solarkataster;
+        h+=\`<div class="card"><div class="card-h">\u{1F50C} MaStR + Solarkataster <span style="font-size:10px;color:var(--t3);text-transform:none;letter-spacing:0;font-weight:400">PLZ \${m?m.plz:'?'} | \${sol?sol.gemeinde:'?'}</span></div><div class="card-b">\`;
+
+        if(m){
+            h+=\`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+                <div class="strom-c"><div class="strom-v" style="color:var(--a)">\${m.anlagen_gesamt}</div><div class="strom-l">PV-Anlagen (PLZ)</div></div>
+                <div class="strom-c"><div class="strom-v">\${m.kwp_gesamt}</div><div class="strom-l">kWp gesamt</div></div>
+                <div class="strom-c"><div class="strom-v">\${m.avg_kwp}</div><div class="strom-l">\u00D8 kWp/Anlage</div></div>
+                <div class="strom-c"><div class="strom-v" style="color:var(--g)">\${m.eigenverbrauch}</div><div class="strom-l">Eigenverbrauch</div></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0">
+                <div class="ic-row"><span class="ic-l">Residential</span><span class="ic-v">\${m.anlagen_residential}</span></div>
+                <div class="ic-row"><span class="ic-l">Gewerbe</span><span class="ic-v">\${m.anlagen_gewerbe}</span></div>
+                <div class="ic-row"><span class="ic-l">Balkon</span><span class="ic-v">\${m.anlagen_balkon}</span></div>
+                <div class="ic-row"><span class="ic-l">Seit 2024</span><span class="ic-v" style="color:var(--g)">\${m.anlagen_2024_plus} neu</span></div>
+            </div>\`;
+        }
+
+        if(sol){
+            h+=\`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+            <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">\u{1F3D7}\uFE0F NRW Solarkataster \${sol.gemeinde}</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+                <div class="strom-c"><div class="strom-v" style="font-size:18px">\${(sol.gebaeude||0).toLocaleString()}</div><div class="strom-l">Geb\u00E4ude</div></div>
+                <div class="strom-c"><div class="strom-v" style="font-size:18px;color:var(--a)">\${(sol.potenzial_kwp||0).toLocaleString()}</div><div class="strom-l">kWp Potenzial</div></div>
+                <div class="strom-c"><div class="strom-v" style="font-size:18px">\${sol.ertrag_kwh||'?'}</div><div class="strom-l">kWh/kWp/Jahr</div></div>
+                <div class="strom-c"><div class="strom-v" style="font-size:18px;color:var(--g)">\${sol.anteil_sued_pct||'?'}%</div><div class="strom-l">S\u00FCd-Anteil</div></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">
+                <div class="ic-row"><span class="ic-l">Einstrahlung</span><span class="ic-v">\${sol.einstrahlung_kwh} kWh/m\u00B2</span></div>
+                <div class="ic-row"><span class="ic-l">\u00D8 Neigung</span><span class="ic-v">\${sol.mittlere_neigung}\u00B0</span></div>
+                <div class="ic-row"><span class="ic-l">Flachdach</span><span class="ic-v">\${sol.anteil_flachdach_pct}%</span></div>
+            </div>
+            \${sol.saettigung_pct!==null?'<div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-bottom:4px"><span>PV-S\u00E4ttigung '+sol.gemeinde+'</span><span style=\'color:var(--a)\'>'+sol.saettigung_pct+'%</span></div><div style="height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div style="width:'+Math.min(sol.saettigung_pct*10,100)+'%;height:100%;background:var(--g);border-radius:3px"></div></div><div style="font-size:10px;color:var(--t2);margin-top:4px">\u{1F4A1} Noch '+Math.round(100-sol.saettigung_pct)+'% Marktpotenzial!</div></div>':''}
+            </div>\`;
+        }
+
+        if(sk.zusammenfassung){
+            h+=\`<div style="margin-top:12px;padding:10px 14px;background:rgba(245,197,0,.06);border-left:3px solid var(--a);border-radius:0 8px 8px 0;font-size:12px;line-height:1.6;color:var(--t2);font-style:italic">\u{1F4A1} \${sk.zusammenfassung}</div>\`;
+        }
+        h+=\`</div></div>\`;
+    }
+
+    // MASTR: Marktstammdatenregister — echte PV-Anlagen im Umkreis
+    if(s.mastr&&s.mastr.count>0){
+        const m=s.mastr;
+        h+=\`<div class="card"><div class="card-h">\u{1F50C} Marktstammdatenregister \u2014 \${m.count} PV-Anlagen im 500m Umkreis<span style="font-size:10px;color:var(--t3);text-transform:none;letter-spacing:0;font-weight:400">\u2211 \${m.total_kwp} kWp | \u00D8 \${m.avg_kwp} kWp</span></div><div class="card-b">
+        \${m.anlagen.map(a=>\`<div class="nb-item" style="background:rgba(168,85,247,.05);border-color:rgba(168,85,247,.15)">
+            <span style="font-size:16px">\u2600\uFE0F</span>
+            <div style="flex:1">
+                <div style="font-size:12px;font-weight:500">\${a.strasse||'?'}, \${a.plz} \${a.ort}</div>
+                <div style="font-size:11px;color:var(--t2)">
+                    <strong>\${a.kwp} kWp</strong>\${a.module?' | '+a.module+' Module':''}
+                    \${a.hersteller?' | '+a.hersteller:''}
+                    \${a.speicher?'<span style="color:var(--g)"> | \u{1F50B} Speicher'+(a.speicher_kwh?' '+a.speicher_kwh+'kWh':'')+'</span>':''}
+                </div>
+                <div style="font-size:10px;color:var(--t3)">Inbetriebnahme: \${a.inbetriebnahme||'?'} | \${a.einspeiseart||''} | MaStR: \${a.mastr_nr||''}</div>
+            </div>
+            <div class="mono" style="font-size:13px;font-weight:700;color:var(--p)">\${a.entfernung_m}m</div>
+        </div>\`).join('')}
+        <div style="font-size:11px;color:var(--a);margin-top:8px;font-style:italic">\u{1F4A1} "In Ihrer Stra\u00DFe/Nachbarschaft stehen bereits \${m.count} Solaranlagen mit insgesamt \${m.total_kwp} kWp!"</div>
+        </div></div>\`;
+    } else if(s.mastr&&s.mastr.count===0) {
+        h+=\`<div class="card"><div class="card-h">\u{1F50C} Marktstammdatenregister</div><div class="card-b" style="color:var(--t3);font-size:12px">Keine registrierten PV-Anlagen im 500m Umkreis gefunden. \u{1F449} Potenzial: Sie k\u00F6nnten der Erste in der Nachbarschaft sein!</div></div>\`;
+    }
+
+    // KATASTER: Geb\u00E4ude- und Dachdaten
+    if(s.kataster&&s.kataster.found){
+        const k=s.kataster;
+        h+=\`<div class="card"><div class="card-h">\u{1F3D7}\uFE0F Katasterdaten <span style="font-size:10px;color:var(--t3);text-transform:none;letter-spacing:0;font-weight:400">Methode: \${k.method}</span></div><div class="card-b">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+            \${k.baujahr?'<div class="ic-row"><span class="ic-l">Baujahr</span><span class="ic-v">'+k.baujahr+'</span></div>':''}
+            \${k.geschosse?'<div class="ic-row"><span class="ic-l">Geschosse</span><span class="ic-v">'+k.geschosse+'</span></div>':''}
+            \${k.grundflaeche_qm?'<div class="ic-row"><span class="ic-l">Grundfl\u00E4che</span><span class="ic-v">'+k.grundflaeche_qm+' m\u00B2</span></div>':''}
+            \${k.dachflaeche_qm?'<div class="ic-row"><span class="ic-l">Dachfl\u00E4che</span><span class="ic-v" style="color:var(--a);font-weight:700">'+k.dachflaeche_qm+' m\u00B2</span></div>':''}
+            \${k.dachform?'<div class="ic-row"><span class="ic-l">Dachform</span><span class="ic-v">'+k.dachform+'</span></div>':''}
+            \${k.dach_ausrichtung?'<div class="ic-row"><span class="ic-l">Ausrichtung</span><span class="ic-v" style="color:var(--a)">'+k.dach_ausrichtung+'</span></div>':''}
+            \${k.dach_neigung?'<div class="ic-row"><span class="ic-l">Neigung</span><span class="ic-v">'+k.dach_neigung+'\u00B0</span></div>':''}
+            \${k.funktion?'<div class="ic-row"><span class="ic-l">Nutzung</span><span class="ic-v">'+k.funktion+'</span></div>':''}
+            \${k.solar_eignung?'<div class="ic-row"><span class="ic-l">Solar-Eignung</span><span class="ic-v" style="color:'+(k.solar_eignung==='sehr_gut'||k.solar_eignung==='gut'?'var(--g)':k.solar_eignung==='mittel'?'var(--o)':'var(--r)')+'">'+k.solar_eignung.replace('_',' ').toUpperCase()+'</span></div>':''}
+            \${k.solar_potential_kwp?'<div class="ic-row"><span class="ic-l">PV-Potenzial</span><span class="ic-v" style="color:var(--a);font-weight:700">'+k.solar_potential_kwp+' kWp</span></div>':''}
+            \${k.solar_ertrag_kwh?'<div class="ic-row"><span class="ic-l">Gesch. Ertrag</span><span class="ic-v" style="color:var(--g)">'+k.solar_ertrag_kwh.toLocaleString()+' kWh/Jahr</span></div>':''}
+            \${k.eigentuemer?'<div class="ic-row"><span class="ic-l">Eigent\u00FCmer (Kataster)</span><span class="ic-v">'+k.eigentuemer+'</span></div>':''}
+            \${k.gemarkung?'<div class="ic-row"><span class="ic-l">Gemarkung</span><span class="ic-v">'+k.gemarkung+'</span></div>':''}
+            \${k.flurstueck?'<div class="ic-row"><span class="ic-l">Flurst\u00FCck</span><span class="ic-v">'+k.flurstueck+'</span></div>':''}
+        </div>
+        </div></div>\`;
+    }
+
+    // EINWAND-KARTEN
+    if(ek.length>0){
+        h+=`<div class="card"><div class="card-h">\u{1F6E1}\uFE0F Einwand-Karten (${ek.length})<span style="font-size:10px;color:var(--t3);text-transform:none;letter-spacing:0;font-weight:400">Flash-Cards f\u00FCr h\u00E4ufige Einw\u00E4nde</span></div><div class="card-b">
+        ${ek.map(k=>`<div class="ek-card">
+            <div class="ek-keyword">\u{1F6E1}\uFE0F "${k.einwand_keyword}"</div>
+            <div class="ek-short">${k.antwort_kurz}</div>
+            <div class="ek-example">${k.beispiel_satz||''}</div>
+            <div class="ek-tags">${(k.einwand_varianten||[]).map(v=>'<span class="ek-tag">'+v+'</span>').join('')}</div>
+        </div>`).join('')}
+        </div></div>`;
+    }
+
+    // ACTIONS
+    h+=`<div class="actions-row">
+    <a href="callcenter.html" style="text-decoration:none"><span class="btn btn-a" style="padding:10px 20px;font-size:13px">\u{1F4DE} Im CallCenter anrufen</span></a>
+    <button class="btn btn-g" style="padding:10px 16px" onclick="navigator.clipboard.writeText(document.querySelector('.lf-box')?.textContent||'');alert('Leitfaden kopiert!')">\u{1F4CB} Leitfaden kopieren</button>
+    ${hg?`<a href="https://www.google.com/maps/@${l.lat},${l.lng},19z/data=!3m1!1e3" target="_blank" style="text-decoration:none"><span class="btn btn-g" style="padding:10px 16px">\u{1F5FA}\uFE0F Google Maps</span></a>`:''}
+    <button class="btn btn-g" style="padding:10px 16px" onclick="window.print()">\u{1F5A8}\uFE0F Drucken</button>
+    </div>`;
+
+    document.getElementById('res').innerHTML=h;
+    document.getElementById('res').classList.add('on');
+}
+</script>
+</body>
+</html>
