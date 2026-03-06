@@ -130,10 +130,24 @@ async function upsertPLZ(plzMap) {
 }
 
 export default async function handler(req, res) {
+  // Auth: Vercel Cron header, query param, or Bearer token
+  const cronSecret = req.headers['x-vercel-cron-auth'] || req.query?.key;
   const authHeader = req.headers['authorization'];
-  // Simple auth check
-  if (authHeader !== 'Bearer bee-doo-mastr-sync-2026') {
-    return res.status(401).json({ error: 'Unauthorized' });
+  const validKey = 'bee-doo-mastr-sync-2026';
+  if (cronSecret !== validKey && authHeader !== 'Bearer ' + validKey && req.query?.key !== validKey) {
+    return res.status(401).json({ error: 'Unauthorized. Use ?key=bee-doo-mastr-sync-2026' });
+  }
+  
+  // Handle reset command
+  if (req.query?.action === 'reset') {
+    await updateState({ last_page: 0, processed_records: 0, status: 'idle', started_at: null, finished_at: null, error: null });
+    return res.json({ status: 'reset' });
+  }
+  
+  // Handle status command
+  if (req.query?.action === 'status') {
+    const s = await getState();
+    return res.json(s);
   }
 
   try {
