@@ -155,6 +155,28 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:18px 40px;display:fl
 .field-error{font-size:13px;color:#ff6b6b;margin-top:8px;display:none}
 .field-error.show{display:block}
 
+
+/* AUTOCOMPLETE */
+.autocomplete-wrap{position:relative}
+.autocomplete-list{
+  position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:999;
+  background:#1c1c1c;border:2px solid var(--yellow);border-radius:var(--radius);
+  overflow:hidden;display:none;box-shadow:0 8px 32px rgba(0,0,0,0.5);
+}
+.autocomplete-list.open{display:block}
+.autocomplete-item{
+  padding:14px 18px;cursor:pointer;
+  font-size:15px;font-weight:500;color:var(--text);
+  border-bottom:1px solid var(--border);
+  transition:background .15s;display:flex;align-items:center;gap:10px;
+}
+.autocomplete-item:last-child{border-bottom:none}
+.autocomplete-item:hover,.autocomplete-item.focused{background:rgba(245,197,0,0.1);color:#fff}
+.autocomplete-item-icon{color:var(--yellow);font-size:14px;flex-shrink:0}
+.autocomplete-item-main{font-weight:600}
+.autocomplete-item-sub{font-size:13px;color:var(--muted)}
+.autocomplete-loading{padding:14px 18px;color:var(--muted);font-size:14px;text-align:center}
+
 /* FOOTER */
 footer{text-align:center;padding:32px 20px;color:var(--muted);font-size:13px;border-top:1px solid var(--border)}
 footer a{color:var(--muted);text-decoration:none}
@@ -276,7 +298,7 @@ footer a:hover{color:var(--text)}
       </button>
     </div>
 
-    <!-- STEP 4: PLZ -->
+    <!-- STEP 4: PLZ + Adresse mit Autocomplete -->
     <div class="step" id="step4">
       <div class="step-eyebrow">Schritt 4</div>
       <h1 class="step-question">Wo befindet sich Ihr Haus?</h1>
@@ -284,11 +306,15 @@ footer a:hover{color:var(--text)}
       <div class="adresse-row">
         <div class="input-wrap">
           <label class="input-label">PLZ</label>
-          <input class="input-field" id="plz" type="text" inputmode="numeric" maxlength="5" placeholder="33609" oninput="checkStep4()">
+          <input class="input-field" id="plz" type="text" inputmode="numeric" maxlength="5" placeholder="33609"
+            oninput="checkStep4();triggerAutocomplete()" autocomplete="off">
         </div>
-        <div class="input-wrap">
+        <div class="input-wrap autocomplete-wrap">
           <label class="input-label">Straße & Hausnummer</label>
-          <input class="input-field" id="strasse" type="text" placeholder="Musterstraße 12" oninput="checkStep4()">
+          <input class="input-field" id="strasse" type="text" placeholder="Musterstraße 12"
+            oninput="checkStep4();triggerAutocomplete()" autocomplete="off"
+            onkeydown="acKeyNav(event)" onfocus="triggerAutocomplete()">
+          <div class="autocomplete-list" id="acList"></div>
         </div>
       </div>
       <div class="field-error" id="errStep4">Bitte PLZ und Straße eingeben.</div>
@@ -548,6 +574,93 @@ async function submitForm() {
   showStep('Success');
   window.scrollTo({top:0,behavior:'smooth'});
 }
+
+
+// ── ADRESS AUTOCOMPLETE ──────────────────────────────────────
+const AC_URL = 'https://hqzpemfaljxcysyqssng.supabase.co/functions/v1/adress-autocomplete';
+const AC_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+let acTimer = null;
+let acFocused = -1;
+let acItems = [];
+
+async function triggerAutocomplete() {
+  clearTimeout(acTimer);
+  const q = document.getElementById('strasse').value.trim();
+  const plz = document.getElementById('plz').value.trim();
+  const list = document.getElementById('acList');
+
+  if (q.length < 2 && plz.length < 2) { closeAc(); return; }
+
+  acTimer = setTimeout(async () => {
+    list.innerHTML = '<div class="autocomplete-loading">Suche…</div>';
+    list.classList.add('open');
+    try {
+      const params = new URLSearchParams();
+      if (q.length >= 2) params.set('q', q);
+      if (plz.length >= 2) params.set('plz', plz);
+      const res = await fetch(`${AC_URL}?${params}`, {
+        headers: { 'apikey': AC_KEY, 'Authorization': 'Bearer ' + AC_KEY }
+      });
+      acItems = await res.json();
+      renderAc(acItems);
+    } catch(e) { closeAc(); }
+  }, 250);
+}
+
+function renderAc(items) {
+  const list = document.getElementById('acList');
+  acFocused = -1;
+  if (!items.length) { closeAc(); return; }
+  list.innerHTML = items.map((item, i) =>
+    `<div class="autocomplete-item" onmousedown="selectAc(${i})" data-i="${i}">
+      <span class="autocomplete-item-icon">📍</span>
+      <div>
+        <div class="autocomplete-item-main">${item.strasse}${item.hausnummer ? ' ' + item.hausnummer : ''}</div>
+        <div class="autocomplete-item-sub">${item.plz} ${item.ort || ''}</div>
+      </div>
+    </div>`
+  ).join('');
+  list.classList.add('open');
+}
+
+function selectAc(i) {
+  const item = acItems[i];
+  if (!item) return;
+  document.getElementById('strasse').value = item.strasse + (item.hausnummer ? ' ' + item.hausnummer : '');
+  document.getElementById('plz').value = item.plz;
+  closeAc();
+  checkStep4();
+}
+
+function closeAc() {
+  const list = document.getElementById('acList');
+  if(list) { list.classList.remove('open'); list.innerHTML = ''; }
+  acFocused = -1;
+}
+
+function acKeyNav(e) {
+  const items = document.querySelectorAll('.autocomplete-item');
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    acFocused = Math.min(acFocused + 1, items.length - 1);
+    items.forEach((el,i) => el.classList.toggle('focused', i === acFocused));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    acFocused = Math.max(acFocused - 1, 0);
+    items.forEach((el,i) => el.classList.toggle('focused', i === acFocused));
+  } else if (e.key === 'Enter' && acFocused >= 0) {
+    e.preventDefault();
+    selectAc(acFocused);
+  } else if (e.key === 'Escape') {
+    closeAc();
+  }
+}
+
+// Klick außerhalb schließt Dropdown
+document.addEventListener('click', e => {
+  if (!e.target.closest('.autocomplete-wrap')) closeAc();
+});
 
 // KEYBOARD: Enter/Pfeil
 document.addEventListener('keydown', e=>{
