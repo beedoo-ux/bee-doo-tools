@@ -792,7 +792,7 @@ async function sync(silent=false){
       const t=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
       document.getElementById('sdot').className='sdot';
       document.getElementById('slbl').textContent=t+' Uhr';
-      render();
+      try{render();}catch(re){console.error('[sync] render error:',re);}
       }else{document.getElementById('sdot').className='sdot e';document.getElementById('slbl').textContent='Sync-Fehler';}
   }catch(e){document.getElementById('sdot').className='sdot e';document.getElementById('slbl').textContent='Offline';}
   S.syncing=false;
@@ -2191,9 +2191,22 @@ document.addEventListener('keydown',e=>{
 async function init(){
   initCC();
   document.getElementById('ltxt').textContent='Lade Termine…';
-  await Promise.all([sync(false), syncBlocks()]);
+  // Sicherheits-Fallback: Loader nach 8s immer ausblenden
+  const loaderTimeout = setTimeout(()=>{
+    document.getElementById('loader').style.display='none';
+    console.warn('[CC-Kal] Loader-Timeout ausgelöst');
+  }, 8000);
+  try{
+    await Promise.all([sync(false), syncBlocks()]);
+  }catch(e){
+    console.error('[CC-Kal] Init-Fehler:', e);
+    document.getElementById('sdot').className='sdot e';
+    document.getElementById('slbl').textContent='Fehler';
+  }finally{
+    clearTimeout(loaderTimeout);
+    document.getElementById('loader').style.display='none';
+  }
   loadVtUsers();
-  document.getElementById('loader').style.display='none';
   // Auto-scroll to current time (slightly before now line)
   setTimeout(()=>{
     const cs=document.getElementById('calscroll');
