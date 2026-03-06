@@ -1194,26 +1194,85 @@ function searchLeads(val){
   clearTimeout(leadSearchTimer);
   const list=document.getElementById('leadList');
   if(val.length<2){list.style.display='none';return;}
+  list.innerHTML='<div style="padding:12px;text-align:center;color:var(--text3);font-size:12px;">🔍 Suche…</div>';
+  list.style.display='block';
   leadSearchTimer=setTimeout(async()=>{
     try{
-      const r=await fetch(`${PROXY}?action=leads&search=${encodeURIComponent(val)}`);
-      const d=await r.json();
-      const leads=(d.leads||d.data||[]).slice(0,8);
-      if(!leads.length){list.innerHTML='<div style="padding:12px;text-align:center;color:var(--text3);font-size:12px;">Keine Leads gefunden</div>';list.style.display='block';return;}
+      // Parallel: Supabase leveto_leads (schnell, vollständig) + Leveto API (Fallback)
+      const isPhone=/^[\d\s\+\-\/]+$/.test(val.trim())&&val.replace(/\D/g,'').length>=4;
+      const enc=encodeURIComponent(val);
+
+      // Supabase-Suche: Vor-/Nachname OR Telefon/Mobil OR PLZ
+      let sbFilter;
+      if(isPhone){
+        const digits=val.replace(/\D/g,'');
+        sbFilter=`or=(telefon.ilike.*${digits}*,mobil.ilike.*${digits}*)`;
+      } else {
+        sbFilter=`or=(vorname.ilike.*${enc}*,nachname.ilike.*${enc}*,ort.ilike.*${enc}*,plz.ilike.*${enc}*)`;
+      }
+      const [sbRes,lvRes]=await Promise.allSettled([
+        fetch(`${SB_URL}/rest/v1/leveto_leads?${sbFilter}&select=leveto_id,vorname,nachname,strasse,hausnr,plz,ort,telefon,mobil&limit=12&order=leveto_letzte_bearbeitung.desc`,{headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}}),
+        fetch(`${PROXY}?action=leads&search=${encodeURIComponent(val)}`)
+      ]);
+
+      // Supabase-Ergebnisse verarbeiten
+      let leads=[];
+      const seen=new Set();
+      if(sbRes.status==='fulfilled'&&sbRes.value.ok){
+        const sbData=await sbRes.value.json();
+        (sbData||[]).forEach(l=>{
+          const id=String(l.leveto_id||'');
+          if(id&&seen.has(id))return;
+          if(id)seen.add(id);
+          leads.push({
+            id:l.leveto_id,
+            vorname:l.vorname||'',
+            nachname:l.nachname||'',
+            street:(l.strasse||'')+(l.hausnr?' '+l.hausnr:''),
+            plz:l.plz||'',
+            city:l.ort||'',
+            tel:l.telefon||l.mobil||'',
+            _src:'sb'
+          });
+        });
+      }
+      // Leveto-Ergebnisse als Ergänzung
+      if(lvRes.status==='fulfilled'&&lvRes.value.ok){
+        const lvData=await lvRes.value.json();
+        (lvData.data||lvData.leads||[]).forEach(l=>{
+          const id=String(l.id||'');
+          if(id&&seen.has(id))return;
+          if(id)seen.add(id);
+          const addr=l.homeAddress||{};
+          leads.push({
+            id:l.id,
+            vorname:l.firstName||'',
+            nachname:l.lastName||'',
+            street:addr.fullstreet||'',
+            plz:addr.postalCode||'',
+            city:addr.city||'',
+            tel:l.telephone||l.mobile||'',
+            _src:'lv'
+          });
+        });
+      }
+
+      leads=leads.slice(0,10);
+      if(!leads.length){
+        list.innerHTML='<div style="padding:12px;text-align:center;color:var(--text3);font-size:12px;">Keine Leads gefunden</div>';
+        list.style.display='block';return;
+      }
       list.innerHTML=leads.map(l=>{
-        const name=[l.firstName,l.lastName].filter(Boolean).join(' ').trim();
-        const addr=l.homeAddress||{};
-        const plz=addr.postalCode||'';
-        const city=addr.city||'';
-        const tel=l.telephone||l.mobile||'';
-        return `<div class="lsItem" onclick='fillLead(${JSON.stringify({name,street:addr.fullstreet||"",plz,city,tel,vorname:l.firstName||"",nachname:l.lastName||"",leadID:l.id}).replace(/'/g,"&#39;")})'>
+        const name=[l.vorname,l.nachname].filter(Boolean).join(' ').trim()||'Unbekannt';
+        const payload=JSON.stringify({name,street:l.street,plz:l.plz,city:l.city,tel:l.tel,vorname:l.vorname,nachname:l.nachname,leadID:l.id}).replace(/'/g,"&#39;");
+        return `<div class="lsItem" onclick='fillLead(${payload})'>
           <div class="lsName">${esc(name)}</div>
-          <div class="lsMeta">${esc(plz)} ${esc(city)} · ${esc(tel)}</div>
+          <div class="lsMeta">${esc(l.plz)} ${esc(l.city)} · ${esc(l.tel)}<span style="margin-left:6px;opacity:.4;font-size:9px">#${l.id}</span></div>
         </div>`;
       }).join('');
       list.style.display='block';
-    }catch(e){list.style.display='none';}
-  },300);
+    }catch(e){list.style.display='none';console.error('Lead search error:',e);}
+  },250);
 }
 
 function fillLead(d){
