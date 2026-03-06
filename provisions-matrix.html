@@ -2384,6 +2384,166 @@ function TabMonatssteuerung({ regeln, sonder, stufen, teamBonus, overrides, setO
 
 
 
+// ═══ Tab: Stammdaten (Mitarbeiter-Übersicht mit Lücken-Filter) ═══
+function TabStammdaten({ mitarbeiterList, setMitarbeiterList, toast }) {
+  const [filter, setFilter] = useState("alle");
+  const [typFilter, setTypFilter] = useState("alle");
+  const [search, setSearch] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const isHGB = (m) => (m.typ||'').includes('hgb');
+  const isAng = (m) => (m.typ||'').includes('angestellt');
+  const hasAddr = (m) => m.strasse && m.plz && m.ort;
+  const hasEmail = (m) => m.email && m.email.includes('@');
+  const hasIBAN = (m) => m.iban && m.iban.length > 5;
+  const hasStNr = (m) => m.steuernummer && m.steuernummer.length > 3;
+  const hasUStId = (m) => m.ustid && m.ustid.length > 3;
+  const hasGehalt = (m) => m.grundgehalt && parseFloat(m.grundgehalt) > 0;
+  const hasTel = (m) => m.telefon && m.telefon.length > 3;
+
+  const allMA = mitarbeiterList.filter(m => m.aktiv !== false);
+
+  const filters = [
+    { key: "alle", label: "Alle", count: allMA.length, color: "var(--y)" },
+    { key: "no_addr", label: "Ohne Adresse", count: allMA.filter(m => !hasAddr(m)).length, color: "var(--r)" },
+    { key: "no_email", label: "Ohne E-Mail", count: allMA.filter(m => !hasEmail(m)).length, color: "var(--o)" },
+    { key: "no_iban", label: "Ohne IBAN", count: allMA.filter(m => !hasIBAN(m)).length, color: "var(--r)" },
+    { key: "no_stnr", label: "Ohne StNr (HGB)", count: allMA.filter(m => isHGB(m) && !hasStNr(m)).length, color: "var(--o)" },
+    { key: "no_gehalt", label: "Ohne Gehalt (Ang.)", count: allMA.filter(m => isAng(m) && !hasGehalt(m)).length, color: "var(--o)" },
+    { key: "no_tel", label: "Ohne Telefon", count: allMA.filter(m => !hasTel(m)).length, color: "var(--ts)" },
+    { key: "vollstaendig", label: "Vollst\u00e4ndig", count: allMA.filter(m => hasAddr(m) && hasEmail(m) && hasIBAN(m) && (isHGB(m) ? hasStNr(m) : true) && (isAng(m) ? hasGehalt(m) : true)).length, color: "var(--g)" },
+  ];
+
+  const typFilters = [
+    { key: "alle", label: "Alle Typen" },
+    { key: "hgb", label: "HGB \u00a784" },
+    { key: "ang", label: "Angestellt" },
+    { key: "scout", label: "Scouts" },
+    { key: "vt", label: "Vertriebler" },
+  ];
+
+  let filtered = allMA;
+  if (filter === "no_addr") filtered = filtered.filter(m => !hasAddr(m));
+  else if (filter === "no_email") filtered = filtered.filter(m => !hasEmail(m));
+  else if (filter === "no_iban") filtered = filtered.filter(m => !hasIBAN(m));
+  else if (filter === "no_stnr") filtered = filtered.filter(m => isHGB(m) && !hasStNr(m));
+  else if (filter === "no_gehalt") filtered = filtered.filter(m => isAng(m) && !hasGehalt(m));
+  else if (filter === "no_tel") filtered = filtered.filter(m => !hasTel(m));
+  else if (filter === "vollstaendig") filtered = filtered.filter(m => hasAddr(m) && hasEmail(m) && hasIBAN(m) && (isHGB(m) ? hasStNr(m) : true) && (isAng(m) ? hasGehalt(m) : true));
+
+  if (typFilter === "hgb") filtered = filtered.filter(m => isHGB(m));
+  else if (typFilter === "ang") filtered = filtered.filter(m => isAng(m));
+  else if (typFilter === "scout") filtered = filtered.filter(m => (m.typ||'').includes('scouter'));
+  else if (typFilter === "vt") filtered = filtered.filter(m => (m.typ||'').includes('vertrieb') || (m.typ||'').includes('_vt'));
+
+  if (search.trim()) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(m => (m.vorname+' '+m.nachname).toLowerCase().includes(q) || (m.leveto_ma_nummer||'').includes(q) || (m.email||'').toLowerCase().includes(q));
+  }
+
+  const startEdit = (m) => { setEditId(m.id); setEditData({strasse:m.strasse||'',hausnr:m.hausnr||'',plz:m.plz||'',ort:m.ort||'',email:m.email||'',telefon:m.telefon||'',steuernummer:m.steuernummer||'',ustid:m.ustid||'',iban:m.iban||'',firmenname:m.firmenname||'',grundgehalt:m.grundgehalt||0}); };
+  const cancelEdit = () => { setEditId(null); setEditData({}); };
+  const saveEdit = async () => {
+    setSaving(true);
+    try {
+      const patch = {};
+      Object.entries(editData).forEach(([k,v]) => { if (v !== '' && v !== null && v !== undefined) patch[k] = k === 'grundgehalt' ? parseFloat(v)||0 : v; });
+      await db.patch("mitarbeiter", "id=eq." + editId, patch);
+      setMitarbeiterList(prev => prev.map(m => m.id === editId ? {...m, ...patch} : m));
+      toast(filtered.find(m=>m.id===editId)?.vorname + " gespeichert", "ok");
+      setEditId(null);
+    } catch(e) { toast("Fehler: " + e.message, "err"); }
+    setSaving(false);
+  };
+
+  const pct = (n, total) => total > 0 ? Math.round(n/total*100) : 0;
+  const TLBL = {angestellt_scouter:"Ang. Scout",hgb_scouter:"\u00a784 Scout",angestellt_vertriebler:"Ang. VB",angestellt_vt:"Ang. VT",hgb_vertriebler_agentur:"\u00a784 Ag.",hgb_vertriebler_haupt:"\u00a784 Hpt.",hgb_vertriebler:"\u00a784 VB",vertriebler:"VB",angestellt_buero:"B\u00fcro",angestellt_montage:"Montage",montage_partner:"Mont.P.",hgb84:"\u00a784"};
+  const TCLR = {angestellt_scouter:"var(--b)",hgb_scouter:"var(--p)",angestellt_vertriebler:"var(--g)",angestellt_vt:"var(--g)",hgb_vertriebler_agentur:"var(--o)",hgb_vertriebler_haupt:"var(--y)",hgb_vertriebler:"var(--o)",hgb84:"var(--y)"};
+  const dot = (ok) => React.createElement("span", { style: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: ok ? "#34d399" : "#f87171", marginRight: 2 } });
+
+  return React.createElement("div", null,
+    // KPI Bar
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))", gap: 8, marginBottom: 16 } },
+      filters.map(f => React.createElement("button", { key: f.key, onClick: () => setFilter(f.key), style: {
+        background: filter === f.key ? f.color + "22" : "var(--s2)", border: "1px solid " + (filter === f.key ? f.color + "55" : "var(--bd)"),
+        borderRadius: 8, padding: "10px 12px", cursor: "pointer", textAlign: "left",
+        borderBottom: filter === f.key ? "2px solid " + f.color : "2px solid transparent",
+      }},
+        React.createElement("div", { style: { fontSize: 22, fontWeight: 700, color: f.color, fontVariantNumeric: "tabular-nums" } }, f.count),
+        React.createElement("div", { style: { fontSize: 10, color: "var(--ts)", marginTop: 2 } }, f.label)
+      ))
+    ),
+    // Search + Typ filter
+    React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" } },
+      React.createElement("input", { value: search, onChange: e => setSearch(e.target.value), placeholder: "Name, MA-Nr oder E-Mail suchen...", style: { flex: 1, minWidth: 200, background: "var(--s1)", border: "1px solid var(--bd)", borderRadius: 6, color: "var(--tx)", padding: "7px 12px", fontSize: 12 } }),
+      React.createElement("div", { style: { display: "flex", gap: 3, background: "var(--s2)", borderRadius: 6, padding: 2 } },
+        typFilters.map(t => React.createElement("button", { key: t.key, onClick: () => setTypFilter(t.key), style: {
+          background: typFilter === t.key ? "var(--y)" : "transparent", color: typFilter === t.key ? "#000" : "var(--ts)",
+          border: "none", borderRadius: 4, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+        }}, t.label))
+      ),
+      React.createElement("span", { style: { fontSize: 11, color: "var(--ts)" } }, filtered.length + " Ergebnisse")
+    ),
+    // Table
+    React.createElement("div", { style: { overflowX: "auto", borderRadius: 8, border: "1px solid var(--bd)" } },
+      React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", minWidth: 1100 } },
+        React.createElement("thead", null,
+          React.createElement("tr", null,
+            ["Name","Typ","Adresse","E-Mail","Telefon","StNr","USt-Id","IBAN","Gehalt","USt",""].map((h,i) =>
+              React.createElement("th", { key: i, style: { padding: "8px 10px", fontSize: 10, fontWeight: 700, color: "var(--ts)", textTransform: "uppercase", letterSpacing: ".4px", borderBottom: "2px solid var(--bd)", background: "var(--s3)", position: "sticky", top: 0, zIndex: 2, textAlign: "left", whiteSpace: "nowrap" } }, h)
+            )
+          )
+        ),
+        React.createElement("tbody", null,
+          filtered.length === 0
+            ? React.createElement("tr", null, React.createElement("td", { colSpan: 11, style: { padding: 30, textAlign: "center", color: "var(--ts)" } }, "Keine Ergebnisse"))
+            : filtered.map((m, idx) => {
+              const isEditing = editId === m.id;
+              const tc = TCLR[m.typ] || "var(--ts)";
+              if (isEditing) {
+                const inp = (key, ph, w) => React.createElement("input", { value: editData[key]||'', onChange: e => setEditData(p => ({...p, [key]: e.target.value})), placeholder: ph, style: { background: "var(--s1)", border: "1px solid var(--y)44", borderRadius: 4, color: "var(--tx)", padding: "3px 6px", fontSize: 11, width: w||"100%" } });
+                return React.createElement("tr", { key: m.id, style: { background: "#F5C50008" } },
+                  React.createElement("td", { style: { padding: "6px 10px", fontWeight: 600, fontSize: 12 } }, m.vorname + " " + m.nachname),
+                  React.createElement("td", { style: { padding: "6px 10px" } }, React.createElement("span", { style: { fontSize: 10, padding: "2px 6px", borderRadius: 4, background: tc+"18", color: tc, fontWeight: 600 } }, TLBL[m.typ]||m.typ)),
+                  React.createElement("td", { style: { padding: "4px 6px" } }, React.createElement("div", { style: { display: "flex", gap: 3 } }, inp("strasse","Stra\u00dfe"), inp("hausnr","Nr",40), inp("plz","PLZ",50), inp("ort","Ort"))),
+                  React.createElement("td", { style: { padding: "4px 6px" } }, inp("email","E-Mail")),
+                  React.createElement("td", { style: { padding: "4px 6px" } }, inp("telefon","Telefon")),
+                  React.createElement("td", { style: { padding: "4px 6px" } }, inp("steuernummer","Steuernr")),
+                  React.createElement("td", { style: { padding: "4px 6px" } }, inp("ustid","USt-IdNr")),
+                  React.createElement("td", { style: { padding: "4px 6px" } }, inp("iban","IBAN")),
+                  React.createElement("td", { style: { padding: "4px 6px" } }, isAng(m) ? inp("grundgehalt","Gehalt",70) : React.createElement("span", { style: { fontSize: 10, color: "var(--ts)" } }, "\u2013")),
+                  React.createElement("td", { style: { padding: "6px 10px", fontSize: 10 } }, m.abrechnungsart === "brutto" ? React.createElement("span", { style: { color: "var(--o)" } }, "Brutto") : React.createElement("span", { style: { color: "var(--b)" } }, "Netto")),
+                  React.createElement("td", { style: { padding: "4px 6px" } }, React.createElement("div", { style: { display: "flex", gap: 4 } },
+                    React.createElement("button", { onClick: saveEdit, disabled: saving, style: { background: "#34d39922", border: "1px solid #34d39940", borderRadius: 4, color: "#34d399", padding: "3px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer" } }, saving ? "..." : "\u2713"),
+                    React.createElement("button", { onClick: cancelEdit, style: { background: "var(--s3)", border: "1px solid var(--bd)", borderRadius: 4, color: "var(--ts)", padding: "3px 8px", fontSize: 10, cursor: "pointer" } }, "\u2715")
+                  ))
+                );
+              }
+              return React.createElement("tr", { key: m.id, style: { borderBottom: "1px solid var(--bd)" } },
+                React.createElement("td", { style: { padding: "6px 10px" } },
+                  React.createElement("div", { style: { fontWeight: 600, fontSize: 12 } }, m.vorname + " " + m.nachname),
+                  React.createElement("div", { style: { fontSize: 9, color: "var(--ts)" } }, (m.leveto_ma_nummer||"") + (m.firmenname ? " \u00b7 " + m.firmenname : ""))
+                ),
+                React.createElement("td", { style: { padding: "6px 10px" } }, React.createElement("span", { style: { fontSize: 10, padding: "2px 6px", borderRadius: 4, background: tc+"18", color: tc, fontWeight: 600 } }, TLBL[m.typ]||m.typ)),
+                React.createElement("td", { style: { padding: "6px 10px", fontSize: 11 } }, dot(hasAddr(m)), hasAddr(m) ? (m.strasse + " " + (m.hausnr||"") + ", " + m.plz + " " + m.ort) : React.createElement("span", { style: { color: "var(--r)", fontSize: 10 } }, "fehlt")),
+                React.createElement("td", { style: { padding: "6px 10px", fontSize: 11 } }, dot(hasEmail(m)), hasEmail(m) ? m.email : React.createElement("span", { style: { color: "var(--r)", fontSize: 10 } }, "fehlt")),
+                React.createElement("td", { style: { padding: "6px 10px", fontSize: 11 } }, dot(hasTel(m)), hasTel(m) ? m.telefon : React.createElement("span", { style: { color: "var(--ts)", fontSize: 10 } }, "\u2013")),
+                React.createElement("td", { style: { padding: "6px 10px", fontSize: 11 } }, isHGB(m) ? [dot(hasStNr(m)), hasStNr(m) ? m.steuernummer : React.createElement("span", { style: { color: "var(--r)", fontSize: 10 } }, "fehlt")] : React.createElement("span", { style: { fontSize: 10, color: "var(--ts)" } }, "\u2013")),
+                React.createElement("td", { style: { padding: "6px 10px", fontSize: 11 } }, isHGB(m) ? [dot(hasUStId(m)), hasUStId(m) ? m.ustid : React.createElement("span", { style: { color: "var(--ts)", fontSize: 10 } }, "\u2013")] : React.createElement("span", { style: { fontSize: 10, color: "var(--ts)" } }, "\u2013")),
+                React.createElement("td", { style: { padding: "6px 10px", fontSize: 11 } }, dot(hasIBAN(m)), hasIBAN(m) ? m.iban.substring(0,4) + "..." + m.iban.slice(-4) : React.createElement("span", { style: { color: "var(--r)", fontSize: 10 } }, "fehlt")),
+                React.createElement("td", { style: { padding: "6px 10px", fontSize: 11, textAlign: "right" } }, isAng(m) ? (hasGehalt(m) ? React.createElement("span", { style: { fontWeight: 600 } }, parseFloat(m.grundgehalt).toLocaleString("de-DE") + " \u20ac") : React.createElement("span", { style: { color: "var(--r)", fontSize: 10 } }, "fehlt")) : React.createElement("span", { style: { fontSize: 10, color: "var(--ts)" } }, "\u2013")),
+                React.createElement("td", { style: { padding: "6px 10px" } }, isHGB(m) ? React.createElement("span", { style: { fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4, background: m.abrechnungsart==="brutto" ? "#fb923c18" : "#60a5fa18", color: m.abrechnungsart==="brutto" ? "#fb923c" : "#60a5fa" } }, m.abrechnungsart==="brutto" ? "BRUTTO" : "NETTO") : React.createElement("span", { style: { fontSize: 10, color: "var(--ts)" } }, "\u2013")),
+                React.createElement("td", { style: { padding: "6px 10px" } }, React.createElement("button", { onClick: () => startEdit(m), style: { background: "var(--s3)", border: "1px solid var(--bd)", borderRadius: 4, color: "var(--ts)", padding: "3px 8px", fontSize: 10, cursor: "pointer" } }, "\u270e"))
+              );
+            })
+        )
+      )
+    )
+  );
+}
+
 // ═══ Main App ═══
 function App() {
   const [tab, setTab] = useState("uebersicht");
@@ -2415,7 +2575,7 @@ function App() {
           db.get("pay_sperrlisten", "?order=auftrag_nr.asc").catch(() => []),
           db.get("pay_duplikate", "?order=kunde_name.asc").catch(() => []),
           db.get("pay_provisions_historie", "?order=mitarbeiter_name.asc,gueltig_ab.asc").catch(() => []),
-          db.get("mitarbeiter", "?select=id,vorname,nachname,typ,abrechnungsart,ust_stichtag,ust_grenze,ust_bestaetigt_am,ust_quelle&order=nachname.asc").catch(() => []),
+          db.get("mitarbeiter", "?select=id,vorname,nachname,typ,kuerzel,abrechnungsart,ust_stichtag,ust_grenze,ust_bestaetigt_am,ust_quelle,strasse,hausnr,plz,ort,email,telefon,steuernummer,ustid,iban,bic,firmenname,grundgehalt,auto_zuschuss,leveto_ma_nummer,aktiv&order=nachname.asc").catch(() => []),
           db.get("pay_regel_overrides", "?order=periode.asc").catch(() => []),
         ]);
         setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp); setHistorieData(hi); setMitarbeiterList(ma); setOverrides(ov);
@@ -2429,6 +2589,7 @@ function App() {
 
   const tabs = [
     { key: "uebersicht", label: "📊 Übersicht", color: "var(--y)" },
+    { key: "stammdaten", label: "👤 Stammdaten", color: "var(--b)" },
     { key: "regeln", label: "📋 Regeln", color: "var(--b)" },
     { key: "sonder", label: "⭐ Sonderprovisionen", color: "var(--y)" },
     { key: "stufen", label: "🏆 Stufenbonus", color: "var(--g)" },
@@ -2444,6 +2605,7 @@ function App() {
 
   const tabDescriptions = {
     uebersicht: "Gesamtübersicht aller Provisions-Konfigurationen",
+    stammdaten: `${mitarbeiterList.length} Mitarbeiter – Adresse, Steuer, IBAN, Gehalt prüfen und bearbeiten`,
     regeln: `${regeln.length} aktive Provisionsmodelle – Basis-Sätze, Staffel, Boni inline editieren`,
     sonder: `${sonder.length} Sonderprovisionen – Flat Rates & Overrides pro Mitarbeiter`,
     stufen: `${stufen.length} Stufenbonus-Definitionen – NUR LZ-Aufträge zählen (keine NZ)`,
@@ -2508,6 +2670,7 @@ function App() {
       {/* Content */}
       <div className="fade-in" key={tab}>
         {tab === "uebersicht" && <TabOverview regeln={regeln} sonder={sonder} setSonder={setSonder} stufen={stufen} teamBonus={teamBonus} sperr={sperrData} duplikate={duplikateData} historie={historieData} mitarbeiterList={mitarbeiterList} toast={toast} />}
+        {tab === "stammdaten" && <TabStammdaten mitarbeiterList={mitarbeiterList} setMitarbeiterList={setMitarbeiterList} toast={toast} />}
         {tab === "regeln" && <TabRegeln regeln={regeln} setRegeln={setRegeln} toast={toast} />}
         {tab === "sonder" && <TabSonder sonder={sonder} setSonder={setSonder} toast={toast} mitarbeiterList={mitarbeiterList} />}
         {tab === "stufen" && <TabStufen stufen={stufen} setStufen={setStufen} toast={toast} />}
