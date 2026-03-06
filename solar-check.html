@@ -271,6 +271,39 @@ body{font-family:var(--font);background:var(--bg);color:var(--tx);min-height:100
       <div class="card" id="configCard" style="padding:4px 16px;"></div>
     </div>
 
+    <!-- MaStR Gebietskontext -->
+    <div class="sec" id="mastrSection" style="display:none;">
+      <div class="sec-hdr">📊 Gebietskontext (MaStR NRW)</div>
+      <div class="grid2" id="mastrGrid">
+        <div class="card">
+          <div class="card-icon">🏘️</div>
+          <div class="card-val" id="mastrAnlagen" style="color:var(--bl)">–</div>
+          <div class="card-lbl">PV-Anlagen im PLZ</div>
+          <div class="card-sub" id="mastrKwp">– kWp installiert</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">📈</div>
+          <div class="card-val" id="mastrNeu" style="color:var(--gr)">–</div>
+          <div class="card-lbl">Neu seit 2024</div>
+          <div class="card-sub" id="mastrBalkon">– Balkon-PV</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;padding:10px 14px;background:var(--card);border:1px solid var(--bd);border-radius:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-size:11px;color:var(--tx3);font-weight:600;">Eigenverbrauch vs. Volleinspeisung</span>
+          <span style="font-size:10px;color:var(--tx3);" id="mastrOrt">–</span>
+        </div>
+        <div style="display:flex;gap:4px;height:8px;border-radius:4px;overflow:hidden;">
+          <div id="barEigen" style="background:var(--gr);border-radius:4px;transition:width .5s;" title="Eigenverbrauch"></div>
+          <div id="barVoll" style="background:var(--or);border-radius:4px;transition:width .5s;" title="Volleinspeisung"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--tx3);">
+          <span>🟢 <span id="eigenPct">–</span>% Eigen</span>
+          <span>🟠 <span id="vollPct">–</span>% Voll</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="actions">
       <button class="act-btn act-primary" onclick="shareResult()">📤 An Kunden senden</button>
@@ -427,6 +460,9 @@ async function runSolarCheck() {
 
     renderResult(data);
 
+    // Load MaStR context for PLZ
+    loadMastrContext(selectedAddress);
+    
     // Cache in Supabase (fire and forget)
     cacheResult(data);
 
@@ -689,6 +725,50 @@ function setStep(n) {
     if (i === n) el.classList.add('active');
   }
 }
+
+// ─── MASTR CONTEXT ───
+async function loadMastrContext(address) {
+  // Extract PLZ from address
+  const plzMatch = address.match(/\b(\d{5})\b/);
+  if (!plzMatch) return;
+  const plz = plzMatch[1];
+  
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/mastr_solar_plz?plz=eq.${plz}`, {
+      headers: { 'apikey': SB_KEY }
+    });
+    const rows = await r.json();
+    if (!rows || !rows.length) return;
+    
+    const m = rows[0];
+    document.getElementById('mastrSection').style.display = '';
+    
+    // Scale factor for sampled data (multiply by ~20 for full estimate)
+    const sf = m.sampling_factor || 1;
+    const anlagen = Math.round(m.anlagen_gesamt * sf);
+    const kwp = Math.round(m.kwp_gesamt * sf);
+    
+    document.getElementById('mastrAnlagen').textContent = anlagen.toLocaleString('de');
+    document.getElementById('mastrKwp').textContent = `${(kwp/1000).toFixed(1)} MWp installiert`;
+    document.getElementById('mastrNeu').textContent = Math.round((m.anlagen_2024_plus || 0) * sf).toLocaleString('de');
+    document.getElementById('mastrBalkon').textContent = `${Math.round((m.anlagen_balkon || 0) * sf)} Balkon-PV`;
+    document.getElementById('mastrOrt').textContent = `PLZ ${plz} · ${m.ort || ''}`;
+    
+    // Bar chart
+    const eigen = m.eigenverbrauch || 0;
+    const voll = m.volleinspeisung || 0;
+    const total = eigen + voll || 1;
+    const eigenPct = Math.round(eigen / total * 100);
+    const vollPct = 100 - eigenPct;
+    document.getElementById('barEigen').style.width = eigenPct + '%';
+    document.getElementById('barVoll').style.width = vollPct + '%';
+    document.getElementById('eigenPct').textContent = eigenPct;
+    document.getElementById('vollPct').textContent = vollPct;
+  } catch (e) {
+    console.warn('MaStR context load failed:', e);
+  }
+}
+
 </script>
 </body>
 </html>
