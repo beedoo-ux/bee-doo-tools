@@ -13,6 +13,7 @@ const CACHE_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2h
 const BERATER_OVERRIDES = {
   65347: 'Kevin Kraus', 65348: 'Kevin Kraus', 65349: 'Kevin Kraus',
   65354: 'Kevin Kraus', 65355: 'Kevin Kraus', 65687: 'Kevin Kraus', 65689: 'Kevin Kraus',
+  65937: 'Kevin Kraus', 65939: 'Kevin Kraus', // Familie Doll + Nicole Güster 05.03.2026
 };
 
 async function readFromCache(month) {
