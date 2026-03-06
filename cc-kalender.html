@@ -301,7 +301,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 <body>
 
 <!-- CC NAME SELECTION -->
-<div id="ccWelcome" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;">
+<div id="ccWelcome" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:500;flex-direction:column;align-items:center;justify-content:center;padding:24px;">
   <div style="max-width:420px;width:100%;">
     <div style="font-size:32px;font-weight:800;color:var(--accent);margin-bottom:4px;letter-spacing:-.5px;">bee-doo</div>
     <div style="font-size:15px;color:var(--text2);margin-bottom:36px;font-weight:500;">CC-Kalender</div>
@@ -315,8 +315,9 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 
 <div class="loader" id="loader">
   <div style="font-size:24px;font-weight:800;color:var(--accent);letter-spacing:-.5px;">bee-doo</div>
-  <div class="spin"></div>
-  <div style="font-size:12px;color:var(--text2)" id="ltxt">Lade Leveto-Daten…</div>
+  <div class="spin" id="loaderSpin"></div>
+  <div style="font-size:12px;color:var(--text2)" id="ltxt">Lade Kalenderdaten…</div>
+  <div id="ltxtSub" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>
 </div>
 
 <!-- TOPBAR -->
@@ -720,6 +721,7 @@ async function sync(silent=false){
   S.syncing=true;
   document.getElementById('sdot').className='sdot s';
   document.getElementById('slbl').textContent='Sync…';
+  if(document.getElementById('ltxtSub')) document.getElementById('ltxtSub').textContent='Supabase…';
   try{
     // Lade direkt aus Supabase leveto_appointments (schnell ~100ms statt Leveto-API ~3s)
     const today=new Date();
@@ -2197,11 +2199,14 @@ async function init(){
     console.warn('[CC-Kal] Loader-Timeout ausgelöst');
   }, 8000);
   try{
+    document.getElementById('ltxtSub').textContent = 'Verbinde mit Datenbank…';
     await Promise.all([sync(false), syncBlocks()]);
+    document.getElementById('ltxtSub').textContent = '';
   }catch(e){
     console.error('[CC-Kal] Init-Fehler:', e);
     document.getElementById('sdot').className='sdot e';
     document.getElementById('slbl').textContent='Fehler';
+    document.getElementById('ltxt').textContent='Fehler beim Laden: '+e.message;
   }finally{
     clearTimeout(loaderTimeout);
     document.getElementById('loader').style.display='none';
