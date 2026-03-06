@@ -3,8 +3,8 @@
 
 const SEVDESK_TOKEN = '038aa548ad6b053b4d6679676fb859a2';
 const SEVDESK_BASE = 'https://my.sevdesk.de/api/v1';
-const SUPABASE_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTMzNTM5NywiZXhwIjoyMDg2OTExMzk3fQ.MJ3cyAAquE8DK2ngzfIIn4bTpQ8_H9DaeJ3YTlBdFz4';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const MAIN_ACCOUNT_ID = '6022136';
 
 async function sevdeskGet(endpoint, params = '') {
