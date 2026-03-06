@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Termin buchen · bee-doo Solar</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #F5C500;
+    --bg: #0f0f0f;
+    --bg2: #161616;
+    --bg3: #1e1e1e;
+    --border: #2a2a2a;
+    --text: #f0f0f0;
+    --text2: #a0a0a0;
+    --green: #22c55e;
+    --red: #ef4444;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px 16px; }
+
+  .logo-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 32px; margin-top: 8px; }
+  .logo-bee { font-size: 28px; }
+  .logo-txt { font-size: 20px; font-weight: 800; }
+  .logo-txt span { color: var(--gold); }
+
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; width: 100%; max-width: 520px; overflow: hidden; }
+
+  .card-hero { background: linear-gradient(135deg, #1a1600, #252000); padding: 32px 28px 24px; border-bottom: 1px solid var(--border); }
+  .hero-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--gold)18; border: 1px solid var(--gold)40; border-radius: 20px; padding: 4px 12px; font-size: 11px; font-weight: 700; color: var(--gold); margin-bottom: 14px; }
+  .hero-title { font-size: 26px; font-weight: 800; line-height: 1.2; margin-bottom: 8px; }
+  .hero-sub { font-size: 14px; color: var(--text2); line-height: 1.5; }
+  .hero-name { color: var(--gold); font-weight: 700; }
+
+  .card-body { padding: 24px 28px; }
+
+  .benefits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
+  .benefit { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; }
+  .benefit-icon { font-size: 20px; flex-shrink: 0; }
+  .benefit-text { font-size: 12px; color: var(--text2); line-height: 1.4; }
+  .benefit-text strong { display: block; font-size: 12px; color: var(--text); margin-bottom: 2px; }
+
+  .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--text2); margin-bottom: 12px; }
+
+  /* Time slots */
+  .slots-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 20px; }
+  .slot { background: var(--bg3); border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer; transition: all .15s; text-align: left; width: 100%; }
+  .slot:hover { border-color: var(--gold)60; background: var(--gold)08; }
+  .slot.selected { border-color: var(--gold); background: var(--gold)12; }
+  .slot.loading { opacity: .5; pointer-events: none; }
+  .slot-date { font-size: 13px; font-weight: 700; color: var(--text); }
+  .slot-time { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .slot.selected .slot-date { color: var(--gold); }
+
+  .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+  .field label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text2); }
+  .field input { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 13px; outline: none; transition: border .15s; width: 100%; }
+  .field input:focus { border-color: var(--gold); }
+
+  .submit-btn { width: 100%; padding: 14px; background: var(--gold); border: none; border-radius: 12px; color: #000; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer; transition: all .15s; margin-top: 8px; }
+  .submit-btn:hover { background: #ffe033; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(245,197,0,.25); }
+  .submit-btn:disabled { opacity: .5; pointer-events: none; }
+
+  /* Success screen */
+  .success { display: none; flex-direction: column; align-items: center; text-align: center; padding: 40px 28px; }
+  .success-icon { font-size: 56px; margin-bottom: 16px; }
+  .success-title { font-size: 22px; font-weight: 800; margin-bottom: 8px; color: var(--green); }
+  .success-sub { font-size: 14px; color: var(--text2); line-height: 1.6; }
+  .success-detail { background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-top: 20px; width: 100%; text-align: left; font-size: 13px; line-height: 1.8; }
+
+  /* Week nav */
+  .week-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .week-nav button { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; color: var(--text2); font-size: 12px; cursor: pointer; }
+  .week-nav button:hover { border-color: var(--gold); color: var(--gold); }
+  .week-label { font-size: 13px; font-weight: 600; }
+
+  .footer-note { margin-top: 20px; font-size: 11px; color: var(--text2); text-align: center; line-height: 1.6; max-width: 420px; }
+
+  @media (max-width: 420px) {
+    .benefits { grid-template-columns: 1fr; }
+    .slots-grid { grid-template-columns: 1fr 1fr; }
+    .card-hero, .card-body { padding: 20px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="logo-wrap">
+  <div class="logo-bee">🐝</div>
+  <div class="logo-txt">bee-<span>doo</span> Solar</div>
+</div>
+
+<div class="card">
+  <div class="card-hero">
+    <div class="hero-badge">☀️ Kostenlose Beratung</div>
+    <div class="hero-title">Ihren persönlichen<br>Solar-Termin buchen</div>
+    <div class="hero-sub" id="heroSub">Wählen Sie einfach einen passenden Termin — wir kommen zu Ihnen nach Hause.</div>
+  </div>
+
+  <div class="card-body" id="mainBody">
+    <!-- Benefits -->
+    <div class="benefits">
+      <div class="benefit">
+        <div class="benefit-icon">🔍</div>
+        <div class="benefit-text"><strong>Kostenlose Analyse</strong>Ihr Dach & Einsparpotential</div>
+      </div>
+      <div class="benefit">
+        <div class="benefit-icon">💰</div>
+        <div class="benefit-text"><strong>Individuelles Angebot</strong>Keine versteckten Kosten</div>
+      </div>
+      <div class="benefit">
+        <div class="benefit-icon">⏱️</div>
+        <div class="benefit-text"><strong>Ca. 45 Minuten</strong>Entspannt zu Hause</div>
+      </div>
+      <div class="benefit">
+        <div class="benefit-icon">🤝</div>
+        <div class="benefit-text"><strong>Kein Kaufzwang</strong>100% unverbindlich</div>
+      </div>
+    </div>
+
+    <!-- Slot picker -->
+    <div class="section-label">📅 Termin wählen</div>
+    <div class="week-nav">
+      <button onclick="changeWeek(-1)" id="prevWeek">← Vorherige</button>
+      <span class="week-label" id="weekLabel">Diese Woche</span>
+      <button onclick="changeWeek(1)">Nächste →</button>
+    </div>
+    <div class="slots-grid" id="slotsGrid">
+      <!-- Generated by JS -->
+    </div>
+
+    <!-- Contact -->
+    <div class="section-label" style="margin-top:4px;">👤 Ihre Daten</div>
+    <div class="field"><label>Vorname & Nachname</label><input id="iName" type="text" placeholder="Max Mustermann"></div>
+    <div class="field"><label>Telefon</label><input id="iTel" type="tel" placeholder="+49 176 …"></div>
+    <div class="field"><label>Adresse (Straße + Nr.)</label><input id="iAddr" type="text" placeholder="Musterstraße 1, 33609 Bielefeld"></div>
+
+    <button class="submit-btn" id="submitBtn" onclick="submitBooking()">✓ Termin jetzt verbindlich buchen</button>
+  </div>
+
+  <!-- Success -->
+  <div class="success" id="successScreen">
+    <div class="success-icon">✅</div>
+    <div class="success-title">Termin bestätigt!</div>
+    <div class="success-sub">Wir freuen uns auf das Gespräch mit Ihnen.<br>Sie erhalten in Kürze eine SMS-Bestätigung.</div>
+    <div class="success-detail" id="successDetail"></div>
+  </div>
+</div>
+
+<div class="footer-note">
+  bee-doo GmbH · Am Stadtholz 39, 33609 Bielefeld<br>
+  Kostenlos: 0800 22 33 664 · <a href="https://bee-doo.de/datenschutz" style="color:var(--text2)">Datenschutz</a>
+</div>
+
+<script>
+const SB_URL = 'https://hqzpemfaljxcysyqssng.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
+
+let selectedSlot = null;
+let weekOffset = 0;
+const TIMES = ['09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00','18:00'];
+const DAYS_AVAIL = [1,2,3,4,5]; // Mo-Fr
+
+// Read URL params
+const params = new URLSearchParams(location.search);
+const urlName = decodeURIComponent(params.get('name') || '');
+const urlTel  = decodeURIComponent(params.get('tel')  || '');
+const urlToken = params.get('token') || '';
+
+// Pre-fill from URL
+window.addEventListener('DOMContentLoaded', () => {
+  if (urlName) {
+    document.getElementById('heroSub').innerHTML = `Hallo <span class="hero-name">${esc(urlName.split(' ')[0])}</span>, wählen Sie einfach einen passenden Termin — wir kommen zu Ihnen nach Hause.`;
+    document.getElementById('iName').value = urlName;
+  }
+  if (urlTel) document.getElementById('iTel').value = urlTel;
+  renderSlots();
+});
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(d) {
+  return d.toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit' });
+}
+function fmtDateLong(d) {
+  return d.toLocaleDateString('de-DE', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+}
+function isoDate(d) {
+  return d.toISOString().slice(0,10);
+}
+
+function changeWeek(dir) {
+  weekOffset += dir;
+  if (weekOffset < 0) weekOffset = 0;
+  document.getElementById('prevWeek').disabled = weekOffset === 0;
+  renderSlots();
+}
+
+function renderSlots() {
+  const grid = document.getElementById('slotsGrid');
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  // Build slots for next 5 working days starting from weekOffset
+  let slots = [];
+  let d = new Date(today);
+  let skipped = 0;
+  while (slots.length < 10) {
+    d = new Date(today);
+    d.setDate(today.getDate() + skipped + weekOffset * 5);
+    skipped++;
+    if (DAYS_AVAIL.includes(d.getDay())) {
+      // 2 random time slots per day
+      const t1 = TIMES[Math.floor(Math.random() * 4)];
+      const t2 = TIMES[4 + Math.floor(Math.random() * 5)];
+      slots.push({ date: new Date(d), time: t1 });
+      slots.push({ date: new Date(d), time: t2 });
+    }
+    if (skipped > 30) break;
+  }
+  slots = slots.slice(0, 10);
+
+  // Update week label
+  const wl = document.getElementById('weekLabel');
+  if (weekOffset === 0) wl.textContent = 'Diese Woche';
+  else if (weekOffset === 1) wl.textContent = 'Nächste Woche';
+  else wl.textContent = `In ${weekOffset} Wochen`;
+
+  grid.innerHTML = slots.map((s, i) => {
+    const sid = `slot_${i}`;
+    const isSelected = selectedSlot && selectedSlot.iso === isoDate(s.date) && selectedSlot.time === s.time;
+    return `<button class="slot${isSelected?' selected':''}" onclick="selectSlot(this,'${isoDate(s.date)}','${s.time}','${fmtDateLong(s.date)}')">
+      <div class="slot-date">${fmtDate(s.date)}</div>
+      <div class="slot-time">🕐 ${s.time} Uhr</div>
+    </button>`;
+  }).join('');
+}
+
+function selectSlot(el, iso, time, dateLong) {
+  document.querySelectorAll('.slot').forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedSlot = { iso, time, dateLong };
+}
+
+async function submitBooking() {
+  const name = document.getElementById('iName').value.trim();
+  const tel  = document.getElementById('iTel').value.trim();
+  const addr = document.getElementById('iAddr').value.trim();
+
+  if (!selectedSlot) return alert('Bitte zuerst einen Termin wählen.');
+  if (!name) return alert('Bitte Namen eintragen.');
+  if (!tel)  return alert('Bitte Telefonnummer eintragen.');
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Wird gebucht…';
+
+  try {
+    // Save to Supabase cc_fragebogen with termin_gebucht = true
+    const r = await fetch(`${SB_URL}/rest/v1/cc_fragebogen`, {
+      method: 'POST',
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${SB_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        vorname: name.split(' ')[0] || name,
+        nachname: name.split(' ').slice(1).join(' ') || null,
+        telefon: tel,
+        strasse: addr || null,
+        termin_gebucht: true,
+        termin_datum: `${selectedSlot.iso}T${selectedSlot.time}:00`,
+        notizen: `Selbst gebucht via Buchungsseite. Token: ${urlToken}`,
+      }),
+    });
+
+    if (!r.ok) throw new Error('Speichern fehlgeschlagen');
+
+    // Show success
+    document.getElementById('mainBody').style.display = 'none';
+    const sd = document.getElementById('successScreen');
+    sd.style.display = 'flex';
+    document.getElementById('successDetail').innerHTML = `
+      <div>📅 <strong>Termin:</strong> ${selectedSlot.dateLong}</div>
+      <div>🕐 <strong>Uhrzeit:</strong> ${selectedSlot.time} Uhr</div>
+      <div>👤 <strong>Name:</strong> ${esc(name)}</div>
+      <div>📞 <strong>Telefon:</strong> ${esc(tel)}</div>
+      ${addr ? `<div>📍 <strong>Adresse:</strong> ${esc(addr)}</div>` : ''}
+    `;
+
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '✓ Termin jetzt verbindlich buchen';
+    alert('Fehler: ' + e.message + '\nBitte versuchen Sie es erneut oder rufen Sie uns an: 0800 22 33 664');
+  }
+}
+</script>
+</body>
+</html>
