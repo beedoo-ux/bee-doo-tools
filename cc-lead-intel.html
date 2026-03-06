@@ -135,9 +135,16 @@ function render(s,d,lid){
     <div style="font-size:12px;color:var(--t2)">${l.strasse||''} ${l.hausnr||''}, ${l.plz||''} ${l.ort||''}</div>
     <div style="font-size:11px;color:var(--t3);margin:4px 0 12px">Quelle: ${l.quelle||'?'} | Alter: ${s.lead_alter_tage}d</div>
     ${(s.factors||[]).map(f=>'<div class="factor"><span class="factor-pts" style="color:'+(f.p>0?'var(--g)':'var(--r)')+'">'+(f.p>0?'+':'')+f.p+'</span><span>'+f.f+'</span></div>').join('')}
-    </div></div><div>${hg||l.strasse?`<div class="maps-row" style="margin-bottom:10px">
-    <div class="map-f" style="height:220px"><div class="map-lbl">\u{1F6F0}\uFE0F Satellit (Dach)</div><iframe src="https://maps.google.com/maps?q=${encodeURIComponent((l.strasse||'')+' '+(l.hausnr||'')+', '+(l.plz||'')+' '+(l.ort||''))}&t=k&z=20&output=embed" style="width:100%;height:100%;border:0" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe></div>
-    <div class="map-f" style="height:220px"><div class="map-lbl">\u{1F5FA}\uFE0F Umgebung</div><iframe src="https://maps.google.com/maps?q=${encodeURIComponent((l.strasse||'')+' '+(l.hausnr||'')+', '+(l.plz||'')+' '+(l.ort||''))}&z=16&output=embed" style="width:100%;height:100%;border:0" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe></div>
+    </div></div><div>${hg||l.strasse?`
+    <div class="card" style="overflow:hidden;padding:0">
+        <div style="position:relative;height:400px" id="mapContainer">
+            <iframe id="satFrame" src="https://maps.google.com/maps?q=${encodeURIComponent((l.strasse||'')+' '+(l.hausnr||'')+', '+(l.plz||'')+' '+(l.ort||''))}&t=k&z=20&output=embed" style="width:100%;height:100%;border:0" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe>
+            <canvas id="solarCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;display:none"></canvas>
+            <div style="position:absolute;top:10px;left:10px;display:flex;gap:6px;z-index:10">
+                <div class="map-lbl" style="position:static">\u{1F6F0}\uFE0F Satellit + Solar</div>
+                <button id="togglePanelsBtn" onclick="toggleSolarPanels()" style="background:rgba(245,197,0,.9);color:#000;border:none;padding:3px 10px;border-radius:4px;font-size:10px;font-weight:700;font-family:inherit;cursor:pointer;display:none">\u2600\uFE0F Panels ein/aus</button>
+            </div>
+        </div>
     </div>`:''}`;
 
     // WETTER
@@ -400,11 +407,153 @@ async function loadSolarData(lat, lng) {
         }
 
         body.innerHTML = sh;
+
+        // Draw solar panels on canvas overlay
+        if (d.roofSegments && d.roofSegments.length > 0 && d.center) {
+            window._solarData = d;
+            window._solarLat = lat;
+            window._solarLng = lng;
+            drawSolarPanels(d, lat, lng);
+            const btn = document.getElementById('togglePanelsBtn');
+            if (btn) btn.style.display = 'block';
+        }
     } catch (err) {
         status.textContent = 'Fehler';
         status.style.color = 'var(--r)';
         body.innerHTML = '<div style="padding:12px;color:var(--r);font-size:12px">Fehler: ' + err.message + '</div>';
     }
+}
+
+let panelsVisible = true;
+function toggleSolarPanels() {
+    const canvas = document.getElementById('solarCanvas');
+    if (!canvas) return;
+    panelsVisible = !panelsVisible;
+    canvas.style.display = panelsVisible ? 'block' : 'none';
+    const btn = document.getElementById('togglePanelsBtn');
+    if (btn) btn.textContent = panelsVisible ? '\u2600\uFE0F Panels ausblenden' : '\u2600\uFE0F Panels einblenden';
+}
+
+function drawSolarPanels(d, centerLat, centerLng) {
+    const canvas = document.getElementById('solarCanvas');
+    const container = document.getElementById('mapContainer');
+    if (!canvas || !container) return;
+
+    const W = container.offsetWidth;
+    const H = container.offsetHeight;
+    canvas.width = W * 2;
+    canvas.height = H * 2;
+    canvas.style.display = 'block';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+
+    // At zoom 20, 1 pixel ~ 0.15 meters (at this latitude)
+    const metersPerPixel = 0.149 * Math.cos(centerLat * Math.PI / 180);
+    const buildingCenter = d.center || { latitude: centerLat, longitude: centerLng };
+
+    // Convert lat/lng offset to pixel offset from center
+    function toPixel(lat, lng) {
+        const dLat = lat - buildingCenter.latitude;
+        const dLng = lng - buildingCenter.longitude;
+        const mPerDegLat = 111320;
+        const mPerDegLng = 111320 * Math.cos(buildingCenter.latitude * Math.PI / 180);
+        const dx = (dLng * mPerDegLng) / metersPerPixel;
+        const dy = -(dLat * mPerDegLat) / metersPerPixel;
+        return { x: W / 2 + dx, y: H / 2 + dy };
+    }
+
+    const panelW = (d.panelWidth || 1.045) / metersPerPixel;
+    const panelH = (d.panelHeight || 1.879) / metersPerPixel;
+
+    // Color per direction
+    function segColor(dir) {
+        if (['S', 'SO', 'SW'].includes(dir)) return { fill: 'rgba(34,197,94,0.45)', stroke: 'rgba(34,197,94,0.8)' };
+        if (['O', 'W'].includes(dir)) return { fill: 'rgba(245,197,0,0.4)', stroke: 'rgba(245,197,0,0.7)' };
+        return { fill: 'rgba(59,130,246,0.35)', stroke: 'rgba(59,130,246,0.7)' };
+    }
+
+    // Draw panels on each roof segment
+    d.roofSegments.forEach((seg) => {
+        if (!seg.center || !seg.areaM2 || seg.areaM2 < 5) return;
+
+        const center = toPixel(seg.center.latitude, seg.center.longitude);
+        const azRad = ((seg.azimuth || 0) - 90) * Math.PI / 180;
+        const area = seg.areaM2;
+        const cols = Math.max(1, Math.round(Math.sqrt(area / ((d.panelWidth || 1) * (d.panelHeight || 1.9)))));
+        const rows = Math.max(1, Math.floor(area / ((d.panelWidth || 1) * (d.panelHeight || 1.9) * cols)));
+        const totalPanels = cols * rows;
+        const c = segColor(seg.direction);
+        const gap = 1.5;
+
+        ctx.save();
+        ctx.translate(center.x, center.y);
+        ctx.rotate(azRad);
+
+        const startX = -(cols * (panelW + gap)) / 2;
+        const startY = -(rows * (panelH + gap)) / 2;
+
+        for (let r = 0; r < rows; r++) {
+            for (let co = 0; co < cols; co++) {
+                const px = startX + co * (panelW + gap);
+                const py = startY + r * (panelH + gap);
+
+                ctx.fillStyle = c.fill;
+                ctx.fillRect(px, py, panelW, panelH);
+                ctx.strokeStyle = c.stroke;
+                ctx.lineWidth = 0.8;
+                ctx.strokeRect(px, py, panelW, panelH);
+
+                // Grid lines inside panel
+                ctx.strokeStyle = c.stroke;
+                ctx.lineWidth = 0.3;
+                const cellsX = 3, cellsY = 6;
+                for (let i = 1; i < cellsX; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(px + (panelW / cellsX) * i, py);
+                    ctx.lineTo(px + (panelW / cellsX) * i, py + panelH);
+                    ctx.stroke();
+                }
+                for (let i = 1; i < cellsY; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(px, py + (panelH / cellsY) * i);
+                    ctx.lineTo(px + panelW, py + (panelH / cellsY) * i);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // Direction label
+        ctx.rotate(-azRad);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px DM Sans, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 3;
+        ctx.fillText(seg.direction + ' ' + totalPanels + '\u00D7', 0, -rows * (panelH + gap) / 2 - 6);
+        ctx.shadowBlur = 0;
+
+        ctx.restore();
+    });
+
+    // Legend
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.roundRect ? ctx.roundRect(8, H - 52, 260, 44, 6) : ctx.fillRect(8, H - 52, 260, 44);
+    ctx.fill();
+    ctx.font = '10px DM Sans, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('\u2600\uFE0F ' + d.optimal.panels + ' Module | ' + d.optimal.kwp + ' kWp | ' + d.optimal.yearlyKwh.toLocaleString() + ' kWh/Jahr', 16, H - 34);
+    ctx.fillStyle = 'rgba(34,197,94,0.8)';
+    ctx.fillRect(16, H - 24, 12, 8);
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('S\u00FCd', 32, H - 16);
+    ctx.fillStyle = 'rgba(245,197,0,0.7)';
+    ctx.fillRect(60, H - 24, 12, 8);
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('Ost/West', 76, H - 16);
+    ctx.fillStyle = 'rgba(59,130,246,0.7)';
+    ctx.fillRect(130, H - 24, 12, 8);
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('Nord', 146, H - 16);
 }
 </script>
 </body>
