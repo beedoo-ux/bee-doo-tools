@@ -922,9 +922,10 @@ function render(){
                 +'<div class="rank-bar"><div class="rank-bar-fill" style="width:'+bp+'%;background:'+bg+'"></div></div>'
             +'</div>'
             +'<div class="rank-right"><div class="rank-sales">'+v+'</div><div class="rank-vol">'+sb+'</div>'+projHTML+(d.termine>0?(function(){
-            var q=Math.round(d.sales/d.termine*100);
+            var abschl=d.leads?d.leads.size:d.sales;
+            var q=Math.round(abschl/d.termine*100);
             var col=q>=50?'#22c55e':q>=30?'#f59e0b':'#ef4444';
-            return '<div class="rank-termine" style="color:'+col+'">📅 '+d.sales+'/'+d.termine+' <span style="opacity:.6;font-weight:600;font-size:9px">'+q+'%</span></div>';
+            return '<div class="rank-termine" style="color:'+col+'">📅 '+abschl+'/'+d.termine+' <span style="opacity:.6;font-weight:600;font-size:9px">'+q+'%</span></div>';
         })():'')+'</div>'
         +'</div>';
     });
@@ -1269,8 +1270,8 @@ function computeMarch(orders,zeros){
     var u=Object.values(bk),bv={};
     u.forEach(function(o){
         var n=(o.berater||o.ersteller||'?').trim();
-        if(!bv[n])bv[n]={sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,zero:0,hp:0,pv:0,termine:0};
-        var d=bv[n];d.sales++;d.kwp+=o.kwp_real>0?Math.round(o.kwp_real*10)/10:Math.round((parseFloat(o.calculated_realprice_netto)||0)/2550*10)/10;d.netto+=parseFloat(o.calculated_realprice_netto)||0;
+        if(!bv[n])bv[n]={sales:0,kwp:0,netto:0,storno:0,el:0,emp:0,sp:0,zero:0,hp:0,pv:0,termine:0,leads:new Set()};
+        var d=bv[n];d.sales++;if(o.lead_id)d.leads.add(o.lead_id);d.kwp+=o.kwp_real>0?Math.round(o.kwp_real*10)/10:Math.round((parseFloat(o.calculated_realprice_netto)||0)/2550*10)/10;d.netto+=parseFloat(o.calculated_realprice_netto)||0;
         if(o.status_kunde==='Storniert')d.storno++;
         var q=(o.quelle||'').toLowerCase();
         if(q==='eigenlead')d.el++;if(q==='empfehlung')d.emp++;
