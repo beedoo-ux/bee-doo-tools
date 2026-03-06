@@ -712,8 +712,8 @@ function sendNotification(title,body){
 
 function checkForNewDeals(){
     if(!notifEnabled||!isCurrentMonth(month))return;
-    fetch('/api/overview-march?month=2026-03').then(function(r){return r.json()}).then(function(data){
-        var contracts=(data.contracts||[]).filter(function(c){return(parseFloat(c.netto)||0)>=6000});
+    fetch(SB+'/rest/v1/auftraege?select=auftrag_nr&datum_angenommen=gte.'+new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01&datum_angenommen=lt.'+(new Date().getMonth()===11?new Date().getFullYear()+1:new Date().getFullYear())+'-'+String(new Date().getMonth()===11?1:new Date().getMonth()+2).padStart(2,'0')+'-01&an_wert_netto=gte.6000&limit=1000',{headers:hd}).then(function(r){return r.json()}).then(function(data){
+        var contracts=Array.isArray(data)?data:[];
         var newTotal=contracts.length;
         if(lastKnownTotal!==null&&newTotal>lastKnownTotal){
             var diff=newTotal-lastKnownTotal;
@@ -1277,44 +1277,54 @@ function computeMarch(orders,zeros){
 }
 
 async function loadMarch(){
-    document.getElementById('app').innerHTML='<div class="loading"><div class="loader"></div><div class="load-text">Lade Live-Daten...</div></div>';
+    document.getElementById('app').innerHTML='<div class="loading"><div class="loader"></div><div class="load-text">Lade Ranking-Daten...</div></div>';
     try{
-        // Fetch from Overview API (LIVE from Leveto, no Supabase sync lag)
-        var r=await fetch('/api/overview-march?month=2026-03');
-        var j=await r.json();
-        if(j.error)throw new Error(j.error);
-        // Map API response to internal format
-        var all=(j.contracts||[]).map(function(c){return{
-            berater:c.berater||c.ersteller||'',
-            ersteller:c.ersteller||'',
-            accepted_date:c.accepted_date||'',
-            calculated_realprice_netto:c.netto||0,
-            calculated_realprice_brutto:c.brutto||0,
-            status_kunde:c.auftragsstatus||'',
-            quelle:c.quelle||'',
-            leveto_id:c.contract_id||0,
-            lead_id:c.lead_id||0,
-            typeicons:c.typeicons||[],
-            kwp_real:c.kwp_real||0
-        }});
-        var z=[];try{var eR=await fetch(SB+'/rest/v1/efs_projekte?select=efs_id,preismodell&preismodell=eq.Zero',{headers:hd});if(eR.ok)z=await eR.json()}catch(e){}
+        // Direkt aus Supabase auftraege – gefiltert auf aktuellen Monat (Index auf datum_angenommen)
+        // Kein Leveto-Overhead, kein 53k-Record-Fetch
+        var NOW2=new Date();
+        var yr=NOW2.getFullYear(),mo=String(NOW2.getMonth()+1).padStart(2,'0');
+        var from=yr+'-'+mo+'-01';
+        var nextMo=NOW2.getMonth()===11?'01':String(NOW2.getMonth()+2).padStart(2,'0');
+        var nextYr=NOW2.getMonth()===11?String(yr+1):String(yr);
+        var to=nextYr+'-'+nextMo+'-01';
+        var sbUrl=SB+'/rest/v1/auftraege?select=kundenberater_name,datum_angenommen,anlagen_kwp,an_wert_netto,storniert,ist_eigenlead,ist_empfehlung,hat_speicher,efs_projekt_id,auftrag_nr,leveto_lead_id,angebot_module'
+            +'&datum_angenommen=gte.'+from+'&datum_angenommen=lt.'+to+'&limit=1000';
+        var[sbR,eR,apR]=await Promise.all([
+            fetch(sbUrl,{headers:hd}),
+            fetch(SB+'/rest/v1/efs_projekte?select=efs_id,preismodell&preismodell=eq.Zero',{headers:hd}),
+            fetch(SB+'/rest/v1/leveto_appointments?select=user_received&start_date=gte.'+from+'T00:00:00&status=neq.Cancelled&status=neq.null',{headers:hd})
+        ]);
+        var rows=sbR.ok?await sbR.json():[];
+        var z=eR.ok?await eR.json():[];
+        // Map Supabase fields to internal format expected by computeMarch/isHP
         var todayStr=fmtLocal(new Date());
+        var all=rows.map(function(o){return{
+            berater:(o.kundenberater_name||'').trim(),
+            ersteller:(o.kundenberater_name||'').trim(),
+            accepted_date:o.datum_angenommen||'',
+            calculated_realprice_netto:parseFloat(o.an_wert_netto)||0,
+            calculated_realprice_brutto:0,
+            status_kunde:o.storniert?'Storniert':'Angenommen',
+            quelle:o.ist_eigenlead?'Eigenlead':o.ist_empfehlung?'Empfehlung':'',
+            leveto_id:parseInt(o.auftrag_nr)||0,
+            lead_id:o.leveto_lead_id||0,
+            typeicons:[],
+            kwp_real:parseFloat(o.anlagen_kwp)||0,
+            angebot_module:o.angebot_module,
+            hat_speicher:o.hat_speicher,
+            efs_projekt_id:o.efs_projekt_id
+        }});
         todayData={total:0,pv:0,hp:0};
-        var a6today=all.filter(function(o){return(parseFloat(o.calculated_realprice_netto)||0)>=6000&&(o.accepted_date||'').slice(0,10)===todayStr});
+        var a6today=all.filter(function(o){return o.calculated_realprice_netto>=6000&&(o.accepted_date||'').slice(0,10)===todayStr});
         var bkT={};a6today.forEach(function(o){var l=o.lead_id;if(!l)return;var k=l+'_'+(isHP(o)?'HP':'PV');var an=o.leveto_id||0;if(!bkT[k]||an>(bkT[k].leveto_id||0))bkT[k]=o});
         Object.values(bkT).forEach(function(o){todayData.total++;if(isHP(o))todayData.hp++;else todayData.pv++;});
         marchData=computeMarch(all,z);
-        // Fetch appointment counts per VT for current month from Supabase
-        try{
-            var mStart='2026-03-01';
-            var apR=await fetch(SB+'/rest/v1/leveto_appointments?select=user_received&start_date=gte.'+mStart+'T00:00:00&status=neq.Cancelled&status=neq.null',{headers:hd});
-            if(apR.ok){
-                var apData=await apR.json();
-                var tMap={};
-                apData.forEach(function(a){if(a.user_received){tMap[a.user_received]=(tMap[a.user_received]||0)+1;}});
-                marchData.forEach(function(d){d.termine=tMap[d.n]||0;});
-            }
-        }catch(e){console.warn('Termine fetch failed:',e);}
+        if(apR.ok){
+            var apData=await apR.json();
+            var tMap={};
+            apData.forEach(function(a){if(a.user_received){tMap[a.user_received]=(tMap[a.user_received]||0)+1;}});
+            marchData.forEach(function(d){d.termine=tMap[d.n]||0;});
+        }
         marchLoaded=true;render();
     }catch(err){document.getElementById('app').innerHTML='<div class="loading"><div class="load-text" style="color:var(--red)">Fehler: '+err.message+'</div></div>'}
 }
