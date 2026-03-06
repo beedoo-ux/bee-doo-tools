@@ -576,8 +576,8 @@ async function submitForm() {
 }
 
 
-// ── ADRESS AUTOCOMPLETE ──────────────────────────────────────
-const AC_URL = 'https://hqzpemfaljxcysyqssng.supabase.co/functions/v1/adress-autocomplete';
+// ── ADRESS AUTOCOMPLETE (direkt via Supabase REST, 23 Mio DE-Adressen) ──
+const SUPA_AC = 'https://hqzpemfaljxcysyqssng.supabase.co';
 const AC_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik';
 let acTimer = null;
 let acFocused = -1;
@@ -595,16 +595,30 @@ async function triggerAutocomplete() {
     list.innerHTML = '<div class="autocomplete-loading">Suche…</div>';
     list.classList.add('open');
     try {
-      const params = new URLSearchParams();
-      if (q.length >= 2) params.set('q', q);
-      if (plz.length >= 2) params.set('plz', plz);
-      const res = await fetch(`${AC_URL}?${params}`, {
+      // Direkt Supabase REST API — kein Cold-Start, instant
+      const filters = [];
+      if (plz.length >= 2) filters.push(`plz=ilike.${encodeURIComponent(plz + '%')}`);
+      if (q.length >= 2) filters.push(`stn=ilike.${encodeURIComponent(q + '%')}`);
+      
+      const url = `${SUPA_AC}/rest/v1/infas_adressen?select=plz,ort,stn,hnr&${filters.join('&')}&limit=20`;
+      const res = await fetch(url, {
         headers: { 'apikey': AC_KEY, 'Authorization': 'Bearer ' + AC_KEY }
       });
-      acItems = await res.json();
+      const raw = await res.json();
+      
+      // Deduplizieren nach Straßenname+PLZ
+      const seen = new Set();
+      acItems = raw.filter(r => {
+        const key = r.stn + '|' + r.plz;
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      }).slice(0,8).map(r => ({
+        strasse: r.stn, hausnummer: r.hnr, plz: r.plz, ort: r.ort
+      }));
+      
       renderAc(acItems);
     } catch(e) { closeAc(); }
-  }, 250);
+  }, 200);
 }
 
 function renderAc(items) {
