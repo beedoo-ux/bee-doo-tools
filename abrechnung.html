@@ -1987,7 +1987,14 @@ function DetailView({aId,per,vtN,vtD,sg,onClose,onRef}){
 function App(){
   const[per,setPer]=useState('');const[pers,setPers]=useState([]);const[abrs,setAbrs]=useState([]);const[ausz,setAusz]=useState([]);const[sg,setSg]=useState(null);const[ld,setLd]=useState(true);const[sel,setSel]=useState(null);const[genMsg,setGenMsg]=useState('');const[genBusy,setGenBusy]=useState(false);const[berOpen,setBerOpen]=useState(false);const[katFilter,setKatFilter]=useState('alle');const[maArr,setMaArr]=useState([]);const[hcWarnings,setHcWarnings]=useState([]);const[hcOpen,setHcOpen]=useState(false);const[hcBusy,setHcBusy]=useState(false);const[bulkBusy,setBulkBusy]=useState(false);const[bulkMsg,setBulkMsg]=useState('');
 
-  useEffect(()=>{(async()=>{try{const d=await sbG('pay_auszahlungen_historie','select=periode&order=periode.desc');const u=[...new Set(d.map(x=>x.periode))];const now=new Date();const cp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;if(!u.includes(cp))u.unshift(cp);const sorted=u.sort().reverse();setPers(sorted);setPer(sorted[0]||cp);}catch(e){const now=new Date();const p=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;setPers([p]);setPer(p);}})();},[]);
+  useEffect(()=>{(async()=>{try{const d=await sbG('pay_auszahlungen_historie','select=periode&order=periode.desc');const u=[...new Set(d.map(x=>x.periode))];const now=new Date();const cp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;
+  // Generate all months from Oct 2025 to current
+  const allMonths=[];
+  let dt=new Date(2025,9,1); // Oct 2025
+  while(dt<=now){allMonths.push(`${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}`);dt=new Date(dt.getFullYear(),dt.getMonth()+1,1);}
+  // Merge: all generated months + any from history
+  const merged=[...new Set([...allMonths,...u])].sort().reverse();
+  setPers(merged);setPer(merged[0]||cp);}catch(e){const now=new Date();const allM=[];let dt=new Date(2025,9,1);while(dt<=now){allM.push(`${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}`);dt=new Date(dt.getFullYear(),dt.getMonth()+1,1);}const sorted=allM.sort().reverse();setPers(sorted);setPer(sorted[0]);}})();},[]);
 
   const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s,ma]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&archiviert_am=is.null&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),sbG('pay_mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,strasse,plz,ort,steuernummer,typ,mwst_pflichtig,iban,bic,kuerzel,firmenname,ustid,hausnr')]);setAbrs(a);setAusz(z);setSg(s[0]||null);setMaArr(ma);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
   useEffect(()=>{loadP();},[loadP]);
