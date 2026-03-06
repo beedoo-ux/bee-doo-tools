@@ -1426,16 +1426,29 @@ function TabAbrechnung({ mitarbeiterList, setMitarbeiterList, historie, sonder, 
     finally { setAbrArtSaving(s => ({ ...s, [maId]: false })); }
   };
 
-  const saveUstStichtag = async (maId, datum) => {
+  const saveUstStichtag = async (maId, datum, quelle) => {
     setAbrArtSaving(s => ({ ...s, [maId]: true }));
     try {
-      const patch = datum ? { ust_stichtag: datum, abrechnungsart: "brutto" } : { ust_stichtag: null, abrechnungsart: "netto" };
+      const patch = datum 
+        ? { ust_stichtag: datum, abrechnungsart: "brutto", ust_quelle: quelle || "manuell" } 
+        : { ust_stichtag: null, abrechnungsart: "netto", ust_quelle: null, ust_bestaetigt_am: null };
       await db.patch("mitarbeiter", "id=eq." + maId, patch);
       setMitarbeiterList(prev => prev.map(m => m.id === maId ? { ...m, ...patch } : m));
       setRows(prev => prev.map(r => r.maId === maId ? { ...r, abrechnungsart: patch.abrechnungsart } : r));
-      toast(datum ? "USt-Stichtag gesetzt: " + datum : "USt-Stichtag entfernt", "ok");
+      toast(datum ? "USt-Stichtag gesetzt: " + datum + " (" + (quelle||"manuell") + ")" : "USt-Stichtag entfernt", "ok");
     } catch (e) { toast("Fehler: " + e.message, "err"); }
     finally { setAbrArtSaving(s => ({ ...s, [maId]: false })); }
+  };
+
+  const saveUstBestaetigung = async (maId, name) => {
+    setAbrArtSaving(s => ({ ...s, ["b_"+maId]: true }));
+    try {
+      const now = new Date().toISOString();
+      await db.patch("mitarbeiter", "id=eq." + maId, { ust_bestaetigt_am: now });
+      setMitarbeiterList(prev => prev.map(m => m.id === maId ? { ...m, ust_bestaetigt_am: now } : m));
+      toast(name + " \u2014 USt-Abf\u00fchrung best\u00e4tigt \u2713", "ok");
+    } catch (e) { toast("Fehler: " + e.message, "err"); }
+    finally { setAbrArtSaving(s => ({ ...s, ["b_"+maId]: false })); }
   };
 
   const regelMap = {};
@@ -1883,12 +1896,13 @@ function TabAbrechnung({ mitarbeiterList, setMitarbeiterList, historie, sonder, 
       running += m.betrag;
       if (running >= grenze && !crossMonat) crossMonat = m.monat;
     }
-    return { ma, name, total: ju.total, monate: ju.monate, grenze, pct, ueberschritten, crossMonat, stichtag: ma.ust_stichtag };
+    return { ma, name, total: ju.total, monate: ju.monate, grenze, pct, ueberschritten, crossMonat, stichtag: ma.ust_stichtag, bestaetigt: ma.ust_bestaetigt_am, quelle: ma.ust_quelle };
   });
 
   const cWarn = ustTracking.filter(u => u.pct >= 70 && !u.ueberschritten).length;
   const cOver = ustTracking.filter(u => u.ueberschritten).length;
   const cOhneStichtag = ustTracking.filter(u => u.ueberschritten && !u.stichtag).length;
+  const cOhneBest = ustTracking.filter(u => u.stichtag && !u.bestaetigt).length;
 
   return React.createElement("div", null,
     // ── USt-Tracking HGB-Partner ──
@@ -1901,6 +1915,7 @@ function TabAbrechnung({ mitarbeiterList, setMitarbeiterList, historie, sonder, 
         React.createElement("div", { style: { display: "flex", gap: 10, fontSize: 11, flexWrap: "wrap" } },
           cOver > 0 && React.createElement("span", { style: { background: "#fb923c22", color: "#fb923c", padding: "3px 10px", borderRadius: 5, fontWeight: 700 } }, cOver + " \u00fcber Grenze"),
           cOhneStichtag > 0 && React.createElement("span", { style: { background: "#ef535022", color: "#ef5350", padding: "3px 10px", borderRadius: 5, fontWeight: 700 } }, cOhneStichtag + " ohne Stichtag!"),
+          cOhneBest > 0 && React.createElement("span", { style: { background: "#a78bfa22", color: "#a78bfa", padding: "3px 10px", borderRadius: 5, fontWeight: 700 } }, cOhneBest + " ohne Best\u00e4tigung"),
           cWarn > 0 && React.createElement("span", { style: { background: "#F5C50022", color: "#F5C500", padding: "3px 10px", borderRadius: 5, fontWeight: 700 } }, cWarn + " nahe Grenze")
         )
       ),
@@ -1947,20 +1962,51 @@ function TabAbrechnung({ mitarbeiterList, setMitarbeiterList, historie, sonder, 
               }}, ["","Jan","Feb","M\u00e4r","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"][m.monat] + ": " + m.betrag.toLocaleString("de-DE") + "\u20ac"))
             ),
             // Stichtag setzen / Action
-            u.ueberschritten && !u.stichtag && React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 4 } },
-              React.createElement("span", { style: { fontSize: 10, color: "#ef5350", fontWeight: 600 } }, "\u26a0 Stichtag fehlt!"),
-              React.createElement("input", { type: "date", defaultValue: jahr + "-" + String(u.crossMonat||1).padStart(2,"0") + "-01",
-                onChange: (ev) => { if (ev.target.value) saveUstStichtag(ma.id, ev.target.value); },
-                disabled: isSaving,
-                style: { background: "var(--s3)", border: "1px solid #ef535040", borderRadius: 4, color: "var(--tx)", padding: "3px 6px", fontSize: 11 }
-              }),
-              isSaving && React.createElement("span", { style: { fontSize: 10, color: "var(--ts)" } }, "...")
+            u.ueberschritten && !u.stichtag && React.createElement("div", { style: { background: "#ef535010", border: "1px solid #ef535030", borderRadius: 6, padding: "8px 10px", marginTop: 6 } },
+              React.createElement("div", { style: { fontSize: 10, color: "#ef5350", fontWeight: 700, marginBottom: 6 } }, "\u26a0 Grenze \u00fcberschritten \u2014 Stichtag setzen:"),
+              React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
+                React.createElement("input", { type: "date", defaultValue: jahr + "-" + String(u.crossMonat||1).padStart(2,"0") + "-01",
+                  id: "ust_date_" + ma.id,
+                  style: { background: "var(--s3)", border: "1px solid #ef535040", borderRadius: 4, color: "var(--tx)", padding: "3px 6px", fontSize: 11 }
+                }),
+                React.createElement("button", { onClick: () => { const d = document.getElementById("ust_date_"+ma.id)?.value; if(d) saveUstStichtag(ma.id, d, "system"); }, disabled: isSaving, style: {
+                  background: "#fb923c22", border: "1px solid #fb923c40", borderRadius: 4, color: "#fb923c", padding: "3px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer",
+                }}, isSaving ? "..." : "System-Erkennung"),
+                React.createElement("button", { onClick: () => { const d = document.getElementById("ust_date_"+ma.id)?.value; if(d) saveUstStichtag(ma.id, d, "partner"); }, disabled: isSaving, style: {
+                  background: "#a78bfa22", border: "1px solid #a78bfa40", borderRadius: 4, color: "#a78bfa", padding: "3px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer",
+                }}, isSaving ? "..." : "Partner hat gemeldet")
+              )
             ),
-            u.stichtag && React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 4 } },
-              React.createElement("span", { style: { fontSize: 10, color: "#fb923c" } }, "USt-pflichtig ab " + u.stichtag),
-              React.createElement("button", { onClick: () => saveUstStichtag(ma.id, null), disabled: isSaving, style: {
+            // Meldung ohne Ueberschreitung (Partner meldet sich proaktiv)
+            !u.ueberschritten && !u.stichtag && React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 6, flexWrap: "wrap" } },
+              React.createElement("input", { type: "date", id: "ust_manual_" + ma.id,
+                style: { background: "var(--s3)", border: "1px solid var(--bd)", borderRadius: 4, color: "var(--tx)", padding: "3px 6px", fontSize: 10, width: 120 }
+              }),
+              React.createElement("button", { onClick: () => { const d = document.getElementById("ust_manual_"+ma.id)?.value; if(d) saveUstStichtag(ma.id, d, "partner"); }, disabled: isSaving, style: {
                 background: "var(--s3)", border: "1px solid var(--bd)", borderRadius: 4, color: "var(--ts)", padding: "2px 8px", fontSize: 9, cursor: "pointer",
-              }}, isSaving ? "..." : "Zur\u00fccksetzen")
+              }}, "Partner meldet USt-Pflicht")
+            ),
+            // Aktiver Stichtag: Infos + Bestätigung
+            u.stichtag && React.createElement("div", { style: { background: "#fb923c10", border: "1px solid #fb923c25", borderRadius: 6, padding: "8px 10px", marginTop: 6 } },
+              React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: u.bestaetigt ? 0 : 6 } },
+                React.createElement("div", null,
+                  React.createElement("span", { style: { fontSize: 10, color: "#fb923c", fontWeight: 600 } }, "USt-pflichtig ab " + u.stichtag),
+                  u.quelle && React.createElement("span", { style: { fontSize: 9, color: "var(--ts)", marginLeft: 6 } }, "(" + ({system:"System erkannt",partner:"Partner gemeldet",manuell:"Manuell"}[u.quelle]||u.quelle) + ")")
+                ),
+                React.createElement("button", { onClick: () => saveUstStichtag(ma.id, null), disabled: isSaving, style: {
+                  background: "var(--s3)", border: "1px solid var(--bd)", borderRadius: 4, color: "var(--ts)", padding: "2px 8px", fontSize: 9, cursor: "pointer",
+                }}, isSaving ? "..." : "Zur\u00fccksetzen")
+              ),
+              // Bestätigung
+              !u.bestaetigt && React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 4 } },
+                React.createElement("span", { style: { fontSize: 10, color: "#a78bfa", fontWeight: 600 } }, "\u26a0 Best\u00e4tigung ausstehend"),
+                React.createElement("button", { onClick: () => saveUstBestaetigung(ma.id, ma.vorname + " " + ma.nachname), disabled: abrArtSaving["b_"+ma.id], style: {
+                  background: "#34d39922", border: "1px solid #34d39940", borderRadius: 4, color: "#34d399", padding: "3px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer",
+                }}, abrArtSaving["b_"+ma.id] ? "..." : "\u2713 USt-Abf\u00fchrung best\u00e4tigt")
+              ),
+              u.bestaetigt && React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 4 } },
+                React.createElement("span", { style: { fontSize: 10, color: "#34d399", fontWeight: 600 } }, "\u2713 Best\u00e4tigt am " + new Date(u.bestaetigt).toLocaleDateString("de-DE"))
+              )
             ),
             !u.ueberschritten && u.pct >= 70 && React.createElement("div", { style: { marginTop: 4, fontSize: 10, color: "#F5C500", fontWeight: 600 } },
               "\u26a0 Noch " + (u.grenze - u.total).toLocaleString("de-DE") + " \u20ac bis zur Grenze"
@@ -2365,7 +2411,7 @@ function App() {
           db.get("pay_sperrlisten", "?order=auftrag_nr.asc").catch(() => []),
           db.get("pay_duplikate", "?order=kunde_name.asc").catch(() => []),
           db.get("pay_provisions_historie", "?order=mitarbeiter_name.asc,gueltig_ab.asc").catch(() => []),
-          db.get("mitarbeiter", "?select=id,vorname,nachname,typ,abrechnungsart,ust_stichtag,ust_grenze&order=nachname.asc").catch(() => []),
+          db.get("mitarbeiter", "?select=id,vorname,nachname,typ,abrechnungsart,ust_stichtag,ust_grenze,ust_bestaetigt_am,ust_quelle&order=nachname.asc").catch(() => []),
           db.get("pay_regel_overrides", "?order=periode.asc").catch(() => []),
         ]);
         setRegeln(r); setSonder(s); setStufen(st); setTeamBonus(tb); setSperrData(sp); setDuplikateData(dp); setHistorieData(hi); setMitarbeiterList(ma); setOverrides(ov);
