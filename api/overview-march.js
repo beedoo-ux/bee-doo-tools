@@ -12,8 +12,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const LEVETO_BASE = 'https://beedoo.leveto.net/API';
-  const LEVETO_USER = 'api@bee-doo.de';
-  const LEVETO_PW = 'Patrick123456789!';
+  const LEVETO_USER = process.env.LEVETO_USER || 'api@bee-doo.de';
+  const LEVETO_PW = process.env.LEVETO_PASS;
   const targetMonth = req.query.month || new Date().toISOString().slice(0, 7);
 
   try {
