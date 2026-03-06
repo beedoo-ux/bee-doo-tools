@@ -643,6 +643,11 @@ function pdfHGB(e, bM, bJ, settings) {
   const beedooUstId = settings.beedoo_ustid || "DE363829401";
   const beedooStNr = settings.beedoo_steuernr || "320/5706/4015";
   const abzugSum = e.abzug_summe||0;
+  const isBrutto = ma.abrechnungsart === "brutto";
+  const nettoProvision = e.netto;
+  const mwstSatz = 0.19;
+  const mwstBetrag = isBrutto ? Math.round(nettoProvision * mwstSatz * 100) / 100 : 0;
+  const bruttoAuszahlung = isBrutto ? nettoProvision + mwstBetrag : nettoProvision;
   const gesamtAbzuege = abzugSum + (e.krank_abzug||0) + (e.vorschuss||0);
 
   const posRows = e.pos.length > 0
@@ -742,8 +747,13 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff}
           <tr><td style="padding:6px 10px;border-bottom:2px solid #999;font-weight:700">Zwischensumme</td><td style="padding:6px 10px;border-bottom:2px solid #999;text-align:right;font-weight:700">${n2(e.gesamt - (e.vorschuss||0) - abzugSum)}</td></tr>
           ${e.vorschuss>0?`<tr style="background:#fef2f2"><td style="padding:6px 10px;border-bottom:1px solid #fca5a5;color:#991b1b">Vorschuss-Verrechnung</td><td style="padding:6px 10px;border-bottom:1px solid #fca5a5;text-align:right;color:#991b1b">-${n2(e.vorschuss)}</td></tr>`:""}
           ${abzugSum>0?`<tr style="background:#fef2f2"><td style="padding:6px 10px;border-bottom:1px solid #fca5a5;color:#991b1b">Sachkosten-Abzüge</td><td style="padding:6px 10px;border-bottom:1px solid #fca5a5;text-align:right;color:#991b1b">-${n2(abzugSum)}</td></tr>`:""}
-          <tr><td style="padding:6px 10px;border-bottom:1px solid #eee">Umsatzsteuer (gem. §19 Abs. 1 UStG)</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">0,00</td></tr>
-          <tr style="background:#f0fdf4;border-top:2px solid #111"><td style="padding:9px 10px;font-weight:800;font-size:13px">Auszahlungssumme</td><td style="padding:9px 10px;text-align:right;font-weight:800;font-size:13px;color:#166534">${n2(e.netto)}</td></tr>
+          ${isBrutto
+            ? `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">Zwischensumme (netto)</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${n2(nettoProvision)}</td></tr>
+               <tr><td style="padding:6px 10px;border-bottom:1px solid #eee">zzgl. 19% Umsatzsteuer</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${n2(mwstBetrag)}</td></tr>
+               <tr style="background:#f0fdf4;border-top:2px solid #111"><td style="padding:9px 10px;font-weight:800;font-size:13px">Auszahlungsbetrag (brutto)</td><td style="padding:9px 10px;text-align:right;font-weight:800;font-size:13px;color:#166534">${n2(bruttoAuszahlung)}</td></tr>`
+            : `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">Umsatzsteuer (gem. &sect;19 Abs. 1 UStG)</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">0,00</td></tr>
+               <tr style="background:#f0fdf4;border-top:2px solid #111"><td style="padding:9px 10px;font-weight:800;font-size:13px">Auszahlungssumme</td><td style="padding:9px 10px;text-align:right;font-weight:800;font-size:13px;color:#166534">${n2(e.netto)}</td></tr>`
+          }
         </tbody>
       </table>
     </div>
@@ -753,7 +763,10 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff}
 
   <!-- Rechtlicher Hinweis -->
   <div style="margin-top:16px;font-size:10px;color:#555;line-height:1.6;border-top:1px solid #eee;padding-top:10px">
-    Gem. Kleinunternehmerregelung §19 Abs. 1 UStG von der Umsatzsteuer befreit. Diese Gutschrift gemäß §14 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers. Empfänger: ${ma.vorname} ${ma.nachname}${ma.steuernummer?`, Steuernr. ${ma.steuernummer}`:""}. Aussteller: bee-doo GmbH, ${beedooUstId}.
+    ${isBrutto
+      ? `Diese Gutschrift gem&auml;&szlig; &sect;14 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers. Nettobetrag: ${n2(nettoProvision)} &euro;, zzgl. 19% USt: ${n2(mwstBetrag)} &euro;, Bruttobetrag: ${n2(bruttoAuszahlung)} &euro;. Steuersatz: 19%. Leistungsart: Vermittlung von Solar-/W&auml;rmepumpenanlagen. Empf&auml;nger: ${ma.vorname} ${ma.nachname}${ma.steuernummer?`, Steuernr. ${ma.steuernummer}`:""}${ustid?`, USt-IdNr. ${ustid}`:""}. Aussteller: bee-doo GmbH, ${beedooUstId}, ${beedooStNr}. Der Gutschriftsempf&auml;nger ist verpflichtet, die ausgewiesene Umsatzsteuer an das zust&auml;ndige Finanzamt abzuf&uuml;hren.`
+      : `Gem. Kleinunternehmerregelung &sect;19 Abs. 1 UStG von der Umsatzsteuer befreit. Diese Gutschrift gem&auml;&szlig; &sect;14 Abs. 2 UStG ersetzt die Rechnung des Leistungserbringers. Empf&auml;nger: ${ma.vorname} ${ma.nachname}${ma.steuernummer?`, Steuernr. ${ma.steuernummer}`:""}. Aussteller: bee-doo GmbH, ${beedooUstId}.`
+    }
   </div>
 
   ${footer}
