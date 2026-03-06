@@ -241,6 +241,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
 .twilio-btn:hover{background:#15a34a;transform:translateY(-1px);}
 .twilio-btn.calling{background:#ef4444;animation:pulse 1s infinite;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.versuch-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:#ef444415;border:1px solid #ef444440;border-radius:20px;font-size:10px;font-weight:700;color:#ef4444;}
+.versuch-badge.sms{background:#22c55e15;border-color:#22c55e40;color:#22c55e;}
 .fq-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);}
 .fq-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:min(680px,96vw);max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;}
 .fq-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg2);z-index:2;}
@@ -633,8 +635,9 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;dis
     </div>
 
     <div class="fq-footer">
-      <button class="mbtn" onclick="saveFQ(false)">💾 Speichern (ohne Termin)</button>
-      <button class="mbtn p" onclick="saveFQ(true)">📅 Speichern + Termin buchen</button>
+      <button class="mbtn" id="nichtErreichtBtn" onclick="nichtErreicht()" style="background:#ef444415;border-color:#ef444440;color:#ef4444;flex:none;padding:10px 14px;">📵 Nicht erreicht</button>
+      <button class="mbtn" onclick="saveFQ(false)">💾 Speichern</button>
+      <button class="mbtn p" onclick="saveFQ(true)">📅 + Termin buchen</button>
     </div>
   </div>
 </div>
@@ -1870,6 +1873,66 @@ function closeFQ() {
   document.getElementById('fqOverlay').style.display = 'none';
   fqLeadID = null;
   fqCalling = false;
+}
+
+async function nichtErreicht() {
+  const tel  = document.getElementById('fqTel').value.trim();
+  const name = [document.getElementById('fqVn').value, document.getElementById('fqNn').value].filter(Boolean).join(' ');
+  if (!tel) { alert('Telefonnummer fehlt im Fragebogen.'); return; }
+
+  const btn = document.getElementById('nichtErreichtBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Wird gespeichert…';
+
+  // Twilio-Credentials fuer SMS (nur bei Versuch 5 benoetigt)
+  let creds = {};
+  try { const s = localStorage.getItem('beedoo_twilio_creds'); if(s) creds = JSON.parse(s); } catch(e){}
+
+  try {
+    const r = await fetch('/api/nicht-erreicht', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        lead_id:   fqLeadID,
+        telefon:   tel,
+        name:      name,
+        cc_agent:  'CC',
+        sid:       creds.sid   || null,
+        token:     creds.token || null,
+        smsSender: creds.smsSender || '+4915888651131',
+      }),
+    });
+    const data = await r.json();
+
+    // Status im Fragebogen anzeigen
+    const statusEl = document.getElementById('fqCallStatus');
+    statusEl.style.display = 'flex';
+
+    if (data.sms_gesendet) {
+      statusEl.innerHTML = `<span class="versuch-badge sms">✅ SMS gesendet nach ${data.anzahl_versuche} Versuchen</span>`;
+      // Kurz warten dann schliessen
+      setTimeout(() => { closeFQ(); showToast('📩 SMS mit Buchungslink wurde gesendet!', 'green'); }, 1500);
+    } else {
+      const naechste = data.naechste_aktion || '';
+      statusEl.innerHTML = `<span class="versuch-badge">📵 ${data.anzahl_versuche}. Versuch · ${naechste}</span>`;
+      btn.disabled = false;
+      btn.textContent = '📵 Nicht erreicht';
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '📵 Nicht erreicht';
+    alert('Fehler: ' + e.message);
+  }
+}
+
+function showToast(msg, color='gold') {
+  const colors = { gold: ['#F5C500','#000'], green: ['#22c55e','#000'], red: ['#ef4444','#fff'] };
+  const [bg, fg] = colors[color] || colors.gold;
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${bg};color:${fg};font-weight:700;font-size:13px;padding:10px 22px;border-radius:20px;z-index:9999;pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,.4);`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
 }
 
 function getRadioVal(name) {
