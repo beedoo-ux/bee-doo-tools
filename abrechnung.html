@@ -267,9 +267,9 @@ async function generateAbrechnungen(periode, onProgress){
   log(`Leistungszeitraum: ${lzM}/${lzY}, Nachzügler vor ${lzM}/${lzY}`);
   const [regeln, stufen, mitarbeiter, sgArr, auftrLZ, auftrNZ, stornoLZ, offenAll, sonderProv, teamBonus, sperrlisten, stornoAbzuege, staffelHistoryFreigegeben, efsZeroProjekte, efsBlockedProjekte, szAuftraege
   ] = await Promise.all([
-    sbG('provisions_regeln','aktiv=eq.true'),
+    sbG('provisionsmodelle','aktiv=eq.true'),
     sbG('pay_stufenbonus','aktiv=eq.true&order=min_anlagen.asc'),
-    sbG('mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,provisions_regel_id,strasse,plz,ort,steuernummer,kleinunternehmer,mwst_pflichtig,auto_zuschuss,firmenname,ustid,hausnr'),
+    sbG('mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,kuerzel,typ,abrechnungsart,ust_stichtag,strasse,hausnr,plz,ort,steuernummer,ustid,firmenname,auto_zuschuss,grundgehalt,email'),
     sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=gte.${leistungsStart}&auftrags_datum=lt.${leistungsEnd}&select=*`),
     sbG('pay_auftraege',`storniert=eq.false&zahlungsstatus=eq.anzahlung_eingegangen&abgerechnet_monat=is.null&auftrags_datum=lt.${leistungsStart}&select=*`),
@@ -411,7 +411,20 @@ async function generateAbrechnungen(periode, onProgress){
   const offenLZn = offeneAuftr.length;
   log(`${auftrLZ.length} LZ + ${auftrNZ.length} NZ | ${stornoLZn} Stornos | ${stornoAbzuege.length} Storno-Abzüge | ${offenLZn} Offen | ${onHoldOrders.length} On Hold | ${sonderProv.length} Sonder | ${teamBonus.length} Team`);
   const sgConfig = sgArr[0] || {prozent:3, max_netto:200, ust_satz:19};
-  const regelMap = {}; regeln.forEach(r => regelMap[r.mitarbeiter_typ] = r);
+  const regelMap = {}; regeln.forEach(r => { regelMap[r.typ || r.mitarbeiter_typ] = {
+    ...r, mitarbeiter_typ: r.typ || r.mitarbeiter_typ,
+    basis_betrag_sale: r.basis_rate ?? r.basis_betrag_sale ?? 0,
+    staffel_betrag_sale: r.staffel_rate ?? r.staffel_betrag_sale ?? 0,
+    staffel_schwelle: r.staffel_schwelle ?? 999,
+    betrag_eigenlead: r.eigenlead_bonus ?? r.betrag_eigenlead ?? 0,
+    betrag_empfehlung: r.empfehlungs_bonus ?? r.betrag_empfehlung ?? 0,
+    betrag_speicher: r.speicher_bonus ?? r.betrag_speicher ?? 0,
+    betrag_termin_sf: r.termin_bonus ?? r.betrag_termin_sf ?? 0,
+    betrag_lead: r.lead_bonus ?? r.betrag_lead ?? 0,
+    betrag_sondereinsatz: r.sondereinsatz_bonus ?? r.betrag_sondereinsatz ?? 0,
+    zero_bonus: r.zero_bonus ?? 0,
+    rueckwirkend: r.rueckwirkend ?? false,
+  }; });
   const typMap = {hgb_vertriebler_haupt:'hgb_vertriebler_haupt',hgb84:'hgb_vertriebler_haupt',angestellt_vt:'angestellt_vertriebler',angestellt_vertriebler:'angestellt_vertriebler',hgb_vertriebler_agentur:'hgb_vertriebler_agentur',vertriebler:'vertriebler',hgb_scouter:'hgb_scouter',angestellt_scouter:'angestellt_scouter'};
   const vpById = {}; mitarbeiter.forEach(v => { vpById[v.id] = v; });
   const byVP = {};
@@ -780,7 +793,7 @@ async function generateAbrechnungen(periode, onProgress){
     });
     const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
     const sgUst=sgNetto*(sgConfig.ust_satz/100);
-    const ustSatz=isHGB&&vp.mwst_pflichtig?19:0;
+    const ustSatz=isHGB&&vp.abrechnungsart==="brutto"?19:0;
     const ustBetrag=bruttoTotal*(ustSatz/100);
     const sgBrutto=sgNetto+sgUst;
     const abr=await sbP('pay_abrechnungen',{periode,mitarbeiter_name:vpName,kuerzel:vp.kuerzel||gK(vpName),beschaeftigungsart:isHGB?'hgb':'angestellt',status:'entwurf',anzahl_sales:orders.length,brutto_provisionen:Math.round(bruttoTotal*100)/100,systemgebuehr_netto:Math.round(sgNetto*100)/100,systemgebuehr_ust:Math.round(sgUst*100)/100,nettobetrag:Math.round(bruttoTotal*100)/100,ust_satz:ustSatz,ust_betrag:Math.round(ustBetrag*100)/100,auszahlungssumme:Math.round((bruttoTotal+ustBetrag-sgBrutto)*100)/100});
@@ -895,7 +908,7 @@ async function generateAbrechnungen(periode, onProgress){
     }
     const sgNetto=isHGB?Math.min(bruttoTotal*(sgConfig.prozent/100),sgConfig.max_netto):0;
     const sgUst=sgNetto*(sgConfig.ust_satz/100);
-    const ustSatz=isHGB&&sc.mwst_pflichtig?19:0;
+    const ustSatz=isHGB&&sc.abrechnungsart==="brutto"?19:0;
     const ustBetrag=bruttoTotal*(ustSatz/100);
     const sgBrutto=sgNetto+sgUst;
     const abr=await sbP('pay_abrechnungen',{periode,mitarbeiter_name:scName,kuerzel:sc.kuerzel||gK(scName),beschaeftigungsart:isHGB?'hgb_scouter':'angestellt_scouter',status:'entwurf',anzahl_sales:orders.length,brutto_provisionen:Math.round(bruttoTotal*100)/100,systemgebuehr_netto:Math.round(sgNetto*100)/100,systemgebuehr_ust:Math.round(sgUst*100)/100,nettobetrag:Math.round(bruttoTotal*100)/100,ust_satz:ustSatz,ust_betrag:Math.round(ustBetrag*100)/100,auszahlungssumme:Math.round((bruttoTotal+ustBetrag-sgBrutto)*100)/100});
@@ -1996,7 +2009,7 @@ function App(){
   const merged=[...new Set([...allMonths,...u])].sort().reverse();
   setPers(merged);setPer(merged[0]||cp);}catch(e){const now=new Date();const allM=[];let dt=new Date(2025,9,1);while(dt<=now){allM.push(`${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}`);dt=new Date(dt.getFullYear(),dt.getMonth()+1,1);}const sorted=allM.sort().reverse();setPers(sorted);setPer(sorted[0]);}})();},[]);
 
-  const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s,ma]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&archiviert_am=is.null&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),sbG('mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,strasse,plz,ort,steuernummer,typ,mwst_pflichtig,iban,bic,kuerzel,firmenname,ustid,hausnr')]);setAbrs(a);setAusz(z);setSg(s[0]||null);setMaArr(ma);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
+  const loadP=useCallback(async()=>{if(!per)return;setLd(true);try{const[a,z,s,ma]=await Promise.all([sbG('pay_abrechnungen',`periode=eq.${per}&archiviert_am=is.null&order=mitarbeiter_name.asc`),sbG('pay_auszahlungen_historie',`periode=eq.${per}&order=vertriebler.asc`),sbG('pay_systemgebuehr','aktiv=eq.true&limit=1'),sbG('mitarbeiter','aktiv=eq.true&select=id,vorname,nachname,typ,abrechnungsart,ust_stichtag,kuerzel,strasse,hausnr,plz,ort,steuernummer,ustid,firmenname,iban,bic,email')]);setAbrs(a);setAusz(z);setSg(s[0]||null);setMaArr(ma);}catch(e){window.__t?.('Fehler: '+e.message,'error');}setLd(false);},[per]);
   useEffect(()=>{loadP();},[loadP]);
 
   // Partner-Daten Lookup
