@@ -2193,23 +2193,13 @@ document.addEventListener('keydown',e=>{
 async function init(){
   initCC();
   document.getElementById('ltxt').textContent='Lade Termine…';
-  // Sicherheits-Fallback: Loader nach 8s immer ausblenden
-  const loaderTimeout = setTimeout(()=>{
-    document.getElementById('loader').style.display='none';
-    console.warn('[CC-Kal] Loader-Timeout ausgelöst');
-  }, 8000);
   try{
-    document.getElementById('ltxtSub').textContent = 'Verbinde mit Datenbank…';
     await Promise.all([sync(false), syncBlocks()]);
-    document.getElementById('ltxtSub').textContent = '';
   }catch(e){
     console.error('[CC-Kal] Init-Fehler:', e);
     document.getElementById('sdot').className='sdot e';
     document.getElementById('slbl').textContent='Fehler';
-    document.getElementById('ltxt').textContent='Fehler beim Laden: '+e.message;
-  }finally{
-    clearTimeout(loaderTimeout);
-    document.getElementById('loader').style.display='none';
+    throw e; // re-throw so outer catch shows error
   }
   loadVtUsers();
   // Auto-scroll to current time (slightly before now line)
@@ -2226,7 +2216,21 @@ async function init(){
       document.getElementById('leadList').style.display='none';
   });
 }
-document.addEventListener('DOMContentLoaded',init);
+document.addEventListener('DOMContentLoaded', function(){
+  // Loader SOFORT ausblenden - nie mehr blockierend
+  const loader = document.getElementById('loader');
+  if(loader) loader.style.display='none';
+  // App initialisieren (async, non-blocking)
+  init().catch(e=>{
+    console.error('[CC-Kal] init() crashed:', e);
+    // Zeige Fehlermeldung direkt im Kalender
+    const body = document.getElementById('calbody');
+    if(body) body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--red);font-size:16px;">
+      ⚠️ Fehler beim Laden: ${e.message}<br><br>
+      <button onclick="location.reload()" style="background:var(--accent);color:#000;border:none;padding:12px 24px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">🔄 Neu laden</button>
+    </div>`;
+  });
+});
 </script>
 </body>
 </html>
