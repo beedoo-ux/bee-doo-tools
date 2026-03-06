@@ -721,10 +721,39 @@ async function sync(silent=false){
   document.getElementById('sdot').className='sdot s';
   document.getElementById('slbl').textContent='Sync…';
   try{
-    const r=await fetch(`${PROXY}?action=appointments`);
-    const d=await r.json();
-    if(d.ok){
-      S.apts=d.data||[];
+    // Lade direkt aus Supabase leveto_appointments (schnell ~100ms statt Leveto-API ~3s)
+    const today=new Date();
+    const from=new Date(today); from.setDate(today.getDate()-21); // 3 Wochen zurück
+    const to=new Date(today);   to.setDate(today.getDate()+28);   // 4 Wochen voraus
+    const fromStr=from.toISOString().slice(0,10);
+    const toStr=to.toISOString().slice(0,10);
+
+    const sbUrl=`${SB_URL}/rest/v1/leveto_appointments?select=leveto_id,lead_id,appointment_type,start_date,end_date,status,user_received,user_received_id,kunde_vorname,kunde_nachname,kunde_plz,kunde_stadt,kunde_strasse,kunde_hausnr,quelle,termin_text&start_date=gte.${fromStr}&start_date=lte.${toStr}&order=start_date.asc&limit=2000`;
+
+    const r=await fetch(sbUrl,{headers:{apikey:SB_ANON,'Authorization':'Bearer '+SB_ANON}});
+    const rows=await r.json();
+
+    if(Array.isArray(rows)){
+      // Spaltennamen auf bekanntes Format mappen
+      S.apts=rows.map(a=>({
+        id:          a.leveto_id,
+        lead_id:     a.lead_id,
+        appointment_type: a.appointment_type||'',
+        start_date:  a.start_date,
+        end_date:    a.end_date,
+        status:      a.status||'Open',
+        user_received: a.user_received||'',
+        user_received_id: a.user_received_id||null,
+        vorname:     a.kunde_vorname||'',
+        nachname:    a.kunde_nachname||'',
+        plz:         a.kunde_plz||'',
+        stadt:       a.kunde_stadt||'',
+        strasse:     a.kunde_strasse||'',
+        hausnummer:  a.kunde_hausnr||'',
+        quelle:      a.quelle||'',
+        text:        a.termin_text||'',
+        telefon:     '',
+      }));
       // Deduplicate: same start_date + same user + same nachname = duplicate
       const seen=new Set();
       S.apts=S.apts.filter(a=>{
@@ -764,7 +793,7 @@ async function sync(silent=false){
       document.getElementById('sdot').className='sdot';
       document.getElementById('slbl').textContent=t+' Uhr';
       render();
-    }else{document.getElementById('sdot').className='sdot e';document.getElementById('slbl').textContent='Fehler';}
+      }else{document.getElementById('sdot').className='sdot e';document.getElementById('slbl').textContent='Sync-Fehler';}
   }catch(e){document.getElementById('sdot').className='sdot e';document.getElementById('slbl').textContent='Offline';}
   S.syncing=false;
 }
@@ -2161,7 +2190,7 @@ document.addEventListener('keydown',e=>{
 // ── INIT ──────────────────────────────────────────────────────────
 async function init(){
   initCC();
-  document.getElementById('ltxt').textContent='Lade Daten…';
+  document.getElementById('ltxt').textContent='Lade Termine…';
   await Promise.all([sync(false), syncBlocks()]);
   loadVtUsers();
   document.getElementById('loader').style.display='none';
