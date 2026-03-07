@@ -1801,9 +1801,10 @@ function toggleMenu(){document.getElementById('mobMenu').classList.toggle('open'
 
 // ═══ HERO ANIMATION ═══
 function heroAnim(){
-  // Video autoplay with fallback to frame slideshow
+  // Video autoplay with clean fallback to frame slideshow
   var vid=document.getElementById('heroVideo');
   var frames=document.getElementById('heroFrames');
+  var videoWorks=false;
   function activateFrames(){
     if(vid)vid.style.display='none';
     if(frames)frames.classList.add('active');
@@ -1815,29 +1816,12 @@ function heroAnim(){
     vid.volume=0;
     var p=vid.play();
     if(p!==undefined){
-      p.then(function(){/* video works */}).catch(function(){
-        vid.load();
-        setTimeout(function(){
-          vid.muted=true;vid.volume=0;
-          var p2=vid.play();
-          if(p2)p2.then(function(){}).catch(function(){
-            activateFrames();
-            function tryOnInteract(){
-              vid.style.display='';
-              vid.muted=true;vid.volume=0;
-              var p3=vid.play();
-              if(p3)p3.then(function(){
-                if(frames)frames.classList.remove('active');
-                document.removeEventListener('touchstart',tryOnInteract);
-                document.removeEventListener('scroll',tryOnInteract);
-              }).catch(function(){vid.style.display='none'});
-            }
-            document.addEventListener('touchstart',tryOnInteract,{once:true,passive:true});
-            document.addEventListener('scroll',tryOnInteract,{once:true,passive:true});
-          });
-        },500);
+      p.then(function(){videoWorks=true;}).catch(function(){
+        activateFrames();
       });
     }
+    // If video hasn't started after 2s, use frames
+    setTimeout(function(){if(!videoWorks)activateFrames()},2000);
   }
   var tl=gsap.timeline({defaults:{ease:'power4.out'}});
   tl.to('.h-word',{y:0,opacity:1,duration:1.4,stagger:.1})
