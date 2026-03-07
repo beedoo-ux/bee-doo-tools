@@ -242,14 +242,15 @@
   .hero-vid{position:absolute;inset:0;z-index:0;overflow:hidden;background:#050505}
   .hero-vid::after{content:'';position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,rgba(5,5,5,.7) 0%,rgba(5,5,5,.5) 25%,rgba(5,5,5,.5) 50%,rgba(5,5,5,.7) 75%,rgba(5,5,5,.92) 95%,#050505 100%)}
   .hero-vid video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;will-change:transform}
-  .hero-vid .hero-frames{position:absolute;inset:0}
-  .hero-vid .hero-frames .hf{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;animation:heroFrame 24s ease infinite}
-  .hero-vid .hero-frames .hf:nth-child(1){animation-delay:0s}
-  .hero-vid .hero-frames .hf:nth-child(2){animation-delay:4s}
-  .hero-vid .hero-frames .hf:nth-child(3){animation-delay:8s}
-  .hero-vid .hero-frames .hf:nth-child(4){animation-delay:12s}
-  .hero-vid .hero-frames .hf:nth-child(5){animation-delay:16s}
-  .hero-vid .hero-frames .hf:nth-child(6){animation-delay:20s}
+  .hero-vid .hero-frames{position:absolute;inset:0;display:none}
+  .hero-vid .hero-frames.active{display:block}
+  .hero-vid .hero-frames.active .hf{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;animation:heroFrame 24s ease infinite}
+  .hero-vid .hero-frames.active .hf:nth-child(1){animation-delay:0s}
+  .hero-vid .hero-frames.active .hf:nth-child(2){animation-delay:4s}
+  .hero-vid .hero-frames.active .hf:nth-child(3){animation-delay:8s}
+  .hero-vid .hero-frames.active .hf:nth-child(4){animation-delay:12s}
+  .hero-vid .hero-frames.active .hf:nth-child(5){animation-delay:16s}
+  .hero-vid .hero-frames.active .hf:nth-child(6){animation-delay:20s}
   @keyframes heroFrame{0%{opacity:0;transform:scale(1)}3%{opacity:1}14%{opacity:1;transform:scale(1.06)}17%{opacity:0}100%{opacity:0}}
   .hero-overlay{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(5,5,5,.55) 0%,rgba(5,5,5,.35) 30%,rgba(5,5,5,.3) 50%,rgba(5,5,5,.55) 70%,rgba(5,5,5,.92) 90%,#050505 100%)}
   .hero-content{position:relative;z-index:2;text-align:center;max-width:1000px;padding:0 clamp(24px,6vw,80px)}
@@ -1727,42 +1728,39 @@ function toggleMenu(){document.getElementById('mobMenu').classList.toggle('open'
 
 // ═══ HERO ANIMATION ═══
 function heroAnim(){
-  // Enhanced video autoplay - multiple techniques like Enpal uses
+  // Video autoplay with fallback to frame slideshow
   var vid=document.getElementById('heroVideo');
   var frames=document.getElementById('heroFrames');
+  function activateFrames(){
+    if(vid)vid.style.display='none';
+    if(frames)frames.classList.add('active');
+  }
   if(vid){
     vid.muted=true;
     vid.setAttribute('muted','');
     vid.setAttribute('playsinline','');
     vid.volume=0;
-    // Attempt 1: direct play
     var p=vid.play();
     if(p!==undefined){
-      p.then(function(){
-        if(frames)frames.style.display='none';
-      }).catch(function(){
-        // Attempt 2: reload and retry after short delay
+      p.then(function(){/* video works */}).catch(function(){
         vid.load();
         setTimeout(function(){
           vid.muted=true;vid.volume=0;
           var p2=vid.play();
-          if(p2)p2.then(function(){
-            if(frames)frames.style.display='none';
-          }).catch(function(){
-            // Attempt 3: play on any user interaction (scroll, touch, click)
-            vid.style.display='none';
-            function tryPlayOnInteract(){
+          if(p2)p2.then(function(){}).catch(function(){
+            activateFrames();
+            function tryOnInteract(){
               vid.style.display='';
               vid.muted=true;vid.volume=0;
               var p3=vid.play();
               if(p3)p3.then(function(){
-                if(frames)frames.style.display='none';
-                document.removeEventListener('touchstart',tryPlayOnInteract);
-                document.removeEventListener('scroll',tryPlayOnInteract);
+                if(frames)frames.classList.remove('active');
+                document.removeEventListener('touchstart',tryOnInteract);
+                document.removeEventListener('scroll',tryOnInteract);
               }).catch(function(){vid.style.display='none'});
             }
-            document.addEventListener('touchstart',tryPlayOnInteract,{once:true,passive:true});
-            document.addEventListener('scroll',tryPlayOnInteract,{once:true,passive:true});
+            document.addEventListener('touchstart',tryOnInteract,{once:true,passive:true});
+            document.addEventListener('scroll',tryOnInteract,{once:true,passive:true});
           });
         },500);
       });
