@@ -1,0 +1,229 @@
+<!-- bee-doo PAY — Regelwerk Review | Stand: 07.03.2026 -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bee-doo PAY | Regelwerk Review</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<style>
+:root{--bg:#0a0a0f;--s1:#0d1117;--s2:#161b22;--s3:#21262d;--bd:#30363d;--tx:#e6edf3;--ts:#8b949e;--y:#F5C500;--g:#34d399;--r:#f87171;--b:#60a5fa;--o:#fb923c;--t:#2dd4bf;--p:#a78bfa}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--s1)}::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.fade-in{animation:fadeIn .3s ease}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}.pulse{animation:pulse 2s infinite}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect}=React;
+const SB="https://hqzpemfaljxcysyqssng.supabase.co/rest/v1";
+const SK="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxenBlbWZhbGp4Y3lzeXFzc25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzUzOTcsImV4cCI6MjA4NjkxMTM5N30.LSlMApceWuLk5MUctCGCVspXfYhc_As559aaoV2uSik";
+const H={apikey:SK,Authorization:`Bearer ${SK}`};
+const eur=v=>v==null?"–":Number(v).toLocaleString("de-DE",{minimumFractionDigits:0,maximumFractionDigits:0})+" €";
+
+function App(){
+  const[matrix,setMatrix]=useState([]);
+  const[regeln,setRegeln]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[reviewer,setReviewer]=useState("");
+  const[feedback,setFeedback]=useState({}); // key → {status:'ok'|'change', note:''}
+  const[submitted,setSubmitted]=useState(false);
+
+  useEffect(()=>{
+    Promise.all([
+      fetch(`${SB}/provisions_matrix?aktiv=eq.true&order=sortierung`,{headers:H}).then(r=>r.json()),
+      fetch(`${SB}/pay_mitarbeiter_regeln?aktiv=eq.true&order=typ,mitarbeiter_name`,{headers:H}).then(r=>r.json()),
+    ]).then(([mx,mr])=>{setMatrix(mx);setRegeln(mr);setLoading(false);});
+  },[]);
+
+  const setFB=(key,status)=>setFeedback(p=>({...p,[key]:{...p[key],status}}));
+  const setNote=(key,note)=>setFeedback(p=>({...p,[key]:{...p[key],note}}));
+  const allKeys=[...matrix.map(m=>`mx_${m.typ}`),...regeln.map(r=>`mr_${r.id}`),"storno_logik","systemgebuehr"];
+  const confirmed=allKeys.filter(k=>feedback[k]?.status==="ok").length;
+  const changes=allKeys.filter(k=>feedback[k]?.status==="change").length;
+  const total=allKeys.length;
+  const pct=total?Math.round(confirmed/total*100):0;
+
+  const submitReview=()=>{
+    const data={reviewer,timestamp:new Date().toISOString(),feedback,summary:{total,confirmed,changes}};
+    // Save to localStorage for now (could be Supabase later)
+    const existing=JSON.parse(localStorage.getItem("pay_reviews")||"[]");
+    existing.push(data);
+    localStorage.setItem("pay_reviews",JSON.stringify(existing));
+    setSubmitted(true);
+  };
+
+  const StatusBtn=({k})=>{
+    const st=feedback[k]?.status;
+    return<div style={{display:"flex",gap:6,flexShrink:0}}>
+      <button onClick={()=>setFB(k,"ok")} style={{background:st==="ok"?"#34d39930":"transparent",border:`1.5px solid ${st==="ok"?"#34d399":"var(--bd)"}`,borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,color:st==="ok"?"#34d399":"var(--ts)",cursor:"pointer",transition:"all .15s"}}>✓ Passt</button>
+      <button onClick={()=>setFB(k,"change")} style={{background:st==="change"?"#f8717130":"transparent",border:`1.5px solid ${st==="change"?"#f87171":"var(--bd)"}`,borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,color:st==="change"?"#f87171":"var(--ts)",cursor:"pointer",transition:"all .15s"}}>✎ Ändern</button>
+    </div>;
+  };
+
+  const NoteBox=({k})=>{
+    if(feedback[k]?.status!=="change")return null;
+    return<div style={{marginTop:8}}><textarea value={feedback[k]?.note||""} onChange={e=>setNote(k,e.target.value)} placeholder="Was soll geändert werden?" style={{width:"100%",background:"var(--s1)",border:"1px solid var(--r)44",borderRadius:8,color:"var(--tx)",padding:"8px 12px",fontSize:12,minHeight:60,resize:"vertical",fontFamily:"inherit"}}/></div>;
+  };
+
+  if(loading)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:16}}><div className="pulse" style={{fontSize:48}}>💰</div><div style={{color:"var(--ts)"}}>Lade Regelwerk...</div></div>;
+
+  if(submitted)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:16,padding:24,textAlign:"center"}}>
+    <div style={{fontSize:64}}>✅</div>
+    <div style={{fontSize:22,fontWeight:800,color:"var(--g)"}}>Review abgeschickt!</div>
+    <div style={{fontSize:14,color:"var(--ts)",maxWidth:400}}>{confirmed} bestätigt, {changes} Änderungswünsche von {reviewer}. Patrick wird die Änderungen einarbeiten.</div>
+  </div>;
+
+  const typLabels={flat_rate:"Flat-Rate",scout_eigenlead:"Scout-Eigenlead",scout_umleitung:"Scout-Umleitung",skip_abrechnung:"Skip Abrechnung",team_bonus:"Team-Bonus",vorschuss:"Vorschuss",sperrliste:"Sperrliste"};
+  const typColors={flat_rate:"var(--y)",scout_eigenlead:"var(--g)",scout_umleitung:"var(--b)",skip_abrechnung:"var(--r)",team_bonus:"var(--t)",vorschuss:"var(--o)",sperrliste:"var(--r)"};
+  const cfgText=r=>{const c=r.config||{};if(c.regel)return c.regel;if(c.beschreibung)return c.beschreibung;if(c.bezugsgruppe)return c.bezugsgruppe==="alle_vt"?"200€ pro Sale ALLER Vertriebler":`${eur(r.betrag)} pro Sale: ${(c.team_mitglieder||[]).join(", ")}`;if(c.auftrag_nr)return`${c.auftrag_nr} – ${c.kunde_name} (${c.grund})`;if(c.grund)return c.grund;return"";};
+
+  return<div style={{maxWidth:900,margin:"0 auto",padding:"24px 20px 60px"}}>
+    {/* Header */}
+    <div style={{textAlign:"center",marginBottom:32}}>
+      <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:12,marginBottom:12}}>
+        <div style={{width:44,height:44,background:"var(--y)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:"#000"}}>💰</div>
+        <div style={{textAlign:"left"}}><div style={{fontSize:22,fontWeight:800}}>bee-doo <span style={{color:"var(--y)"}}>PAY</span></div><div style={{fontSize:12,color:"var(--ts)"}}>Regelwerk Review · Stand 07.03.2026</div></div>
+      </div>
+      <div style={{fontSize:14,color:"var(--ts)",maxWidth:600,margin:"0 auto",lineHeight:1.6}}>Bitte prüfe alle Provisionsregeln. Klicke bei jedem Punkt auf <span style={{color:"var(--g)",fontWeight:600}}>✓ Passt</span> oder <span style={{color:"var(--r)",fontWeight:600}}>✎ Ändern</span> und schreib dazu was geändert werden soll.</div>
+    </div>
+
+    {/* Reviewer Name */}
+    <div style={{background:"var(--s2)",border:"1px solid var(--bd)",borderRadius:12,padding:20,marginBottom:24,textAlign:"center"}}>
+      <div style={{fontSize:13,color:"var(--ts)",marginBottom:8}}>Wer prüft?</div>
+      <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+        {["Olaf Schader","Patrick Windolph","Patrick Grabowski"].map(n=><button key={n} onClick={()=>setReviewer(n)} style={{background:reviewer===n?"var(--y)22":"var(--s3)",border:`1.5px solid ${reviewer===n?"var(--y)":"var(--bd)"}`,borderRadius:8,padding:"8px 18px",fontSize:13,fontWeight:600,color:reviewer===n?"var(--y)":"var(--ts)",cursor:"pointer"}}>{n}</button>)}
+      </div>
+    </div>
+
+    {/* Progress Bar */}
+    <div style={{background:"var(--s2)",border:"1px solid var(--bd)",borderRadius:10,padding:"12px 18px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:10}}>
+      <div style={{fontSize:13}}><span style={{fontWeight:700,color:"var(--g)"}}>{confirmed} bestätigt</span>{changes>0&&<span style={{color:"var(--r)",marginLeft:12,fontWeight:600}}>{changes} Änderungen</span>}<span style={{color:"var(--ts)",marginLeft:12}}>{total-confirmed-changes} offen</span></div>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <div style={{width:120,height:8,background:"var(--s3)",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:((confirmed+changes)/total*100)+"%",background:changes>0?"var(--o)":"var(--g)",borderRadius:4,transition:"width .3s"}}/></div>
+        <span style={{fontSize:12,fontWeight:700,color:pct===100?"var(--g)":"var(--ts)"}}>{Math.round((confirmed+changes)/total*100)}%</span>
+      </div>
+    </div>
+
+    {/* ═══ SECTION 1: Provisionsmodelle ═══ */}
+    <div style={{marginBottom:32}}>
+      <div style={{fontSize:18,fontWeight:800,marginBottom:4}}>📋 Provisionsmodelle</div>
+      <div style={{fontSize:12,color:"var(--ts)",marginBottom:16}}>5 Modelle — gelten für alle Mitarbeiter je nach Typ</div>
+      
+      {matrix.map(mx=>{const k=`mx_${mx.typ}`;const isS=mx.kategorie==="scout";const stufen=mx.stufenbonus||[];
+        return<div key={mx.typ} className="fade-in" style={{background:"var(--s2)",border:`1px solid ${feedback[k]?.status==="ok"?"var(--g)44":feedback[k]?.status==="change"?"var(--r)44":"var(--bd)"}`,borderRadius:12,padding:20,marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,flexWrap:"wrap",gap:8}}>
+            <div><div style={{fontSize:16,fontWeight:700,color:mx.color}}>{mx.label}</div><div style={{fontSize:11,color:"var(--ts)",marginTop:2}}>Gilt für: {(mx.typ_mapping||[]).join(", ")}</div></div>
+            <StatusBtn k={k}/>
+          </div>
+          
+          {isS?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
+            {[{l:"Fixgehalt/Monat",v:mx.fix_gehalt},{l:"Pro Lead",v:mx.pro_lead},{l:"Termin gebucht",v:mx.pro_termin_gebucht},{l:"Termin wahrgenommen",v:mx.pro_termin_wahrgenommen},{l:"Pro Anlage (Sale)",v:mx.pro_anlage}].map(f=><div key={f.l} style={{background:"var(--s1)",borderRadius:8,padding:"10px 14px",border:"1px solid var(--bd)40"}}>
+              <div style={{fontSize:10,color:"var(--ts)",fontWeight:600,textTransform:"uppercase",marginBottom:4}}>{f.l}</div>
+              <div style={{fontSize:20,fontWeight:800,color:Number(f.v)>0?"var(--tx)":"var(--ts)"}}>{eur(f.v)}</div>
+            </div>)}
+          </div>:<>
+            {/* Staffel */}
+            <div style={{display:"flex",gap:12,marginBottom:12}}>
+              <div style={{flex:1,background:"var(--s1)",borderRadius:8,padding:"12px 16px",border:"1px solid var(--bd)40"}}>
+                <div style={{fontSize:10,color:"var(--ts)",fontWeight:600,marginBottom:4}}>BASIS (Anlage 1–{Number(mx.staffel_ab)-1})</div>
+                <div style={{fontSize:26,fontWeight:800}}>{eur(mx.basis_pro_anlage)}</div>
+              </div>
+              <div style={{flex:1,background:"var(--g)08",borderRadius:8,padding:"12px 16px",border:"1px solid var(--g)25"}}>
+                <div style={{fontSize:10,color:"var(--g)",fontWeight:600,marginBottom:4}}>STAFFEL (ab {mx.staffel_ab}, rückwirkend)</div>
+                <div style={{fontSize:26,fontWeight:800,color:"var(--g)"}}>{eur(mx.staffel_pro_anlage)}</div>
+              </div>
+            </div>
+            {/* Boni */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:8,marginBottom:12}}>
+              {[{l:"Eigenlead",v:mx.bonus_eigenlead},{l:"Empfehlung",v:mx.bonus_empfehlung},{l:"Speicher",v:mx.bonus_speicher},{l:"Zero%",v:mx.bonus_zero_prozent}].map(b=><div key={b.l} style={{background:"var(--s1)",borderRadius:6,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",border:"1px solid var(--bd)30"}}>
+                <span style={{fontSize:12,color:"var(--ts)"}}>{b.l}</span>
+                <span style={{fontSize:15,fontWeight:700,color:"var(--y)"}}>+{eur(b.v)}</span>
+              </div>)}
+            </div>
+            {/* Stufenbonus */}
+            {stufen.length>0&&<div style={{background:"var(--g)08",borderRadius:8,padding:"10px 14px",border:"1px solid var(--g)20",marginBottom:8}}>
+              <div style={{fontSize:11,fontWeight:700,color:"var(--g)",marginBottom:6}}>🏆 Stufenbonus</div>
+              <div style={{display:"flex",gap:12,fontSize:13}}>{stufen.map((s,i)=><span key={i}>≥{s.ab} Anlagen = <span style={{fontWeight:700,color:"var(--g)"}}>{eur(s.betrag)}</span></span>)}</div>
+            </div>}
+            {/* Systemgebühr */}
+            {Number(mx.systemgebuehr_prozent)>0&&<div style={{background:"var(--o)08",borderRadius:8,padding:"10px 14px",border:"1px solid var(--o)20"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"var(--o)"}}>💳 Systemgebühr</div>
+              <div style={{fontSize:13,marginTop:4}}>{mx.systemgebuehr_prozent}% der Provision (max. {eur(mx.systemgebuehr_max_netto)} netto) + {mx.systemgebuehr_ust_satz}% USt</div>
+            </div>}
+          </>}
+          
+          {/* Storno */}
+          <div style={{marginTop:8,background:"var(--r)08",borderRadius:8,padding:"10px 14px",border:"1px solid var(--r)20"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--r)"}}>Storno-Logik</div>
+            <div style={{fontSize:13,marginTop:4}}>{mx.storno_dynamisch?"Dynamisch: Es wird immer genau der Betrag abgezogen, der ausgezahlt wurde":`Fester Betrag: ${eur(mx.storno_rueckbuchung)} pro Storno`} · Frist: {mx.storno_frist_tage} Tage · Nach Montage: {mx.storno_nach_montage?"Ja":"Nein"}</div>
+          </div>
+          <NoteBox k={k}/>
+        </div>;
+      })}
+    </div>
+
+    {/* ═══ SECTION 2: Individuelle Regeln ═══ */}
+    <div style={{marginBottom:32}}>
+      <div style={{fontSize:18,fontWeight:800,marginBottom:4}}>⭐ Individuelle Regeln</div>
+      <div style={{fontSize:12,color:"var(--ts)",marginBottom:16}}>Flat-Rates, Scout-Eigenleads, Team-Boni, Umleitungen — pro Mitarbeiter</div>
+      
+      {/* Group by type */}
+      {Object.entries(
+        regeln.filter(r=>!["sperrliste","vorschuss"].includes(r.typ)).reduce((acc,r)=>{(acc[r.typ]=acc[r.typ]||[]).push(r);return acc;},{})
+      ).map(([typ,items])=><div key={typ} style={{marginBottom:16}}>
+        <div style={{fontSize:14,fontWeight:700,marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{padding:"2px 10px",borderRadius:6,fontSize:11,fontWeight:600,background:`${typColors[typ]||"var(--ts)"}18`,color:typColors[typ]||"var(--ts)"}}>{typLabels[typ]||typ}</span>
+          <span style={{fontSize:12,color:"var(--ts)"}}>{items.length} Einträge</span>
+        </div>
+        {items.map(r=>{const k=`mr_${r.id}`;return<div key={r.id} className="fade-in" style={{background:"var(--s2)",border:`1px solid ${feedback[k]?.status==="ok"?"var(--g)44":feedback[k]?.status==="change"?"var(--r)44":"var(--bd)"}`,borderRadius:10,padding:"14px 18px",marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+            <div style={{flex:1,minWidth:200}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontWeight:700,fontSize:14}}>{r.mitarbeiter_name}</span>
+                {Number(r.betrag)>0&&<span style={{fontSize:16,fontWeight:800,color:"var(--y)"}}>{eur(r.betrag)}</span>}
+              </div>
+              <div style={{fontSize:12,color:"var(--ts)",marginTop:4,lineHeight:1.5}}>{cfgText(r)}</div>
+              {r.gueltig_ab&&<div style={{fontSize:10,color:"var(--ts)",marginTop:4}}>Gültig ab: {r.gueltig_ab}{r.gueltig_bis?` bis ${r.gueltig_bis}`:""}</div>}
+            </div>
+            <StatusBtn k={k}/>
+          </div>
+          <NoteBox k={k}/>
+        </div>;})}
+      </div>)}
+    </div>
+
+    {/* ═══ SECTION 3: Sperrlisten ═══ */}
+    {regeln.filter(r=>r.typ==="sperrliste").length>0&&<div style={{marginBottom:32}}>
+      <div style={{fontSize:18,fontWeight:800,marginBottom:4}}>🔒 Sperrlisten</div>
+      <div style={{fontSize:12,color:"var(--ts)",marginBottom:16}}>Gesperrte Aufträge — werden nicht provisioniert</div>
+      <div style={{background:"var(--s2)",border:"1px solid var(--bd)",borderRadius:10,padding:16}}>
+        <div style={{display:"grid",gap:6}}>
+          {regeln.filter(r=>r.typ==="sperrliste").map(r=><div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid var(--bd)20",fontSize:13}}>
+            <div><span style={{fontWeight:600,color:"var(--r)"}}>{r.config?.auftrag_nr}</span> — {r.config?.kunde_name} <span style={{fontSize:11,color:"var(--ts)"}}>({r.config?.grund})</span></div>
+          </div>)}
+        </div>
+      </div>
+    </div>}
+
+    {/* ═══ SUBMIT ═══ */}
+    <div style={{background:"var(--s2)",border:"1px solid var(--y)33",borderRadius:12,padding:24,textAlign:"center"}}>
+      <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>Review abschließen</div>
+      <div style={{fontSize:13,color:"var(--ts)",marginBottom:16}}>{confirmed+changes} von {total} Punkten bearbeitet{!reviewer&&" — bitte oben deinen Namen auswählen"}</div>
+      <button onClick={submitReview} disabled={!reviewer||confirmed+changes===0} style={{background:!reviewer||confirmed+changes===0?"var(--s3)":"var(--y)",color:!reviewer||confirmed+changes===0?"var(--ts)":"#000",border:"none",borderRadius:10,padding:"12px 32px",fontSize:15,fontWeight:700,cursor:!reviewer||confirmed+changes===0?"not-allowed":"pointer",transition:"all .2s"}}>
+        {!reviewer?"Bitte Namen auswählen":confirmed+changes===0?"Mindestens 1 Punkt bewerten":"✓ Review abschicken"}
+      </button>
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
