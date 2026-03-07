@@ -1019,7 +1019,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   </div>
   <div class="hero-overlay"></div>
   <div class="hero-content">
-    <div class="hero-tag" id="hTag"><div class="hero-tag-dot"></div>Solarexperte aus Bielefeld</div>
+    <div class="hero-tag" id="hTag"><div class="hero-tag-dot"></div><span id="heroTagText">Solarexperte aus Bielefeld</span></div>
     <h1>
       <span class="h-line"><span class="h-word">Strom,</span> <span class="h-word">der</span></span>
       <span class="h-line"><span class="h-word"><em>sich</em></span> <span class="h-word"><em>rechnet.</em></span></span>
@@ -1053,7 +1053,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   </div>
   <div class="hero-footer">
     <div class="hero-scroll" id="hScroll"><div class="scroll-dot"></div><span class="scroll-txt">Scroll</span></div>
-    <div class="hero-live" id="hLive"><div class="live-dot"></div>2.000+ Projekte realisiert</div>
+    <div class="hero-live" id="hLive"><div class="live-dot"></div><span id="heroLiveText">2.000+ Projekte realisiert</span></div>
   </div>
 </section>
 
@@ -1917,6 +1917,58 @@ function selectRoof(el,type,m2,kwp,save){
     });
   };
   document.head.appendChild(sc);
+})();
+
+// ═══ GEO-PERSONALISIERUNG ═══
+(function(){
+  var bundeslandMap={
+    'Baden-Württemberg':'Baden-Württemberg','Bavaria':'Bayern','Bayern':'Bayern',
+    'Berlin':'Berlin','Brandenburg':'Brandenburg','Bremen':'Bremen',
+    'Hamburg':'Hamburg','Hesse':'Hessen','Hessen':'Hessen',
+    'Lower Saxony':'Niedersachsen','Niedersachsen':'Niedersachsen',
+    'Mecklenburg-Vorpommern':'Mecklenburg-Vorpommern','Mecklenburg-Western Pomerania':'Mecklenburg-Vorpommern',
+    'North Rhine-Westphalia':'NRW','Nordrhein-Westfalen':'NRW','NRW':'NRW',
+    'Rhineland-Palatinate':'Rheinland-Pfalz','Rheinland-Pfalz':'Rheinland-Pfalz',
+    'Saarland':'Saarland','Saxony':'Sachsen','Sachsen':'Sachsen',
+    'Saxony-Anhalt':'Sachsen-Anhalt','Sachsen-Anhalt':'Sachsen-Anhalt',
+    'Schleswig-Holstein':'Schleswig-Holstein',
+    'Thuringia':'Thüringen','Thüringen':'Thüringen'
+  };
+  try{
+    fetch('https://ipapi.co/json/',{signal:AbortSignal.timeout(3000)})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(!d||!d.country_code)return;
+      if(d.country_code!=='DE'){
+        // Ausland
+        document.getElementById('heroTagText').textContent='Ihr Solarpartner aus Deutschland';
+        document.getElementById('heroLiveText').textContent='2.000+ Projekte deutschlandweit';
+        return;
+      }
+      var city=d.city||'';
+      var region=d.region||'';
+      var bl=bundeslandMap[region]||region;
+      // Weather Widget mit echtem Ort
+      var wt=document.querySelector('.weather-temp');
+      if(wt&&city)wt.textContent=city+' '+Math.round(d.latitude>50?12:15)+'°C';
+      // NRW = Kerngebiet
+      if(bl==='NRW'){
+        if(city&&city!=='Bielefeld'){
+          document.getElementById('heroTagText').textContent='Ihr Solarexperte für '+city;
+          document.getElementById('heroLiveText').textContent='2.000+ Projekte in NRW';
+        }
+        // Bielefeld bleibt default
+        return;
+      }
+      // Anderes Bundesland
+      if(city){
+        document.getElementById('heroTagText').textContent='Ihr Solarpartner für '+city+' & '+bl;
+      }else{
+        document.getElementById('heroTagText').textContent='Ihr Solarpartner für '+bl;
+      }
+      document.getElementById('heroLiveText').textContent='2.000+ Projekte deutschlandweit';
+    }).catch(function(){});
+  }catch(e){}
 })();
 
 // ═══ WEATHER WIDGET ═══
