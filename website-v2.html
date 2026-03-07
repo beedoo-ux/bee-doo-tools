@@ -225,6 +225,8 @@
   .nav-cta{background:transparent;border:1px solid rgba(245,197,0,.4);color:var(--gold)!important;font-weight:700!important;font-size:.75rem!important;padding:10px 24px;border-radius:50px;letter-spacing:1px;text-transform:uppercase;transition:all .4s var(--ease)!important;position:relative;overflow:hidden}
   .nav-cta::before{content:'';position:absolute;inset:0;background:var(--gold);opacity:0;transition:opacity .4s;border-radius:50px}
   .nav-cta:hover{background:var(--gold)!important;color:#000!important;border-color:var(--gold)!important;box-shadow:0 0 40px rgba(245,197,0,.3),0 0 80px rgba(245,197,0,.1)!important}
+  .nav-login{display:inline-flex;align-items:center;gap:5px;font-size:.7rem!important;font-weight:600!important;color:rgba(255,255,255,.5)!important;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:50px;transition:all .3s!important}
+  .nav-login:hover{color:rgba(255,255,255,.9)!important;border-color:rgba(255,255,255,.3)}
   .burger{display:none;width:28px;height:20px;position:relative;cursor:pointer}
   .burger span{position:absolute;left:0;width:100%;height:1.5px;background:#fff;border-radius:2px;transition:.3s var(--ease)}
   .burger span:nth-child(1){top:0}.burger span:nth-child(2){top:50%;transform:translateY(-50%)}.burger span:nth-child(3){bottom:0}
@@ -993,6 +995,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <li><a href="/news.html">News</a></li>
     <li><a href="/faqs.html">FAQs</a></li>
     <li><a href="/kontakt.html" class="nav-cta" target="_blank">Anfragen</a></li>
+    <li><a href="https://bee-doo-tools.vercel.app/mitarbeiter-portal.html" class="nav-login" target="_blank"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Login</a></li>
     <li><a href="/impressum.html" style="font-size:.65rem!important;opacity:.5">Impressum</a></li>
     <li><a href="/datenschutz.html" style="font-size:.65rem!important;opacity:.5">Datenschutz</a></li>
   </ul>
@@ -1008,6 +1011,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <a href="/news.html" onclick="toggleMenu()">News</a>
   <a href="/faqs.html" onclick="toggleMenu()">FAQs</a>
   <a href="/kontakt.html" class="mob-cta" target="_blank">Kostenlos anfragen</a>
+  <a href="https://bee-doo-tools.vercel.app/mitarbeiter-portal.html" target="_blank" style="font-size:.85rem!important;color:rgba(255,255,255,.6)!important;font-weight:500!important;margin-top:8px;display:flex;align-items:center;gap:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Kunden-Login</a>
   <div style="display:flex;gap:20px;margin-top:24px"><a href="/impressum.html" onclick="toggleMenu()" style="font-size:.75rem!important;color:var(--muted)!important;font-weight:400!important">Impressum</a><a href="/datenschutz.html" onclick="toggleMenu()" style="font-size:.75rem!important;color:var(--muted)!important;font-weight:400!important">Datenschutz</a></div>
 </div>
 
@@ -1789,19 +1793,44 @@ function toggleMenu(){document.getElementById('mobMenu').classList.toggle('open'
 
 // ═══ HERO ANIMATION ═══
 function heroAnim(){
-  // Try video, frames always animate underneath as fallback
+  // Enhanced video autoplay - multiple techniques like Enpal uses
   var vid=document.getElementById('heroVideo');
   var frames=document.getElementById('heroFrames');
   if(vid){
     vid.muted=true;
+    vid.setAttribute('muted','');
+    vid.setAttribute('playsinline','');
+    vid.volume=0;
+    // Attempt 1: direct play
     var p=vid.play();
     if(p!==undefined){
       p.then(function(){
-        // Video works - hide frames
         if(frames)frames.style.display='none';
       }).catch(function(){
-        // Video blocked - hide video, frames already animating
-        vid.style.display='none';
+        // Attempt 2: reload and retry after short delay
+        vid.load();
+        setTimeout(function(){
+          vid.muted=true;vid.volume=0;
+          var p2=vid.play();
+          if(p2)p2.then(function(){
+            if(frames)frames.style.display='none';
+          }).catch(function(){
+            // Attempt 3: play on any user interaction (scroll, touch, click)
+            vid.style.display='none';
+            function tryPlayOnInteract(){
+              vid.style.display='';
+              vid.muted=true;vid.volume=0;
+              var p3=vid.play();
+              if(p3)p3.then(function(){
+                if(frames)frames.style.display='none';
+                document.removeEventListener('touchstart',tryPlayOnInteract);
+                document.removeEventListener('scroll',tryPlayOnInteract);
+              }).catch(function(){vid.style.display='none'});
+            }
+            document.addEventListener('touchstart',tryPlayOnInteract,{once:true,passive:true});
+            document.addEventListener('scroll',tryPlayOnInteract,{once:true,passive:true});
+          });
+        },500);
       });
     }
   }
