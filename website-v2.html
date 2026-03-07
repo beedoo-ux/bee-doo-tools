@@ -2167,16 +2167,34 @@ setTimeout(showSocialProof,8000);
   var dragging=false;
   function setPos(x){
     var rect=slider.getBoundingClientRect();
-    var pct=Math.max(0,Math.min(100,((x-rect.left)/rect.width)*100));
+    var pct=Math.max(2,Math.min(98,((x-rect.left)/rect.width)*100));
     handle.style.left=pct+'%';
     after.style.clipPath='inset(0 0 0 '+pct+'%)';
   }
   slider.addEventListener('mousedown',function(e){dragging=true;setPos(e.clientX)});
   window.addEventListener('mousemove',function(e){if(dragging)setPos(e.clientX)});
   window.addEventListener('mouseup',function(){dragging=false});
-  slider.addEventListener('touchstart',function(e){dragging=true;setPos(e.touches[0].clientX);e.preventDefault()},{passive:false});
-  window.addEventListener('touchmove',function(e){if(dragging){setPos(e.touches[0].clientX);e.preventDefault()}},{passive:false});
-  window.addEventListener('touchend',function(){dragging=false});
+  slider.addEventListener('touchstart',function(e){
+    dragging=true;
+    setPos(e.touches[0].clientX);
+    e.stopPropagation();
+    e.preventDefault();
+    // Stop Lenis smooth scroll during drag
+    if(typeof lenis!=='undefined')lenis.stop();
+  },{passive:false});
+  window.addEventListener('touchmove',function(e){
+    if(dragging){
+      setPos(e.touches[0].clientX);
+      e.preventDefault();
+    }
+  },{passive:false});
+  window.addEventListener('touchend',function(){
+    if(dragging){
+      dragging=false;
+      // Resume Lenis
+      if(typeof lenis!=='undefined')lenis.start();
+    }
+  });
 })();
 
 // ═══ AI CHATBOT ═══
