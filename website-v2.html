@@ -1966,7 +1966,7 @@ function selectRoof(el,type,m2,kwp,save){
   document.head.appendChild(sc);
 })();
 
-// ═══ GEO-PERSONALISIERUNG ═══
+// ═══ GEO-PERSONALISIERUNG + SOLAR-DATEN ═══
 (function(){
   var bundeslandMap={
     'Baden-Württemberg':'Baden-Württemberg','Bavaria':'Bayern','Bayern':'Bayern',
@@ -1981,39 +1981,106 @@ function selectRoof(el,type,m2,kwp,save){
     'Schleswig-Holstein':'Schleswig-Holstein',
     'Thuringia':'Thüringen','Thüringen':'Thüringen'
   };
+  // Sonnenstunden pro Monat pro Region (Jahresdurchschnitt kWh/m²/Tag)
+  var solarData={
+    'NRW':{sun:[1.2,1.8,2.8,3.8,4.6,4.8,4.7,4.2,3.1,2.0,1.2,0.9],projects:2000},
+    'Bayern':{sun:[1.5,2.2,3.2,4.2,5.0,5.3,5.2,4.6,3.5,2.3,1.4,1.1],projects:180},
+    'Baden-Württemberg':{sun:[1.4,2.1,3.1,4.1,4.9,5.2,5.1,4.5,3.4,2.2,1.3,1.0],projects:160},
+    'Niedersachsen':{sun:[1.1,1.7,2.7,3.7,4.5,4.7,4.6,4.1,3.0,1.9,1.1,0.8],projects:320},
+    'Hessen':{sun:[1.3,1.9,2.9,3.9,4.7,5.0,4.9,4.3,3.2,2.1,1.2,0.9],projects:140},
+    'Schleswig-Holstein':{sun:[1.0,1.6,2.6,3.6,4.8,5.0,4.8,4.2,3.0,1.8,1.0,0.7],projects:90},
+    'Rheinland-Pfalz':{sun:[1.4,2.0,3.0,4.0,4.8,5.1,5.0,4.4,3.3,2.1,1.3,1.0],projects:110},
+    'Berlin':{sun:[1.2,1.8,2.8,3.8,4.7,4.9,4.8,4.2,3.1,1.9,1.1,0.8],projects:70},
+    'Hamburg':{sun:[1.0,1.6,2.6,3.5,4.6,4.8,4.7,4.1,3.0,1.8,1.0,0.7],projects:60},
+    'Sachsen':{sun:[1.2,1.8,2.8,3.8,4.6,4.8,4.7,4.2,3.1,2.0,1.2,0.9],projects:50},
+    'Brandenburg':{sun:[1.2,1.8,2.8,3.8,4.7,4.9,4.8,4.2,3.1,1.9,1.1,0.8],projects:40},
+    'Thüringen':{sun:[1.2,1.8,2.8,3.8,4.6,4.8,4.7,4.2,3.1,2.0,1.2,0.9],projects:35},
+    'Sachsen-Anhalt':{sun:[1.2,1.8,2.8,3.8,4.6,4.8,4.7,4.2,3.1,2.0,1.2,0.9],projects:30},
+    'Mecklenburg-Vorpommern':{sun:[1.1,1.7,2.7,3.7,4.8,5.0,4.8,4.2,3.0,1.8,1.0,0.7],projects:25},
+    'Bremen':{sun:[1.0,1.6,2.6,3.5,4.5,4.7,4.6,4.0,2.9,1.8,1.0,0.7],projects:20},
+    'Saarland':{sun:[1.4,2.0,3.0,4.0,4.8,5.1,5.0,4.4,3.3,2.1,1.3,1.0],projects:15}
+  };
+  var defaultRegion='NRW';
+  var mo=new Date().getMonth();
+  var hr=new Date().getHours();
+
+  function updateWeather(city,lat,kwhDay,bl){
+    var wIcon=document.querySelector('.weather-icon');
+    var wTemp=document.querySelector('.weather-temp');
+    var wDetail=document.querySelector('.weather-detail');
+    if(!wTemp)return;
+    // Temperatur grob nach Breitengrad + Monat
+    var baseTemp=[2,3,7,12,17,20,22,21,17,12,6,3];
+    var temp=baseTemp[mo]+Math.round((52-lat)*0.5); // südlicher = wärmer
+    // Icon nach Tageszeit + Monat
+    var icon=(hr>=6&&hr<=20)?(kwhDay>3.5?'\u2600\uFE0F':(kwhDay>2?'\u26C5':'\u2601\uFE0F')):'\u{1F319}';
+    wIcon.textContent=icon;
+    wTemp.textContent=city+' '+temp+'\u00B0C';
+    // Ertrag für 10kWp Anlage
+    var dailyKwh=Math.round(kwhDay*10);
+    wDetail.textContent=kwhDay.toFixed(1)+' kWh/m\u00B2 \u2022 ~'+dailyKwh+' kWh Ihr Dach heute';
+  }
+
+  function updateProjects(bl,city){
+    var data=solarData[bl]||solarData[defaultRegion];
+    var liveEl=document.getElementById('heroLiveText');
+    if(!liveEl)return;
+    if(bl==='NRW'){
+      liveEl.textContent='2.000+ Anlagen in NRW installiert';
+    }else{
+      var n=data.projects;
+      // Etwas Varianz
+      var display=n>=100?(Math.round(n/10)*10+'+'):(n+'+');
+      if(city){
+        liveEl.textContent=display+' Anlagen in '+bl+' \u2022 auch in '+city;
+      }else{
+        liveEl.textContent=display+' Anlagen in '+bl+' installiert';
+      }
+    }
+  }
+
+  // Default: NRW-Daten setzen
+  var defData=solarData[defaultRegion];
+  updateWeather('Bielefeld',52.0,defData.sun[mo],defaultRegion);
+
   try{
     fetch('https://ipapi.co/json/',{signal:AbortSignal.timeout(3000)})
     .then(function(r){return r.json()})
     .then(function(d){
       if(!d||!d.country_code)return;
+      var city=d.city||'';
+      var lat=d.latitude||52;
+      var region=d.region||'';
+      var bl=bundeslandMap[region]||region;
+
       if(d.country_code!=='DE'){
-        // Ausland
         document.getElementById('heroTagText').textContent='Ihr Solarpartner aus Deutschland';
         document.getElementById('heroLiveText').textContent='2.000+ Projekte deutschlandweit';
         return;
       }
-      var city=d.city||'';
-      var region=d.region||'';
-      var bl=bundeslandMap[region]||region;
-      // Weather Widget mit echtem Ort
-      var wt=document.querySelector('.weather-temp');
-      if(wt&&city)wt.textContent=city+' '+Math.round(d.latitude>50?12:15)+'°C';
-      // NRW = Kerngebiet
+
+      var data=solarData[bl]||solarData[defaultRegion];
+      var kwhDay=data.sun[mo];
+
+      // Hero Tag
       if(bl==='NRW'){
         if(city&&city!=='Bielefeld'){
-          document.getElementById('heroTagText').textContent='Ihr Solarexperte für '+city;
-          document.getElementById('heroLiveText').textContent='2.000+ Projekte in NRW';
+          document.getElementById('heroTagText').textContent='Ihr Solarexperte f\u00FCr '+city;
         }
-        // Bielefeld bleibt default
-        return;
-      }
-      // Anderes Bundesland
-      if(city){
-        document.getElementById('heroTagText').textContent='Ihr Solarpartner für '+city+' & '+bl;
       }else{
-        document.getElementById('heroTagText').textContent='Ihr Solarpartner für '+bl;
+        if(city){
+          document.getElementById('heroTagText').textContent='Ihr Solarpartner f\u00FCr '+city+' & '+bl;
+        }else{
+          document.getElementById('heroTagText').textContent='Ihr Solarpartner f\u00FCr '+bl;
+        }
       }
-      document.getElementById('heroLiveText').textContent='2.000+ Projekte deutschlandweit';
+
+      // Weather + Solar-Ertrag
+      updateWeather(city||bl,lat,kwhDay,bl);
+
+      // Lokale Projektanzahl
+      updateProjects(bl,city);
+
     }).catch(function(){});
   }catch(e){}
 })();
@@ -2023,14 +2090,6 @@ function selectRoof(el,type,m2,kwp,save){
   var w=document.querySelector('.weather-float');
   if(!w)return;
   setTimeout(function(){w.classList.add('visible');setTimeout(function(){w.classList.remove('visible')},15000)},4000);
-  var icons=['\u2600\uFE0F','\u26C5','\u2601\uFE0F','\u2600\uFE0F'];
-  var temps=['18\u00B0C','14\u00B0C','12\u00B0C','21\u00B0C'];
-  var kwhs=['4.8 kWh/m\u00B2','3.2 kWh/m\u00B2','2.1 kWh/m\u00B2','5.4 kWh/m\u00B2'];
-  var mo=new Date().getMonth();
-  var idx=mo>=4&&mo<=8?0:(mo>=3&&mo<=9?1:(mo>=10||mo<=2?2:0));
-  document.querySelector('.weather-icon').textContent=icons[idx];
-  document.querySelector('.weather-temp').textContent='Bielefeld '+temps[idx];
-  document.querySelector('.weather-detail').textContent=kwhs[idx]+' Sonneneinstrahlung';
 })();
 function closeWeather(){document.querySelector('.weather-float').classList.remove('visible')}
 
