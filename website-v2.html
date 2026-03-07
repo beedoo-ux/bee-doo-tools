@@ -1057,23 +1057,34 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <!-- HERO -->
 <section class="hero">
   <div class="hero-vid" id="heroVid">
-    <video id="heroVideo" autoplay muted loop playsinline webkit-playsinline preload="auto" style="opacity:1">
+    <video id="heroVideo" autoplay muted loop playsinline webkit-playsinline preload="auto" poster="https://cdn.jsdelivr.net/gh/beedoo-ux/bee-doo-tools@main/assets/website/hero_f1.jpg" style="opacity:1">
       <source src="https://cdn.jsdelivr.net/gh/beedoo-ux/bee-doo-tools@main/assets/website/hero-web-small.mp4" type="video/mp4">
     </video>
     <script>
-    // Immediate video play - before preloader finishes
+    // Aggressive video autoplay for iOS
     (function(){
       var v=document.getElementById('heroVideo');
       if(!v)return;
-      v.muted=true;v.volume=0;
+      v.muted=true;v.volume=0;v.defaultMuted=true;
       v.setAttribute('muted','');
       v.setAttribute('playsinline','');
       v.setAttribute('webkit-playsinline','');
-      var p=v.play();
-      if(p)p.catch(function(){
-        // iOS: retry on first touch
-        document.addEventListener('touchstart',function(){v.muted=true;v.play();},{once:true,passive:true});
+      function tryPlay(){
+        v.muted=true;v.volume=0;
+        var p=v.play();
+        if(p)p.catch(function(){});
+      }
+      tryPlay();
+      // Retry after DOM ready
+      document.addEventListener('DOMContentLoaded',tryPlay);
+      // Retry on first interaction
+      ['touchstart','scroll','click'].forEach(function(evt){
+        document.addEventListener(evt,function(){tryPlay()},{once:true,passive:true});
       });
+      // Retry after preloader (500ms + 1s + 2s)
+      setTimeout(tryPlay,500);
+      setTimeout(tryPlay,1000);
+      setTimeout(tryPlay,2000);
     })();
     </script>
 
