@@ -122,6 +122,7 @@ function renderMatrix(mx){
   html+='<div class="card-head"><div><div class="card-title" style="color:'+mx.color+'">'+mx.label+'</div><div class="card-sub">Gilt für: '+(mx.typ_mapping||[]).join(", ")+'</div></div>'+statusBtns(k)+'</div>';
   
   if(isS){
+    html+='<div style="font-size:12px;color:var(--ts);margin-bottom:10px;line-height:1.5">'+(mx.typ==="scout_angestellt"?'Angestellte Scouts bekommen ein Fixgehalt plus variable Vergütung pro Lead, wahrgenommenem Termin und verkaufter Anlage. Termin "gebucht" wird nicht vergütet — erst wenn der Termin tatsächlich stattgefunden hat.':'HGB-Scouts haben kein Fixgehalt und bekommen nur Provision für wahrgenommene Termine (100€) und verkaufte Anlagen (200€). Kein Storno-Abzug.')+'</div>';
     html+='<div class="grid grid-4">';
     [{l:"Fixgehalt/Monat",v:mx.fix_gehalt},{l:"Pro Lead",v:mx.pro_lead},{l:"Termin gebucht",v:mx.pro_termin_gebucht},{l:"Termin wahrgenommen",v:mx.pro_termin_wahrgenommen},{l:"Pro Anlage (Sale)",v:mx.pro_anlage}].forEach(f=>{
       html+='<div class="val-box"><div class="val-label">'+f.l+'</div><div class="val-num" style="color:'+(Number(f.v)>0?"var(--tx)":"var(--ts)")+'">'+eur(f.v)+'</div></div>';
@@ -136,10 +137,10 @@ function renderMatrix(mx){
     });
     html+='</div>';
     if(stufen.length){html+='<div class="info-box info-stufen"><div class="info-title" style="color:var(--g)">🏆 Stufenbonus</div>';stufen.forEach(s=>{html+='<span style="margin-right:16px">≥'+s.ab+' Anlagen = <b style="color:var(--g)">'+eur(s.betrag)+'</b></span>';});html+='</div>';}
-    if(Number(mx.systemgebuehr_prozent)>0){html+='<div class="info-box info-sg"><div class="info-title" style="color:var(--o)">💳 Systemgebühr</div>'+mx.systemgebuehr_prozent+'% der Provision (max. '+eur(mx.systemgebuehr_max_netto)+' netto) + '+mx.systemgebuehr_ust_satz+'% USt</div>';}
+    if(Number(mx.systemgebuehr_prozent)>0){html+='<div class="info-box info-sg"><div class="info-title" style="color:var(--o)">💳 Systemgebühr (nur HGB)</div>bee-doo stellt jedem HGB-Vertriebler eine Systemgebühr in Rechnung: '+mx.systemgebuehr_prozent+'% der Netto-Provision, maximal '+eur(mx.systemgebuehr_max_netto)+' netto + '+mx.systemgebuehr_ust_satz+'% USt. Wird automatisch von der Auszahlung abgezogen.</div>';}
   }
   
-  html+='<div class="info-box info-storno"><div class="info-title" style="color:var(--r)">Storno-Logik</div>'+(mx.storno_dynamisch?'Dynamisch: Es wird immer genau der Betrag abgezogen, der ausgezahlt wurde':'Fester Betrag: '+eur(mx.storno_rueckbuchung)+' pro Storno')+' · Frist: '+mx.storno_frist_tage+' Tage · Nach Montage: '+(mx.storno_nach_montage?"Ja":"Nein")+'</div>';
+  html+='<div class="info-box info-storno"><div class="info-title" style="color:var(--r)">Storno-Logik</div>'+(mx.storno_dynamisch?'<b>Dynamisch:</b> Wenn ein Auftrag storniert wird, wird genau der Betrag wieder abgezogen, den der Berater dafür bekommen hat (inkl. aller Boni). Beispiel: Berater hat 1.700€ + 800€ Eigenlead bekommen → bei Storno werden 2.500€ abgezogen.':'Fester Betrag: '+eur(mx.storno_rueckbuchung)+' pro Storno')+' · Widerrufsfrist: '+mx.storno_frist_tage+' Tage · Nach abgeschlossener Montage: '+(mx.storno_nach_montage?"Storno möglich":"Kein Storno mehr")+'</div>';
   html+=noteBox(k)+'</div>';
   return html;
 }
@@ -155,7 +156,7 @@ function render(){
   const typLabels={flat_rate:"Flat-Rate",scout_eigenlead:"Scout-Eigenlead",scout_umleitung:"Scout-Umleitung",skip_abrechnung:"Skip",team_bonus:"Team-Bonus"};
   const typColors={flat_rate:"var(--y)",scout_eigenlead:"var(--g)",scout_umleitung:"var(--b)",skip_abrechnung:"var(--r)",team_bonus:"#2dd4bf"};
   
-  let html='<div class="header"><h1>bee-doo <span>PAY</span></h1><p style="font-size:14px;color:var(--ts)">Regelwerk Review · Stand 07.03.2026</p><p>Bitte prüfe alle Provisionsregeln. Klicke bei jedem Punkt auf <span style="color:var(--g);font-weight:600">✓ Passt</span> oder <span style="color:var(--r);font-weight:600">✎ Ändern</span>.</p></div>';
+  let html='<div class="header"><h1>bee-doo <span>PAY</span></h1><p style="font-size:14px;color:var(--ts)">Regelwerk Review · Stand 07.03.2026</p><p>Wir stellen die Provisionsabrechnung auf ein neues System um. Alle Regeln, die ihr hier seht, werden ab sofort für die automatische Berechnung der Gutschriften verwendet. Bitte prüft jeden Punkt und klickt auf <span style="color:var(--g);font-weight:600">✓ Passt</span> wenn alles korrekt ist, oder auf <span style="color:var(--r);font-weight:600">✎ Ändern</span> wenn etwas angepasst werden muss — dann könnt ihr dazuschreiben was geändert werden soll.</p></div>';
   
   // Reviewer
   html+='<div class="reviewer-bar"><div style="font-size:13px;color:var(--ts);margin-bottom:8px">Wer prüft?</div>';
@@ -170,12 +171,14 @@ function render(){
   
   // Matrix
   html+='<div class="section"><h2>📋 Provisionsmodelle</h2><div class="sub">5 Modelle — gelten für alle Mitarbeiter je nach Typ</div>';
+  html+='<div style="background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:12px;color:var(--ts);line-height:1.7"><b style="color:var(--tx)">So funktioniert es:</b> Jeder Mitarbeiter ist einem Typ zugeordnet (z.B. "HGB Vertriebler" oder "Angestellt Scout"). Das System schaut automatisch, welches Modell für den jeweiligen Typ gilt, und berechnet die Provision danach.<br><br><b style="color:var(--y)">Staffel-Logik:</b> Erreicht ein Berater die Staffel-Schwelle (z.B. 8 Anlagen im Monat), bekommt er den höheren Satz — und zwar rückwirkend auf ALLE Anlagen des Monats, nicht nur ab der 8. Anlage.<br><br><b style="color:var(--y)">Boni:</b> Eigenleads (selbst generiert), Empfehlungen, Speicher-Erweiterungen und Zero%-Finanzierungen werden zusätzlich zur Basis-Provision vergütet.</div>';
   mx.forEach(m=>{html+=renderMatrix(m);});
   html+='</div>';
   
   // Individuelle Regeln
   const groups={};mr.filter(r=>!["sperrliste","vorschuss"].includes(r.typ)).forEach(r=>{(groups[r.typ]=groups[r.typ]||[]).push(r);});
   html+='<div class="section"><h2>⭐ Individuelle Regeln</h2><div class="sub">Pro Mitarbeiter — Flat-Rates, Scout-Eigenleads, Team-Boni, Umleitungen</div>';
+  html+='<div style="background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:12px;color:var(--ts);line-height:1.7"><b style="color:var(--tx)">Was sind individuelle Regeln?</b> Manche Mitarbeiter haben Sondervereinbarungen, die von den Standard-Modellen abweichen:<br><br><b style="color:var(--y)">Flat-Rate:</b> Statt der normalen Staffel bekommt der Berater einen festen Betrag pro Anlage — egal wie viele er verkauft. Bsp: Christoph Held bekommt immer 3.000€/Anlage statt 1.400/1.700€.<br><br><b style="color:var(--g)">Scout-Eigenlead:</b> Wenn ein bestimmter Scout den Lead gebracht hat, bekommt der zugeordnete Vertriebler einen Extra-Bonus von 800€. Das ist eine individuelle Zuordnung Scout → Vertriebler.<br><br><b style="color:#2dd4bf">Team-Bonus:</b> Teamleiter bekommen einen Bonus pro Sale ihrer Team-Mitglieder. Christoph z.B. 200€ pro Sale aller VTs, Tayfun 300€ pro Sale seines Teams.<br><br><b style="color:var(--b)">Scout-Umleitung:</b> Die Provision eines Beraters wird auf eine andere Person umgeleitet (z.B. Kalinowski → Dagmar Schmitz).<br><br><b style="color:var(--r)">Skip:</b> Für diesen Mitarbeiter wird keine Abrechnung erstellt.</div>';
   Object.entries(groups).forEach(([typ,items])=>{
     const col=typColors[typ]||"var(--ts)";
     html+='<div style="margin-bottom:16px"><div style="margin-bottom:8px"><span class="tag" style="background:'+col+'18;color:'+col+'">'+(typLabels[typ]||typ)+'</span><span style="font-size:12px;color:var(--ts)">'+items.length+' Einträge</span></div>';
@@ -195,6 +198,7 @@ function render(){
   const sperren=mr.filter(r=>r.typ==="sperrliste");
   if(sperren.length){
     html+='<div class="section"><h2>🔒 Sperrlisten</h2><div class="sub">Gesperrte Aufträge — werden nicht provisioniert</div>';
+    html+='<div style="background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:12px;color:var(--ts);line-height:1.7"><b style="color:var(--tx)">Was bedeutet das?</b> Diese Aufträge sind gesperrt und werden bei der Provisionsberechnung übersprungen — meistens wegen offener Grundbuchprüfung (EFS meldet LAND_REGISTRY_CHECK). Sobald die Prüfung abgeschlossen ist, kann die Sperre aufgehoben werden.</div>';
     html+='<div class="card"><div style="display:grid;gap:6px">';
     sperren.forEach(r=>{const c=r.config||{};html+='<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)20;font-size:13px"><div><span style="font-weight:600;color:var(--r)">'+c.auftrag_nr+'</span> — '+c.kunde_name+' <span style="font-size:11px;color:var(--ts)">('+c.grund+')</span></div></div>';});
     html+='</div></div></div>';
