@@ -353,91 +353,88 @@ function TabGutschrift({provs,selPerson,setSelPerson,selMonth,matrix}){
   </div>;
 }
 
-// ═══ Tab: Stammdaten (vollständig aus alter Matrix) ═══
+// ═══ Tab: Stammdaten — Eingabefreundlich mit Lücken-Ampel ═══
 function TabStammdaten({mitarbeiterList,setMitarbeiterList,toast}){
   const[filter,setFilter]=useState("alle");const[typFilter,setTypFilter]=useState("alle");const[search,setSearch]=useState("");
   const[editId,setEditId]=useState(null);const[editData,setEditData]=useState({});const[saving,setSaving]=useState(false);
-  const[sortCol,setSortCol]=useState("name");const[sortDir,setSortDir]=useState("asc");const[deactivating,setDeactivating]=useState(null);
-  const toggleSort=col=>{if(sortCol===col)setSortDir(d=>d==="asc"?"desc":"asc");else{setSortCol(col);setSortDir("asc");}};
+  const[deactivating,setDeactivating]=useState(null);const[expandedId,setExpandedId]=useState(null);
   const isHGB=m=>(m.typ||"").includes("hgb");const isAng=m=>(m.typ||"").includes("angestellt");
   const hasAddr=m=>m.strasse&&m.plz&&m.ort;const hasEmail=m=>m.email&&m.email.includes("@");const hasIBAN=m=>m.iban&&m.iban.length>5;
-  const hasStNr=m=>m.steuernummer&&m.steuernummer.length>3;const hasUStId=m=>m.ustid&&m.ustid.length>3;const hasGehalt=m=>m.grundgehalt&&parseFloat(m.grundgehalt)>0;const hasTel=m=>m.telefon&&m.telefon.length>3;
+  const hasStNr=m=>m.steuernummer&&m.steuernummer.length>3;const hasUStId=m=>m.ustid&&m.ustid.length>3;
+  const hasGehalt=m=>m.grundgehalt&&parseFloat(m.grundgehalt)>0;const hasTel=m=>m.telefon&&m.telefon.length>3;
+  const isReady=m=>{const base=hasAddr(m)&&hasEmail(m)&&hasIBAN(m);if(isHGB(m))return base&&hasStNr(m);if(isAng(m))return base&&hasGehalt(m);return base;};
+  const missingFields=m=>{const ms=[];if(!hasAddr(m))ms.push("Adresse");if(!hasEmail(m))ms.push("E-Mail");if(!hasIBAN(m))ms.push("IBAN");if(!hasTel(m))ms.push("Telefon");if(isHGB(m)&&!hasStNr(m))ms.push("StNr");if(isHGB(m)&&!hasUStId(m))ms.push("USt-Id");if(isAng(m)&&!hasGehalt(m))ms.push("Gehalt");return ms;};
   const allMA=mitarbeiterList.filter(m=>m.aktiv!==false);
-  const filters=[{key:"alle",label:"Alle",count:allMA.length,color:"var(--y)"},{key:"no_addr",label:"Ohne Adresse",count:allMA.filter(m=>!hasAddr(m)).length,color:"var(--r)"},{key:"no_email",label:"Ohne E-Mail",count:allMA.filter(m=>!hasEmail(m)).length,color:"var(--o)"},{key:"no_iban",label:"Ohne IBAN",count:allMA.filter(m=>!hasIBAN(m)).length,color:"var(--r)"},{key:"no_stnr",label:"Ohne StNr (HGB)",count:allMA.filter(m=>isHGB(m)&&!hasStNr(m)).length,color:"var(--o)"},{key:"no_gehalt",label:"Ohne Gehalt (Ang.)",count:allMA.filter(m=>isAng(m)&&!hasGehalt(m)).length,color:"var(--o)"},{key:"no_tel",label:"Ohne Telefon",count:allMA.filter(m=>!hasTel(m)).length,color:"var(--ts)"},{key:"vollstaendig",label:"Vollständig",count:allMA.filter(m=>hasAddr(m)&&hasEmail(m)&&hasIBAN(m)&&(isHGB(m)?hasStNr(m):true)&&(isAng(m)?hasGehalt(m):true)).length,color:"var(--g)"}];
-  const typFilters=[{key:"alle",label:"Alle Typen"},{key:"hgb",label:"HGB §84"},{key:"ang",label:"Angestellt"},{key:"scout",label:"Scouts"},{key:"vt",label:"Vertriebler"}];
+  const readyCount=allMA.filter(m=>isReady(m)).length;const notReadyCount=allMA.length-readyCount;
+  const filters=[{key:"alle",label:"Alle",count:allMA.length,color:"var(--y)",icon:"👤"},{key:"not_ready",label:"Nicht abrechnungsbereit",count:notReadyCount,color:"var(--r)",icon:"⚠️"},{key:"ready",label:"Abrechnungsbereit",count:readyCount,color:"var(--g)",icon:"✓"},{key:"no_addr",label:"Ohne Adresse",count:allMA.filter(m=>!hasAddr(m)).length,color:"var(--r)",icon:"📍"},{key:"no_iban",label:"Ohne IBAN",count:allMA.filter(m=>!hasIBAN(m)).length,color:"var(--r)",icon:"🏦"},{key:"no_email",label:"Ohne E-Mail",count:allMA.filter(m=>!hasEmail(m)).length,color:"var(--o)",icon:"✉️"},{key:"no_stnr",label:"HGB ohne StNr",count:allMA.filter(m=>isHGB(m)&&!hasStNr(m)).length,color:"var(--o)",icon:"📋"},{key:"no_gehalt",label:"Ang. ohne Gehalt",count:allMA.filter(m=>isAng(m)&&!hasGehalt(m)).length,color:"var(--o)",icon:"💰"}];
+  const typFilters=[{key:"alle",label:"Alle"},{key:"hgb",label:"HGB §84"},{key:"ang",label:"Angestellt"},{key:"scout",label:"Scouts"},{key:"vt",label:"Vertriebler"}];
   let filtered=allMA;
-  if(filter==="no_addr")filtered=filtered.filter(m=>!hasAddr(m));else if(filter==="no_email")filtered=filtered.filter(m=>!hasEmail(m));else if(filter==="no_iban")filtered=filtered.filter(m=>!hasIBAN(m));else if(filter==="no_stnr")filtered=filtered.filter(m=>isHGB(m)&&!hasStNr(m));else if(filter==="no_gehalt")filtered=filtered.filter(m=>isAng(m)&&!hasGehalt(m));else if(filter==="no_tel")filtered=filtered.filter(m=>!hasTel(m));else if(filter==="vollstaendig")filtered=filtered.filter(m=>hasAddr(m)&&hasEmail(m)&&hasIBAN(m)&&(isHGB(m)?hasStNr(m):true)&&(isAng(m)?hasGehalt(m):true));
+  if(filter==="not_ready")filtered=filtered.filter(m=>!isReady(m));else if(filter==="ready")filtered=filtered.filter(m=>isReady(m));else if(filter==="no_addr")filtered=filtered.filter(m=>!hasAddr(m));else if(filter==="no_iban")filtered=filtered.filter(m=>!hasIBAN(m));else if(filter==="no_email")filtered=filtered.filter(m=>!hasEmail(m));else if(filter==="no_stnr")filtered=filtered.filter(m=>isHGB(m)&&!hasStNr(m));else if(filter==="no_gehalt")filtered=filtered.filter(m=>isAng(m)&&!hasGehalt(m));
   if(typFilter==="hgb")filtered=filtered.filter(m=>isHGB(m));else if(typFilter==="ang")filtered=filtered.filter(m=>isAng(m));else if(typFilter==="scout")filtered=filtered.filter(m=>(m.typ||"").includes("scouter"));else if(typFilter==="vt")filtered=filtered.filter(m=>(m.typ||"").includes("vertrieb")||(m.typ||"").includes("_vt"));
-  if(search.trim()){const q=search.toLowerCase();filtered=filtered.filter(m=>(m.vorname+" "+m.nachname).toLowerCase().includes(q)||(m.email||"").toLowerCase().includes(q));}
-  const sortFn=(a,b)=>{let va,vb;const name=m=>(m.vorname+" "+m.nachname).toLowerCase();switch(sortCol){case"name":va=name(a);vb=name(b);break;case"typ":va=a.typ||"";vb=b.typ||"";break;case"adresse":va=a.plz||"zzz";vb=b.plz||"zzz";break;case"email":va=a.email||"zzz";vb=b.email||"zzz";break;case"gehalt":va=parseFloat(a.grundgehalt||0);vb=parseFloat(b.grundgehalt||0);return sortDir==="asc"?va-vb:vb-va;default:va=name(a);vb=name(b);}if(typeof va==="string"){const c=va.localeCompare(vb);return sortDir==="asc"?c:-c;}return sortDir==="asc"?va-vb:vb-va;};
-  filtered=[...filtered].sort(sortFn);
-  const startEdit=m=>{setEditId(m.id);setEditData({strasse:m.strasse||"",hausnr:m.hausnr||"",plz:m.plz||"",ort:m.ort||"",email:m.email||"",telefon:m.telefon||"",steuernummer:m.steuernummer||"",ustid:m.ustid||"",iban:m.iban||"",firmenname:m.firmenname||"",grundgehalt:m.grundgehalt||0,auto_zuschuss:m.auto_zuschuss||0});};
-  const cancelEdit=()=>{setEditId(null);setEditData({});};
-  const saveEdit=async()=>{setSaving(true);try{const patch={};Object.entries(editData).forEach(([k,v])=>{if(v!=="")patch[k]=k==="grundgehalt"||k==="auto_zuschuss"?parseFloat(v)||0:v;});await db.patch("mitarbeiter","id=eq."+editId,patch);setMitarbeiterList(prev=>prev.map(m=>m.id===editId?{...m,...patch}:m));toast("Gespeichert","ok");setEditId(null);}catch(e){toast("Fehler: "+e.message,"err");}setSaving(false);};
-  const deactivateMA=async m=>{if(!confirm(m.vorname+" "+m.nachname+" deaktivieren?"))return;setDeactivating(m.id);try{await db.patch("mitarbeiter","id=eq."+m.id,{aktiv:false,austritt_datum:new Date().toISOString().substring(0,10)});setMitarbeiterList(prev=>prev.filter(x=>x.id!==m.id));toast(m.vorname+" deaktiviert","ok");}catch(e){toast("Fehler: "+e.message,"err");}setDeactivating(null);};
+  if(search.trim()){const q=search.toLowerCase();filtered=filtered.filter(m=>(m.vorname+" "+m.nachname).toLowerCase().includes(q)||(m.email||"").toLowerCase().includes(q)||(m.ort||"").toLowerCase().includes(q));}
+  filtered=[...filtered].sort((a,b)=>(a.vorname+" "+a.nachname).localeCompare(b.vorname+" "+b.nachname));
   const TLBL={angestellt_scouter:"Ang. Scout",hgb_scouter:"§84 Scout",angestellt_vertriebler:"Ang. VB",angestellt_vt:"Ang. VT",hgb_vertriebler_agentur:"§84 Ag.",hgb_vertriebler_haupt:"§84 Hpt.",hgb_vertriebler:"§84 VB",vertriebler:"VB",angestellt_buero:"Büro",angestellt_montage:"Montage",montage_partner:"Mont.P.",hgb84:"§84"};
   const TCLR={angestellt_scouter:"var(--b)",hgb_scouter:"var(--p)",angestellt_vertriebler:"var(--g)",angestellt_vt:"var(--g)",hgb_vertriebler_agentur:"var(--o)",hgb_vertriebler_haupt:"var(--y)",hgb_vertriebler:"var(--o)",hgb84:"var(--y)"};
-  const Dot=({ok})=><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:ok?"#34d399":"#f87171",marginRight:2}}/>;
-  const Inp=({k,ph,w})=><input value={editData[k]||""} onChange={e=>setEditData(p=>({...p,[k]:e.target.value}))} placeholder={ph} style={{background:"var(--s1)",border:"1px solid var(--y)44",borderRadius:4,color:"var(--tx)",padding:"3px 6px",fontSize:11,width:w||"100%"}}/>;
-
+  const startEdit=m=>{setEditId(m.id);setExpandedId(m.id);setEditData({strasse:m.strasse||"",hausnr:m.hausnr||"",plz:m.plz||"",ort:m.ort||"",email:m.email||"",telefon:m.telefon||"",steuernummer:m.steuernummer||"",ustid:m.ustid||"",iban:m.iban||"",firmenname:m.firmenname||"",grundgehalt:m.grundgehalt||0,auto_zuschuss:m.auto_zuschuss||0,abrechnungsart:m.abrechnungsart||"netto"});};
+  const cancelEdit=()=>{setEditId(null);setEditData({});};
+  const saveEdit=async()=>{setSaving(true);try{const patch={};Object.entries(editData).forEach(([k,v])=>{patch[k]=(k==="grundgehalt"||k==="auto_zuschuss")?parseFloat(v)||0:v;});await db.patch("mitarbeiter","id=eq."+editId,patch);setMitarbeiterList(prev=>prev.map(m=>m.id===editId?{...m,...patch}:m));const ma=filtered.find(m=>m.id===editId);toast((ma?.vorname||"")+" gespeichert","ok");setEditId(null);}catch(e){toast("Fehler: "+e.message,"err");}setSaving(false);};
+  const deactivateMA=async m=>{if(!confirm(m.vorname+" "+m.nachname+" deaktivieren?"))return;setDeactivating(m.id);try{await db.patch("mitarbeiter","id=eq."+m.id,{aktiv:false,austritt_datum:new Date().toISOString().substring(0,10)});setMitarbeiterList(prev=>prev.filter(x=>x.id!==m.id));toast(m.vorname+" deaktiviert","ok");}catch(e){toast("Fehler: "+e.message,"err");}setDeactivating(null);};
+  const Dot=({ok})=><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:ok?"#34d399":"#f87171",marginRight:4}}/>;
+  const pctReady=allMA.length?Math.round(readyCount/allMA.length*100):0;
   return<div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:8,marginBottom:16}}>
-      {filters.map(f=><button key={f.key} onClick={()=>setFilter(f.key)} style={{background:filter===f.key?f.color+"22":"var(--s2)",border:"1px solid "+(filter===f.key?f.color+"55":"var(--bd)"),borderRadius:8,padding:"10px 12px",cursor:"pointer",textAlign:"left",borderBottom:filter===f.key?"2px solid "+f.color:"2px solid transparent"}}>
-        <div style={{fontSize:22,fontWeight:700,color:f.color,fontVariantNumeric:"tabular-nums"}}>{f.count}</div>
-        <div style={{fontSize:10,color:"var(--ts)",marginTop:2}}>{f.label}</div>
-      </button>)}
+    <div style={{background:pctReady===100?"var(--g)12":"var(--y)12",border:"1px solid "+(pctReady===100?"var(--g)":"var(--y)")+"33",borderRadius:10,padding:"14px 18px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+      <div><div style={{fontSize:14,fontWeight:700,color:pctReady===100?"var(--g)":"var(--y)"}}>{pctReady===100?"✓ Alle abrechnungsbereit":"⚠️ "+notReadyCount+" nicht abrechnungsbereit"}</div><div style={{fontSize:12,color:"var(--ts)",marginTop:4}}>{readyCount}/{allMA.length} vollständig ({pctReady}%)</div></div>
+      <div style={{width:120,height:8,background:"var(--s3)",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:pctReady+"%",background:pctReady===100?"var(--g)":"var(--y)",borderRadius:4,transition:"width .3s"}}/></div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8,marginBottom:16}}>
+      {filters.map(f=><button key={f.key} onClick={()=>setFilter(f.key)} style={{background:filter===f.key?f.color+"22":"var(--s2)",border:"1px solid "+(filter===f.key?f.color+"55":"var(--bd)"),borderRadius:8,padding:"10px 12px",cursor:"pointer",textAlign:"left",borderBottom:filter===f.key?"2px solid "+f.color:"2px solid transparent"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:22,fontWeight:700,color:f.color}}>{f.count}</span><span style={{fontSize:14}}>{f.icon}</span></div><div style={{fontSize:10,color:"var(--ts)",marginTop:4}}>{f.label}</div></button>)}
     </div>
     <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Name oder E-Mail suchen..." style={{flex:1,minWidth:200,padding:"7px 12px",fontSize:12}}/>
-      <div style={{display:"flex",gap:3,background:"var(--s2)",borderRadius:6,padding:2}}>
-        {typFilters.map(t=><button key={t.key} onClick={()=>setTypFilter(t.key)} style={{background:typFilter===t.key?"var(--y)":"transparent",color:typFilter===t.key?"#000":"var(--ts)",border:"none",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}}>{t.label}</button>)}
-      </div>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Name, E-Mail oder Ort suchen..." style={{flex:1,minWidth:200,padding:"8px 14px",fontSize:13}}/>
+      <div style={{display:"flex",gap:3,background:"var(--s2)",borderRadius:6,padding:2}}>{typFilters.map(t=><button key={t.key} onClick={()=>setTypFilter(t.key)} style={{background:typFilter===t.key?"var(--y)":"transparent",color:typFilter===t.key?"#000":"var(--ts)",border:"none",borderRadius:4,padding:"5px 12px",fontSize:11,fontWeight:600,cursor:"pointer"}}>{t.label}</button>)}</div>
       <span style={{fontSize:11,color:"var(--ts)"}}>{filtered.length} Ergebnisse</span>
     </div>
-    <div style={{overflowX:"auto",borderRadius:8,border:"1px solid var(--bd)"}}>
-      <table style={{minWidth:1100}}>
-        <thead><tr>{[["Name","name"],["Typ","typ"],["Adresse","adresse"],["E-Mail","email"],["Telefon",""],["StNr","stnr"],["USt-Id",""],["IBAN","iban"],["Gehalt","gehalt"],["USt",""],["",""]].map(([h,col],i)=><th key={i} onClick={col?()=>toggleSort(col):undefined} style={{cursor:col?"pointer":"default"}}>{h}{sortCol===col?(sortDir==="asc"?" ▲":" ▼"):""}</th>)}</tr></thead>
-        <tbody>
-          {filtered.length===0&&<tr><td colSpan={11} style={{padding:30,textAlign:"center",color:"var(--ts)"}}>Keine Ergebnisse</td></tr>}
-          {filtered.map(m=>{const tc=TCLR[m.typ]||"var(--ts)";
-            if(editId===m.id)return<tr key={m.id} style={{background:"#F5C50008"}}>
-              <td style={{padding:"6px 10px",fontWeight:600,fontSize:12}}>{m.vorname} {m.nachname}</td>
-              <td style={{padding:"6px 10px"}}><span style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:tc+"18",color:tc,fontWeight:600}}>{TLBL[m.typ]||m.typ}</span></td>
-              <td style={{padding:"4px 6px"}}><div style={{display:"flex",gap:3}}><Inp k="strasse" ph="Straße"/><Inp k="hausnr" ph="Nr" w="40px"/><Inp k="plz" ph="PLZ" w="50px"/><Inp k="ort" ph="Ort"/></div></td>
-              <td style={{padding:"4px 6px"}}><Inp k="email" ph="E-Mail"/></td>
-              <td style={{padding:"4px 6px"}}><Inp k="telefon" ph="Telefon"/></td>
-              <td style={{padding:"4px 6px"}}><Inp k="steuernummer" ph="Steuernr"/></td>
-              <td style={{padding:"4px 6px"}}><Inp k="ustid" ph="USt-IdNr"/></td>
-              <td style={{padding:"4px 6px"}}><Inp k="iban" ph="IBAN"/></td>
-              <td style={{padding:"4px 6px"}}>{isAng(m)?<Inp k="grundgehalt" ph="Gehalt" w="70px"/>:<span style={{fontSize:10,color:"var(--ts)"}}>–</span>}</td>
-              <td style={{padding:"6px 10px",fontSize:10}}>{m.abrechnungsart==="brutto"?<span style={{color:"var(--o)"}}>Brutto</span>:<span style={{color:"var(--b)"}}>Netto</span>}</td>
-              <td style={{padding:"4px 6px"}}><div style={{display:"flex",gap:4}}>
-                <button onClick={saveEdit} disabled={saving} style={{background:"#34d39922",border:"1px solid #34d39940",borderRadius:4,color:"#34d399",padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{saving?"...":"✓"}</button>
-                <button onClick={cancelEdit} style={{background:"var(--s3)",border:"1px solid var(--bd)",borderRadius:4,color:"var(--ts)",padding:"3px 8px",fontSize:10,cursor:"pointer"}}>✗</button>
-              </div></td>
-            </tr>;
-            return<tr key={m.id}>
-              <td style={{padding:"6px 10px"}}><div style={{fontWeight:600,fontSize:12}}>{m.vorname} {m.nachname}</div>{m.firmenname&&<div style={{fontSize:9,color:"var(--ts)"}}>{m.firmenname}</div>}</td>
-              <td style={{padding:"6px 10px"}}><span style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:tc+"18",color:tc,fontWeight:600}}>{TLBL[m.typ]||m.typ}</span></td>
-              <td style={{padding:"6px 10px",fontSize:11}}><Dot ok={hasAddr(m)}/>{hasAddr(m)?`${m.strasse} ${m.hausnr||""}, ${m.plz} ${m.ort}`:<span style={{color:"var(--r)",fontSize:10}}>fehlt</span>}</td>
-              <td style={{padding:"6px 10px",fontSize:11}}><Dot ok={hasEmail(m)}/>{hasEmail(m)?m.email:<span style={{color:"var(--r)",fontSize:10}}>fehlt</span>}</td>
-              <td style={{padding:"6px 10px",fontSize:11}}><Dot ok={hasTel(m)}/>{hasTel(m)?m.telefon:<span style={{color:"var(--ts)",fontSize:10}}>–</span>}</td>
-              <td style={{padding:"6px 10px",fontSize:11}}>{isHGB(m)?<><Dot ok={hasStNr(m)}/>{hasStNr(m)?m.steuernummer:<span style={{color:"var(--r)",fontSize:10}}>fehlt</span>}</>:<span style={{fontSize:10,color:"var(--ts)"}}>–</span>}</td>
-              <td style={{padding:"6px 10px",fontSize:11}}>{isHGB(m)?<><Dot ok={hasUStId(m)}/>{hasUStId(m)?m.ustid:<span style={{color:"var(--ts)",fontSize:10}}>–</span>}</>:<span style={{fontSize:10,color:"var(--ts)"}}>–</span>}</td>
-              <td style={{padding:"6px 10px",fontSize:11}}><Dot ok={hasIBAN(m)}/>{hasIBAN(m)?m.iban.substring(0,4)+"..."+m.iban.slice(-4):<span style={{color:"var(--r)",fontSize:10}}>fehlt</span>}</td>
-              <td style={{padding:"6px 10px",fontSize:11,textAlign:"right"}}>{isAng(m)?(hasGehalt(m)?<span style={{fontWeight:600}}>{parseFloat(m.grundgehalt).toLocaleString("de-DE")} €</span>:<span style={{color:"var(--r)",fontSize:10}}>fehlt</span>):<span style={{fontSize:10,color:"var(--ts)"}}>–</span>}</td>
-              <td style={{padding:"6px 10px"}}>{isHGB(m)?<span style={{fontSize:10,fontWeight:600,padding:"2px 6px",borderRadius:4,background:m.abrechnungsart==="brutto"?"#fb923c18":"#60a5fa18",color:m.abrechnungsart==="brutto"?"#fb923c":"#60a5fa"}}>{m.abrechnungsart==="brutto"?"BRUTTO":"NETTO"}</span>:<span style={{fontSize:10,color:"var(--ts)"}}>–</span>}</td>
-              <td style={{padding:"6px 10px"}}><div style={{display:"flex",gap:3}}>
-                <button onClick={()=>startEdit(m)} style={{background:"var(--s3)",border:"1px solid var(--bd)",borderRadius:4,color:"var(--ts)",padding:"3px 8px",fontSize:10,cursor:"pointer"}}>✎</button>
-                <button onClick={()=>deactivateMA(m)} disabled={deactivating===m.id} style={{background:"#f8717112",border:"1px solid #f8717130",borderRadius:4,color:"#f87171",padding:"3px 6px",fontSize:10,cursor:"pointer"}}>{deactivating===m.id?"...":"✗"}</button>
-              </div></td>
-            </tr>;
-          })}
-        </tbody>
-      </table>
+    <div style={{display:"grid",gap:8}}>
+      {filtered.map(m=>{const tc=TCLR[m.typ]||"var(--ts)";const missing=missingFields(m);const ready=missing.length===0;const isExp=expandedId===m.id;const isEdit=editId===m.id;
+        return<div key={m.id} style={{background:"var(--s2)",border:"1px solid "+(ready?"var(--g)33":"var(--bd)"),borderRadius:10,overflow:"hidden",borderLeft:"3px solid "+(ready?"var(--g)":missing.length>2?"var(--r)":"var(--o)")}}>
+          <div onClick={()=>{if(!isEdit)setExpandedId(isExp?null:m.id);}} style={{padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <div style={{width:32,height:32,borderRadius:8,background:ready?"var(--g)18":"var(--s3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:ready?"var(--g)":"var(--ts)",flexShrink:0}}>{ready?"✓":missing.length}</div>
+            <div style={{flex:1,minWidth:150}}><div style={{fontWeight:600,fontSize:13}}>{m.vorname} {m.nachname}</div><div style={{display:"flex",gap:6,marginTop:3,flexWrap:"wrap"}}><span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:tc+"18",color:tc,fontWeight:600}}>{TLBL[m.typ]||m.typ}</span>{m.firmenname&&<span style={{fontSize:10,color:"var(--ts)"}}>{m.firmenname}</span>}</div></div>
+            <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}} className="desktop-only"><Dot ok={hasAddr(m)}/><span style={{fontSize:10,color:"var(--ts)"}}>Adr</span><Dot ok={hasEmail(m)}/><span style={{fontSize:10,color:"var(--ts)"}}>Mail</span><Dot ok={hasIBAN(m)}/><span style={{fontSize:10,color:"var(--ts)"}}>IBAN</span>{isHGB(m)&&<><Dot ok={hasStNr(m)}/><span style={{fontSize:10,color:"var(--ts)"}}>StNr</span></>}{isAng(m)&&<><Dot ok={hasGehalt(m)}/><span style={{fontSize:10,color:"var(--ts)"}}>Gehalt</span></>}</div>
+            {missing.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",flexShrink:0}}>{missing.map(f=><span key={f} style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:"var(--r)15",color:"var(--r)",fontWeight:600}}>{f}</span>)}</div>}
+            <div style={{display:"flex",gap:4,flexShrink:0}}>
+              <button onClick={e=>{e.stopPropagation();startEdit(m);}} style={{background:"var(--y)18",border:"1px solid var(--y)44",borderRadius:6,color:"var(--y)",padding:"4px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}}>✎ Bearbeiten</button>
+              <button onClick={e=>{e.stopPropagation();deactivateMA(m);}} disabled={deactivating===m.id} style={{background:"var(--r)12",border:"1px solid var(--r)30",borderRadius:6,color:"var(--r)",padding:"4px 8px",fontSize:11,cursor:"pointer"}}>{deactivating===m.id?"...":"✗"}</button>
+            </div>
+          </div>
+          {(isExp||isEdit)&&<div style={{padding:"0 14px 14px",borderTop:"1px solid var(--bd)"}}>
+            {isEdit?<div style={{paddingTop:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
+                {[{label:"Straße",key:"strasse",ph:"Musterstraße"},{label:"Hausnr.",key:"hausnr",ph:"12a"},{label:"PLZ",key:"plz",ph:"33609"},{label:"Ort",key:"ort",ph:"Bielefeld"},{label:"E-Mail",key:"email",ph:"name@example.de"},{label:"Telefon",key:"telefon",ph:"+49 170 1234567"},{label:"IBAN",key:"iban",ph:"DE89 3704 0044 0532 0130 00"},...(isHGB(m)?[{label:"Steuernummer",key:"steuernummer",ph:"12/345/67890"},{label:"USt-IdNr",key:"ustid",ph:"DE123456789"},{label:"Firmenname",key:"firmenname",ph:"Firma GmbH"}]:[]),...(isAng(m)?[{label:"Grundgehalt €",key:"grundgehalt",ph:"3000",type:"number"},{label:"Auto-Zuschuss €",key:"auto_zuschuss",ph:"0",type:"number"}]:[])].map(f=><div key={f.key}>
+                  <div style={{fontSize:10,color:editData[f.key]?"var(--g)":"var(--o)",fontWeight:600,marginBottom:4,textTransform:"uppercase"}}>{f.label}{!editData[f.key]&&<span style={{color:"var(--r)"}}> *</span>}</div>
+                  <input type={f.type||"text"} value={editData[f.key]||""} onChange={e=>setEditData(p=>({...p,[f.key]:e.target.value}))} placeholder={f.ph} style={{width:"100%",padding:"8px 12px",fontSize:13,background:"var(--s1)",border:"1.5px solid "+(editData[f.key]?"var(--g)44":"var(--o)44"),borderRadius:6}}/>
+                </div>)}
+                {isHGB(m)&&<div><div style={{fontSize:10,color:"var(--ts)",fontWeight:600,marginBottom:4,textTransform:"uppercase"}}>Abrechnungsart</div><select value={editData.abrechnungsart||"netto"} onChange={e=>setEditData(p=>({...p,abrechnungsart:e.target.value}))} style={{width:"100%",padding:"8px 12px",fontSize:13}}><option value="netto">Netto (Kleinunternehmer)</option><option value="brutto">Brutto (USt-pflichtig)</option></select></div>}
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:14,justifyContent:"flex-end"}}><button onClick={cancelEdit} style={{background:"var(--s3)",border:"1px solid var(--bd)",borderRadius:6,color:"var(--ts)",padding:"8px 16px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Abbrechen</button><button onClick={saveEdit} disabled={saving} style={{background:"var(--g)22",border:"1px solid var(--g)44",borderRadius:6,color:"var(--g)",padding:"8px 20px",fontSize:12,fontWeight:700,cursor:"pointer"}}>{saving?"Speichere...":"✓ Speichern"}</button></div>
+            </div>
+            :<div style={{paddingTop:10,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8,fontSize:12}}>
+              <div><span style={{color:"var(--ts)"}}>Adresse: </span>{hasAddr(m)?<span>{m.strasse} {m.hausnr}, {m.plz} {m.ort}</span>:<span style={{color:"var(--r)"}}>fehlt</span>}</div>
+              <div><span style={{color:"var(--ts)"}}>E-Mail: </span>{hasEmail(m)?m.email:<span style={{color:"var(--r)"}}>fehlt</span>}</div>
+              <div><span style={{color:"var(--ts)"}}>Telefon: </span>{hasTel(m)?m.telefon:<span style={{color:"var(--ts)"}}>–</span>}</div>
+              <div><span style={{color:"var(--ts)"}}>IBAN: </span>{hasIBAN(m)?m.iban.substring(0,4)+"····"+m.iban.slice(-4):<span style={{color:"var(--r)"}}>fehlt</span>}</div>
+              {isHGB(m)&&<div><span style={{color:"var(--ts)"}}>StNr: </span>{hasStNr(m)?m.steuernummer:<span style={{color:"var(--r)"}}>fehlt</span>}</div>}
+              {isHGB(m)&&<div><span style={{color:"var(--ts)"}}>USt-Id: </span>{hasUStId(m)?m.ustid:<span style={{color:"var(--ts)"}}>–</span>}</div>}
+              {isAng(m)&&<div><span style={{color:"var(--ts)"}}>Gehalt: </span>{hasGehalt(m)?parseFloat(m.grundgehalt).toLocaleString("de-DE")+" €":<span style={{color:"var(--r)"}}>fehlt</span>}</div>}
+              {m.abrechnungsart&&<div><span style={{color:"var(--ts)"}}>Abr.: </span><span style={{color:m.abrechnungsart==="brutto"?"var(--o)":"var(--b)",fontWeight:600}}>{m.abrechnungsart==="brutto"?"BRUTTO":"NETTO"}</span></div>}
+            </div>}
+          </div>}
+        </div>;})}
+      {filtered.length===0&&<div style={{textAlign:"center",padding:40,color:"var(--ts)"}}>Keine Mitarbeiter gefunden</div>}
     </div>
   </div>;
 }
+
 
 // ═══ Tab: CSV-Import ═══
 function TabImport({toast,mitarbeiterList}){
