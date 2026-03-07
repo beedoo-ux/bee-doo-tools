@@ -1050,7 +1050,7 @@
 
 <!-- HERO -->
 <section class="hero">
-  <div class="hero-vid"><video autoplay muted loop playsinline preload="auto"><source src="https://bee-doo.de/wp-content/uploads/2025/10/Haus-bee-doo-Video.mp4" type="video/mp4"></video></div>
+  <div class="hero-vid"><video id="heroVideo" autoplay muted loop playsinline preload="auto" webkit-playsinline="true"><source src="https://bee-doo.de/wp-content/uploads/2025/10/Haus-bee-doo-Video.mp4" type="video/mp4"></video></div>
   <div class="hero-overlay"></div>
   <div class="hero-content">
     <div class="hero-tag" id="hTag"><div class="hero-tag-dot"></div>Solarexperte aus Bielefeld</div>
@@ -1711,6 +1711,9 @@
 <script>
 gsap.registerPlugin(ScrollTrigger);
 
+// ═══ HERO VIDEO IMMEDIATE PLAY ═══
+(function(){var v=document.getElementById('heroVideo');if(v){v.muted=true;v.play().catch(function(){});}})();
+
 // ═══ LENIS ═══
 var lenis=new Lenis({duration:1.4,easing:function(t){return Math.min(1,1.001-Math.pow(2,-10*t))},orientation:'vertical',smoothWheel:true});
 lenis.on('scroll',ScrollTrigger.update);
@@ -1755,9 +1758,14 @@ function toggleMenu(){document.getElementById('mobMenu').classList.toggle('open'
 
 // ═══ HERO ANIMATION ═══
 function heroAnim(){
-  // Force video play on iOS
-  var vid=document.querySelector('.hero-vid video');
-  if(vid){vid.play().catch(function(){});}
+  // Force video play on iOS — retry until it works
+  var vid=document.getElementById('heroVideo');
+  if(vid){
+    vid.muted=true; // iOS requires this property, not just attribute
+    vid.setAttribute('playsinline','');
+    function tryPlay(){vid.play().catch(function(){setTimeout(tryPlay,500)});}
+    tryPlay();
+  }
   var tl=gsap.timeline({defaults:{ease:'power4.out'}});
   tl.to('.h-word',{y:0,opacity:1,duration:1.4,stagger:.1})
     .to('#hTag',{opacity:1,duration:.8,y:0},'-=.8')
